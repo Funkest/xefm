@@ -157,16 +157,19 @@ def _slot(app, widget):
     return next(s for s in app.panel._layers if s.widget is widget)
 
 
-def test_the_page_sits_inside_the_help_and_dims_it(app):
+def test_the_page_sits_inside_the_help(app):
     """Same chrome on the same surface, one covering the other, read as one
-    box: the page is inset within the help on every side and dims it."""
+    box: the page is inset within the help on every side, its shadow on the
+    help's surface. Nothing is dimmed — a page is a smaller step than the
+    help, and a whole-screen veil would say the opposite."""
     help_dialog = _help(app)
     app._follow_action_link("xefm-action:copy_files")
     page = _top(app)
     outer, inner = _slot(app, help_dialog).rect, _slot(app, page).rect
     assert inner.x > outer.x and inner.x + inner.w < outer.x + outer.w
     assert inner.y > outer.y and inner.y + inner.h < outer.y + outer.h
-    assert _slot(app, page).hints.get("dim_below")
+    assert _slot(app, page).hints.get("shadow")
+    assert not _slot(app, page).hints.get("dim_below")
     assert _slot(app, page).z > _slot(app, help_dialog).z
 
 
@@ -178,4 +181,4 @@ def test_the_palette_page_sits_inside_the_palette(app):
     assert page is not palette
     outer, inner = _slot(app, palette).rect, _slot(app, page).rect
     assert inner.x > outer.x and inner.x + inner.w < outer.x + outer.w
-    assert _slot(app, page).hints.get("dim_below")
+    assert not _slot(app, page).hints.get("dim_below")

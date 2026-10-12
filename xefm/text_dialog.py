@@ -284,8 +284,11 @@ def show_markdown(
     something in that dialog (an action's page over the Help dialog or the
     command palette). The two would otherwise be the same chrome on the same
     surface, one exactly covering the other, and read as one box; so the page
-    goes in front of it (``z`` is then ignored), dims everything beneath it, and
-    is inset within it so the frame below still shows on every side."""
+    goes in front of it (``z`` is then ignored) and is inset within it, so the
+    frame below shows on every side and the page's drop shadow falls on that
+    dialog's surface rather than off its edge. Nothing is dimmed: a page over a
+    dialog is a smaller step than the dialog was, and a veil over the whole
+    screen would make it read as the bigger one."""
     dialog = MarkdownDialog(source, title=title, on_close=on_close,
                             on_link=on_link, hint=hint)
     below = _layer_of(panel, over)
@@ -343,7 +346,7 @@ def _push(panel: Any, dialog: _ScrollModal, *, rows: int, z: int,
     is a rough estimate from the source ``rows`` (Markdown may wrap/expand, but the
     body scrolls, so an approximate reserve is fine). ``over`` is the layer slot
     of a dialog this one is stacked on (see :func:`show_markdown`): the height is
-    then kept inside it too, and the layers beneath are dimmed."""
+    then kept inside it too."""
     _sw, sh = panel.backend.size_units
     if w is None:
         w = _box_width(panel)
@@ -353,7 +356,7 @@ def _push(panel: Any, dialog: _ScrollModal, *, rows: int, z: int,
     hints: dict[str, Any] = {"shadow": True, "w": w, "h": h}
     if over is not None:
         h = max(8.0, min(h, over.rect.h - 2.0))
-        hints.update(h=h, dim_below=True)
+        hints["h"] = h
     dialog._panel = panel
     panel.push_layer(dialog, z=z, hints=hints)
     animate_open(panel, dialog)

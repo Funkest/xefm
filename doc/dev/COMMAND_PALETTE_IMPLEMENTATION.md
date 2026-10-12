@@ -152,8 +152,11 @@ Tab, so the other Markdown dialogs are unchanged apart from that key.
 opens from share the modal chrome and the popup surface, and at the same width
 one exactly covered the other — the two read as one box. `show_markdown(...,
 over=dialog)` therefore stacks the page *in front of* that dialog's layer, insets
-it by `_NESTED_INSET` on each side (and keeps its height inside too), and pushes
-it with PuiKit's `dim_below`, so the dialog behind sits visibly a level back.
+it by `_NESTED_INSET` on each side (and keeps its height inside too). The frame
+below then shows all round, and the page's drop shadow falls on that dialog's
+surface instead of off its edge. It deliberately does **not** dim: `dim_below`
+was tried, and a veil over the whole screen made the second, smaller step read
+as a bigger transition than the dialog it opened from.
 The palette's F1 and the Help dialog's links both open their page this way.
 
 **PuiKit floor.** `MarkdownView(on_link=...)` needs the PuiKit release that
