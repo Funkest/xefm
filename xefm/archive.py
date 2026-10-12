@@ -7,6 +7,7 @@ import os
 import calendar
 import datetime
 import tempfile
+import codecs
 import tarfile
 import zipfile
 import gzip
@@ -24,6 +25,7 @@ from pathlib import Path as PathlibPath
 from xefm.log_manager import getLogger
 from xefm.path import Path, PathImpl
 from xefm.str_format import format_size
+from xefm.text_encoding import _jp_score
 from typing import Callable, List, Optional, Union, Tuple, Dict, Any, Iterator
 
 
@@ -306,6 +308,82 @@ def clear_archive_password(archive_path: Path) -> None:
     wrong)."""
     with _archive_passwords_lock:
         _archive_passwords.pop(_archive_password_key(archive_path), None)
+
+
+#: General-purpose flag bit 11: the entry's name (and comment) is UTF-8.
+_ZIP_UTF8_FLAG = 0x800
+
+
+def zip_name_encoding(zf: zipfile.ZipFile) -> Optional[str]:
+    """The encoding the names of ``zf`` were actually written in, when they are
+    not the CP437 ``zipfile`` assumes; None when CP437 (or all-ASCII) is right.
+
+    A name without the UTF-8 flag is, by the spec, CP437 — but real writers
+    store whatever the system encoding was: Windows' own "Send to compressed
+    folder" and most Japanese tools write CP932, others write UTF-8 and leave
+    the flag off. Explorer reads them in the system code page, so XeFM showed
+    mojibake where Explorer showed the names (#526). CP437 maps every byte, so
+    the raw bytes come back exactly from ``orig_filename``; they are then tried
+    as UTF-8 (strict decoding makes a false positive vanishingly unlikely), as
+    Windows' OEM code page, and as the Japanese legacy encodings (so a CP932 zip
+    reads on a Mac too), scored the way the text viewer picks between them."""
+    raw = [info.orig_filename.encode('cp437') for info in zf.infolist()
+           if not info.flag_bits & _ZIP_UTF8_FLAG]
+    data = b'\n'.join(raw)
+    if data.isascii():
+        return None
+    candidates = ['utf-8']
+    system = _oem_code_page()
+    if system is not None:
+        candidates.append(system)
+    for name in candidates:
+        try:
+            data.decode(name)
+            return name
+        except UnicodeDecodeError:
+            pass
+    best = None
+    for name in ('cp932', 'euc_jp'):
+        try:
+            score = _jp_score(data.decode(name))
+        except UnicodeDecodeError:
+            continue
+        if score > 0 and (best is None or score > best[0]):
+            best = (score, name)
+    return best[1] if best else None
+
+
+def _oem_code_page() -> Optional[str]:
+    """Windows' OEM code page as a codec name — the one Explorer reads unflagged
+    zip names in (CP932 on Japanese Windows) — or None where there is none, it
+    is CP437 already, or Python has no codec for it."""
+    if os.name != 'nt':
+        return None
+    try:
+        import ctypes
+        name = codecs.lookup(f"cp{ctypes.windll.kernel32.GetOEMCP()}").name
+    except (AttributeError, OSError, LookupError):
+        return None
+    return None if name in ('cp437', 'utf-8') else name
+
+
+def open_zip(file, cls=zipfile.ZipFile) -> zipfile.ZipFile:
+    """Open ``file`` for reading as ``cls`` (a ``ZipFile`` or a subclass), with
+    its names decoded in the encoding :func:`zip_name_encoding` finds. The
+    encoding has to be known when the central directory is read — that is where
+    ``zipfile`` decodes the names, before turning a backslash into ``/``, and a
+    CP932 trail byte can be 0x5C — so a zip that needs one is opened again."""
+    zf = cls(file, 'r')
+    try:
+        encoding = zip_name_encoding(zf)
+    except Exception:
+        zf.close()
+        raise
+    if encoding is None:
+        return zf
+    zf.close()
+    getLogger('Archive').info(f"Reading zip names as {encoding}: {file}")
+    return cls(file, 'r', metadata_encoding=encoding)
 
 
 def zip_encryption_status(zf: zipfile.ZipFile) -> str:
@@ -749,7 +827,7 @@ class ZipHandler(ArchiveHandler):
             
             # Open the ZIP file
             try:
-                self._archive_obj = zipfile.ZipFile(archive_to_open, 'r')
+                self._archive_obj = open_zip(archive_to_open)
             except PermissionError as e:
                 raise ArchivePermissionError(
                     f"Permission denied opening archive: {e}",
