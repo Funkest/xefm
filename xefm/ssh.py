@@ -360,9 +360,9 @@ class SSHPathImpl(PathImpl):
 
     def listdir_attrs(self) -> List[tuple]:
         """Read the directory and every entry's attributes from the one remote
-        listing. ``ls -la`` already reports type, size and mtime beside each
-        name, so there is nothing left to ask the host — the base class would
-        otherwise re-``stat`` every entry over the connection."""
+        listing. SFTP's READDIR already reports type, size and mtime beside
+        each name, so there is nothing left to ask the host — the base class
+        would otherwise re-``stat`` every entry over the connection."""
         conn = self._get_connection()
         return [(self._entry_path(entry['name']), self._entry_attrs(entry))
                 for entry in conn.list_directory(self.remote_path)]
@@ -370,18 +370,17 @@ class SSHPathImpl(PathImpl):
     @staticmethod
     def _entry_attrs(entry: dict) -> dict:
         """Turn one :meth:`SSHConnection.list_directory` record into the
-        attribute record :mod:`xefm.dir_scan` describes. As everywhere else in
-        this backend, a symlink is reported as the link itself — ``ls`` names
-        the target but does not say what it is. ``hidden`` is always False: a
-        remote host has no attribute to report over this protocol, so a dot in
-        the name is the whole of it (see :func:`xefm.dir_scan.is_hidden`)."""
+        attribute record :mod:`xefm.dir_scan` describes. As for a local
+        directory, a symlink reports its target's type, size and mtime but stays
+        flagged as a link (``list_directory`` looks the targets up). ``hidden``
+        is always False: a remote host has no attribute to report over this
+        protocol, so a dot in the name is the whole of it (see
+        :func:`xefm.dir_scan.is_hidden`)."""
         is_dir = entry.get('is_dir', False)
         return {'is_dir': is_dir,
                 'is_link': entry.get('is_symlink', False),
                 'size': 0 if is_dir else entry.get('size', 0),
-                # ``ls -la`` reports a length, never an allocation; ``ls -s``
-                # would, but it is a second listing over the same connection
-                # for a number only the details dialog reads. None says the
+                # SFTP v3 reports a length, never an allocation. None says the
                 # figure is unknown here rather than zero (see
                 # :func:`xefm.dir_scan.alloc_from_stat`).
                 'alloc': None,
@@ -493,11 +492,7 @@ class SSHPathImpl(PathImpl):
             File contents as bytes
         """
         conn = self._get_connection()
-        conn.set_progress_callback(progress_callback)
-        try:
-            return conn.read_file(self.remote_path)
-        finally:
-            conn.set_progress_callback(None)
+        return conn.read_file(self.remote_path, progress=progress_callback)
     
     def write_text(self, data: str, encoding=None, errors=None, newline=None) -> int:
         """Open the file in text mode, write to it, and close the file"""
@@ -524,12 +519,8 @@ class SSHPathImpl(PathImpl):
             Number of bytes written
         """
         conn = self._get_connection()
-        conn.set_progress_callback(progress_callback)
-        try:
-            conn.write_file(self.remote_path, data)
-            return len(data)
-        finally:
-            conn.set_progress_callback(None)
+        conn.write_file(self.remote_path, data, progress=progress_callback)
+        return len(data)
     
     # File system modification operations
     def mkdir(self, mode=0o777, parents=False, exist_ok=False):
@@ -604,9 +595,7 @@ class SSHPathImpl(PathImpl):
     
     def chmod(self, mode):
         """Change the permissions of the path"""
-        # SFTP doesn't provide a direct chmod command
-        # Would need to use SSH command execution
-        raise NotImplementedError("chmod not supported for SSH paths via SFTP")
+        raise NotImplementedError("chmod not supported for SSH paths")
     
     # Storage-specific methods
     def as_uri(self) -> str:
