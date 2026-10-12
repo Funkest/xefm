@@ -6333,7 +6333,7 @@ class XeFMApp:
         grain the copy engine logs at, and for the same reason: a run's record
         should say what it actually wrote, not only how many things it wrote.
         Directory members are not logged, again matching copy."""
-        from xefm.archive import verify_zip_password
+        from xefm.archive import open_zip, verify_zip_password
         from xefm.archive_progress import ByteProgress, ProgressTarFile, ProgressZipFile
         bytes_ = ByteProgress(prog) if prog is not None else None
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -6344,7 +6344,7 @@ class XeFMApp:
                                              owns_total=owns_total, log=log,
                                              pool=pool, key=key)
         if fmt == "zip":
-            with ProgressZipFile(str(archive_path)) as zf:
+            with open_zip(str(archive_path), ProgressZipFile) as zf:
                 verify_zip_password(zf, pwd)  # no-op unless the zip is encrypted
                 zf.byte_progress = bytes_     # after the probe, which reads a little
                 members = zf.infolist()
