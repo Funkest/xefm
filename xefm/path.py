@@ -155,6 +155,13 @@ class PathImpl(ABC):
     #: space (``'S3: '``). Empty for local files, which need no marking.
     DISPLAY_PREFIX: str = ''
 
+    #: How many directories a tree walk may list at once (:mod:`xefm.tree_walk`).
+    #: 1 — one at a time, depth first — is right wherever a listing is cheap or
+    #: the storage gains nothing from being asked several things at once. A
+    #: backend whose listings are round trips over a connection that serves
+    #: requests side by side raises it.
+    LISTING_CONCURRENCY: int = 1
+
     def __init_subclass__(cls, **kwargs):
         """Validate a backend's declarations as it is defined.
 
@@ -1049,6 +1056,11 @@ class Path:
         each entry's ``is_dir``/``is_link``/``size``/``alloc``/``mtime`` in one
         call. See :meth:`PathImpl.listdir_attrs`."""
         return self._impl.listdir_attrs()
+
+    def listing_concurrency(self) -> int:
+        """How many directories a tree walk under this path may list at once
+        (``PathImpl.LISTING_CONCURRENCY``)."""
+        return max(1, int(getattr(self._impl, 'LISTING_CONCURRENCY', 1) or 1))
 
 
     def glob(self, pattern: str) -> Iterator['Path']:

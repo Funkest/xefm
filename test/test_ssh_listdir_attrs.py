@@ -6,7 +6,7 @@ A pane reads a directory with :meth:`Path.listdir_attrs`, which every backend
 must answer. ``SSHPathImpl`` used to stand outside the ``PathImpl`` hierarchy, so
 it simply had no such method and every SSH pane failed with "'SSHPathImpl' object
 has no attribute 'listdir_attrs'". These tests pin both halves of the fix: the
-class is a ``PathImpl``, and it answers the listing from the single ``ls -la``
+class is a ``PathImpl``, and it answers the listing from the single remote listing
 the connection already ran.
 """
 
@@ -80,7 +80,7 @@ class TestSSHListdirAttrs(unittest.TestCase):
 
         # 'hidden' is the platform attribute, which a remote host has no way to
         # report here — a dot in the name is the whole of hidden over SSH.
-        # 'alloc' is None for the same reason: `ls -la` gives a length, never an
+        # 'alloc' is None for the same reason: SFTP gives a length, never an
         # allocation, and None says unknown where 0 would claim "takes up no
         # space" (issue #275).
         self.assertEqual(attrs['docs'],

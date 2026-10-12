@@ -2,7 +2,7 @@
 
 ## Overview
 
-XeFM provides seamless SFTP (SSH File Transfer Protocol) support, allowing you to browse, search, and manage files on remote servers as if they were local directories. SFTP integration uses SSH multiplexing for optimal performance and supports all standard file operations.
+XeFM provides seamless SFTP (SSH File Transfer Protocol) support, allowing you to browse, search, and manage files on remote servers as if they were local directories. XeFM opens one SSH connection per server and runs every operation over it, and supports all standard file operations.
 
 ## Quick Start
 
@@ -11,6 +11,9 @@ XeFM provides seamless SFTP (SSH File Transfer Protocol) support, allowing you t
 1. **SSH access** to the remote server
 2. **SSH config** (optional but recommended) in `~/.ssh/config`
 3. **SSH keys** (optional) for passwordless authentication
+4. **The `ssh` command** — the OpenSSH client. macOS and Linux have it; on
+   Windows, the OpenSSH client built into Windows works, as does any other on
+   your `PATH` (Git for Windows, MSYS2, Cygwin).
 
 ### Basic Usage
 
@@ -73,7 +76,6 @@ Host prod-*
 **Benefits:**
 - Use short names: `ssh://myserver/path` instead of full details
 - Centralized authentication configuration
-- Connection multiplexing for better performance
 - Consistent settings across all SSH tools
 
 ### SSH Key Authentication
@@ -155,15 +157,13 @@ test_.*\.py    # Find Python test files
 
 XeFM includes several optimizations for SFTP operations:
 
-1. **SSH Control Master Multiplexing**
-   - Reuses existing SSH connections
-   - 99% reduction in connection overhead
-   - Automatic connection health monitoring
+1. **One connection per server**
+   - You log in once; every listing, copy and rename after that reuses the connection
+   - A dropped connection is reopened the next time you use it
 
-2. **Bulk Stat Operations**
-   - Fetches file metadata in batches
-   - 99% reduction in network round trips
-   - Dramatically faster directory listings
+2. **Directory listings in one round trip**
+   - A listing brings back every file's size, date and type with it
+   - Transfers keep many requests in flight, so a long link stays busy
 
 3. **Intelligent Caching**
    - Caches directory listings and file metadata
@@ -220,24 +220,14 @@ opened to any of these until you select one.
 
 ## Advanced Usage
 
-### SSH Multiplexing
+### One connection per server
 
-XeFM automatically uses SSH Control Master for connection multiplexing. To verify it's working:
-
-```bash
-# Check for control socket
-ls -la ~/.ssh/
-# Look for: controlmaster-*
-
-# Monitor SSH connections
-ssh -O check user@hostname
-```
-
-**Benefits:**
-- Single SSH connection shared across operations
-- Faster subsequent operations (no re-authentication)
-- Reduced server load
-- Better performance on high-latency connections
+XeFM runs one `ssh` per server — the same `ssh <server> -s sftp` the `sftp`
+command runs — and sends every operation over it. It does not depend on SSH
+connection sharing (`ControlMaster`), so the OpenSSH built into Windows works
+too. Anything in your `~/.ssh/config` for the host (`HostName`, `User`,
+`ProxyJump`, `ProxyCommand`, keys) applies as it would to `ssh` itself; port
+forwards configured there are left out of XeFM's connection.
 
 ### Batch Operations
 
@@ -313,9 +303,8 @@ Solutions:
 
 Solutions:
 1. Check network latency: `ping hostname`
-2. Verify SSH multiplexing is active
-3. Increase cache TTL in config
-4. Use SSH compression: Add to `~/.ssh/config`:
+2. Increase cache TTL in config
+3. Use SSH compression: Add to `~/.ssh/config`:
    ```
    Compression yes
    CompressionLevel 6
@@ -450,5 +439,5 @@ tar czf archive.tar.gz $XEFM_THIS_DIR/*
 ## Technical Details
 
 For implementation details and architecture, see:
-- **[SSH System](../doc/dev/SSH_SYSTEM.md)** - Connection, control-master sharing, bulk-stat caching, default-directory resolution
+- **[SSH System](../doc/dev/SSH_SYSTEM.md)** - The SFTP session, request pipelining, bulk-stat caching, default-directory resolution
 - **[Path Polymorphism System](../doc/dev/PATH_POLYMORPHISM_SYSTEM.md)**
