@@ -76,6 +76,13 @@ echoes.
 - **Errors**: a STATUS reply other than OK is `SFTPError(code, message)`; the
   stream ending fails every waiting request with `SFTPClosed`; a reply that does
   not arrive within `timeout` is `SFTPTimeout`.
+- **Directories** are read with `READDIR_AHEAD` (4) READDIRs in flight on the
+  handle, so a small directory's entries and its EOF arrive in one round trip;
+  OpenSSH's server answers in order, and paramiko reads ahead the same way.
+- **CLOSE is not waited for** after a read or a listing (`wait=False`):
+  nothing its reply could say changes the outcome, and waiting cost a round trip
+  per file and per directory. A completed write does wait, and checks the
+  reply — a buffering server can still report the write failing there.
 - **Rename** uses `posix-rename@openssh.com` when the server announces it, as
   `sftp`'s own `rename` does: plain SSH_FXP_RENAME refuses an existing target,
   POSIX rename replaces it.
@@ -164,6 +171,27 @@ flagged as a link. READDIR returns `lstat` attributes, so `_resolve_links()`
 sends a `STAT` for every link in the listing, all in flight at once
 (`stat_many`); a broken link keeps its own attributes. `stat()` is `LSTAT`, then
 the same resolution if it is a link.
+
+## Walking a tree — `LISTING_CONCURRENCY`
+
+A search walks every directory under the pane. A walk that lists one directory,
+then the next, is bound by round trips × directories: on a deep tree over SFTP
+it spent nearly all its time waiting while the session sat idle.
+`xefm/tree_walk.py`'s `walk()` keeps up to the backend's
+`PathImpl.LISTING_CONCURRENCY` listings in flight instead, on a small thread
+pool; a directory is queued as soon as its parent's listing names it.
+`SSHPathImpl` sets 16; everything else stays at 1 and gets the old depth-first
+walk unchanged. Both search walks (`_iter_filename_matches`,
+`_iter_content_matches`) go through it.
+
+Measured against the real `sftp-server` behind a 40 ms round-trip delay line,
+259 directories / 906 entries: 53.4 s one directory at a time with four round
+trips each; 25.9 s with the READDIR read-ahead and unwaited CLOSE; 1.8 s with
+16 listings in flight as well.
+
+With several listings in flight, results arrive in the order the listings
+complete rather than strictly depth-first; each directory's own entries still
+come together and in order.
 
 ## Bulk stat caching during `list_directory`
 

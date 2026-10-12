@@ -91,6 +91,13 @@ CHUNK = 32 * 1024
 #: to keep a long link busy without a round trip between chunks.
 WINDOW = 32
 
+#: READDIRs kept in flight on one directory handle. A small directory then
+#: takes one round trip — its entries and the EOF arrive together — instead of
+#: one for the entries and one more to learn there are no more. OpenSSH's
+#: sftp-server answers requests in order, and so do the others in use; paramiko
+#: reads directories ahead the same way.
+READDIR_AHEAD = 4
+
 #: The protocol version this client speaks.
 VERSION = 3
 
@@ -416,9 +423,12 @@ class SFTPClient:
         handle = self._check(self._request(FXP_OPENDIR, _string(path)), FXP_HANDLE)
         handle = _Reader(handle).bytes()
         entries: List[Tuple[str, Dict]] = []
+        inflight: deque = deque()
         try:
             while True:
-                reply = self._request(FXP_READDIR, _string(handle))
+                while len(inflight) < READDIR_AHEAD:
+                    inflight.append(self.submit(FXP_READDIR, _string(handle)))
+                reply = self.wait(inflight.popleft())
                 if reply[0] == FXP_STATUS and self._status(reply[1])[0] == FX_EOF:
                     break
                 r = _Reader(self._check(reply, FXP_NAME))
@@ -429,7 +439,8 @@ class SFTPClient:
                     if name not in (".", ".."):
                         entries.append((name, attrs))
         finally:
-            self._close_handle(handle)
+            # The READDIRs still in flight are answered with EOF and dropped.
+            self._close_handle(handle, wait=False)
         return entries
 
     def mkdir(self, path: str, permissions: Optional[int] = None) -> None:
@@ -458,11 +469,19 @@ class SFTPClient:
                                          _attrs_bytes()), FXP_HANDLE)
         return _Reader(body).bytes()
 
-    def _close_handle(self, handle: bytes) -> None:
+    def _close_handle(self, handle: bytes, *, wait: bool = True) -> None:
+        """Close ``handle``, ignoring how the close went: the operation's own
+        outcome is what the caller needs. ``wait=False`` sends the CLOSE and
+        moves on — for a handle only read from, or one being abandoned, where
+        waiting would cost a round trip per file or directory and nothing the
+        reply says would change anything. (A completed write checks its close
+        itself; see :meth:`write_file`.)"""
         try:
-            self._ok(self._request(FXP_CLOSE, _string(handle)))
+            future = self.submit(FXP_CLOSE, _string(handle))
+            if wait:
+                self._ok(self.wait(future))
         except (SFTPError, SFTPClosed, SFTPTimeout):
-            pass  # the operation's own outcome is what the caller needs
+            pass
 
     def read_file(self, path: str,
                   progress: Optional[Callable[[int, int], None]] = None) -> bytes:
@@ -513,7 +532,7 @@ class SFTPClient:
                 progress(len(out), len(out))
             return bytes(out)
         finally:
-            self._close_handle(handle)
+            self._close_handle(handle, wait=False)
 
     def write_file(self, path: str, data: bytes,
                    progress: Optional[Callable[[int, int], None]] = None) -> None:
@@ -540,5 +559,9 @@ class SFTPClient:
                 done += size
                 if progress is not None:
                     progress(done, total)
-        finally:
-            self._close_handle(handle)
+        except BaseException:
+            self._close_handle(handle, wait=False)
+            raise
+        # The close is where a server that buffers can still report the write
+        # failing, so a write that got this far waits for it and checks it.
+        self._ok(self._request(FXP_CLOSE, _string(handle)))

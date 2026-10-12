@@ -32,6 +32,9 @@ class SSHPathImpl(PathImpl):
                               'extraction_for_reading', 'cache_for_search'})
     SEARCH_STRATEGY = 'buffered'
     DISPLAY_PREFIX = 'SSH: '
+    # Every listing is round trips, and the host's one SFTP session serves
+    # requests side by side, so a tree walk lists this many directories at once.
+    LISTING_CONCURRENCY = 16
     
     def __init__(self, uri: str):
         """

@@ -84,6 +84,7 @@ from xefm import search_options as search_opts
 from xefm.isearch_bar import ISearchBar
 from xefm import filters
 from xefm import name_key
+from xefm import tree_walk
 from xefm.log_manager import (LOG_ERROR_SOURCE, LOG_SOURCE, clear_log_sink,
                               getLogger, route_library_logger, set_log_sink)
 from xefm.pane_manager import PaneManager
@@ -1293,6 +1294,20 @@ class _StepBehindLog:
         if pending is not None and self._log is not None:
             self._log(pending)
 
+
+
+def _search_rules(show_hidden: bool, recursive: bool):
+    """``(shows, descend)`` for a search walk: ``shows(entry, attrs)`` says
+    whether the search looks at an entry at all (not a hidden one, unless the
+    pane is showing them), ``descend`` whether the walk goes into it — every
+    directory the search looks at, unless it searches this directory alone."""
+    def shows(entry, attrs) -> bool:
+        return show_hidden or not is_hidden(entry.name, attrs)
+
+    def descend(entry, attrs) -> bool:
+        return recursive and attrs["is_dir"] and shows(entry, attrs)
+
+    return shows, descend
 
 class XeFMApp:
     """Controller: owns pane state and maps key actions onto it."""
@@ -4838,7 +4853,8 @@ class XeFMApp:
 
     def _iter_filename_matches(self, root, pattern, cancel, *,
                                case: bool = False, recursive: bool = True):
-        """Depth-first walk under ``root`` yielding entries whose name matches
+        """Walk under ``root`` (:func:`xefm.tree_walk.walk` — several directories
+        at once over SSH) yielding entries whose name matches
         ``pattern`` (a glob), checking ``cancel`` between entries so
         a superseded search stops promptly. The pattern is matched against the
         *whole* filename — an exact glob (issue #231): ``report.txt`` matches only
@@ -4854,26 +4870,13 @@ class XeFMApp:
         this directory alone: subdirectories still *match* by name, they are
         just not descended."""
         match = search_opts.filename_matcher(pattern, case=case)
-        stack = [root]
-        while stack:
-            if cancel.is_set():
-                return
-            try:
-                # One pass per directory answers both questions asked of every
-                # entry below — is it hidden, is it a directory to descend —
-                # instead of a stat apiece.
-                entries = stack.pop().listdir_attrs()
-            except Exception:
-                continue
-            for e, attrs in entries:
-                if cancel.is_set():
-                    return
-                if not self.flm.show_hidden and is_hidden(e.name, attrs):
-                    continue
-                if match(name_key.compare_name(e)):
-                    yield e
-                if attrs["is_dir"] and recursive:
-                    stack.append(e)
+        # One listing per directory answers both questions asked of every entry
+        # — is it hidden, is it a directory to descend — instead of a stat
+        # apiece; the walk lists several at once where that pays (SSH).
+        shows, descend = _search_rules(self.flm.show_hidden, recursive)
+        for e, attrs in tree_walk.walk(root, cancel, descend):
+            if shows(e, attrs) and match(name_key.compare_name(e)):
+                yield e
 
     def _go_to_result(self, entry) -> None:
         pane = self.active_pane()
@@ -4970,7 +4973,8 @@ class XeFMApp:
 
     def _iter_content_matches(self, root, regex, cancel, max_line: int = 200,
                               name_filter: str = "", *, recursive: bool = True):
-        """Depth-first walk under ``root`` yielding ``{path, line, text}`` for each
+        """Walk under ``root`` (:func:`xefm.tree_walk.walk`) yielding
+        ``{path, line, text}`` for each
         line of a text file that matches ``regex`` (compiled), checking ``cancel``
         between entries so a superseded search stops promptly. ``name_filter`` is
         the pane's filter (issue #305): when set, only the files it shows are
@@ -4992,38 +4996,25 @@ class XeFMApp:
         # The pane's filter, whichever kind it is — a typed glob or a filter the
         # config registered — applied to the same entries the pane would show.
         match = filters.matcher(name_filter) if name_filter else None
-        stack = [root]
-        while stack:
-            if cancel.is_set():
-                return
+        shows, descend = _search_rules(self.flm.show_hidden, recursive)
+        for e, attrs in tree_walk.walk(root, cancel, descend):
+            if attrs["is_dir"] or not shows(e, attrs):
+                continue
             try:
-                entries = stack.pop().listdir_attrs()
+                if match is not None and not match(e, attrs):
+                    continue
+                encoding = self._sniff_text_encoding(e)
+                if encoding is None:
+                    continue
+                with e.open("r", encoding=encoding, errors="ignore") as f:
+                    for line_num, line in enumerate(f, 1):
+                        if cancel.is_set():
+                            return
+                        if regex.search(line):
+                            yield {"path": e, "line": line_num,
+                                   "text": line.strip()[:max_line]}
             except Exception:
                 continue
-            for e, attrs in entries:
-                if cancel.is_set():
-                    return
-                if not self.flm.show_hidden and is_hidden(e.name, attrs):
-                    continue
-                try:
-                    if attrs["is_dir"]:
-                        if recursive:
-                            stack.append(e)
-                        continue
-                    if match is not None and not match(e, attrs):
-                        continue
-                    encoding = self._sniff_text_encoding(e)
-                    if encoding is None:
-                        continue
-                    with e.open("r", encoding=encoding, errors="ignore") as f:
-                        for line_num, line in enumerate(f, 1):
-                            if cancel.is_set():
-                                return
-                            if regex.search(line):
-                                yield {"path": e, "line": line_num,
-                                       "text": line.strip()[:max_line]}
-                except Exception:
-                    continue
 
     def _go_to_content_hit(self, hit) -> None:
         entry = hit["path"]
