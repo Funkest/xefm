@@ -139,8 +139,7 @@ user action named with a space still makes a valid link). A row without details
 stays plain text — its page would only repeat the row — and so does every row of
 the isearch section, whose actions belong to the search bar.
 
-The links are followed through two PuiKit `MarkdownView` features (PuiKit's
-`markdown-link-hook` work, not yet released): a per-view `on_link(href) -> bool`
+The links are followed through two PuiKit `MarkdownView` features (PuiKit 1.7.7): a per-view `on_link(href) -> bool`
 handler, and keyboard link focus (`focus_advance`, `activate_focused_link`).
 `_follow_action_link` takes `xefm-action:` and declines everything else, so an
 ordinary URL still opens the way PuiKit opens it. `text_dialog._ScrollModal`
@@ -159,5 +158,6 @@ was tried, and a veil over the whole screen made the second, smaller step read
 as a bigger transition than the dialog it opened from.
 The palette's F1 and the Help dialog's links both open their page this way.
 
-**PuiKit floor.** `MarkdownView(on_link=...)` needs the PuiKit release that
-carries this work; `requirements.txt` must move to it when that ships.
+**PuiKit floor.** `MarkdownView(on_link=...)` arrived in PuiKit 1.7.7
+(puikit#153), so `requirements.txt` pins `puikit>=1.7.7` — a hard floor, since
+every Markdown dialog passes the argument.

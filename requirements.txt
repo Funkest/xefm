@@ -24,7 +24,14 @@
 # PuiKit is XeFM's UI/rendering framework (the TUI/GUI backend layer), published
 # on PyPI as of 1.0. For co-development against a local checkout, ``make venv``
 # additionally installs it editable from ../puikit, which overrides this pin.
-# 1.7.6 is the floor, and a soft one: XeFM calls nothing new for it, and nothing
+# 1.7.7 is the floor, and a hard one: every Markdown dialog -- Help, file
+# details, a viewer's key list, an action's page -- builds its MarkdownView with
+# ``on_link=``, a TypeError on any older PuiKit, so none of them would open.
+# 1.7.7 is where that per-view link handler arrived, with keyboard link focus
+# (``focus_advance`` / ``activate_focused_link``): Tab / Enter in the Help dialog
+# reach a row's link and open that action's page over the help (discussion
+# #550, puikit#153).
+# 1.7.6 was the previous floor, and a soft one: XeFM calls nothing new for it, and nothing
 # raises without it. It is what makes the context menus say which row they are
 # for, and what delivers the Menu key. A native popup menu (macOS, Windows)
 # holds the UI thread until it closes while a render only schedules a redraw,
@@ -134,7 +141,7 @@
 # itself from under a covering confirm box -- issue #333), and
 # ``MenuBar.open_menu`` / ``open_menu_mnemonic`` (keyboard menu activation --
 # issue #304).
-puikit>=1.7.6
+puikit>=1.7.7
 pygments
 boto3
 watchdog
