@@ -91,7 +91,14 @@ class MenuBarActivation(unittest.TestCase):
         self.assertTrue(self._menu_open())
         self.app.panel.render()
         self.assertEqual(self._file_title_bgs(), {theme.selection_bg})
-        self._click(10, 5)  # a pane click dismisses the pulldown
+        # A pane click dismisses the pulldown. Pick the point just right of
+        # the pulldown: a fixed (10, 5) landed on its "Open with Default App"
+        # row, so the click ran that item (and launched the OS's default app on
+        # a.txt) instead of exercising an outside click at all.
+        menu = self.app.panel._layers[-1].rect
+        x, y = int(menu.x + menu.w) + 2, 5
+        self.assertFalse(menu.contains(x, y))
+        self._click(x, y)
         self.assertFalse(self._menu_open())
         self.app.panel.render()
         self.assertEqual(self._file_title_bgs(), {theme.popup_bg})
