@@ -127,7 +127,10 @@ Web Server (/var/www)
 For favorites you want to keep in a file you control — the same list on every
 machine you copy your config to — edit `FAVORITE_DIRECTORIES` in your `~/.xefm/config.py`. Each entry needs a
 `name` (what to call it) and a `path` (where it is; `~` expands to your home
-directory):
+directory). A `path` may be a file as well as a directory — selecting it opens the
+file's directory with the cursor on the file, just like a file favorite added with
+**B**. You don't say which it is: XeFM finds out when you pick the row, so a list
+of paths loaded from elsewhere can go in as it is:
 
 ```python
 class Config:
@@ -136,6 +139,7 @@ class Config:
         {'name': 'Work Projects', 'path': '~/work'},
         {'name': 'Scripts', 'path': '~/bin'},
         {'name': 'Web Server', 'path': '/var/www'},
+        {'name': 'Todo', 'path': '~/notes/todo.md'},
         # Add your own here
     ]
 ```

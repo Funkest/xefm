@@ -994,6 +994,10 @@ class Config:
     # without the picker stalling on it. Nothing connects until you select a
     # row; if the place turns out to be unreachable, the pane says so then.
     #
+    # A path may name a file as well as a directory: selecting it opens the
+    # file's directory with the cursor on the file. Nothing needs to say which
+    # it is - XeFM finds out when you select the row.
+    #
     # The four below are the ones almost every machine has. Delete what you do
     # not use - a favorite you never selected costs nothing, but it is a row
     # between you and the one you want.
@@ -1005,6 +1009,7 @@ class Config:
         # Add your own favorites here:
         # {'name': 'Work', 'path': '/path/to/work'},
         # {'name': 'Scripts', 'path': '~/bin'},
+        # {'name': 'Todo', 'path': '~/notes/todo.md'},
         # {'name': 'NAS', 'path': '/Volumes/share'},
         # {'name': 'Dev Server', 'path': 'ssh://devbox/var/www'},
     ]

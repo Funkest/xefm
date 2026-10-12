@@ -56,6 +56,20 @@ snaps back if the listing fails. A file favorite passes the file's parent plus
 remembered cursor. A file that has since been deleted simply leaves the cursor
 where the listing put it.
 
+### A config row that names a file (#525)
+
+A `FAVORITE_DIRECTORIES` row has no `is_file`: it is written by hand (or loaded
+from the user's own list), and asking the filesystem when the config loads is
+exactly the probe #430 removed. So the jump finds out instead. Listing a file
+raises `NotADirectoryError`; `FileListManager.compute_listing` returns that as
+`not_a_directory` without logging, and `apply_listing` records it as
+`listing_not_dir`. `_jump_pane_to` — when it was not already given a
+`select_name` — marks the pane `_lands_on_file`, which tells `apply_listing` not
+to log "Not a directory"; its `landed` callback then restores the pane and jumps
+again to the parent with `select_name`. Any other navigation that lists a file
+still gets the error line. History and drives rows go through the same jump, so
+they gain the same behavior for free.
+
 ## The add flow — `XeFMApp.add_favorite`
 
 1. Build up to two candidates: the pane's directory (not in a virtual pane,

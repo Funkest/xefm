@@ -124,6 +124,23 @@ class AddFavoriteTest(unittest.TestCase):
         self.assertEqual(str(pane["path"]), os.path.join(self.tmp, "sub"))
         self.assertEqual(pane["files"][pane["focused_index"]].name, "deep.txt")
 
+    def test_a_config_favorite_may_name_a_file(self):
+        """#525: a ``FAVORITE_DIRECTORIES`` row is not probed, so it does not say
+        whether it is a file. The listing finds out, and the jump lands on it."""
+        target = os.path.join(self.tmp, "sub", "deep.txt")
+        with open(target, "w") as f:
+            f.write("x")
+        pane = self.app.active_pane()
+        self.app._jump_to_favorite(favorites.FavoriteEntry(
+            "Deep", target, origin=favorites.CONFIG))
+        self.app._settle_listings()
+        self.assertEqual(str(pane["path"]), os.path.join(self.tmp, "sub"))
+        self.assertEqual(pane["files"][pane["focused_index"]].name, "deep.txt")
+        self.app.log._select_all()
+        log = self.app.log.selection_text()
+        self.assertNotIn("Not a directory", log)
+        self.assertIn("Jumped to Deep", log)
+
     def test_the_context_menu_adds_the_clicked_row(self):
         """A right-click names its row, so there is no directory-or-row choice:
         the menu item goes straight to the name prompt for that row."""

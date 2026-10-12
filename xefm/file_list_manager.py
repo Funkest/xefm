@@ -149,6 +149,12 @@ class FileListManager:
         # having already named it twice.
         except PermissionError:
             self.logger.error(f"Permission denied: {path}")
+        except NotADirectoryError:
+            # Not logged here: a navigation that may name a file (a favorite)
+            # goes to its directory instead, and apply_listing — which knows
+            # whether the pane asked for that — reports the rest.
+            return {"ok": False, "files": [], "file_info": {},
+                    "not_a_directory": True}
         except FileNotFoundError:
             self.logger.error(f"Directory not found: {path}")
         except OSError as e:
@@ -352,6 +358,13 @@ class FileListManager:
         # one that failed should not have moved the pane (see
         # ``XeFMApp._jump_pane_to``).
         pane_data['listing_ok'] = bool(result.get("ok"))
+        # A path that turned out to be a file: a navigation that accepts one
+        # (``_lands_on_file``, set by ``XeFMApp._jump_pane_to``) goes to its
+        # directory instead, so only everyone else is told it failed.
+        pane_data['listing_not_dir'] = bool(result.get("not_a_directory"))
+        lands_on_file = pane_data.pop('_lands_on_file', False)
+        if pane_data['listing_not_dir'] and not lands_on_file:
+            self.logger.error(f"Not a directory: {pane_data.get('path')}")
         if not result.get("ok"):
             pane_data['files'] = []
             pane_data['focused_index'] = 0
