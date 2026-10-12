@@ -21,6 +21,7 @@ Press `F1` in XeFM for the keys these are on — the help is built from your own
 | `sync_other_to_current` | Sync other pane's directory to the current pane |
 | `copy_files` | Copy selected files to the other pane's directory |
 | `move_files` | Move selected files to the other pane's directory |
+| `copy_files_to` / `move_files_to` | Copy / move selected files to a typed directory (prefilled with the other pane's) |
 | `compare_selection` | Compare files/directories between panes |
 | `adjust_pane_left` | Move the pane boundary left (left pane smaller) |
 | `adjust_pane_right` | Move the pane boundary right (left pane larger) |

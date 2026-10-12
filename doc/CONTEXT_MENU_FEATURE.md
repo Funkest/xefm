@@ -23,7 +23,7 @@ a PC keyboard. A terminal on macOS or Linux never passes it on, which is why
 ## What is in them
 
 **Item menu** — Open, View File, Select / Deselect, Rename…, Duplicate, Copy /
-Move to Other Pane, Delete, Copy Name(s), Copy Full Path(s), Open as List, Add
+Move to Other Pane, Copy to… / Move to…, Delete, Copy Name(s), Copy Full Path(s), Open as List, Add
 to Favorites… (that item), Show Hidden Files. Copy, Move and Delete act on the
 marked files when there are any, as their keys do. Select / Deselect leaves the
 cursor on the item, unlike Space, which moves on to the next row.

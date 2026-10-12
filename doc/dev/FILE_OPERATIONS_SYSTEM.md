@@ -132,7 +132,7 @@ Reachability (no default key binding):
 - Dispatch: `elif action == "duplicate_files": return self.duplicate_files()` — so a user-defined `duplicate_files` key binding works.
 - Menu bar (`_build_menu` → File menu) and right-click context menu (`_show_context_menu`): a **Duplicate** item after **Rename…**.
 
-The same-directory copy relaxation lives in `_transfer()`: when `dest_dir == src_pane["path"]` and `kind == "copy"`, it routes to `_run_duplicate(src_pane, targets)` instead of logging the old "source and destination are the same directory" error. Move keeps that error.
+The same-directory copy relaxation lives in `_run_transfer()` (shared by `_transfer()` and `_transfer_to_path()`): when `dest_dir == src_pane["path"]` and `kind == "copy"`, it routes to `_run_duplicate(src_pane, targets)` instead of logging the old "source and destination are the same directory" error. Move keeps that error.
 
 ### Tests
 
@@ -152,6 +152,7 @@ The same-directory copy relaxation lives in `_transfer()`: when `dest_dir == src
 
 - `XeFMApp.__init__` — `self.tasks = TaskManager()`, `self._fileops = FileOperationService(self.config, self.tasks)`.
 - `XeFMApp.copy_files()` / `move_files()` / `duplicate_files()` / `delete_files()` gather the active pane's selection and delegate to `self._fileops`, passing an `on_complete` that refreshes panes and logs the summary.
+- `XeFMApp.copy_files_to()` / `move_files_to()` (Shift-C / Shift-M, #528) go through `_transfer_to_path()`: the source-side guards of `_transfer()`, then a `show_input` prompt shaped like Jump to Path's — prefilled with the other pane's directory, `FilepathCompleter(directories_only=True)` rooted at the active pane, input resolved by `_resolve_jump_target` against the active pane (so `.` is "here"). The destination guards (non-empty, not a read-only archive, an existing directory) run as the prompt's `validate`; accept hands off to `_run_transfer()`. Its `on_complete` re-lists every pane whose path equals the destination, plus the source on a move — for C / M that is exactly the other pane, as before.
 
 ## References
 

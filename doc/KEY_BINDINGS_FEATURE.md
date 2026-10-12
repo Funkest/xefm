@@ -247,8 +247,9 @@ list-style bindings keep working unchanged.
 
 **Default selection-aware actions.** Out of the box these file operations use
 `'required'` (they act on the selection, so they're hidden when nothing is
-selected): `copy_files` (`C`), `move_files` (`M`), `delete_files` (`K` / `DELETE`),
-and `create_archive` (`P`). `create_directory` (`M`) uses `'none'` so it shares
+selected): `copy_files` (`C`), `move_files` (`M`), `copy_files_to` (`Shift-C`),
+`move_files_to` (`Shift-M`), `delete_files` (`K` / `DELETE`), and
+`create_archive` (`P`). `create_directory` (`M`) uses `'none'` so it shares
 the `M` key with `move_files` without conflict — XeFM picks whichever action fits
 the current selection state. You can add a `'selection'` requirement to any other
 action the same way.
