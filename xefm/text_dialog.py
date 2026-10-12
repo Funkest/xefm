@@ -264,6 +264,7 @@ def show_markdown(
     on_close: Callable[[], None] | None = None,
     on_link: Callable[[str], bool] | None = None,
     hint: str | None = None,
+    over: Any = None,
     z: int = 70,
 ) -> MarkdownDialog:
     """Push a modal :class:`MarkdownDialog` over ``panel`` and return it.
@@ -277,11 +278,38 @@ def show_markdown(
     returns True for one it handled — how a dialog gives its links an in-app
     meaning (``xefm-action:`` in the Help dialog); declined, a link opens the
     way PuiKit opens it. ``hint`` replaces the bottom band's text, for a dialog
-    that wants to name its link keys."""
+    that wants to name its link keys.
+
+    ``over`` is the dialog this one opens on top of, when it is a page *about*
+    something in that dialog (an action's page over the Help dialog or the
+    command palette). The two would otherwise be the same chrome on the same
+    surface, one exactly covering the other, and read as one box; so the page
+    goes in front of it (``z`` is then ignored), dims everything beneath it, and
+    is inset within it so the frame below still shows on every side."""
     dialog = MarkdownDialog(source, title=title, on_close=on_close,
                             on_link=on_link, hint=hint)
-    _push(panel, dialog, rows=_wrapped_rows(source, _box_width(panel) - 4.0), z=z)
+    below = _layer_of(panel, over)
+    w = _box_width(panel)
+    if below is not None:
+        w = max(36.0, min(w, below.rect.w - 2 * _NESTED_INSET))
+    _push(panel, dialog, rows=_wrapped_rows(source, w - 4.0),
+          z=below.z + 10 if below is not None else z, w=w, over=below)
     return dialog
+
+
+#: How far a page opened over another dialog sits inside it, on each side, in
+#: base units — enough for the frame underneath to stay visible around it.
+_NESTED_INSET = 4.0
+
+
+def _layer_of(panel: Any, widget: Any) -> Any:
+    """The layer slot holding ``widget``, or None (no widget, or not pushed)."""
+    if widget is None:
+        return None
+    for slot in getattr(panel, "_layers", ()):
+        if slot.widget is widget:
+            return slot
+    return None
 
 
 def _wrapped_rows(source: str, width: float) -> int:
@@ -309,15 +337,23 @@ def _box_width(panel: Any) -> float:
     return max(48.0, min(sw * 0.7, 96.0))
 
 
-def _push(panel: Any, dialog: _ScrollModal, *, rows: int, z: int) -> None:
+def _push(panel: Any, dialog: _ScrollModal, *, rows: int, z: int,
+          w: float | None = None, over: Any = None) -> None:
     """Size, center, and push a scroll-modal, with the shared modal intent. Height
     is a rough estimate from the source ``rows`` (Markdown may wrap/expand, but the
-    body scrolls, so an approximate reserve is fine)."""
+    body scrolls, so an approximate reserve is fine). ``over`` is the layer slot
+    of a dialog this one is stacked on (see :func:`show_markdown`): the height is
+    then kept inside it too, and the layers beneath are dimmed."""
     _sw, sh = panel.backend.size_units
-    w = _box_width(panel)
+    if w is None:
+        w = _box_width(panel)
     # rows + chrome: top border, title, rule, body, rule, hint, bottom border.
     # The body scrolls, so an approximate reserve is fine.
     h = max(10.0, min(sh * 0.8, float(rows + 6)))
+    hints: dict[str, Any] = {"shadow": True, "w": w, "h": h}
+    if over is not None:
+        h = max(8.0, min(h, over.rect.h - 2.0))
+        hints.update(h=h, dim_below=True)
     dialog._panel = panel
-    panel.push_layer(dialog, z=z, hints={"shadow": True, "w": w, "h": h})
+    panel.push_layer(dialog, z=z, hints=hints)
     animate_open(panel, dialog)

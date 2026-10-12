@@ -151,3 +151,31 @@ def test_a_user_action_with_a_docstring_body_is_linked(app):
     assert "[Tidy the pane.](xefm-action:tidy%20up)" in md
     assert app._follow_action_link("xefm-action:tidy%20up")
     assert _top(app).title == "tidy up"
+
+
+def _slot(app, widget):
+    return next(s for s in app.panel._layers if s.widget is widget)
+
+
+def test_the_page_sits_inside_the_help_and_dims_it(app):
+    """Same chrome on the same surface, one covering the other, read as one
+    box: the page is inset within the help on every side and dims it."""
+    help_dialog = _help(app)
+    app._follow_action_link("xefm-action:copy_files")
+    page = _top(app)
+    outer, inner = _slot(app, help_dialog).rect, _slot(app, page).rect
+    assert inner.x > outer.x and inner.x + inner.w < outer.x + outer.w
+    assert inner.y > outer.y and inner.y + inner.h < outer.y + outer.h
+    assert _slot(app, page).hints.get("dim_below")
+    assert _slot(app, page).z > _slot(app, help_dialog).z
+
+
+def test_the_palette_page_sits_inside_the_palette(app):
+    app.show_command_palette()
+    palette = _top(app)
+    palette.handle_event(key("f1"))
+    page = _top(app)
+    assert page is not palette
+    outer, inner = _slot(app, palette).rect, _slot(app, page).rect
+    assert inner.x > outer.x and inner.x + inner.w < outer.x + outer.w
+    assert _slot(app, page).hints.get("dim_below")

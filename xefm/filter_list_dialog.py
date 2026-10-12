@@ -463,16 +463,8 @@ class FilterListDialog(FocusContainer, Widget):
             return False
         from xefm.text_dialog import show_markdown
         show_markdown(self._panel, self.to_help(value),
-                      title=self.to_label(value), z=self._layer_z() + 10)
+                      title=self.to_label(value), over=self)
         return True
-
-    def _layer_z(self) -> int:
-        """The z this dialog's own layer was pushed at, so its help lands above
-        it whatever the caller picked."""
-        for slot in getattr(self._panel, "_layers", ()):
-            if slot.widget is self:
-                return slot.z
-        return 70
 
     # --- outcome -------------------------------------------------------------
 

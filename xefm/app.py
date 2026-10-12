@@ -7778,7 +7778,11 @@ class XeFMApp:
         if action is None:
             self.log_info(f"No action named '{name}'")
         else:
-            show_markdown(self.panel, self._action_page(action), title=name, z=80)
+            # Over the dialog the link is in — the topmost layer, since only it
+            # takes events — so the page is inset and dims the help behind it.
+            help_dialog = self.panel._layers[-1].widget if self.panel.has_layers else None
+            show_markdown(self.panel, self._action_page(action), title=name,
+                          over=help_dialog)
         self.panel.render()
         return True
 

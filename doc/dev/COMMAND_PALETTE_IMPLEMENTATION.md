@@ -148,5 +148,13 @@ routes Tab / Shift-Tab to the body's links (cycling at the ends) and gives Enter
 to a focused link before treating it as "close"; a body without links ignores
 Tab, so the other Markdown dialogs are unchanged apart from that key.
 
+**Telling the page from the dialog under it.** The page and the dialog it
+opens from share the modal chrome and the popup surface, and at the same width
+one exactly covered the other — the two read as one box. `show_markdown(...,
+over=dialog)` therefore stacks the page *in front of* that dialog's layer, insets
+it by `_NESTED_INSET` on each side (and keeps its height inside too), and pushes
+it with PuiKit's `dim_below`, so the dialog behind sits visibly a level back.
+The palette's F1 and the Help dialog's links both open their page this way.
+
 **PuiKit floor.** `MarkdownView(on_link=...)` needs the PuiKit release that
 carries this work; `requirements.txt` must move to it when that ships.
