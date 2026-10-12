@@ -94,6 +94,26 @@ class FilePaneClick(unittest.TestCase):
         _click(view, 9.0, button="right")
         self.assertEqual(seen, [-1])
 
+    def test_a_right_click_on_a_row_hangs_the_menu_under_it(self):
+        """#524: the menu opens just under the clicked row — where the keyboard
+        opens it — not from the pointer, which covered the row with the menu."""
+        seen = []
+        view = self._widget([_F(str(i)) for i in range(20)],
+                            on_context=lambda i, x, y: seen.append((i, x, y)))
+        view._abs = (10.0, 3.0, 40.0, 20.0)
+        view.offset = 5.0
+        _click(view, 2.4, button="right")
+        self.assertEqual(seen, [(7, 11.0, 6.0)])
+        self.assertEqual(view.menu_anchor(7)[1], 6.0)
+
+    def test_a_right_click_below_the_rows_opens_at_the_pointer(self):
+        seen = []
+        view = self._widget([_F("one")],
+                            on_context=lambda i, x, y: seen.append((x, y)))
+        view._abs = (10.0, 3.0, 40.0, 20.0)
+        _click(view, 9.0, button="right")
+        self.assertEqual(seen, [(11.0, 12.0)])
+
 
 class AppPaneActivation(unittest.TestCase):
     """A click through the live layout, on the memory backend."""

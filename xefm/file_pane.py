@@ -974,7 +974,14 @@ class FilePane(Widget):
             index = self._row_at(event)
             if self.on_context is not None:
                 rx, ry, *_ = self._abs
-                self.on_context(index, rx + (event.x or 0.0), ry + (event.y or 0.0))
+                # On a row, the menu hangs just under it — where the keyboard
+                # opens it (``menu_anchor``) — rather than from the pointer,
+                # which put its first item over the row it is for (#524).
+                if index >= 0:
+                    y = self._margin_y + (index - self.offset) + 1.0
+                else:
+                    y = event.y or 0.0
+                self.on_context(index, rx + (event.x or 0.0), ry + y)
                 return True
         if event.type is EventType.FILE_DROP and self.on_drop is not None:
             # Files dropped onto the pane from another app. Map the drop point to a
