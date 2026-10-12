@@ -107,6 +107,51 @@ def test_move_same_storage_is_atomic(tmp_path, svc):
     assert not (src / "m.txt").exists()
 
 
+def _answer_overwrite(svc, monkeypatch):
+    """Answer every conflict prompt with Overwrite."""
+    monkeypatch.setattr(Task, "ask", lambda self, *a, **k: ("overwrite", True))
+
+
+def test_move_overwrites_an_existing_file(tmp_path, svc, monkeypatch):
+    """#527: on one drive the move is a rename, and Windows' ``rename`` refuses an
+    existing destination — Overwrite has to replace it."""
+    src, dst = tmp_path / "s", tmp_path / "d"
+    src.mkdir(); dst.mkdir()
+    (src / "m.txt").write_text("new")
+    (dst / "m.txt").write_text("old")
+    _answer_overwrite(svc, monkeypatch)
+    res = _run_sync(svc, svc.move, [_P(src / "m.txt")], _P(dst))
+    assert res["done"] == 1 and res["errors"] == []
+    assert (dst / "m.txt").read_text() == "new"
+    assert not (src / "m.txt").exists()
+
+
+def test_move_overwrite_merges_into_an_existing_directory(tmp_path, svc, monkeypatch):
+    """A directory onto a non-empty directory merges: no rename can do that, so
+    the tree is moved into it file by file."""
+    src, dst = tmp_path / "s", tmp_path / "d"
+    (src / "f").mkdir(parents=True); (dst / "f").mkdir(parents=True)
+    (src / "f" / "same.txt").write_text("new")
+    (src / "f" / "only_src.txt").write_text("src")
+    (dst / "f" / "same.txt").write_text("old")
+    (dst / "f" / "only_dst.txt").write_text("dst")
+    _answer_overwrite(svc, monkeypatch)
+    res = _run_sync(svc, svc.move, [_P(src / "f")], _P(dst))
+    assert res["done"] == 1 and res["errors"] == []
+    assert (dst / "f" / "same.txt").read_text() == "new"
+    assert (dst / "f" / "only_src.txt").read_text() == "src"
+    assert (dst / "f" / "only_dst.txt").read_text() == "dst"
+    assert not (src / "f").exists()
+
+
+def test_path_move_to_overwrites_an_existing_file(tmp_path):
+    (tmp_path / "a.txt").write_text("new")
+    (tmp_path / "b.txt").write_text("old")
+    assert _P(tmp_path / "a.txt").move_to(_P(tmp_path / "b.txt"), overwrite=True)
+    assert (tmp_path / "b.txt").read_text() == "new"
+    assert not (tmp_path / "a.txt").exists()
+
+
 # --- moving across filesystems ----------------------------------------------
 
 def _fake_devices(monkeypatch, other_root):
