@@ -2798,6 +2798,8 @@ class XeFMApp:
                 "open_list_from_file": (self.open_list_from_file, True),
                 "copy_files": (self.copy_files, None),
                 "move_files": (self.move_files, None),
+                "copy_files_to": (self.copy_files_to, None),
+                "move_files_to": (self.move_files_to, None),
                 "duplicate_files": (self.duplicate_files, None),
                 "delete_files": (self.delete_files, None),
                 "create_archive": (self.create_archive, None),
@@ -3336,6 +3338,10 @@ class XeFMApp:
                      enabled=has_files, shortcut=sc("copy_files")),
             MenuItem("Move to Other Pane", on_select=self.move_files,
                      enabled=has_files, shortcut=sc("move_files")),
+            MenuItem("Copy to…", on_select=self.copy_files_to,
+                     enabled=has_files, shortcut=sc("copy_files_to")),
+            MenuItem("Move to…", on_select=self.move_files_to,
+                     enabled=has_files, shortcut=sc("move_files_to")),
             MenuItem("Delete…", on_select=self.delete_files,
                      enabled=has_files, shortcut=sc("delete_files")),
             SEPARATOR,
@@ -5889,6 +5895,18 @@ class XeFMApp:
         Returns True when a guard bailed out synchronously (see ``_transfer``)."""
         return self._transfer("move")
 
+    def copy_files_to(self) -> bool:
+        """Copy the active pane's selection (or cursor entry) into a directory
+        typed in a prompt (the 'Shift-C' key) — cfiler's CopyInput.
+        Returns True when a guard bailed out synchronously (see ``_transfer``)."""
+        return self._transfer_to_path("copy")
+
+    def move_files_to(self) -> bool:
+        """Move the active pane's selection (or cursor entry) into a directory
+        typed in a prompt (the 'Shift-M' key) — cfiler's MoveInput.
+        Returns True when a guard bailed out synchronously (see ``_transfer``)."""
+        return self._transfer_to_path("move")
+
     def duplicate_files(self) -> bool:
         """Duplicate the active pane's selection (or cursor entry) in place — a
         Finder-style copy into the same directory, auto-renamed with the shared
@@ -5965,11 +5983,19 @@ class XeFMApp:
             # Move = copy + delete source; the archive source can't be deleted.
             self.log_info("Cannot move out of an archive — use copy instead")
             return True
-        dest_dir = dst_pane["path"]
         targets = self._selected_or_focused(src_pane)
         if not targets:
             self.log_info(f"No file to {kind}")
             return True
+        return self._run_transfer(kind, src_pane, targets, dst_pane["path"])
+
+    def _run_transfer(self, kind: str, src_pane: dict, targets: list, dest_dir) -> bool:
+        """Copy or move ``targets`` from ``src_pane`` into ``dest_dir`` — the other
+        pane's directory for C / M, a typed one for Shift-C / Shift-M. Callers
+        have already cleared the destination as a writable directory. On
+        completion, every pane showing ``dest_dir`` is re-listed, and the source
+        too on a move. Same return contract as ``_transfer``."""
+        verb = "Copy" if kind == "copy" else "Move"
         # A virtual source spans many directories, so the single "same directory"
         # guard doesn't apply — the per-target dest-exists check below still holds.
         if not src_pane.get("virtual") and str(dest_dir) == str(src_pane["path"]):
@@ -5982,9 +6008,11 @@ class XeFMApp:
             return True
 
         def on_complete(result: dict) -> None:
-            self._relist(dst_pane)
-            if kind == "move":
-                self._relist(src_pane)
+            dest = str(dest_dir)
+            for pane in (self.pm.left_pane, self.pm.right_pane):
+                if (pane is src_pane and kind == "move") or (
+                        not pane.get("virtual") and str(pane["path"]) == dest):
+                    self._relist(pane)
             src_pane["selected_files"].clear()
             self.log_info(format_op_summary(verb, result))
             self._report_op_failures(verb, result)
@@ -5992,6 +6020,63 @@ class XeFMApp:
 
         op = self._fileops.copy if kind == "copy" else self._fileops.move
         op(self.panel, targets, dest_dir, on_complete=on_complete, log=self.log_info)
+        return False
+
+    def _transfer_to_path(self, kind: str) -> bool:
+        """Prompt for a destination directory, then copy / move the active pane's
+        targets there (#528). The prompt is Jump to Path's: prefilled with the
+        other pane's directory, TAB-completing directories, and resolving a
+        relative path — ``.`` included — against the *active* pane, so ``.``
+        means "here" and ``..`` its parent. Same return contract as
+        ``_transfer``; the source-side guards are its, the destination ones run
+        as the prompt's validation."""
+        verb = "Copy" if kind == "copy" else "Move"
+        src_pane = self.active_pane()
+        if kind == "move" and self._is_archive(src_pane["path"]):
+            self.log_info("Cannot move out of an archive — use copy instead")
+            return True
+        targets = self._selected_or_focused(src_pane)
+        if not targets:
+            self.log_info(f"No file to {kind}")
+            return True
+        current = str(src_pane["path"])
+
+        def resolve(text: str) -> Path:
+            return self._resolve_jump_target(text, current)
+
+        def validate(text: str) -> str | None:
+            if not text.strip():
+                return "Path cannot be empty"
+            target = resolve(text)
+            if self._is_archive(target):
+                return f"Cannot {kind} into a read-only archive"
+            try:
+                is_dir = target.is_dir()
+            except Exception as exc:
+                # A hand-written PATH_SCHEMES backend can raise anything; left
+                # unguarded it escapes the dialog's key handler (see jump_to_path).
+                report_user_failure(f"{verb} to {text!r}", exc)
+                return f"{exc.__class__.__name__}: {exc}"
+            if not is_dir:
+                return f"Not a directory: {target}"
+            return None
+
+        def accept(text: str) -> None:
+            self._run_transfer(kind, src_pane, targets, resolve(text))
+            self.panel.render()
+
+        # Prefill with the other pane's directory — C / M's destination, ready to
+        # edit — unless that pane is a search-results feed with none of its own.
+        dst_pane = self.pm.get_inactive_pane()
+        start = current if dst_pane.get("virtual") else str(dst_pane["path"])
+        sep = os.sep if self._is_local(start) else "/"
+        initial = start if start.endswith(sep) else start + sep
+        show_input(self.panel, title=f"{verb} to Path", prompt=f"{verb} to:", text=initial,
+                   on_accept=accept, validate=validate, select_all=False,
+                   completer=FilepathCompleter(base_directory=current, directories_only=True,
+                                               show_hidden=self.flm.show_hidden),
+                   region=self._active_pane_region())
+        self.panel.render()
         return False
 
     def delete_files(self) -> bool:
@@ -7542,6 +7627,8 @@ class XeFMApp:
             ("copy_names", "Copy selection's name(s) to the clipboard"),
             ("copy_paths", "Copy selection's full path(s) to the clipboard"),
             ("move_files", "Move selection to the other pane"),
+            ("copy_files_to", "Copy selection to a typed directory"),
+            ("move_files_to", "Move selection to a typed directory"),
             ("delete_files", "Delete selection"),
             ("create_archive", "Create archive from selection"),
             ("extract_archive", "Extract the selected archive(s)"),
@@ -7866,6 +7953,8 @@ class XeFMApp:
             SEPARATOR,
             MenuItem("Copy to Other Pane", on_select=self.copy_files, enabled=entry is not None),
             MenuItem("Move to Other Pane", on_select=self.move_files, enabled=entry is not None),
+            MenuItem("Copy to…", on_select=self.copy_files_to, enabled=entry is not None),
+            MenuItem("Move to…", on_select=self.move_files_to, enabled=entry is not None),
             MenuItem("Delete", on_select=self.delete_files, enabled=entry is not None),
             SEPARATOR,
             MenuItem("Copy Name(s)", on_select=self.copy_names_to_clipboard,

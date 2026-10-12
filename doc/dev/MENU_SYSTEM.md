@@ -192,7 +192,7 @@ self.left_view = FilePane(..., on_context=lambda i, x, y:
 
 `_show_context_menu(pane_name, index, x, y)` makes the clicked pane/row active,
 builds a fresh `Menu(...)` (Open, View File, Select/Deselect, Rename,
-Duplicate, Copy/Move to Other Pane, Delete, Copy Name(s)/Path(s), Show Hidden
+Duplicate, Copy/Move to Other Pane, Copy/Move to…, Delete, Copy Name(s)/Path(s), Show Hidden
 Files), and calls `self.panel.popup_menu(menu, x, y)`. As with the bar, the
 items reuse the same handlers and carry live `enabled` / `checked` predicates
 (e.g. `enabled=entry is not None`, the Select/Deselect label chosen from the

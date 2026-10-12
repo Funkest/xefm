@@ -433,6 +433,8 @@ _FILER_ACTIONS = [
     # File operations
     _a("copy_files", FILER, "Copy the selection to the other pane"),
     _a("move_files", FILER, "Move the selection to the other pane"),
+    _a("copy_files_to", FILER, "Copy the selection to a directory typed in a prompt"),
+    _a("move_files_to", FILER, "Move the selection to a directory typed in a prompt"),
     _a("duplicate_files", FILER, "Duplicate the selection in place",
        default_keys=()),
     _a("delete_files", FILER, "Delete the selected files and directories"),

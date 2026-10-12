@@ -65,6 +65,27 @@ For S3 you need AWS credentials configured and the `boto3` package installed.
 Cross-storage transfers depend on your network speed, so test with small files
 first when setting up a new storage backend.
 
+## Copy / Move to a typed directory
+
+**Shift-C** and **Shift-M** copy or move the selected file(s) somewhere other
+than the other pane, without navigating there first.
+
+1. Select one or more items.
+2. Press **Shift-C** (copy) or **Shift-M** (move).
+3. Edit the destination and press **Enter**. The prompt starts with the other
+   pane's directory; **Tab** completes directory names.
+
+A relative path is taken from the **current** pane: `.` is the current
+directory, `..` its parent, `sub` a directory inside it. `~` and absolute paths
+work as in Jump to Path, as do `s3://…` / `ssh://…` locations. The destination
+must be an existing directory; anything else is refused in the prompt. From
+there it is an ordinary copy or move — the same confirmation, conflict handling
+and progress — and copying into the current directory itself duplicates, as
+**C** does.
+
+The menu bar's File menu and the item context menu carry these as **Copy to…**
+and **Move to…**.
+
 ## Duplicate
 
 Make an in-place copy of a file or directory — XeFM's equivalent of Finder's

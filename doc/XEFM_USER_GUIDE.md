@@ -257,6 +257,7 @@ it is the one list of keys that is always right for your config.
 | `select_range` | Select everything between the nearest selected item and the cursor |
 | `copy_files` | Copy selected files to the other pane |
 | `move_files` | Move selected files |
+| `copy_files_to` / `move_files_to` | Copy / move selected files to a directory you type |
 | `create_directory` | Create a directory (the same key, with nothing selected) |
 | `delete_files` | Delete selected files |
 | `rename` | Rename a file (or batch-rename several) |

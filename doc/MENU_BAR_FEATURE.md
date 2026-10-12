@@ -84,6 +84,8 @@ menu.
 | Duplicate | *(menu only)* |
 | Copy to Other Pane | `copy_files` |
 | Move to Other Pane | `move_files` *(when files are selected)* |
+| Copy to… | `copy_files_to` |
+| Move to… | `move_files_to` |
 | Delete… | `delete_files` |
 | Create Archive… | `create_archive` |
 | Extract Archive… | `extract_archive` |
