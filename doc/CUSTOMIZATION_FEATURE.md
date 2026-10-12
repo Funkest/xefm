@@ -207,7 +207,44 @@ class Config:
     }
 ```
 
-The dict form also takes `description` (what the help dialog shows).
+### Describing an action: the docstring
+
+Every action of yours is in the command palette (Ctrl-T), bound to a key or
+not, so an action you run once a month needs no key at all. Its docstring is how
+it is described there, split the usual Python way:
+
+```python
+def open_in_vscode(ctx):
+    """Open the item under the cursor in VS Code.
+
+    Works on directories too — VS Code opens them as a workspace.
+    """
+    ctx.run_program(['code', str(ctx.pane.focused.path)])
+```
+
+- The **first line** is the one-line description: the row in the Help dialog
+  (F1) and the line under the palette's list.
+- The **paragraphs after the blank line** are the page the palette opens when
+  you press F1 on the action. Markdown works there.
+
+Without a docstring, both show only the action's name. For a function whose
+docstring you cannot write — a lambda, or one from a library — the dict form
+takes a `description`, written and split exactly like a docstring. It replaces
+the docstring as a whole:
+
+```python
+ACTIONS = {
+    'tidy': {'func': lambda ctx: ctx.invoke('unselect_all'),
+             'description': """
+                 Clear the selection.
+
+                 The same as Edit ▸ Clear Selection, under a name of its own.
+             """},
+}
+```
+
+A one-line `description`, as configs before the command palette wrote it, is a
+summary with no further page.
 
 ### What your function is given
 

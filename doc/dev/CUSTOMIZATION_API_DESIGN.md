@@ -109,7 +109,7 @@ A new module `xefm/actions.py`:
 class Action:
     name: str            # "cursor_up", "diff.next_block"
     func: Callable       # receives an ActionContext (see §3)
-    description: str     # feeds help dialogs and the future command palette
+    description: str     # feeds help dialogs and the command palette
     source: str          # "builtin" | "user" — user entries rebuilt on reload
 
 class ActionRegistry:
@@ -201,8 +201,8 @@ Design points:
 
 - **Keys live in `KEY_BINDINGS` only.** `ACTIONS` defines behavior;
   `KEY_BINDINGS` binds it. One namespace, one place for conflict checking,
-  and an action with no binding is still reachable from the future command
-  palette. This is the issue's original `KEY_BINDINGS`-references-`PROGRAMS`
+  and an action with no binding is still reachable from the command
+  palette (#550). This is the issue's original `KEY_BINDINGS`-references-`PROGRAMS`
   intuition, with in-process functions in place of subprocesses.
 - **Simple/extended duality.** A bare callable covers the common case; the
   dict form (`func`, `override`, `context`, `description`) mirrors the

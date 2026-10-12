@@ -71,6 +71,7 @@ down with it. A malformed entry in any of the tables above is a validation
 warning that skips that entry, never a load failure.
 """
 
+import inspect
 import traceback
 from typing import Any, Callable, Iterable, Mapping, NamedTuple
 
@@ -978,14 +979,33 @@ def _build_action(name, spec) -> tuple[_actions.Action | None, str | None]:
         return None, (f"ACTIONS['{name}'] targets context '{context}'; user "
                       f"functions are accepted only in '{_actions.FILER}' in this "
                       f"preview (viewer key bindings are rebindable via KEY_BINDINGS)")
+    # The action is described the way any Python function is: by its
+    # docstring, whose summary line is the one-liner the help dialog and the
+    # command palette show, and whose body is the palette's help page. A
+    # 'description' entry is read the same way and replaces the docstring
+    # whole — for a function that cannot carry one, such as a lambda.
+    text = spec.get("description")
+    if text is None:
+        text = inspect.getdoc(func) or ""
+    summary, details = _split_description(str(text))
     return _actions.Action(
         name=name,
         context=context,
-        description=str(spec.get("description") or f"User action '{name}'"),
+        description=summary or f"User action '{name}'",
         default_keys=(),
         func=func,
         source="user",
+        details=details,
     ), None
+
+
+def _split_description(text: str) -> tuple[str, str]:
+    """``(summary, details)`` from a description, split the PEP 257 way: the
+    first paragraph is the summary — joined onto one line, in case it was
+    wrapped — and everything after the first blank line is the details. Used
+    alike for a docstring and for an ``ACTIONS`` entry's 'description'."""
+    summary, _, details = inspect.cleandoc(text).partition("\n\n")
+    return " ".join(summary.split()), details.strip()
 
 
 def _build_path_scheme(name, spec) -> tuple[type | None, str | None]:

@@ -27,6 +27,7 @@ from puikit.backend import DEFAULT_STYLE, Style
 from puikit.event import Event, EventType
 from puikit.focus import FocusContainer
 from puikit.panel import Rect
+from puikit.text import display_width
 from puikit.widgets.base import Widget
 from puikit.widgets.list import ListView
 from puikit.widgets.markdown_view import MarkdownView
@@ -132,7 +133,11 @@ class _ScrollModal(FocusContainer, Widget):
     def handle_event(self, event: Event) -> bool:
         if event.type is EventType.KEY:
             key = event.key
-            if key in ("escape", "enter"):
+            if key == "tab":
+                self._step_link(-1 if "shift" in event.modifiers else 1)
+            elif key == "enter" and self._follow_link():
+                pass  # a keyboard-focused link was followed; the dialog stays
+            elif key in ("escape", "enter"):
                 self._close()
             elif key in _SCROLL_KEYS:
                 self.body.handle_event(event)
@@ -148,6 +153,23 @@ class _ScrollModal(FocusContainer, Widget):
                 self._close()  # click outside dismisses
             return True
         return True  # modal: swallow everything else
+
+
+    # --- links -----------------------------------------------------------------
+
+    def _step_link(self, direction: int) -> None:
+        """Tab / Shift-Tab: move the body's keyboard link focus, cycling — off
+        one end, the next press starts again from the other. A body without
+        links (or one that is not a MarkdownView) ignores the key."""
+        advance = getattr(self.body, "focus_advance", None)
+        if advance is not None and not advance(direction):
+            advance(direction)
+
+    def _follow_link(self) -> bool:
+        """Enter on a keyboard-focused link follows it; False when no link is
+        focused, so Enter keeps closing the dialog."""
+        activate = getattr(self.body, "activate_focused_link", None)
+        return bool(activate is not None and activate())
 
 
 class TextDialog(_ScrollModal):
@@ -179,8 +201,12 @@ class MarkdownDialog(_ScrollModal):
         *,
         title: str = "",
         on_close: Callable[[], None] | None = None,
+        on_link: Callable[[str], bool] | None = None,
+        hint: str | None = None,
     ):
-        super().__init__(MarkdownView(source), title=title, on_close=on_close)
+        kw = {} if hint is None else {"hint": hint}
+        super().__init__(MarkdownView(source, on_link=on_link), title=title,
+                         on_close=on_close, **kw)
         self.md = self.body
 
     def _style_body(self, theme, surface_bg) -> None:
@@ -236,26 +262,101 @@ def show_markdown(
     *,
     title: str = "",
     on_close: Callable[[], None] | None = None,
+    on_link: Callable[[str], bool] | None = None,
+    hint: str | None = None,
+    over: Any = None,
     z: int = 70,
 ) -> MarkdownDialog:
     """Push a modal :class:`MarkdownDialog` over ``panel`` and return it.
 
     Same chrome and sizing as :func:`show_text`, but ``source`` is Markdown and
-    lays out as rich text (headings, tables, emphasis, links)."""
-    dialog = MarkdownDialog(source, title=title, on_close=on_close)
-    _push(panel, dialog, rows=source.count("\n") + 1, z=z)
+    lays out as rich text (headings, tables, emphasis, links).
+
+    Links are followed by a click, or from the keyboard: Tab / Shift-Tab step
+    through them and Enter follows the stepped-to one (Enter with none stepped
+    to still closes). ``on_link(href)`` sees every followed link first and
+    returns True for one it handled — how a dialog gives its links an in-app
+    meaning (``xefm-action:`` in the Help dialog); declined, a link opens the
+    way PuiKit opens it. ``hint`` replaces the bottom band's text, for a dialog
+    that wants to name its link keys.
+
+    ``over`` is the dialog this one opens on top of, when it is a page *about*
+    something in that dialog (an action's page over the Help dialog or the
+    command palette). The two would otherwise be the same chrome on the same
+    surface, one exactly covering the other, and read as one box; so the page
+    goes in front of it (``z`` is then ignored) and is inset within it, so the
+    frame below shows on every side and the page's drop shadow falls on that
+    dialog's surface rather than off its edge. Nothing is dimmed: a page over a
+    dialog is a smaller step than the dialog was, and a veil over the whole
+    screen would make it read as the bigger one."""
+    dialog = MarkdownDialog(source, title=title, on_close=on_close,
+                            on_link=on_link, hint=hint)
+    below = _layer_of(panel, over)
+    w = _box_width(panel)
+    if below is not None:
+        w = max(36.0, min(w, below.rect.w - 2 * _NESTED_INSET))
+    _push(panel, dialog, rows=_wrapped_rows(source, w - 4.0),
+          z=below.z + 10 if below is not None else z, w=w, over=below)
     return dialog
 
 
-def _push(panel: Any, dialog: _ScrollModal, *, rows: int, z: int) -> None:
+#: How far a page opened over another dialog sits inside it, on each side, in
+#: base units — enough for the frame underneath to stay visible around it.
+_NESTED_INSET = 4.0
+
+
+def _layer_of(panel: Any, widget: Any) -> Any:
+    """The layer slot holding ``widget``, or None (no widget, or not pushed)."""
+    if widget is None:
+        return None
+    for slot in getattr(panel, "_layers", ()):
+        if slot.widget is widget:
+            return slot
+    return None
+
+
+def _wrapped_rows(source: str, width: float) -> int:
+    """A rough count of the rows ``source`` lays out to at ``width``.
+
+    Counting source lines alone sizes a page of prose — a handful of long
+    paragraphs, like a command palette help page — far too short, so it opens
+    already needing a scroll. Each line is counted as the rows its text wraps
+    to; a table row stays one row, since its cells lay out as columns rather
+    than one long line. Still an estimate: the body scrolls, so close is
+    enough."""
+    width = max(1.0, width)
+    rows = 0
+    for line in source.split("\n"):
+        if line.lstrip().startswith("|"):
+            rows += 1
+        else:
+            rows += max(1, -(-display_width(line) // int(width)))
+    return rows
+
+
+def _box_width(panel: Any) -> float:
+    """The width a scroll-modal opens at: a comfortable fraction of the window."""
+    sw, _sh = panel.backend.size_units
+    return max(48.0, min(sw * 0.7, 96.0))
+
+
+def _push(panel: Any, dialog: _ScrollModal, *, rows: int, z: int,
+          w: float | None = None, over: Any = None) -> None:
     """Size, center, and push a scroll-modal, with the shared modal intent. Height
     is a rough estimate from the source ``rows`` (Markdown may wrap/expand, but the
-    body scrolls, so an approximate reserve is fine)."""
-    sw, sh = panel.backend.size_units
-    w = max(48.0, min(sw * 0.7, 96.0))
+    body scrolls, so an approximate reserve is fine). ``over`` is the layer slot
+    of a dialog this one is stacked on (see :func:`show_markdown`): the height is
+    then kept inside it too."""
+    _sw, sh = panel.backend.size_units
+    if w is None:
+        w = _box_width(panel)
     # rows + chrome: top border, title, rule, body, rule, hint, bottom border.
     # The body scrolls, so an approximate reserve is fine.
     h = max(10.0, min(sh * 0.8, float(rows + 6)))
+    hints: dict[str, Any] = {"shadow": True, "w": w, "h": h}
+    if over is not None:
+        h = max(8.0, min(h, over.rect.h - 2.0))
+        hints["h"] = h
     dialog._panel = panel
-    panel.push_layer(dialog, z=z, hints={"shadow": True, "w": w, "h": h})
+    panel.push_layer(dialog, z=z, hints=hints)
     animate_open(panel, dialog)

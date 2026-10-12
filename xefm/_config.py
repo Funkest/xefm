@@ -283,6 +283,13 @@ class Config:
         # of using XeFM.
         'redraw': ['F5'],                      # Repaint the screen
         'menu': ['F10', 'ALT'],                # Open the menu bar (terminal; a bare Alt tap works on the Windows terminal, F10 everywhere)
+        # Ctrl-T -- the palette lives in the Tools menu. Not the Ctrl-Shift-P
+        # other applications use: Windows Terminal takes that chord for its own
+        # palette, and a POSIX terminal cannot tell it from Ctrl-P (copy_paths).
+        # Shift-P is left to the archive family (P), and Ctrl-K was passed over
+        # because a missed Ctrl would land on K, delete. A missed Ctrl here
+        # lands on T, which nothing is bound to.
+        'command_palette': ['Ctrl-T'],         # Search every action by name and run it
         
         # === Navigation ===
         'cursor_up': ['UP'],                   # Move cursor up one item
@@ -554,9 +561,13 @@ class Config:
         # === Searchable-list picker keys (rebindable, not listed above) =======
         # The picker dialogs -- Favorites, Drives, History, External Programs and
         # the ';' Filter prompt -- are a surface of their own ('filter_list'), and
-        # one of their keys is yours to move:
+        # two of their keys are yours to move:
         #
-        #   'remove_list_item':  Shift-DELETE  forget the highlighted row
+        #   'remove_list_item':    Shift-DELETE  forget the highlighted row
+        #   'describe_list_item':  F1            help for the highlighted row
+        #
+        # The help key is offered where a row has more to say than its label:
+        # the command palette (Ctrl-T) today.
         #
         # It only does anything where the rows are *remembered* rather than
         # declared: History and the Filter prompt, whose lists XeFM built by
@@ -718,6 +729,23 @@ class Config:
     # }
     # ...and bind them in KEY_BINDINGS above, like any built-in action:
     #     'select-documents': ['Shift-Y'],
+    #
+    # Every action of yours is in the command palette (Ctrl-T), key or no
+    # key. The docstring is how it is described there: its first line is the
+    # one-line description (also the Help dialog's row), and the paragraphs
+    # after a blank line are the page F1 opens in the palette (Markdown):
+    #
+    # def open_in_vscode(ctx):
+    #     """Open the item under the cursor in VS Code.
+    #
+    #     Works on directories too -- VS Code opens them as a workspace.
+    #     """
+    #     ctx.run_program(['code', str(ctx.pane.focused.path)])
+    #
+    # Without a docstring the palette has only the name to show. (The dict
+    # form below also takes a 'description', written and split the same way,
+    # which replaces the docstring -- for a function that cannot carry one,
+    # such as a lambda.)
     #
     # An action name that already exists is ignored unless you say you meant it,
     # which also keeps the built-in reachable so you can wrap it:

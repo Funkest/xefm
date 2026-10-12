@@ -98,13 +98,14 @@ class TestUnboundRowsReadAsUnbound(HelpMarkdownCase):
         # "—" in the same code style as Q or ? reads as a key you could press,
         # and reset_log_height's binding really is an underscore.
         md = self.terminal_help()
-        self.assertIn(f"| {UNBOUND_KEYS} | Copy the whole log", md)
+        # The description is a link to the action's page (it has details).
+        self.assertIn(f"| {UNBOUND_KEYS} | [Copy the whole log", md)
         self.assertNotIn(f"| `{UNBOUND_KEYS}` |", md)
 
     def test_bound_key_is_still_typeset_as_a_key(self):
         md = self.terminal_help()
-        self.assertIn("| `Q` | Quit XeFM |", md)
-        self.assertIn("| `_` | Reset the log pane height |", md)
+        self.assertIn("| `Q` | [Quit XeFM](xefm-action:quit) |", md)
+        self.assertIn("| `_` | [Reset the log pane height](xefm-action:reset_log_height) |", md)
         self.assertTrue(self._CODE_KEY.search(md))
 
     def test_every_unbound_row_names_the_menu_that_reaches_it(self):

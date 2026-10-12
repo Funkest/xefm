@@ -151,6 +151,13 @@ class Action:
     #: name can be corrected without breaking the configs that already use it,
     #: so they are permanent — never reuse one for a different action.
     aliases: tuple[str, ...] = ()
+    #: What the one-line ``description`` leaves out, in Markdown: what the
+    #: action needs, how it treats the selection, what else touches it. Shown
+    #: on the command palette's help page (``describe_list_item``); empty where
+    #: the one line says it all. The pair is a docstring's two halves — summary
+    #: line and body — and a user action's are split from its docstring that
+    #: way (see :func:`xefm.user_api._build_action`).
+    details: str = ""
 
     @property
     def is_user(self) -> bool:
@@ -374,7 +381,362 @@ def _new_registry() -> ActionRegistry:
 # whose ``default_keys`` are omitted read them from the ``_config.py`` template.
 
 def _a(name, context, description, **kw) -> Action:
+    if context in (FILER, COMMON):
+        kw.setdefault("details", _DETAILS.get(name, ""))
     return Action(name=name, context=context, description=description, **kw)
+
+
+# The command palette's help page for the file list's actions (``Action.details``)
+# — kept here rather than inline so the tables below stay readable as the list
+# of what each surface can do. Only actions with more to say than their
+# one-line description have an entry; the page shows the description, the keys
+# and the selection requirement on its own. Read for the ``filer`` and
+# ``common`` contexts only: ``copy_files`` in ``dir_diff`` is the same name
+# doing a different thing.
+#
+# Written for the person running the action — what it acts on, where the
+# result goes, what it refuses — never how it is built.
+_DETAILS: dict[str, str] = {
+    # --- common ---
+    "quit": (
+        "In the file list, asks for confirmation and then quits XeFM. Inside a "
+        "viewer the same key closes the viewer and returns to the file list."),
+    "help": (
+        "Lists every key the current screen answers to, generated from your "
+        "key bindings — so a key you rebound in `config.py` shows up there as "
+        "you bound it. Each viewer has its own page."),
+    "isearch": (
+        "Opens a search bar in the active pane's footer. Type part of a name: "
+        "every match is highlighted and the cursor jumps to the nearest one. "
+        "Words separated by spaces must all match, and romaji also finds "
+        "Japanese names (Migemo).\n\n"
+        "While the bar is open, ↑/↓ move between matches, Ctrl-Space marks the "
+        "current match, Ctrl-A marks every match, Enter stops at the current "
+        "match and Esc puts the cursor back where it was. Those are the "
+        "default keys; the Help dialog lists yours."),
+    "edit_file": (
+        "Opens the selected files — or the file under the cursor when nothing "
+        "is selected — in your editor. An `edit` rule in `FILE_ASSOCIATIONS` "
+        "picks the program per file type; otherwise `TEXT_EDITOR` is used. "
+        "Files that go to the same editor open in one session.\n\n"
+        "Local files only: directories and files on remote or archive panes "
+        "are skipped, with a note in the log."),
+    # --- navigation ---
+    "open_item": (
+        "On a directory, enters it. On an archive XeFM can read, browses it "
+        "like a directory (read-only; going to the parent leaves it). On any "
+        "other file, opens it in the built-in viewer.\n\n"
+        "An `enter` rule in `FILE_ASSOCIATIONS` can change what happens to a "
+        "file type: `'viewer'`, `'navigate'` (browse as an archive), `'list'` "
+        "(open as a file list) or `None` (do nothing)."),
+    "open_with_os": (
+        "Hands the file under the cursor to another application — the "
+        "operating system's default for that type, or the `open` rule in "
+        "`FILE_ASSOCIATIONS`. A rule set to `None` stops the file type from "
+        "being opened this way at all."),
+    "reveal_in_os": (
+        "Shows the item under the cursor in Finder or Explorer, highlighted. "
+        "Elsewhere, opens its parent directory in the system file manager."),
+    "go_parent": (
+        "Goes up one directory and puts the cursor on the one you came from. "
+        "On a search-results or file-list pane it leaves the list and returns "
+        "to the directory it was opened from; inside an archive at its top, "
+        "it leaves the archive."),
+    "go_root": (
+        "Jumps straight to the top of wherever the pane is: the drive root on "
+        "Windows, `/` on macOS and Linux, the bucket root on S3, the host's "
+        "root over SFTP."),
+    "nav_left": (
+        "In the right pane, makes the left pane active. Already in the left "
+        "pane, goes to the parent directory — so the arrow always moves "
+        "\"outwards\"."),
+    "nav_right": (
+        "In the left pane, makes the right pane active. Already in the right "
+        "pane, goes to the parent directory — so the arrow always moves "
+        "\"outwards\"."),
+    # --- selection ---
+    "toggle_select_items": (
+        "Inverts the mark on every item in the pane, directories included: "
+        "marked items are cleared and the rest are marked."),
+    "toggle_select_files": (
+        "Inverts the mark on every file in the pane, leaving directories "
+        "alone: marked files are cleared and the rest are marked."),
+    "select_range": (
+        "Marks every item between the cursor and the nearest marked item — "
+        "the keyboard's Shift-click. The nearest mark above the cursor is the "
+        "anchor (below, when there is none above). Nothing outside the span is "
+        "touched, so several ranges add up.\n\n"
+        "In Terminal.app, iTerm2 and Linux terminals Shift-Space arrives as a "
+        "plain Space; bind this to a key the terminal can send (for example "
+        "`Ctrl-Y`) if you work there."),
+    "cursor_next_selected": (
+        "Moves the cursor to the next marked item below it. When there is "
+        "none, the cursor stays and the log says so."),
+    "cursor_prev_selected": (
+        "Moves the cursor to the previous marked item above it. When there "
+        "is none, the cursor stays and the log says so."),
+    # --- clipboard ---
+    "copy_names": (
+        "Copies the names of the selected items — or of the item under the "
+        "cursor when nothing is selected — one per line. On a search-results "
+        "pane the name includes the path below the search root, so it still "
+        "says which hit it was.\n\n"
+        "In a terminal the copy travels by OSC 52, which most terminals pass "
+        "to the system clipboard (Terminal.app does not)."),
+    "copy_paths": (
+        "Copies the full paths of the selected items — or of the item under "
+        "the cursor when nothing is selected — one per line. The inverse of "
+        "Open List ▸ From Clipboard."),
+    # --- file operations ---
+    "copy_files": (
+        "Copies the selected items — or the item under the cursor when "
+        "nothing is selected — into the directory shown in the other pane. "
+        "Directories are copied with everything in them.\n\n"
+        "When a name already exists there you choose Overwrite, Skip or Keep "
+        "both, once or for all. If both panes show the same directory the "
+        "copy becomes a duplicate named like `report (2).txt`. The other pane "
+        "cannot be a search-results view or an archive."),
+    "move_files": (
+        "Moves the selected items — or the item under the cursor when nothing "
+        "is selected — into the directory shown in the other pane, with the "
+        "same name-conflict choices as copy.\n\n"
+        "Its default key is shared with `create_directory`: with something "
+        "marked the key moves, with nothing marked it makes a directory. "
+        "Moving out of an archive is refused — copy instead."),
+    "copy_files_to": (
+        "Like copy, but asks where to. The prompt starts with the other "
+        "pane's directory and completes directory names with Tab; a relative "
+        "path is taken from the active pane, so `.` means here and `..` its "
+        "parent."),
+    "move_files_to": (
+        "Like move, but asks where to. The prompt starts with the other "
+        "pane's directory and completes directory names with Tab; a relative "
+        "path is taken from the active pane, so `.` means here and `..` its "
+        "parent."),
+    "duplicate_files": (
+        "Copies the selected items — or the item under the cursor — into the "
+        "same directory, named the way Finder does: `report (2).txt`. Also on "
+        "the File menu and the context menu."),
+    "delete_files": (
+        "Deletes the selected items — or the item under the cursor when "
+        "nothing is selected — after a confirmation (`CONFIRM_DELETE`). "
+        "Directories are deleted with everything in them. The files are "
+        "removed, not moved to the Trash or Recycle Bin."),
+    "rename": (
+        "With one item, or none selected, asks for a new name for the item "
+        "under the cursor. With several items selected, opens batch rename: "
+        "a regular-expression find and replace across all of them, with a "
+        "preview before anything changes."),
+    "create_file": (
+        "Asks for a name and creates an empty file in the active pane's "
+        "directory, with the cursor on it."),
+    "create_directory": (
+        "Asks for a name and creates a directory in the active pane's "
+        "directory, with the cursor on it.\n\n"
+        "Its default key is shared with `move_files`: the key makes a "
+        "directory only while nothing is marked."),
+    # --- viewing ---
+    "view_file": (
+        "Opens the file under the cursor in a viewer. A `view` rule in "
+        "`FILE_ASSOCIATIONS` can name an external program; otherwise the "
+        "built-in viewer picks by type — text with syntax highlighting, "
+        "rendered Markdown, a JSON tree, a CSV grid, images. Files on remote "
+        "and archive panes always use the built-in viewer."),
+    "file_details": (
+        "Shows size, dates, permissions and the rest for the item under the "
+        "cursor, or a summary plus details for each selected item. For a "
+        "directory the total size and item count are added up in the "
+        "background, and the numbers climb while the dialog is open."),
+    "diff_files": (
+        "Compares two files side by side, differences highlighted. Mark "
+        "exactly two files first — both in one pane, or one in each."),
+    "diff_directories": (
+        "Compares the directories shown in the two panes, recursively, as two "
+        "trees side by side with the differences marked. From there you can "
+        "open a file diff, and copy, move or delete across the two sides."),
+    # --- archives ---
+    "create_archive": (
+        "Packs the selected items — or the item under the cursor — into an "
+        "archive in the other pane's directory. The name you type picks the "
+        "format by its extension (`.zip`, `.tar.gz`, …); a name with "
+        "no recognised extension gets `.tar.gz`. Help ▸ Keyboard Shortcuts "
+        "lists the formats this installation can write."),
+    "extract_archive": (
+        "Extracts the selected archives — or the one under the cursor — each "
+        "into a directory named after it in the other pane's directory. "
+        "Asks first when a destination already exists. Selected items that "
+        "are not archives are skipped and reported, and a password is asked "
+        "for when an archive needs one."),
+    # --- search and filter ---
+    "find_files": (
+        "Searches for file names below the active pane's directory, showing "
+        "results as you type. Tab switches to content search, and the options "
+        "key (Ctrl-O by default) sets case, regular expressions and "
+        "subfolders.\n\n"
+        "Enter puts every result into the pane as a list you can work on like "
+        "a directory, with the cursor on the hit you chose; Backspace returns "
+        "to the directory."),
+    "find_in_files": (
+        "Searches inside the text files below the active pane's directory, "
+        "showing matching lines as you type. Tab switches to file-name "
+        "search, and the options key (Ctrl-O by default) sets case, whole "
+        "words, regular expressions and subfolders.\n\n"
+        "Enter puts the matching files into the pane, one row per file, with "
+        "the cursor on the one you chose; Backspace returns to the "
+        "directory."),
+    "filter": (
+        "Shows only the files whose names match a pattern (`*.py`, "
+        "`*report*`); directories always stay visible. The list offers the "
+        "filters defined in `FILTERS` in `config.py` and the patterns you used "
+        "before. The pane's status bar shows the active filter."),
+    "clear_filter": (
+        "Removes the active pane's file-name filter, so every file shows "
+        "again."),
+    "sort": (
+        "Opens the sort dialog for the active pane: ↑/↓ choose what to sort "
+        "by, ←/→ the order, and the letters F, E, S and T pick name, "
+        "extension, size and time directly. An example of the result is "
+        "shown at the bottom."),
+    "quick_sort_name": (
+        "Sorts the active pane by name. Pressing it again while already "
+        "sorted by name reverses the order."),
+    "quick_sort_ext": (
+        "Sorts the active pane by extension. Pressing it again while already "
+        "sorted by extension reverses the order."),
+    "quick_sort_size": (
+        "Sorts the active pane by size. Pressing it again while already "
+        "sorted by size reverses the order."),
+    "quick_sort_date": (
+        "Sorts the active pane by modification time. Pressing it again while "
+        "already sorted by time reverses the order."),
+    # --- directory navigation ---
+    "favorites": (
+        "Lists your favorites — those in `FAVORITES` in `config.py` and those "
+        "you added — and takes the active pane to the one you pick. A "
+        "favorite file opens its directory with the cursor on it. The list's "
+        "remove key (Shift-Delete by default) forgets a favorite you added."),
+    "add_favorite": (
+        "Adds a favorite: you choose between the directory the pane is "
+        "showing and the item under the cursor, which may be a file. Where "
+        "there is only one candidate it is added without asking."),
+    "context_menu": (
+        "Opens the menu a right-click on the item under the cursor would "
+        "open, just below it. In an empty pane, opens the directory's menu "
+        "instead."),
+    "context_menu_dir": (
+        "Opens the menu a right-click on the empty part of the pane would "
+        "open — the operations on the directory itself."),
+    "jump_to_path": (
+        "Asks for a path and takes the active pane there. Accepts `~`, "
+        "relative and absolute paths, and `s3://` / `ssh://` addresses; Tab "
+        "completes names. A path to a file opens its directory with the "
+        "cursor on the file."),
+    "history": (
+        "Lists the directories you have visited, most recent first, and takes "
+        "the active pane to the one you pick. The history survives restarts. "
+        "The list's remove key (Shift-Delete by default) forgets a "
+        "directory."),
+    "drives": (
+        "Lists drives and volumes, common locations, the SSH hosts in your "
+        "config and your S3 buckets, and takes the active pane to the one you "
+        "pick. Buckets appear as they load.\n\n"
+        "The list's remove key (Shift-Delete by default) disconnects a network "
+        "share, or ejects a removable disk."),
+    "connect_server": (
+        "Lists the file servers on the network and the ones you have used, "
+        "asks the one you pick which shares it offers, and mounts your choice "
+        "through the operating system — the pane then goes there like any "
+        "other directory. macOS and Windows."),
+    "open_list_from_clipboard": (
+        "Shows the paths on the clipboard, one per line, as the active pane's "
+        "listing — the files can be in many directories. Nothing on disk "
+        "changes; Backspace returns to the directory. Relative lines are "
+        "taken from the pane's directory."),
+    "open_list_from_command": (
+        "Runs a command and shows the paths it prints, one per line, as the "
+        "active pane's listing — `git ls-files -m`, `rg -l TODO`, `fd -e py`. "
+        "The command runs in the pane's directory with the same `XEFM_*` "
+        "variables external programs get. Earlier commands are offered to "
+        "run again."),
+    "open_list_from_file": (
+        "Shows the paths listed in the file under the cursor — or in every "
+        "selected file, as one list — as the active pane's listing, one path "
+        "per line. Relative lines are taken from the list file's own "
+        "directory, the way M3U playlists work."),
+    # --- panes ---
+    "sync_current_to_other": (
+        "Takes the active pane to the directory the other pane shows. When "
+        "both already show the same directory, moves the cursor onto the item "
+        "the other pane's cursor is on. When the other pane holds search "
+        "results, goes to the directory of the highlighted result."),
+    "sync_other_to_current": (
+        "Takes the other pane to the directory the active pane shows. When "
+        "both already show the same directory, moves the other pane's cursor "
+        "onto the item under this one. On a search-results pane, shows the "
+        "highlighted result's directory in the other pane."),
+    "compare_selection": (
+        "Marks items in the active pane by comparing each with the item of "
+        "the same name in the other pane, by any mix of size (equal or "
+        "different), modification time (same, newer or older) and content "
+        "(equal or different). Choose whether to replace the current marks or "
+        "add to them. Items with no namesake on the other side are never "
+        "marked."),
+    "reset_pane_boundary": "Puts the divider between the two panes back in the middle.",
+    "reset_log_height": "Puts the log pane back to its default height.",
+    # --- log pane ---
+    "copy_log_selection": (
+        "Copies the text you dragged across in the log pane with the mouse, "
+        "wherever the keyboard focus is. Does nothing when no log text is "
+        "selected."),
+    "copy_log_all": (
+        "Copies every line the log pane holds, not only the ones on screen — "
+        "useful for pasting into a bug report. Also on the Edit menu."),
+    # --- appearance ---
+    "toggle_hidden": (
+        "Shows or hides hidden items — dot-files, and files with the hidden "
+        "attribute on Windows."),
+    "toggle_color_scheme": (
+        "Switches to the next color theme. View ▸ Theme lists them all by "
+        "name."),
+    "redraw": (
+        "Repaints the whole screen — for when another program or a terminal "
+        "multiplexer has written over it."),
+    "menu": (
+        "Opens the menu bar in the window. ←/→ move between menus, Esc "
+        "closes. Where the operating system shows the menu bar itself, this "
+        "key is not needed."),
+    "command_palette": (
+        "Lists every file-list action, including the ones no key or menu "
+        "reaches and the actions your `config.py` defines. Type part of a "
+        "name to narrow the list — words separated by spaces must all match, "
+        "in any order — and press Enter to run the highlighted action on the "
+        "active pane.\n\n"
+        "Each row shows the key the action is bound to, so the palette is "
+        "also a way to find out what a key is."),
+    # --- external programs and configuration ---
+    "programs": (
+        "Lists the programs in `PROGRAMS` in `config.py` and runs the one you "
+        "pick on the selected files — or the file under the cursor — in the "
+        "active pane's directory. Output goes to the log pane. A program "
+        "marked `'terminal': True` gets the terminal (or, in the desktop app, "
+        "a terminal window) for full-screen tools like `vim`."),
+    "subshell": (
+        "Opens a shell in the active pane's directory. In a terminal XeFM "
+        "steps aside until you exit the shell; in the desktop app the shell "
+        "opens in the terminal application set by `TERMINAL`. The shell is "
+        "`SUBSHELL` from `config.py`, else your `$SHELL`, and it gets the "
+        "`XEFM_*` variables. Local directories only."),
+    "edit_config": (
+        "Opens `~/.xefm/config.py` in your `TEXT_EDITOR`, creating it on first "
+        "use. In a terminal the configuration reloads when the editor exits; "
+        "with an editor that opens its own window, use Reload Configuration "
+        "after saving."),
+    "reload_config": (
+        "Re-reads `~/.xefm/config.py` and applies it without restarting: key "
+        "bindings, file associations, external programs, favorites and your "
+        "own actions take effect at once. Theme, fonts and layout apply on the "
+        "next start, and the log says so."),
+}
 
 
 _COMMON_ACTIONS = [
@@ -516,6 +878,9 @@ _FILER_ACTIONS = [
     _a("toggle_color_scheme", FILER, "Cycle to the next color theme"),
     _a("redraw", FILER, "Redraw the screen"),
     _a("menu", FILER, "Open the menu bar"),
+    # Every action of the file list, searchable and runnable — the long tail
+    # the menu bar deliberately leaves out (discussion #550).
+    _a("command_palette", FILER, "Search every action by name and run it"),
     # External programs and configuration
     _a("programs", FILER, "Run an external program"),
     _a("subshell", FILER, "Open a subshell in this directory"),
@@ -724,6 +1089,16 @@ _FILTER_LIST_ACTIONS = [
     _a("remove_list_item", FILTER_LIST,
        "Remove the highlighted entry from the list",
        default_keys=("Shift-DELETE",)),
+    # "Tell me about the highlighted entry" — a different question from
+    # ``help`` ("which keys does this screen answer to"), so a name of its own
+    # rather than an overload, which would also blur what rebinding ``help``
+    # means. Named for the operation like the action above, for the same
+    # reason. F1 is free inside the picker: the dialog does not handle
+    # ``help``, and it claims this key by action, ahead of the query field.
+    # Offered only by a picker that can describe its rows (``to_help``).
+    _a("describe_list_item", FILTER_LIST,
+       "Show help for the highlighted entry",
+       default_keys=("F1",)),
 ]
 
 _SEARCH_ACTIONS = [
