@@ -211,6 +211,12 @@ create a new archive (**P**).
 
 Other notes:
 
+- **An archive a pane is showing cannot be deleted, moved, renamed or
+  overwritten.** XeFM says why — for example "'photos.zip' is shown in the left
+  pane" — instead of failing with a "file in use" error. Leave the archive in
+  that pane first. Once no pane shows it and nothing is copying out of it, XeFM
+  lets go of the file within a couple of seconds, so other programs can delete
+  it too.
 - **Nested archives** are shown as plain files; extract the inner archive first,
   then browse it.
 - **7z and RAR entries are read one at a time.** Those archives are usually one

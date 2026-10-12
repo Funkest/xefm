@@ -317,8 +317,8 @@ strings. See [File Associations](FILE_ASSOCIATIONS_FEATURE.md).
 S3_CACHE_TTL          = 60    # S3 directory-listing cache TTL (seconds)
 SSH_CACHE_TTL         = 30    # SSH/SFTP cache TTL for successful results (seconds)
 SSH_CACHE_ERROR_TTL   = 300   # SSH/SFTP cache TTL for cached errors (seconds)
-ARCHIVE_CACHE_MAX_OPEN = 5    # max archives kept open at once
-ARCHIVE_CACHE_TTL      = 300  # archive cache TTL (seconds)
+ARCHIVE_CACHE_MAX_OPEN = 5    # idle archives kept open at once
+ARCHIVE_CACHE_TTL      = 300  # how long an idle remote archive's download is kept (seconds)
 ```
 
 ## File Monitoring

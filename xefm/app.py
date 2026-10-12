@@ -55,7 +55,8 @@ from xefm.actions import registry as _action_registry
 from xefm.archive import (ArchiveFormatError, archive_format_for_name,
                           archive_format_label, archive_readable_formats,
                           archive_strip_suffix, archive_writable_formats,
-                          tar_zstd_supported)
+                          get_archive_cache, get_member_archive_path,
+                          release_archives_under, tar_zstd_supported)
 from xefm.backend_detector import is_desktop_mode
 # Every background scene XeFM offers is a fragment shader; a theme's ``animation`` key
 # names one of these and ``_resolve_background`` turns it into a puikit ``Shader``.
@@ -1531,6 +1532,9 @@ class XeFMApp:
         self._fileops.monitor = self.file_monitor
         self._monitored: dict[str, object] = {"left": None, "right": None}
         self._sync_monitored_dirs()
+        # A pane inside an archive owns it: the archive stays open while the
+        # pane is there and closes soon after it leaves (issue #516).
+        get_archive_cache().add_pin_source(self._archive_pins)
 
         # Idle-CPU strategy. When the backend can accept work from other threads
         # (native run loop → ``dispatches_to_main_thread``), go fully event-driven:
@@ -2250,6 +2254,14 @@ class XeFMApp:
 
     def pane(self, name: str) -> dict:
         return self.pm.left_pane if name == "left" else self.pm.right_pane
+
+    def _archive_pins(self):
+        """The archive files the panes are inside, for the archive cache. Called
+        from the cache's reaper thread, so it only reads (issue #516)."""
+        for name in ("left", "right"):
+            archive = get_member_archive_path(self.pane(name).get("path"))
+            if archive is not None:
+                yield f"shown in the {name} pane", archive
 
     def counts(self, pane: dict) -> tuple[int, int]:
         """(dirs, files) in a pane, read from the file-info cache."""
@@ -5338,6 +5350,7 @@ class XeFMApp:
                 self.panel.render()
                 return
             try:
+                release_archives_under(entry)
                 entry.rename(entry.parent / name)
             except OSError as exc:
                 self.log_info(f"Failed to rename '{original}': {exc}")
