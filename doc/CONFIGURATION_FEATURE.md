@@ -57,7 +57,7 @@ KEY_BINDINGS = {
 ```
 
 Reloading applies **live** to key bindings, file associations, external programs,
-favorite directories, confirmation prompts, and the text-editor / diff-tool
+favorites, confirmation prompts, and the text-editor / diff-tool
 settings. Themes and post-effects, fonts (desktop mode), the pane-split and
 log-height ratios, and file-monitoring intervals are read once at startup and
 only fully apply on the **next launch**. XeFM logs a reminder after each reload.
@@ -227,10 +227,10 @@ to a Python function that manipulates the panes, or run one at startup, on quit,
 on a directory change, or when a file is opened. Not stable yet — see
 [Customization (Preview)](CUSTOMIZATION_FEATURE.md).
 
-## Favorite Directories
+## Favorites
 
 ```python
-FAVORITE_DIRECTORIES = [
+FAVORITES = [
     {'name': 'Home', 'path': '~'},
     {'name': 'Documents', 'path': '~/Documents'},
     {'name': 'Projects', 'path': '~/Projects'},

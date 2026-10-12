@@ -928,8 +928,8 @@ class Config:
 
     # --- PATH_SCHEMES -----------------------------------------------------
     # Your own browsable locations. A scheme like 'reg' makes 'reg://...' a
-    # place XeFM can open in a pane, jump to (Shift-J), and keep in FAVORITE_
-    # DIRECTORIES -- listed by your class rather than read off a disk.
+    # place XeFM can open in a pane, jump to (Shift-J), and keep in FAVORITES
+    # -- listed by your class rather than read off a disk.
     #
     # Inherit ReadOnlyPathImpl and write five methods. Everything else -- the
     # path arithmetic, refusing writes, what the pane and the status bar show --
@@ -980,7 +980,11 @@ class Config:
     PATH_SCHEMES = {}
 
 
-    # Favorite directories (J) - the places you jump to by name.
+    # Favorites (J) - the places and files you jump to by name.
+    #
+    # (This was FAVORITE_DIRECTORIES, when it could only hold directories. A
+    # config that still uses that name keeps working; if both are set, the two
+    # lists are joined.)
     #
     # B adds one without editing this file: the directory you are in, or the
     # item under the cursor (a file too - selecting it lands the cursor on it).
@@ -1001,7 +1005,7 @@ class Config:
     # The four below are the ones almost every machine has. Delete what you do
     # not use - a favorite you never selected costs nothing, but it is a row
     # between you and the one you want.
-    FAVORITE_DIRECTORIES = [
+    FAVORITES = [
         {'name': 'Home', 'path': '~'},
         {'name': 'Documents', 'path': '~/Documents'},
         {'name': 'Downloads', 'path': '~/Downloads'},

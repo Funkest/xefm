@@ -36,7 +36,7 @@ class FavoritesTest(unittest.TestCase):
         self.config_rows = []
         for target, value in (
                 ("get_state_manager", lambda: self.state),
-                ("get_favorite_directories", lambda: self.config_rows)):
+                ("get_config_favorites", lambda: self.config_rows)):
             patcher = patch.object(favorites, target, value)
             patcher.start()
             self.addCleanup(patcher.stop)

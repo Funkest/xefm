@@ -595,7 +595,7 @@ More, including the format table per platform, in
 A config can add a browsable location that is not a directory — the Windows
 registry, a bookmark database, a device list, anything you can present as
 folders and files. Write one class, name it, and `reg://` is somewhere a pane
-can open, `jump_to_path` can jump to, and `FAVORITE_DIRECTORIES` can hold.
+can open, `jump_to_path` can jump to, and `FAVORITES` can hold.
 
 ```python
 import io

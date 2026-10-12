@@ -32,7 +32,7 @@ class AddFavoriteTest(unittest.TestCase):
         self.state_dir = tempfile.mkdtemp()
         self.sm = XeFMStateManager(db_path=os.path.join(self.state_dir, "state.db"))
         for target, value in (("get_state_manager", lambda: self.sm),
-                              ("get_favorite_directories", lambda: [])):
+                              ("get_config_favorites", lambda: [])):
             patcher = patch.object(favorites, target, value)
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -125,7 +125,7 @@ class AddFavoriteTest(unittest.TestCase):
         self.assertEqual(pane["files"][pane["focused_index"]].name, "deep.txt")
 
     def test_a_config_favorite_may_name_a_file(self):
-        """#525: a ``FAVORITE_DIRECTORIES`` row is not probed, so it does not say
+        """#525: a ``FAVORITES`` row is not probed, so it does not say
         whether it is a file. The listing finds out, and the jump lands on it."""
         target = os.path.join(self.tmp, "sub", "deep.txt")
         with open(target, "w") as f:

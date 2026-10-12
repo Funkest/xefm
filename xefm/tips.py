@@ -76,7 +76,7 @@ TIPS: tuple[tuple[str, str], ...] = (
      "{key:favorites} opens a searchable picker of your favorites for a "
      "one-keystroke jump. {key:add_favorite} adds the current directory — or "
      "the file under the cursor, to land right on it. Permanent ones can also "
-     "go in `FAVORITE_DIRECTORIES` in `~/.xefm/config.py`."),
+     "go in `FAVORITES` in `~/.xefm/config.py`."),
 
     ("Jump to any path",
      "{key:jump_to_path} prompts for a path — with filename completion — and "

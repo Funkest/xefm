@@ -142,7 +142,7 @@ KEY_BINDINGS = {
     
     # Advanced Features
     'file_details': ['i', 'I'],         # Show detailed file information dialog
-    'favorites': ['j', 'J'],            # Show favorite directories dialog
+    'favorites': ['j', 'J'],            # Show the favorites dialog
     'subshell': ['X'],                  # Enter subshell (command line) mode
     'programs': ['x'],                  # Show external programs menu
     'create_archive': ['p', 'P'],       # Create archive from selected files

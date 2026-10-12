@@ -2,7 +2,7 @@
 
 Two sources, merged into one list — the same shape as :mod:`xefm.server_list`:
 
-1. ``FAVORITE_DIRECTORIES`` in ``~/.xefm/config.py`` — hand-written, and
+1. ``FAVORITES`` in ``~/.xefm/config.py`` — hand-written, and
    therefore not removable from the UI. XeFM never rewrites a user-authored
    Python file, so the config stays the source of truth for those rows.
 2. Favorites added with ``add_favorite`` (B) — kept in the state DB, removable
@@ -25,7 +25,7 @@ import os
 from dataclasses import dataclass
 
 from xefm import path_schemes
-from xefm.config import get_favorite_directories
+from xefm.config import get_config_favorites
 from xefm.log_manager import getLogger
 from xefm.state_manager import get_state_manager
 
@@ -80,7 +80,7 @@ def _key(path: str) -> str:
 
 def _from_config() -> list[FavoriteEntry]:
     return [FavoriteEntry(name=row["name"], path=row["path"], origin=CONFIG)
-            for row in get_favorite_directories()]
+            for row in get_config_favorites()]
 
 
 def _from_state() -> list[FavoriteEntry]:

@@ -3052,7 +3052,7 @@ class XeFMApp:
 
         A ``path`` that turns out to be a file is taken the same way: the pane
         goes to its directory and lands on it. That is how a favorite written in
-        ``FAVORITE_DIRECTORIES`` can name a file (#525) without anything being
+        ``FAVORITES`` can name a file (#525) without anything being
         probed up front — the listing that would have shown it is the probe.
         """
         before = {k: pane.get(k) for k in self._PANE_VIEW_KEYS}
@@ -4221,7 +4221,7 @@ class XeFMApp:
         there. The canonical searchable-list-picker pattern (XeFM's
         ``BaseListDialog`` workhorse), built from PuiKit's TextEdit + ListView.
 
-        The rows are ``FAVORITE_DIRECTORIES`` followed by the favorites added
+        The rows are ``FAVORITES`` followed by the favorites added
         with :meth:`add_favorite` (see :mod:`xefm.favorites`). The picker's
         remove key forgets an added one; a config row stays, since the next
         config load would only bring it back."""
@@ -4248,7 +4248,7 @@ class XeFMApp:
     def _forget_favorite(self, fav: favorites.FavoriteEntry) -> bool:
         if not favorites.remove_favorite(fav):
             if not fav.removable:
-                self.log_info(f"'{fav.name}' is set in FAVORITE_DIRECTORIES "
+                self.log_info(f"'{fav.name}' is set in FAVORITES "
                               "in config.py; remove it there")
             return False
         self.log_info(f"Removed favorite: {fav.name} ({fav.path})")

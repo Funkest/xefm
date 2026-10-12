@@ -134,7 +134,7 @@ major groups are:
 - **Threaded Search**: Non-blocking filename and content search
 - **Pattern Filtering**: fnmatch patterns (*.py, test_*, etc.)
 - **Jump Dialog**: Intelligent directory scanning with search
-- **Favorite Directories**: Customizable bookmarks with quick access
+- **Favorites**: Customizable bookmarks with quick access
 
 ### Text Handling
 - **Built-in Text Viewer**: Syntax highlighting for 20+ file formats

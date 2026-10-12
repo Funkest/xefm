@@ -312,7 +312,7 @@ it, the same knowledge lived in four places that had to agree:
 | `Path.__init__` | whether a string survives verbatim instead of going through `PathlibPath` |
 | `Path._create_implementation` | which backend to build |
 | `XeFMApp._REMOTE_SCHEMES` | what Jump to Path resolves as a URI, and what a subshell refuses |
-| `config._REMOTE_SCHEMES` | what `FAVORITE_DIRECTORIES` / `DRIVE_LOCATIONS` list without probing |
+| `config._REMOTE_SCHEMES` | what `FAVORITES` / `DRIVE_LOCATIONS` list without probing |
 
 Patch only the first two — which is what a monkeypatch naturally does — and
 Jump to Path treats the new URI as a path relative to the current directory and
