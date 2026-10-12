@@ -36,7 +36,7 @@ ssh://server.example.com:2222/opt/data
 2. Enter: `ssh://hostname/path`
 3. Press Enter
 
-**Method 2: Favorite Directories**
+**Method 2: Favorites**
 1. Add SFTP paths to favorites in config: `~/.xefm/config.py`
 2. Press `J` to access favorites
 3. Select your SFTP bookmark
@@ -206,7 +206,7 @@ SSH_CACHE_ERROR_TTL = 300
 Add frequently-used SFTP paths to favorites:
 
 ```python
-FAVORITE_DIRECTORIES = [
+FAVORITES = [
     {'name': 'Local Projects', 'path': '~/projects'},
     {'name': 'Dev Server', 'path': 'ssh://devbox/var/www'},
     {'name': 'Production Logs', 'path': 'ssh://prod-web1/var/log/nginx'},

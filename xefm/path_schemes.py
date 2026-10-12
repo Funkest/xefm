@@ -7,7 +7,7 @@ over four places that had to agree and did not:
 - ``Path.__init__`` — the guard that keeps a URI away from ``PathlibPath``
 - ``Path._create_implementation`` — the if-chain that actually builds a backend
 - ``XeFMApp._REMOTE_SCHEMES`` — what Jump to Path resolves against
-- ``config._REMOTE_SCHEMES`` — what ``FAVORITE_DIRECTORIES`` and
+- ``config._REMOTE_SCHEMES`` — what ``FAVORITES`` and
   ``DRIVE_LOCATIONS`` pass through unprobed
 
 Patch only the first two and Jump to Path treats ``reg://…`` as a path relative

@@ -55,7 +55,7 @@ learn an `smb://` scheme, and nothing in `xefm/path.py` changes. Mounting is a
 side effect with a network round trip and a password prompt attached, and
 `Path("smb://…")` is constructed in places that must never do either — the
 favorites picker builds one per row and is required to touch nothing
-(`get_favorite_directories`, issue #430). Resolution happens one layer up, in
+(`get_config_favorites`, issue #430). Resolution happens one layer up, in
 the dialog that asked for it, and what reaches the rest of XeFM is the local
 path the mount landed on.
 

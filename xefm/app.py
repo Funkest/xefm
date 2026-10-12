@@ -3049,6 +3049,11 @@ class XeFMApp:
         ``log`` is the line to write once the move has actually happened.
         ``select_name`` lands the cursor on that entry instead of where the
         pane last left it — a favorite that names a file.
+
+        A ``path`` that turns out to be a file is taken the same way: the pane
+        goes to its directory and lands on it. That is how a favorite written in
+        ``FAVORITES`` can name a file (#525) without anything being
+        probed up front — the listing that would have shown it is the probe.
         """
         before = {k: pane.get(k) for k in self._PANE_VIEW_KEYS}
         # Copied, not referenced: the clear() below empties the very set the
@@ -3058,6 +3063,8 @@ class XeFMApp:
         self._exit_virtual(pane)
         pane["path"] = path
         pane["selected_files"].clear()
+        if select_name is None:
+            pane["_lands_on_file"] = True
 
         def landed(p: dict) -> None:
             if p.get("listing_ok", True):
@@ -3066,6 +3073,14 @@ class XeFMApp:
                     self._select_by_name(p, select_name)
                 else:
                     self._restore_remembered_cursor(p)
+            elif p.get("listing_not_dir") and select_name is None:
+                # A file: go to where it is and land on it. The pane is restored
+                # first so that, should the directory fail too, it goes back to
+                # what it was showing and not to the file.
+                p.update(before)
+                p["selected_files"].update(marked)
+                self._jump_pane_to(p, path.parent, log=log, select_name=path.name)
+                return
             else:
                 # The navigation did not happen — so nothing about it happened,
                 # marked files included. compute_listing has already said why,
@@ -4206,7 +4221,7 @@ class XeFMApp:
         there. The canonical searchable-list-picker pattern (XeFM's
         ``BaseListDialog`` workhorse), built from PuiKit's TextEdit + ListView.
 
-        The rows are ``FAVORITE_DIRECTORIES`` followed by the favorites added
+        The rows are ``FAVORITES`` followed by the favorites added
         with :meth:`add_favorite` (see :mod:`xefm.favorites`). The picker's
         remove key forgets an added one; a config row stays, since the next
         config load would only bring it back."""
@@ -4233,7 +4248,7 @@ class XeFMApp:
     def _forget_favorite(self, fav: favorites.FavoriteEntry) -> bool:
         if not favorites.remove_favorite(fav):
             if not fav.removable:
-                self.log_info(f"'{fav.name}' is set in FAVORITE_DIRECTORIES "
+                self.log_info(f"'{fav.name}' is set in FAVORITES "
                               "in config.py; remove it there")
             return False
         self.log_info(f"Removed favorite: {fav.name} ({fav.path})")

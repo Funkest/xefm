@@ -36,7 +36,7 @@ class ContextMenuKeysTest(unittest.TestCase):
         self.state_dir = tempfile.mkdtemp()
         self.sm = XeFMStateManager(db_path=os.path.join(self.state_dir, "state.db"))
         for target, value in (("get_state_manager", lambda: self.sm),
-                              ("get_favorite_directories", lambda: [])):
+                              ("get_config_favorites", lambda: [])):
             patcher = patch.object(favorites, target, value)
             patcher.start()
             self.addCleanup(patcher.stop)

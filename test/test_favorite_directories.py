@@ -17,17 +17,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from xefm.config import config_manager, get_favorite_directories
+from xefm.config import config_manager, get_config_favorites
 from xefm.path import Path
 
 
 @pytest.fixture
 def with_favorites():
-    """Swap the loaded config for a stub carrying just FAVORITE_DIRECTORIES."""
+    """Swap the loaded config for a stub carrying just FAVORITES."""
     saved = config_manager.config
 
     def use(value):
-        config_manager.config = SimpleNamespace(FAVORITE_DIRECTORIES=value)
+        config_manager.config = SimpleNamespace(FAVORITES=value)
 
     yield use
     config_manager.config = saved
@@ -47,7 +47,7 @@ def no_filesystem(monkeypatch):
 def test_a_missing_directory_is_still_listed(with_favorites, no_filesystem):
     """The whole point: a favorite nobody can reach is a row like any other."""
     with_favorites([{"name": "Gone", "path": "/no/such/place"}])
-    assert get_favorite_directories() == [{"name": "Gone", "path": "/no/such/place"}]
+    assert get_config_favorites() == [{"name": "Gone", "path": "/no/such/place"}]
 
 
 def test_an_unreachable_share_costs_no_round_trip(with_favorites, no_filesystem):
@@ -56,20 +56,20 @@ def test_an_unreachable_share_costs_no_round_trip(with_favorites, no_filesystem)
         {"name": "Dev", "path": "ssh://nowhere.invalid/var/www"},
         {"name": "Bucket", "path": "s3://nowhere-invalid/data"},
     ])
-    assert [f["name"] for f in get_favorite_directories()] == ["NAS", "Dev", "Bucket"]
+    assert [f["name"] for f in get_config_favorites()] == ["NAS", "Dev", "Bucket"]
 
 
 def test_remote_paths_are_listed_verbatim(with_favorites, no_filesystem):
     """Not even a Path is constructed for one — that alone pulls in the row's
     backend module for a row that may never be selected."""
     with_favorites([{"name": "Bucket", "path": "s3://my-bucket/data"}])
-    assert get_favorite_directories() == [{"name": "Bucket", "path": "s3://my-bucket/data"}]
+    assert get_config_favorites() == [{"name": "Bucket", "path": "s3://my-bucket/data"}]
 
 
 def test_tilde_is_expanded(with_favorites, no_filesystem):
     """Expansion is string work, not I/O, so it survives the ban above."""
     with_favorites([{"name": "Home", "path": "~"}])
-    assert get_favorite_directories() == [{"name": "Home", "path": str(Path.home())}]
+    assert get_config_favorites() == [{"name": "Home", "path": str(Path.home())}]
 
 
 def test_a_symlinked_favorite_keeps_the_path_as_written(with_favorites):
@@ -82,7 +82,7 @@ def test_a_symlinked_favorite_keeps_the_path_as_written(with_favorites):
         os.symlink(target, link)
 
         with_favorites([{"name": "Link", "path": link}])
-        assert get_favorite_directories() == [{"name": "Link", "path": link}]
+        assert get_config_favorites() == [{"name": "Link", "path": link}]
 
 
 def test_malformed_entries_are_skipped_and_warned(with_favorites, no_filesystem):
@@ -94,4 +94,51 @@ def test_malformed_entries_are_skipped_and_warned(with_favorites, no_filesystem)
         "not-a-dict",
         {"name": "Good", "path": "/somewhere"},
     ])
-    assert get_favorite_directories() == [{"name": "Good", "path": "/somewhere"}]
+    assert get_config_favorites() == [{"name": "Good", "path": "/somewhere"}]
+
+
+# --- the old name, FAVORITE_DIRECTORIES (#525) -------------------------------
+# Remote rows keep these independent of the platform's path spelling.
+
+A = {"name": "A", "path": "ssh://host/a"}
+B = {"name": "B", "path": "ssh://host/b"}
+
+
+def test_a_config_with_only_the_old_name_keeps_its_own_list():
+    """Not the template's defaults on top of it: the old list *is* the
+    favorites, so a user who deleted Home/Documents/… does not get them back."""
+    from xefm.config import _copy_missing_fields
+
+    class Template:
+        FAVORITES = [{"name": "Home", "path": "~"}]
+
+    class Old:
+        FAVORITE_DIRECTORIES = [A]
+
+    cfg = Old()
+    _copy_missing_fields(cfg, Template)
+    assert cfg.FAVORITES == [A]
+
+
+def test_the_old_name_alone_is_read(with_favorites):
+    config_manager.config = SimpleNamespace(FAVORITE_DIRECTORIES=[A])
+    assert get_config_favorites() == [A]
+
+
+def test_both_names_are_joined_new_first():
+    saved = config_manager.config
+    try:
+        config_manager.config = SimpleNamespace(FAVORITES=[A], FAVORITE_DIRECTORIES=[B])
+        assert get_config_favorites() == [A, B]
+    finally:
+        config_manager.config = saved
+
+
+def test_an_adopted_old_list_is_not_read_twice():
+    saved = config_manager.config
+    try:
+        rows = [A]
+        config_manager.config = SimpleNamespace(FAVORITES=rows, FAVORITE_DIRECTORIES=rows)
+        assert get_config_favorites() == [A]
+    finally:
+        config_manager.config = saved

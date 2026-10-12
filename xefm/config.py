@@ -592,6 +592,13 @@ def _copy_missing_fields(user_config, template_config_class):
     if template_config_class is None:
         return
     
+    # A config written before FAVORITE_DIRECTORIES became FAVORITES: its own
+    # list is the favorites, not the template's defaults it never asked for.
+    if (not hasattr(user_config, 'FAVORITES')
+            and hasattr(user_config, _LEGACY_FAVORITES)):
+        setattr(user_config, 'FAVORITES', getattr(user_config, _LEGACY_FAVORITES))
+        logger.info(f"Reading {_LEGACY_FAVORITES} as FAVORITES, its new name")
+
     # Get all class attributes from template (excluding private/magic attributes)
     template_attrs = {
         name: value 
@@ -1187,7 +1194,22 @@ def format_key_for_display(key_expr: str) -> str:
 
 
 
-def get_favorite_directories():
+#: The name ``FAVORITES`` had when it could only hold directories (#525).
+_LEGACY_FAVORITES = 'FAVORITE_DIRECTORIES'
+
+
+def _favorite_rows(config) -> list:
+    """``FAVORITES``, then any rows still written under the old name. A config
+    that only has the old name had it adopted as ``FAVORITES`` when it loaded
+    (:func:`_copy_missing_fields`), so the same list is not read twice."""
+    rows = list(getattr(config, 'FAVORITES', None) or [])
+    legacy = getattr(config, _LEGACY_FAVORITES, None)
+    if legacy and legacy is not getattr(config, 'FAVORITES', None):
+        rows.extend(legacy)
+    return rows
+
+
+def get_config_favorites():
     """The rows the favorites picker shows — listed exactly as configured, with
     **no filesystem access at all**.
 
@@ -1213,9 +1235,9 @@ def get_favorite_directories():
 
     favorites = []
 
-    for fav in config.FAVORITE_DIRECTORIES:
+    for fav in _favorite_rows(config):
         if not (isinstance(fav, dict) and 'name' in fav and 'path' in fav):
-            logger.warning(f"Invalid favorite directory entry: {fav!r}")
+            logger.warning(f"Invalid favorite entry: {fav!r}")
             continue
         name, raw = str(fav['name']), str(fav['path'])
         try:
@@ -1229,7 +1251,7 @@ def get_favorite_directories():
                 favorites.append({'name': name,
                                   'path': str(Path(raw).expanduser())})
         except Exception as e:
-            logger.warning(f"Invalid favorite directory path: {name} -> {raw}: {e}")
+            logger.warning(f"Invalid favorite path: {name} -> {raw}: {e}")
 
     return favorites
 

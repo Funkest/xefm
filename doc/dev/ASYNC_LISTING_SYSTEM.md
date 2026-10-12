@@ -190,7 +190,7 @@ them stacked into minutes of dead UI (issue #430).
 
 So neither picker probes:
 
-- `config.get_favorite_directories()` lists every configured entry as written,
+- `config.get_config_favorites()` lists every configured entry as written,
   expanding `~` (string work) and nothing else. It does not even construct a
   `Path` for a `_REMOTE_SCHEMES` row — that alone pulls in the row's backend
   module, and `import boto3` behind an `s3://` row is not cheap.
@@ -237,7 +237,7 @@ pane had already given up on.
 Tests:
 [`test/test_jump_to_missing_directory.py`](../../test/test_jump_to_missing_directory.py).
 
-`get_favorite_directories()` also stopped calling `resolve()`, which was I/O
+`get_config_favorites()` also stopped calling `resolve()`, which was I/O
 *and* a display bug: it printed a symlinked favorite's target rather than the
 path the user wrote, while no other navigation in XeFM resolves the path it
 lands on.

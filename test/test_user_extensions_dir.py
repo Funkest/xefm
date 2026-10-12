@@ -18,7 +18,7 @@ CONFIG = """\
 import xefm_test_ext
 
 class Config:
-    FAVORITE_DIRECTORIES = [xefm_test_ext.VALUE]
+    FAVORITES = [xefm_test_ext.VALUE]
 """
 
 
@@ -82,12 +82,12 @@ def test_config_imports_extension_and_reload_picks_up_edit(manager):
     write(module, "VALUE = 'first'\n")
 
     config = manager.load_config()
-    assert config.FAVORITE_DIRECTORIES == ['first']
+    assert config.FAVORITES == ['first']
 
     # Same length, so a same-second .pyc would validate against the old source.
     write(module, "VALUE = 'secnd'\n")
     config = manager.reload_config()
-    assert config.FAVORITE_DIRECTORIES == ['secnd']
+    assert config.FAVORITES == ['secnd']
 
 
 def test_reload_reimports_package_submodules(manager):
@@ -97,7 +97,7 @@ def test_reload_reimports_package_submodules(manager):
     write(package / '__init__.py', "from .inner import VALUE\n")
     write(package / 'inner.py', "VALUE = 'first'\n")
 
-    assert manager.load_config().FAVORITE_DIRECTORIES == ['first']
+    assert manager.load_config().FAVORITES == ['first']
 
     write(package / 'inner.py', "VALUE = 'secnd'\n")
-    assert manager.reload_config().FAVORITE_DIRECTORIES == ['secnd']
+    assert manager.reload_config().FAVORITES == ['secnd']

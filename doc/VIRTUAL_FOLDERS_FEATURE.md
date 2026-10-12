@@ -18,7 +18,7 @@ PATH_SCHEMES = {'notes': NotesPathImpl}
 ```
 
 After that, `notes://` is a place: you can open it in a pane, jump to it with
-the Jump dialog, put it in `FAVORITE_DIRECTORIES`, and walk into it and back out.
+the Jump dialog, put it in `FAVORITES`, and walk into it and back out.
 
 ---
 
@@ -221,7 +221,7 @@ class RegistryPathImpl(ReadOnlyPathImpl):
 class Config:
     PATH_SCHEMES = {'reg': RegistryPathImpl}
 
-    FAVORITE_DIRECTORIES = [
+    FAVORITES = [
         {'name': 'Registry',  'path': 'reg://'},
         {'name': 'Run keys',  'path': 'reg://HKEY_CURRENT_USER/Software/'
                                       'Microsoft/Windows/CurrentVersion/Run'},

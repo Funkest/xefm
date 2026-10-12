@@ -86,10 +86,10 @@ class TestOneRegistrationReachesEverything(SchemeFixture):
         """``config._REMOTE_SCHEMES``. The picker lists a remote row exactly as
         configured — probing it would be a round trip on the UI thread."""
         class FakeConfig:
-            FAVORITE_DIRECTORIES = [{'name': 'Demo', 'path': 'demo://root'}]
+            FAVORITES = [{'name': 'Demo', 'path': 'demo://root'}]
 
         with patch.object(config, 'get_config', return_value=FakeConfig()):
-            rows = config.get_favorite_directories()
+            rows = config.get_config_favorites()
         self.assertEqual(rows, [{'name': 'Demo', 'path': 'demo://root'}])
 
 

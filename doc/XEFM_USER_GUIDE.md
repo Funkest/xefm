@@ -333,7 +333,7 @@ location, and `cursor_top` / `cursor_bottom` go to the first / last item.
 
 | Action | What it opens |
 |--------|---------------|
-| `favorites` | Your favorite directories |
+| `favorites` | Your favorite directories and files |
 | `jump_to_path` | Jump to a path (a file path lands the cursor on the file) |
 | `history` | Directories this pane has visited |
 | `sync_current_to_other` | Point the other pane at this one's directory |
@@ -644,9 +644,9 @@ Define your own with the `THEMES` dict in config.
 
 **See detailed documentation**: [Color Schemes Feature](COLOR_SCHEMES_FEATURE.md)
 
-### Favorite Directories
+### Favorites
 ```python
-FAVORITE_DIRECTORIES = [
+FAVORITES = [
     {'name': 'Projects', 'path': '~/dev'},
     {'name': 'Documents', 'path': '~/Documents'},
     {'name': 'S3 Bucket', 'path': 's3://my-bucket/'},

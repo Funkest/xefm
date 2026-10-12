@@ -63,7 +63,7 @@ apply on next launch. The reload log line states this explicitly rather than
 silently doing nothing.
 
 Module-level helpers in `xefm/config.py` (`get_program_for_file`,
-`get_favorite_directories`, `get_keys_for_action`, …) go through the
+`get_config_favorites`, `get_keys_for_action`, …) go through the
 `config_manager` singleton, which `reload_config()` updates, so they need no
 repointing.
 
