@@ -85,7 +85,7 @@ def clean_schemes():
 def load(**attrs):
     """``(warnings, path_scheme_count)`` for one config."""
     result = user_api.load_user_entries(config_with(**attrs))
-    return result[0], result[-1]
+    return result[0], result[6]
 
 
 # --------------------------------------------------------------------------- #

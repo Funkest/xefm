@@ -17,6 +17,7 @@ User-facing documentation: [`doc/CUSTOMIZATION_FEATURE.md`](../CUSTOMIZATION_FEA
 |---|---|
 | `xefm/actions.py` | `Action`, `ActionRegistry`, the context names, the built-in action tables |
 | `xefm/user_api.py` | `ActionContext`, `PaneApi`, `EntryInfo`, `EventHooks`, the `ACTIONS`/`EVENT_HOOKS` loader, `API_VERSION` |
+| `xefm/lexer_registry.py` | the `LEXERS` table and the lexer lookup every highlighter goes through |
 | `xefm/config.py` | per-context key resolution inside `KeyBindings` |
 | `xefm/app.py` | the `filer` handler table, `_run_action`, hook firing |
 | `xefm/{text,image,diff,directory_diff}_viewer.py` | per-viewer handler tables |
@@ -626,6 +627,59 @@ suffixes in, so `IMAGE_DECODERS` is the whole of "make `.svg` open in the image
 viewer" — the user never edits a second list. The general shape: a registry whose
 entries also widen *what the feature applies to* is worth more than one that only
 changes how it behaves.
+
+---
+
+## 8e. `LEXERS` — the fourth, and the first that borrows another library's extension shape
+
+`xefm/lexer_registry.py`, from [issue #529](https://github.com/crftwr/xefm/issues/529)
+(AutoCAD `.dcl` and `.mnl`). The user's workaround there monkeypatched
+`text_viewer.get_lexer_for_filename`, a module global — which works until the
+call site moves.
+
+**Why not Pygments' own plugin mechanism.** Pygments has one: a `pygments.lexers`
+entry point, which `get_lexer_for_filename` already consults, so an installed
+plugin package works in XeFM unchanged. It cannot be the config's route, because
+it reads `importlib.metadata` — only *installed distributions*. A class defined
+in `config.py` or `~/.xefm/extensions/` is not one, and a packaged XeFM (DMG,
+Windows zip, MSIX) has nowhere to `pip install` one. There is no runtime
+`register()` in Pygments; `pygments.lexers.LEXERS` is an internal table keyed by
+an importable module path.
+
+**What it borrows instead.** Everything but the registration. A value is a plain
+Pygments `Lexer` subclass or a Pygments alias, so there is no XeFM type to
+import and nothing a Pygments tutorial — or an AI asked for "a Pygments lexer" —
+would not already produce. Each entry is stored as a one-line subclass of the
+resolved class whose `filenames` is that entry's pattern (`type(name, (base,),
+{"filenames": [pattern]})`), so the lookup is Pygments' own idea — match a
+class's `filenames` — over a table the config wrote down.
+
+**The key decides, never the class's `filenames`.** The first sketch was a list
+of classes, each carrying its own `filenames`, plus a second table for aliases.
+It was dropped in review because `config.py` then showed neither the patterns
+nor the alias names: the link between `'*.dclx': 'dcl'` and `DclLexer` lived in
+another file. One dict, pattern → class-or-alias, keeps the whole mapping
+readable where it is configured, and matches the dict-keyed-by-file shape of
+`IMAGE_DECODERS`. The class's `aliases` *are* used — that is how `'dcl'`
+resolves — and the loader registers classes before strings so an alias may
+precede its class in the dict.
+
+**Lookup order** (`lexer_for_filename`): the config's table → Pygments
+(built-ins and entry-point plugins) → `BUILTIN`, the suffix table that used to be
+`text_viewer._EXT_LEXERS` → `TextLexer`. The config comes first because
+overriding Pygments is half the point (`*.dcl` is Clean to Pygments). Within the
+table, an exact name beats a wildcard (Pygments' own bonus for explicit
+patterns), then the later entry wins. Matching folds case, unlike Pygments',
+because the suffix table it replaces did.
+
+**No `override`, fails closed per entry.** Same reasoning as §8d: naming a
+pattern is the statement. An unresolvable alias or a non-`Lexer` value is a
+warning that skips the entry. Without Pygments the whole table is one warning.
+
+**Not yet wired: Markdown fences.** `lexer_by_name` exists for them, but
+PuiKit's `markdown_view` calls Pygments' `get_lexer_by_name` directly, so a
+registered alias does not reach a ```` ```dcl ```` fence. That needs a lookup
+hook in PuiKit, not a change here.
 
 ---
 

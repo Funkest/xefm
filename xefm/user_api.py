@@ -19,11 +19,13 @@ It may also define what the panes *show*: ``SORT_KEYS`` and ``FILTERS`` are
 functions over one entry, ``IMAGE_DECODERS`` is how a picture in a format XeFM
 does not read becomes one it does, and ``PATH_SCHEMES`` is a browsable location
 that is not a directory at all — a class, named by its scheme, that XeFM then
-treats as a place.
+treats as a place. ``LEXERS`` names the Pygments lexer that colors a file in
+the text viewer (:mod:`xefm.lexer_registry`).
 
     class Config:
         IMAGE_DECODERS = {".dcm": open_dicom}
         PATH_SCHEMES = {"reg": RegistryPathImpl}
+        LEXERS = {"*.dcl": DclLexer, "*.mnl": "newlisp"}
 
 The class to inherit is :class:`xefm.path_base.ReadOnlyPathImpl`, never
 :class:`~xefm.path.PathImpl`: the intermediate class is where a method added to
@@ -75,6 +77,7 @@ from typing import Any, Callable, Iterable, Mapping, NamedTuple
 from xefm import actions as _actions
 from xefm import filters as _filters
 from xefm import image_decoders as _image_decoders
+from xefm import lexer_registry as _lexers
 from xefm import name_key
 from xefm import path_schemes as _path_schemes
 from xefm import sort_keys as _sort_keys
@@ -663,16 +666,16 @@ class EventHooks:
 hooks = EventHooks()
 
 
-def load_user_entries(config, registry=None) -> tuple[list[str], int, int, int, int, int, int]:
+def load_user_entries(config, registry=None) -> tuple[list[str], int, int, int, int, int, int, int]:
     """Install a config's ``ACTIONS``, ``EVENT_HOOKS``, ``SORT_KEYS``,
-    ``FILTERS``, ``IMAGE_DECODERS`` and ``PATH_SCHEMES``.
+    ``FILTERS``, ``IMAGE_DECODERS``, ``PATH_SCHEMES`` and ``LEXERS``.
 
     Every previously loaded user entry is dropped first, so this doubles as the
     reload path: edit the config, reload, and the new definitions replace the old
     ones with no restart and no idempotence contract on the config's part.
 
     Returns ``(warnings, action_count, hook_count, sort_key_count,
-    filter_count, image_decoder_count, path_scheme_count)``. Warnings are the same kind
+    filter_count, image_decoder_count, path_scheme_count, lexer_count)``. Warnings are the same kind
     of non-fatal, report-them-all diagnostics the rest of ``validate_config``
     produces; a warned entry is skipped, never fatal.
     """
@@ -685,7 +688,7 @@ def validate_user_entries(config, registry=None) -> list[str]:
     return _process_user_entries(config, registry, apply=False)[0]
 
 
-def _process_user_entries(config, registry, apply: bool) -> tuple[list[str], int, int, int, int, int, int]:
+def _process_user_entries(config, registry, apply: bool) -> tuple[list[str], int, int, int, int, int, int, int]:
     registry = registry if registry is not None else _actions.registry
     if apply:
         registry.unregister_source("user")
@@ -694,6 +697,7 @@ def _process_user_entries(config, registry, apply: bool) -> tuple[list[str], int
         _filters.clear()
         _image_decoders.clear()
         _path_schemes.unregister_source("user")
+        _lexers.clear()
 
     warnings: list[str] = []
     count = 0
@@ -782,8 +786,29 @@ def _process_user_entries(config, registry, apply: bool) -> tuple[list[str], int
             _path_schemes.register(name, impl, source="user")
         scheme_count += 1
 
+    lexer_count = 0
+    lexer_items = _items(getattr(config, "LEXERS", None), "LEXERS", warnings)
+    if lexer_items and not _lexers.PYGMENTS:
+        warnings.append("LEXERS was ignored: Pygments is not installed, so "
+                        "nothing is syntax-highlighted")
+        lexer_items = []
+    # Classes before aliases, so '*.dclx': 'dcl' finds the DclLexer registered
+    # in the same table whichever line comes first. Without applying, there is
+    # no table to find it in: check the classes' own aliases instead.
+    lexer_items.sort(key=lambda item: isinstance(item[1], str))
+    table_aliases = {a.lower() for _, v in lexer_items if isinstance(v, type)
+                     for a in getattr(v, "aliases", ())}
+    for pattern, spec in lexer_items:
+        problem = _check_lexer(pattern, spec, None if apply else table_aliases)
+        if problem:
+            warnings.append(problem)
+            continue
+        if apply:
+            _lexers.register(pattern, spec)
+        lexer_count += 1
+
     return (warnings, count, hook_count, sort_count, filter_count,
-            decoder_count, scheme_count)
+            decoder_count, scheme_count, lexer_count)
 
 
 def _items(value, label: str, warnings: list[str]):
@@ -902,6 +927,28 @@ def _build_image_decoder(name, spec) -> tuple[dict | None, str | None]:
             "label": (str(spec["label"]) if spec.get("label") else None)}, None
 
 
+def _check_lexer(pattern, spec, table_aliases: set[str] | None) -> str | None:
+    """Why one ``LEXERS`` entry cannot be used, or ``None``.
+
+    The key is a file-name pattern as Pygments writes them in a lexer's
+    ``filenames`` (``'*.dcl'``, ``'Jenkinsfile'``), or a bare suffix (``'.dcl'``)
+    as the other tables take. The value is a Pygments lexer class or the alias of
+    one. ``table_aliases`` is set when validating without loading, standing in
+    for the classes the same table would have registered first. There is no
+    ``override``: naming a pattern Pygments already claims is the way to color it
+    differently."""
+    if not isinstance(pattern, str) or not pattern.strip():
+        return f"LEXERS keys must be file-name patterns like '*.dcl'; ignored {pattern!r}"
+    if table_aliases is not None and isinstance(spec, str) \
+            and spec.strip().lower() in table_aliases:
+        return None
+    try:
+        _lexers.resolve(spec)
+    except ValueError as e:
+        return f"LEXERS['{pattern}'] was ignored: {e}"
+    return None
+
+
 def _override_requested(spec) -> bool:
     return isinstance(spec, dict) and bool(spec.get("override"))
 
@@ -993,11 +1040,12 @@ def _build_path_scheme(name, spec) -> tuple[type | None, str | None]:
 def preview_notice(action_count: int, hook_count: int,
                    sort_key_count: int = 0, filter_count: int = 0,
                    image_decoder_count: int = 0,
-                   path_scheme_count: int = 0) -> str | None:
+                   path_scheme_count: int = 0,
+                   lexer_count: int = 0) -> str | None:
     """The one line a config using this API gets in the log pane, or ``None``
     when it uses none of it."""
     if not any((action_count, hook_count, sort_key_count, filter_count,
-                image_decoder_count, path_scheme_count)):
+                image_decoder_count, path_scheme_count, lexer_count)):
         return None
     parts = [f"{action_count} action(s)", f"{hook_count} event hook(s)"]
     if sort_key_count:
@@ -1008,5 +1056,7 @@ def preview_notice(action_count: int, hook_count: int,
         parts.append(f"{image_decoder_count} image decoder(s)")
     if path_scheme_count:
         parts.append(f"{path_scheme_count} path scheme(s)")
+    if lexer_count:
+        parts.append(f"{lexer_count} lexer(s)")
     return (f"Customization API (Preview, API_VERSION {API_VERSION}): "
             f"{', '.join(parts)} loaded — this API may change without notice.")

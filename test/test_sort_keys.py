@@ -53,7 +53,7 @@ def order(tree, mode, reverse=False):
 def load(**sort_keys_table):
     cfg = types.SimpleNamespace(SORT_KEYS=sort_keys_table)
     (warnings, _actions, _hooks, count, _filters,
-     _decoders, _schemes) = user_api.load_user_entries(cfg)
+     _decoders, _schemes, _lexers) = user_api.load_user_entries(cfg)
     return warnings, count
 
 

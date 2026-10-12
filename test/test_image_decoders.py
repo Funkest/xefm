@@ -43,7 +43,7 @@ def clean_registry():
 def load(**table):
     cfg = types.SimpleNamespace(IMAGE_DECODERS=table)
     (warnings, _actions, _hooks, _sorts, _filters,
-     count, _schemes) = user_api.load_user_entries(cfg)
+     count, _schemes, _lexers) = user_api.load_user_entries(cfg)
     return warnings, count
 
 
