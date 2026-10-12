@@ -133,7 +133,11 @@ class _ScrollModal(FocusContainer, Widget):
     def handle_event(self, event: Event) -> bool:
         if event.type is EventType.KEY:
             key = event.key
-            if key in ("escape", "enter"):
+            if key == "tab":
+                self._step_link(-1 if "shift" in event.modifiers else 1)
+            elif key == "enter" and self._follow_link():
+                pass  # a keyboard-focused link was followed; the dialog stays
+            elif key in ("escape", "enter"):
                 self._close()
             elif key in _SCROLL_KEYS:
                 self.body.handle_event(event)
@@ -149,6 +153,23 @@ class _ScrollModal(FocusContainer, Widget):
                 self._close()  # click outside dismisses
             return True
         return True  # modal: swallow everything else
+
+
+    # --- links -----------------------------------------------------------------
+
+    def _step_link(self, direction: int) -> None:
+        """Tab / Shift-Tab: move the body's keyboard link focus, cycling — off
+        one end, the next press starts again from the other. A body without
+        links (or one that is not a MarkdownView) ignores the key."""
+        advance = getattr(self.body, "focus_advance", None)
+        if advance is not None and not advance(direction):
+            advance(direction)
+
+    def _follow_link(self) -> bool:
+        """Enter on a keyboard-focused link follows it; False when no link is
+        focused, so Enter keeps closing the dialog."""
+        activate = getattr(self.body, "activate_focused_link", None)
+        return bool(activate is not None and activate())
 
 
 class TextDialog(_ScrollModal):
@@ -180,8 +201,12 @@ class MarkdownDialog(_ScrollModal):
         *,
         title: str = "",
         on_close: Callable[[], None] | None = None,
+        on_link: Callable[[str], bool] | None = None,
+        hint: str | None = None,
     ):
-        super().__init__(MarkdownView(source), title=title, on_close=on_close)
+        kw = {} if hint is None else {"hint": hint}
+        super().__init__(MarkdownView(source, on_link=on_link), title=title,
+                         on_close=on_close, **kw)
         self.md = self.body
 
     def _style_body(self, theme, surface_bg) -> None:
@@ -237,13 +262,24 @@ def show_markdown(
     *,
     title: str = "",
     on_close: Callable[[], None] | None = None,
+    on_link: Callable[[str], bool] | None = None,
+    hint: str | None = None,
     z: int = 70,
 ) -> MarkdownDialog:
     """Push a modal :class:`MarkdownDialog` over ``panel`` and return it.
 
     Same chrome and sizing as :func:`show_text`, but ``source`` is Markdown and
-    lays out as rich text (headings, tables, emphasis, links)."""
-    dialog = MarkdownDialog(source, title=title, on_close=on_close)
+    lays out as rich text (headings, tables, emphasis, links).
+
+    Links are followed by a click, or from the keyboard: Tab / Shift-Tab step
+    through them and Enter follows the stepped-to one (Enter with none stepped
+    to still closes). ``on_link(href)`` sees every followed link first and
+    returns True for one it handled — how a dialog gives its links an in-app
+    meaning (``xefm-action:`` in the Help dialog); declined, a link opens the
+    way PuiKit opens it. ``hint`` replaces the bottom band's text, for a dialog
+    that wants to name its link keys."""
+    dialog = MarkdownDialog(source, title=title, on_close=on_close,
+                            on_link=on_link, hint=hint)
     _push(panel, dialog, rows=_wrapped_rows(source, _box_width(panel) - 4.0), z=z)
     return dialog
 

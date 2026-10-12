@@ -11,7 +11,7 @@ answered how.
 |---|---|
 | `xefm/actions.py` | `command_palette` (FILER, `Ctrl-T` via the `_config.py` template); `describe_list_item` (FILTER_LIST, `F1`); `Action.details` |
 | `xefm/filter_list_dialog.py` | opt-in `to_right`, `to_detail`, `to_help` hooks; `_ColumnRow`; `describe_selected()` |
-| `xefm/app.py` | `show_command_palette`, `_palette_actions`, `_palette_keys`, `_palette_help`; Tools menu item; help row |
+| `xefm/app.py` | `show_command_palette`, `_palette_actions`, `_palette_keys`; `_action_page` (shared with the Help dialog); Tools menu item; help row |
 | `xefm/user_api.py` | a user action's docstring — or its `'description'` entry, which replaces it whole — split PEP 257-style (`_split_description`): summary → `description`, body → `details` |
 | `test/test_command_palette.py` | picker hooks and the palette against a live app |
 
@@ -95,7 +95,7 @@ applies to every Markdown dialog; the box is still capped at 80% of the window.
 
 `_palette_keys` resolves in the FILER context only and returns an empty string
 for an unbound action — an empty column reads as "no key" where a dash on many
-rows would be noise. `_palette_help` builds the F1 page from the description,
+rows would be noise. `_action_page` builds the F1 page from the description,
 `Action.details`, the keys, the resolved selection requirement, the source and the
 aliases.
 
@@ -125,3 +125,28 @@ aliases.
 Not addressed here beyond the action → key column: finding *free* keys is a
 per-context question with terminal-specific exceptions, and the discussion's
 plan is to confirm that is what #531 wants before designing for it.
+
+## The same page from the Help dialog
+
+The action page is the action's, not the palette's: the palette executes, the
+Help dialog teaches, and a page explaining an action belongs to neither. Both
+open `_action_page(action)` over themselves.
+
+In the Help dialog (`show_help`), a row whose action resolves in the FILER
+context **and has details** renders its description as a link,
+`[text](xefm-action:<name>)` (`_action_link`; the name is percent-quoted, so a
+user action named with a space still makes a valid link). A row without details
+stays plain text — its page would only repeat the row — and so does every row of
+the isearch section, whose actions belong to the search bar.
+
+The links are followed through two PuiKit `MarkdownView` features (PuiKit's
+`markdown-link-hook` work, not yet released): a per-view `on_link(href) -> bool`
+handler, and keyboard link focus (`focus_advance`, `activate_focused_link`).
+`_follow_action_link` takes `xefm-action:` and declines everything else, so an
+ordinary URL still opens the way PuiKit opens it. `text_dialog._ScrollModal`
+routes Tab / Shift-Tab to the body's links (cycling at the ends) and gives Enter
+to a focused link before treating it as "close"; a body without links ignores
+Tab, so the other Markdown dialogs are unchanged apart from that key.
+
+**PuiKit floor.** `MarkdownView(on_link=...)` needs the PuiKit release that
+carries this work; `requirements.txt` must move to it when that ships.

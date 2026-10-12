@@ -11,7 +11,21 @@ its own key list rather than this dialog.
 - **↑/↓** — scroll line by line (the mouse wheel scrolls too)
 - **Page Up/Down** — scroll by page
 - **Home/End** — jump to top/bottom
-- **Escape** or **Enter** — close (clicking outside the dialog closes it too)
+- **Tab / Shift-Tab** — step to the next / previous link
+- **Enter** — open the link stepped to; with none, close the dialog
+- **Escape** — close (clicking outside the dialog closes it too)
+
+## Details for an action
+
+Where an action has more to say than its one line — what it needs, how it
+treats the selection, what it refuses — its description in the dialog is a
+link. Click it, or Tab to it and press Enter, and a page about that action
+opens over the help: what it does, its keys, whether it needs a selection.
+**Escape** returns to the help, where you left it. Your own actions get a page
+when their docstring has more than a first line.
+
+The same page opens from the [command palette](COMMAND_PALETTE_FEATURE.md) with
+F1 on a row.
 
 ## Content
 
@@ -39,7 +53,7 @@ the place to read which key does what on *your* setup. The sections, in order:
 - **Log Pane** — scrolling the log, resizing it, and copying from it
 - **Other** — the menu bar, editing and reloading your config, help, and quit
 - **Your Actions (config.py)** — the actions your own config defines, listed
-  with the descriptions you gave them. Absent unless your config defines at
+  with the first line of each one's docstring. Absent unless your config defines at
   least one (see [Customization](CUSTOMIZATION_FEATURE.md))
 - **Archive Formats** — which archive formats this copy of XeFM can browse,
   extract and create, and the libarchive it found. Built when XeFM starts rather

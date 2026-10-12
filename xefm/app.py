@@ -37,7 +37,7 @@ import threading
 import time
 import sys
 from pathlib import Path as _StdPath
-from urllib.parse import urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 from puikit import EventType, Font, Item, Panel, PostEffect, Style, TextAttribute, Theme, VSplit, WindowStyle, derive_theme, mix
 from puikit.background import Shader, Wallpaper
@@ -143,6 +143,11 @@ _HISTORY_MAX = 100
 #: and the tips both render this, and the help tells it apart from a real
 #: binding by comparing against it rather than by how it looks.
 UNBOUND_KEYS = "—"
+
+#: The scheme of a Help-dialog link to an action's page
+#: (``xefm-action:copy_files``). XeFM's own: the dialog's link handler takes
+#: it and declines every other link, which PuiKit then opens as usual.
+_ACTION_LINK = "xefm-action:"
 
 _TIPS_ENABLED_KEY = "tips.enabled"
 _TIPS_INDEX_KEY = "tips.index"
@@ -7741,9 +7746,41 @@ class XeFMApp:
         return UNBOUND_KEYS
 
     def show_help(self) -> None:
-        """A scrollable key-binding reference, built live from the port's keymap."""
-        show_markdown(self.panel, self._help_markdown(), title="Help")
+        """A scrollable key-binding reference, built live from the port's keymap.
+
+        A row whose action has details links to its page
+        (:meth:`_action_link`): click it, or Tab to it and press Enter, and the
+        page opens over the help; Esc returns to the help where it was."""
+        show_markdown(self.panel, self._help_markdown(), title="Help",
+                      on_link=self._follow_action_link,
+                      hint="↑/↓ scroll · Tab next link · Enter open · Esc close")
         self.panel.render()
+
+    def _action_link(self, name: str, text: str) -> str:
+        """``text`` as a link to action ``name``'s page, when there is a page
+        worth opening — the action has details beyond the line already in the
+        row; otherwise ``text`` unchanged. Only the file list's actions (and the
+        shared ones) carry details, so a viewer's row stays plain."""
+        action = _action_registry.resolve(_ctx.FILER, name)
+        if action is None or not action.details:
+            return text
+        label = text.replace("[", "\\[").replace("]", "\\]")
+        return f"[{label}]({_ACTION_LINK}{quote(name, safe='')})"
+
+    def _follow_action_link(self, url: str) -> bool:
+        """The Help dialog's link handler: an ``xefm-action:`` link opens that
+        action's page over the help; any other link is declined, so PuiKit opens
+        it the usual way (a browser, or the clipboard in a terminal)."""
+        if not url.startswith(_ACTION_LINK):
+            return False
+        name = unquote(url[len(_ACTION_LINK):])
+        action = _action_registry.resolve(_ctx.FILER, name)
+        if action is None:
+            self.log_info(f"No action named '{name}'")
+        else:
+            show_markdown(self.panel, self._action_page(action), title=name, z=80)
+        self.panel.render()
+        return True
 
     # --- command palette (#550) ---------------------------------------------
 
@@ -7763,7 +7800,7 @@ class XeFMApp:
             to_label=lambda a: a.name,
             to_right=self._palette_keys,
             to_detail=lambda a: a.description,
-            to_help=self._palette_help,
+            to_help=self._action_page,
             on_accept=lambda a: self._menu(a.name))
         self.panel.render()
 
@@ -7796,10 +7833,14 @@ class XeFMApp:
         keys, _ = self.keys.get_keys_for_action(action.name, _ctx.FILER)
         return ", ".join(self.keys.format_key_for_display(k) for k in keys)
 
-    def _palette_help(self, action) -> str:
-        """The F1 page for one palette row: what it does, its keys, what it
-        needs, and the longer help where the action has some (a built-in's
-        ``Action.details``, the body of a user action's docstring)."""
+    def _action_page(self, action) -> str:
+        """One action's help page: what it does, its keys, what it needs, and
+        the details where the action has some (a built-in's ``Action.details``,
+        the body of a user action's docstring).
+
+        Shared by the two surfaces that explain an action — the command
+        palette (F1 on a row) and the Help dialog (a row's link) — and owned
+        by neither: the page is the action's, built from the registry."""
         paragraphs = [action.description or action.name]
         if action.details:
             paragraphs.append(action.details)
@@ -7847,7 +7888,7 @@ class XeFMApp:
                 # are a glyph apart.
                 keys = UNBOUND_KEYS if label == UNBOUND_KEYS else \
                     "`" + label.replace("|", "\\|") + "`"
-                lines.append(f"| {keys} | {desc} |")
+                lines.append(f"| {keys} | {self._action_link(action, desc)} |")
             lines.append("")
         lines.append(self._archive_help_section())
         return "\n".join(lines)
