@@ -1223,10 +1223,17 @@ class Path:
         source_scheme = self.get_scheme()
         dest_scheme = destination.get_scheme()
         
-        if source_scheme == dest_scheme:
-            # Same storage type - use native rename/move
+        # Two directories merge rather than replace: no rename can do that, so
+        # it takes the copy + delete path below.
+        merge = overwrite and self.is_dir() and destination.is_dir()
+        if source_scheme == dest_scheme and not merge:
+            # Same storage type - use native rename/move. ``rename`` refuses an
+            # existing destination on Windows, so an overwrite uses ``replace``.
             try:
-                self.rename(destination)
+                if overwrite and destination.exists():
+                    self.replace(destination)
+                else:
+                    self.rename(destination)
                 return True
             except OSError as e:
                 # errno 18 is EXDEV (Cross-device link) - different mount points

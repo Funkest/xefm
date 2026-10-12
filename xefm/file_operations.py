@@ -362,7 +362,8 @@ class FileOperationService:
                     pass
 
             total_items, total_bytes = self._count(task, kind, dest_dir,
-                                                   [p[0] for p in plan])
+                                                   [p[0] for p in plan],
+                                                   [p[1] for p in plan])
             # Delete never reports bytes, so weighting its bar by them would
             # freeze it; copy/move/duplicate report every byte they touch.
             prog.update_operation_total(
@@ -457,15 +458,19 @@ class FileOperationService:
         return plan, skipped
 
     def _count(self, task: Task, kind: str, dest_dir: Optional[Path],
-               targets: list) -> tuple[int, int]:
+               targets: list, dests: Optional[list] = None) -> tuple[int, int]:
         """Recursively count the nodes (files + dirs) and total bytes to process,
         so the primary bar is determinate. A move that stays on one filesystem is
         one atomic rename, so it counts as a single node (its subtree is never
-        walked); a move to another filesystem is walked like a copy."""
+        walked); a move to another filesystem, or a directory merged into an
+        existing one (``dests`` holds each target's destination), is walked like
+        a copy."""
         items = 0
         bytes_ = 0
-        for t in targets:
-            if _is_atomic_move(kind, t, dest_dir):
+        if dests is None:
+            dests = [None] * len(targets)
+        for t, dest in zip(targets, dests):
+            if _is_atomic_move(kind, t, dest_dir) and not _merges_into(t, dest):
                 items += 1
                 task.counted = items
                 continue
@@ -500,7 +505,8 @@ class FileOperationService:
         failed. A single bad entry never aborts the rest of the target."""
         if kind == "delete":
             return self._delete_tree(task, target, prog, log, errors)
-        if kind == "move" and _is_atomic_move(kind, target, dest_dir):
+        if (kind == "move" and _is_atomic_move(kind, target, dest_dir)
+                and not _merges_into(target, dest_base)):
             prog.update_progress(target.name)
             try:
                 target.move_to(dest_base, overwrite=overwrite)
@@ -570,7 +576,8 @@ class FileOperationService:
             for i, (target, dest_base, overwrite) in enumerate(plan):
                 task.checkpoint()
                 terr = per_errors[i]
-                if kind == "move" and _is_atomic_move(kind, target, dest_dir):
+                if (kind == "move" and _is_atomic_move(kind, target, dest_dir)
+                        and not _merges_into(target, dest_base)):
                     prog.update_progress(target.name)
                     try:
                         target.move_to(dest_base, overwrite=overwrite)
@@ -1029,6 +1036,14 @@ def _is_atomic_move(kind: str, target: Path, dest_dir: Optional[Path]) -> bool:
     if src_dev is not None and dest_dev is not None:
         return src_dev == dest_dev
     return True
+
+
+def _merges_into(target: Path, dest: Optional[Path]) -> bool:
+    """An overwrite of a directory onto an existing directory is a merge: no
+    rename can do it (Windows refuses any existing destination, POSIX a non-empty
+    one), so the move copies the tree into it and then drops the source."""
+    return (dest is not None and target.is_dir() and not target.is_symlink()
+            and dest.is_dir())
 
 
 # --- conflict dialog ---------------------------------------------------------
