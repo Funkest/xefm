@@ -150,6 +150,7 @@ the mouse for the first, take the whole buffer with the second. See
 
 | Item | Action |
 |------|--------|
+| Command Palette… | `command_palette` |
 | External Programs… | `programs` |
 | Subshell Here | `subshell` *(desktop mode: in a terminal window)* |
 | Edit Configuration… | `edit_config` *(ships unbound)* |

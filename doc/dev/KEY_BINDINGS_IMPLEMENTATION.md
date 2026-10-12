@@ -333,8 +333,11 @@ so `Cmd-A` still selects the text on macOS.
 
 `xefm.actions.FILTER_LIST` names the second typing-competing surface: the modal
 searchable-list picker (`xefm/filter_list_dialog.py`) behind Favorites, Drives,
-History, External Programs and the `;` Filter prompt. It has one action —
-`remove_list_item`, Shift-Delete by default — which drops the highlighted row.
+History, External Programs, the `;` Filter prompt and the command palette. It
+has two actions: `remove_list_item`, Shift-Delete by default, which drops the
+highlighted row, and `describe_list_item`, F1 by default, which opens the
+highlighted row's help where the picker was given `to_help` (the command
+palette — see `COMMAND_PALETTE_IMPLEMENTATION.md`).
 
 The routing constraint is the isearch bar's: the query field holds focus and a
 printable key belongs to the query, so a remove key must be modified or

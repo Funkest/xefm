@@ -750,6 +750,8 @@ Check file permissions and disk space
 
 ### Getting Help
 - Press **F1** for built-in help
+- Press **Ctrl-T** for the [command palette](COMMAND_PALETTE_FEATURE.md): find
+  any action by name, see its key, and run it
 - Check feature documentation below
 - Use `--help` command line option
 
@@ -792,6 +794,7 @@ For detailed information about specific features, see these dedicated guides:
 - [Menu Bar Feature](MENU_BAR_FEATURE.md) - Native / in-window menu bar
 - [Status Bar Feature](STATUS_BAR_FEATURE.md) - Viewer status information display
 - [Help Dialog Feature](HELP_DIALOG_FEATURE.md) - Built-in help system
+- [Command Palette Feature](COMMAND_PALETTE_FEATURE.md) - Search every action by name and run it
 - [Mouse & Interaction Feature](MOUSE_EVENT_SUPPORT_FEATURE.md) - Mouse, double-click, and drag-and-drop
 - [Color Schemes & Visual Effects](COLOR_SCHEMES_FEATURE.md) - Themes, background animations, and motion
 - [Wide Character Support Feature](WIDE_CHARACTER_SUPPORT_FEATURE.md) - International character display

@@ -2704,6 +2704,7 @@ class XeFMApp:
                 # --- application ---
                 "quit": (self.confirm_quit, False),
                 "help": (self.show_help, False),
+                "command_palette": (self.show_command_palette, False),
                 "menu": (self.menu_bar.open_menu, None),
                 "redraw": (lambda: None, True),
                 # --- cursor ---
@@ -3416,6 +3417,9 @@ class XeFMApp:
             title="Go",
         )
         tools_menu = Menu(
+            MenuItem("Command Palette…", on_select=self.show_command_palette,
+                     shortcut=sc("command_palette")),
+            SEPARATOR,
             MenuItem("External Programs…", on_select=self.show_programs, shortcut=sc("programs")),
             MenuItem("Subshell Here", on_select=self.subshell, shortcut=sc("subshell")),
             SEPARATOR,
@@ -7690,6 +7694,7 @@ class XeFMApp:
         )),
         ("Other", (
             ("menu", "Open the menu bar (←/→ walk it, Esc closes)"),
+            ("command_palette", "Search every action by name and run it"),
             ("edit_config", "Edit ~/.xefm/config.py, then reload (Tools menu)"),
             ("reload_config", "Reload ~/.xefm/config.py (Tools menu)"),
             ("help", "Show this help"),
@@ -7739,6 +7744,84 @@ class XeFMApp:
         """A scrollable key-binding reference, built live from the port's keymap."""
         show_markdown(self.panel, self._help_markdown(), title="Help")
         self.panel.render()
+
+    # --- command palette (#550) ---------------------------------------------
+
+    def show_command_palette(self) -> None:
+        """Every file-list action in a searchable picker, run on Enter.
+
+        Built on the shared ``FilterListDialog`` so it matches the way every
+        other picker does (tokens ANDed, Migemo), with three of its opt-in
+        hooks: the key each action is bound to as a right-hand column, its
+        one-line description under the list, and a help page on F1
+        (``describe_list_item``). The rows are the actions this surface can
+        actually run — the ``filer`` context's own, the inherited ``common``
+        ones, and the config's ``ACTIONS`` — so a viewer's actions, which only
+        mean something inside that viewer, are not offered here."""
+        show_filter_list(
+            self.panel, self._palette_actions(), title="Command Palette",
+            to_label=lambda a: a.name,
+            to_right=self._palette_keys,
+            to_detail=lambda a: a.description,
+            to_help=self._palette_help,
+            on_accept=lambda a: self._menu(a.name))
+        self.panel.render()
+
+    def _palette_actions(self) -> list:
+        """The rows the palette offers, in registry order (which is the order
+        the help dialog reads in, grouped by what the actions do).
+
+        A built-in needs a handler in this app to be runnable, and an action
+        the running frontend refuses (``_BACKEND_GATED``) is left out for the
+        same reason the help leaves it out. The palette itself is left out
+        too — opening it from inside it would only stack a second one."""
+        handlers = self._filer_handlers()
+        rows = []
+        for action in _action_registry.actions(_ctx.FILER):
+            name = action.name
+            if name == "command_palette":
+                continue
+            if not action.is_user and name not in handlers:
+                continue
+            gate = self._BACKEND_GATED.get(name)
+            if gate is not None and not gate(self):
+                continue
+            rows.append(action)
+        return rows
+
+    def _palette_keys(self, action) -> str:
+        """The palette's right-hand column: the key(s) bound to ``action`` in the
+        file list, or nothing — an empty column reads as "no key" at a glance,
+        where a dash on half the rows would be noise."""
+        keys, _ = self.keys.get_keys_for_action(action.name, _ctx.FILER)
+        return ", ".join(self.keys.format_key_for_display(k) for k in keys)
+
+    def _palette_help(self, action) -> str:
+        """The F1 page for one palette row: what it does, its keys, what it
+        needs, and the longer help where the action has some (a built-in's
+        ``Action.details``, the body of a user action's docstring)."""
+        paragraphs = [action.description or action.name]
+        if action.details:
+            paragraphs.append(action.details)
+        # The facts as labelled lines in one paragraph, joined by hard breaks:
+        # a list would hang a lone bullet off the common case, which has only
+        # the keys to state. The name is not repeated — it is the title.
+        keys = self._palette_keys(action)
+        facts = [f"**Keys:** `{keys}`" if keys else
+                 "**Keys:** none — bind one under `KEY_BINDINGS` in config.py"]
+        if action.resolved_selection() == "required":
+            facts.append("**Needs a selection:** its key does nothing until "
+                         "an item is marked")
+        elif action.resolved_selection() == "none":
+            facts.append("**Only without a selection:** its key is ignored "
+                         "while items are marked")
+        if action.is_user:
+            facts.append("**Defined in:** your config.py (`ACTIONS`)")
+        if action.aliases:
+            old = ", ".join(f"`{a}`" for a in action.aliases)
+            facts.append(f"**Formerly:** {old}")
+        paragraphs.append("\\\n".join(facts))
+        return "\n\n".join(paragraphs)
 
     def _help_markdown(self) -> str:
         """The help dialog's whole body.
@@ -7811,8 +7894,8 @@ class XeFMApp:
     def _user_help_sections(self) -> tuple:
         """The config's own actions as a final help section, or nothing when it
         defines none. A user who binds a key deserves to find it in the same
-        place as every built-in one; the description comes from the ``ACTIONS``
-        entry, falling back to the action's name."""
+        place as every built-in one; the description is the action's docstring
+        summary (or an explicit ``description`` entry)."""
         user = _action_registry.user_actions(_ctx.FILER)
         if not user:
             return ()

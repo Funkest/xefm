@@ -37,6 +37,19 @@ the highlighted row (#271). A hint band along the
 bottom, mirroring the title bar, says which keys are live — the remove key among
 them read back from the keymap, so a rebind shows up there.
 
+Three more opt-in hooks let a picker say more about each row than its label —
+each one off unless passed, so a call site that uses none of them looks exactly
+as before (discussion #550, which the command palette is built on):
+
+- ``to_right(value)`` — a right-aligned column, kept whole while the label
+  elides (the palette's key for each action);
+- ``to_detail(value)`` — one line about the highlighted row, in a row of its own
+  between the list and the hint band. It is not a key, so it stays out of the
+  band, which is where a modal names its keys and nothing else;
+- ``to_help(value)`` — a longer Markdown page for the highlighted row, opened
+  over the picker by the ``describe_list_item`` key (F1); closing it returns to
+  the picker with the query and the cursor where they were.
+
 The dialog is modal — it owns events while open — and reports its outcome through
 ``on_accept(value)`` / ``on_cancel()``.
 
@@ -54,6 +67,8 @@ from puikit.backend import Style
 from puikit.event import Event, EventType
 from puikit.focus import FocusContainer, focus_on_click
 from puikit.panel import Rect
+from puikit.layout import SizeRequest
+from puikit.text import elide
 from puikit.widgets.base import Widget
 from puikit.widgets.list import ListView
 from puikit.widgets.text_edit import TextEdit
@@ -63,7 +78,8 @@ from xefm.actions import FILTER_LIST
 from xefm.config import (format_key_for_display, get_keys_for_action,
                          is_action_for_event)
 from xefm.dialog_geometry import (animate_open, draw_hint_row, draw_title_bar,
-                                  hint_content_bottom, pane_anchored_box)
+                                  hint_content_bottom, hint_style,
+                                  pane_anchored_box)
 
 #: Navigation keys the *list* owns even while the filter field holds focus —
 #: typing filters, but the arrows still drive the selection.
@@ -75,8 +91,51 @@ _LIST_KEYS = frozenset({"up", "down", "pageup", "pagedown"})
 #: is the operation a user may well want on a key of their own choosing.
 _REMOVE_ACTION = "remove_list_item"
 
+#: The key that opens the highlighted row's help — offered only by a picker
+#: given ``to_help``, the way the remove key needs ``on_remove``.
+_DESCRIBE_ACTION = "describe_list_item"
+
 #: Braille spinner frames for the title's background-loading indicator.
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+
+class _ColumnRow(Widget):
+    """One list row with a right-aligned second column: the label on the left,
+    eliding as the row narrows, and ``right`` kept whole against the right edge
+    in the muted text color. The list paints the selection fill behind it (the
+    ``bg`` hint ``ListView`` hands a selected widget row), so the row draws only
+    its two texts."""
+
+    def __init__(self, label: str, right: str, *, ellipsis: str, elide_where: str):
+        self.label = label
+        self.right = right
+        self._ellipsis = ellipsis
+        self._elide_where = elide_where
+
+    def measure(self, ctx, axis: str, available: float) -> SizeRequest:
+        if axis == "x":
+            return SizeRequest()
+        h = ctx.measure_line_height()
+        return SizeRequest(min=h, preferred=h, max=h)
+
+    def draw(self, ctx) -> None:
+        theme = ctx.theme
+        style = Style(fg=theme.text if theme else None)
+        wu, _hu = ctx.size_units
+        reserved = 0.0
+        if self.right:
+            right_w = ctx.measure_text(self.right, style)
+            gap = ctx.measure_text("  ", style)
+            # The second column goes first, and only while the label keeps some
+            # room beside it: on a very narrow row the name is what matters.
+            if right_w + gap < wu / 2:
+                ctx.draw_text(wu - right_w - 1.0, 0, self.right,
+                              Style(fg=theme.muted_text if theme else None))
+                reserved = right_w + gap + 1.0
+        label = elide(self.label, max(0.0, wu - reserved), self._ellipsis or "",
+                      where=self._elide_where,
+                      measure=lambda t: ctx.measure_text(t, style))
+        ctx.draw_text(0, 0, label, style)
 
 
 class FilterListDialog(FocusContainer, Widget):
@@ -102,6 +161,9 @@ class FilterListDialog(FocusContainer, Widget):
         on_remove: Callable[[Any], bool] | None = None,
         remove_label: str = "remove",
         load_more: Callable[[threading.Event], Iterator[Any]] | None = None,
+        to_right: Callable[[Any], str] | None = None,
+        to_detail: Callable[[Any], str] | None = None,
+        to_help: Callable[[Any], str] | None = None,
     ):
         self.all_items = list(items)
         self.to_label = to_label
@@ -124,6 +186,15 @@ class FilterListDialog(FocusContainer, Widget):
         #: a list of remembered rows, and wrong for the Drives picker, where the
         #: same key disconnects a share or ejects a disk.
         self.remove_label = remove_label
+        #: Optional second column, right-aligned on every row (see the module
+        #: docstring). With it the list draws widget rows instead of plain text.
+        self.to_right = to_right
+        #: Optional one-line description of the highlighted row, drawn in a row
+        #: of its own above the hint band.
+        self.to_detail = to_detail
+        #: Optional Markdown help for the highlighted row, opened by the
+        #: ``describe_list_item`` key. ``None`` leaves the dialog without it.
+        self.to_help = to_help
         self._hint_cache: str | None = None
         self._panel: Any = None
         # Values currently passing the filter, parallel to ``self.list.items``.
@@ -142,11 +213,16 @@ class FilterListDialog(FocusContainer, Widget):
         self._spin = 0
 
         self.filter_edit = TextEdit(on_change=self._refilter)
+        row_factory = None
+        if to_right is not None:
+            def row_factory(row: tuple[str, str]) -> Widget:
+                return _ColumnRow(*row, ellipsis=ellipsis, elide_where=elide_where)
         self.list = ListView(
-            [self.to_label(v) for v in self.all_items],
+            self._rows(self.all_items),
             on_select=lambda i, _label: self._accept_index(i),
             ellipsis=ellipsis,
             elide_where=elide_where,
+            row_factory=row_factory,
         )
         # The filter field holds focus so typing flows there and the IME engages;
         # the arrows are routed to the list explicitly (see handle_event).
@@ -159,6 +235,23 @@ class FilterListDialog(FocusContainer, Widget):
 
     def focus_children(self) -> list[Any]:
         return [self.filter_edit]
+
+    # --- rows ----------------------------------------------------------------
+
+    def _rows(self, values: Sequence[Any]) -> list[Any]:
+        """What the list holds for ``values``: the labels, or ``(label, right)``
+        pairs for the widget rows a second column needs."""
+        if self.to_right is None:
+            return [self.to_label(v) for v in values]
+        return [(self.to_label(v), self.to_right(v)) for v in values]
+
+    def selected_value(self) -> Any:
+        """The value behind the highlighted row, or ``None`` when no row passes
+        the filter."""
+        index = self.list.selected
+        if 0 <= index < len(self.filtered):
+            return self.filtered[index]
+        return None
 
     # --- filtering -----------------------------------------------------------
 
@@ -174,7 +267,7 @@ class FilterListDialog(FocusContainer, Widget):
     def _refilter(self, text: str) -> None:
         tokens = search_match.compile_query(text)
         self.filtered = [v for v in self.all_items if self._label_hit(v, tokens)]
-        self.list.set_items([self.to_label(v) for v in self.filtered])
+        self.list.set_items(self._rows(self.filtered))
         self.list.selected = 0
 
     def add_items(self, values: Sequence[Any]) -> None:
@@ -191,7 +284,7 @@ class FilterListDialog(FocusContainer, Widget):
             return
         self.filtered.extend(matches)
         selected, offset = self.list.selected, self.list.offset
-        self.list.set_items([self.to_label(v) for v in self.filtered])
+        self.list.set_items(self._rows(self.filtered))
         self.list.selected = selected
         self.list.offset = offset
 
@@ -220,7 +313,7 @@ class FilterListDialog(FocusContainer, Widget):
         except ValueError:
             pass  # streamed in and already gone; the visible list is what matters
         offset = self.list.offset
-        self.list.set_items([self.to_label(v) for v in self.filtered])
+        self.list.set_items(self._rows(self.filtered))
         # Hold the position rather than the index: after removing a row the next
         # one slides up into it, which is where a repeat press should land.
         self.list.selected = min(index, max(0, len(self.filtered) - 1))
@@ -242,6 +335,10 @@ class FilterListDialog(FocusContainer, Widget):
         """
         if self._hint_cache is None:
             parts = ["↑/↓ select", "Enter choose"]
+            if self.to_help is not None:
+                keys, _ = get_keys_for_action(_DESCRIBE_ACTION, FILTER_LIST)
+                if keys:
+                    parts.append(f"{format_key_for_display(keys[0])} help")
             if self.on_remove is not None:
                 keys, _ = get_keys_for_action(_REMOVE_ACTION, FILTER_LIST)
                 if keys:
@@ -353,6 +450,30 @@ class FilterListDialog(FocusContainer, Widget):
         if not self._closed and self._panel is not None:
             self._panel.render()
 
+    # --- item help -----------------------------------------------------------
+
+    def describe_selected(self) -> bool:
+        """Open the highlighted row's help (``to_help``) over the picker.
+
+        A dialog of its own, stacked rather than replacing this one: closing it
+        pops only itself, so the query, the filtered rows and the cursor are
+        exactly where the user left them. Returns whether anything opened."""
+        value = self.selected_value()
+        if self.to_help is None or value is None or self._panel is None:
+            return False
+        from xefm.text_dialog import show_markdown
+        show_markdown(self._panel, self.to_help(value),
+                      title=self.to_label(value), z=self._layer_z() + 10)
+        return True
+
+    def _layer_z(self) -> int:
+        """The z this dialog's own layer was pushed at, so its help lands above
+        it whatever the caller picked."""
+        for slot in getattr(self._panel, "_layers", ()):
+            if slot.widget is self:
+                return slot.z
+        return 70
+
     # --- outcome -------------------------------------------------------------
 
     def _accept_index(self, index: int) -> None:
@@ -441,7 +562,16 @@ class FilterListDialog(FocusContainer, Widget):
         # popup frame color) whose outer edges line up with the search box, with
         # the rows/scrollbar inset inside it. A grid keeps the flush, frameless
         # list.
-        list_h = max(1.0, hint_content_bottom(ctx, surface_bg) - y)
+        bottom = hint_content_bottom(ctx, surface_bg)
+        detail_style = hint_style(ctx, surface_bg)
+        detail_y = None
+        if self.to_detail is not None:
+            # The detail row sits between the list and the hint band: one line,
+            # a small gap above it on a vector backend, flush on a grid.
+            line_h = ctx.line_height(detail_style)
+            detail_y = bottom - line_h
+            bottom = detail_y - (0.4 if vector else 0.0)
+        list_h = max(1.0, bottom - y)
         frame = Rect(2.0, y, max(1.0, wu - 4.0), list_h)
         if vector:
             ctx.round_rect(
@@ -464,6 +594,14 @@ class FilterListDialog(FocusContainer, Widget):
             self._list_rect.w, self._list_rect.h,
             hints={"focused": False, "bg": surface_bg},
         )
+
+        if detail_y is not None:
+            value = self.selected_value()
+            text = self.to_detail(value) if value is not None else ""
+            if text:
+                text = elide(text, max(1.0, wu - 4.0), "…",
+                             measure=lambda t: ctx.measure_text(t, detail_style))
+                ctx.draw_text(2.0, detail_y, text, detail_style)
 
         # Key hint as the bottom band, mirroring the title bar — the list's own
         # left inset, so the three line up down the left edge.
@@ -500,6 +638,12 @@ class FilterListDialog(FocusContainer, Widget):
                 # than by key is what keeps a rebind working here, and what
                 # keeps a plain Delete typing in the query field.
                 self.remove_selected()
+            elif (self.to_help is not None
+                  and is_action_for_event(event, _DESCRIBE_ACTION,
+                                          context=FILTER_LIST)):
+                # By action, like the remove key — so F1 here means this
+                # picker's row help, never the inherited ``help``.
+                self.describe_selected()
             elif key in _LIST_KEYS:
                 self.list.handle_event(event)  # arrows drive the list selection
             else:
@@ -541,6 +685,9 @@ def show_filter_list(
     ellipsis: str = "…",
     elide_where: str = "end",
     load_more: Callable[[threading.Event], Iterator[Any]] | None = None,
+    to_right: Callable[[Any], str] | None = None,
+    to_detail: Callable[[Any], str] | None = None,
+    to_help: Callable[[Any], str] | None = None,
     z: int = 70,
 ) -> FilterListDialog:
     """Push a modal :class:`FilterListDialog` over ``panel`` and return it.
@@ -579,6 +726,11 @@ def show_filter_list(
     the scan runs. For rows that need a network round-trip — the drives picker's
     S3 buckets — so the dialog never waits on them.
 
+    ``to_right``, ``to_detail`` and ``to_help`` describe each row beyond its
+    label — a right-aligned column, a one-line detail row for the highlighted
+    entry, and a Markdown help page for it on the ``describe_list_item`` key.
+    All three are optional and independent; see the module docstring.
+
     A picker's Enter takes a row. For text the user types and uses — a command,
     a filter pattern — see :mod:`xefm.history_input_dialog`, whose Enter takes
     the field."""
@@ -587,6 +739,7 @@ def show_filter_list(
         on_accept_text=on_accept_text, on_remove=on_remove,
         remove_label=remove_label,
         ellipsis=ellipsis, elide_where=elide_where, load_more=load_more,
+        to_right=to_right, to_detail=to_detail, to_help=to_help,
     )
     sw, sh = panel.backend.size_units
     w = max(36.0, min(sw * 0.6, 72.0))

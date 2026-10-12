@@ -27,6 +27,7 @@ from puikit.backend import DEFAULT_STYLE, Style
 from puikit.event import Event, EventType
 from puikit.focus import FocusContainer
 from puikit.panel import Rect
+from puikit.text import display_width
 from puikit.widgets.base import Widget
 from puikit.widgets.list import ListView
 from puikit.widgets.markdown_view import MarkdownView
@@ -243,16 +244,41 @@ def show_markdown(
     Same chrome and sizing as :func:`show_text`, but ``source`` is Markdown and
     lays out as rich text (headings, tables, emphasis, links)."""
     dialog = MarkdownDialog(source, title=title, on_close=on_close)
-    _push(panel, dialog, rows=source.count("\n") + 1, z=z)
+    _push(panel, dialog, rows=_wrapped_rows(source, _box_width(panel) - 4.0), z=z)
     return dialog
+
+
+def _wrapped_rows(source: str, width: float) -> int:
+    """A rough count of the rows ``source`` lays out to at ``width``.
+
+    Counting source lines alone sizes a page of prose — a handful of long
+    paragraphs, like a command palette help page — far too short, so it opens
+    already needing a scroll. Each line is counted as the rows its text wraps
+    to; a table row stays one row, since its cells lay out as columns rather
+    than one long line. Still an estimate: the body scrolls, so close is
+    enough."""
+    width = max(1.0, width)
+    rows = 0
+    for line in source.split("\n"):
+        if line.lstrip().startswith("|"):
+            rows += 1
+        else:
+            rows += max(1, -(-display_width(line) // int(width)))
+    return rows
+
+
+def _box_width(panel: Any) -> float:
+    """The width a scroll-modal opens at: a comfortable fraction of the window."""
+    sw, _sh = panel.backend.size_units
+    return max(48.0, min(sw * 0.7, 96.0))
 
 
 def _push(panel: Any, dialog: _ScrollModal, *, rows: int, z: int) -> None:
     """Size, center, and push a scroll-modal, with the shared modal intent. Height
     is a rough estimate from the source ``rows`` (Markdown may wrap/expand, but the
     body scrolls, so an approximate reserve is fine)."""
-    sw, sh = panel.backend.size_units
-    w = max(48.0, min(sw * 0.7, 96.0))
+    _sw, sh = panel.backend.size_units
+    w = _box_width(panel)
     # rows + chrome: top border, title, rule, body, rule, hint, bottom border.
     # The body scrolls, so an approximate reserve is fine.
     h = max(10.0, min(sh * 0.8, float(rows + 6)))

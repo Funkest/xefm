@@ -308,6 +308,12 @@ TIPS: tuple[tuple[str, str], ...] = (
      "Space cannot do either: the search reads it as the separator between the "
      "pattern's words."),
 
+    ("Every action, one search away",
+     "{key:command_palette} opens the **command palette**: type part of an "
+     "action's name and press Enter to run it. It lists every action — the "
+     "ones with no key or menu item, and your own from `config.py` — with the "
+     "key each is bound to, and {key:describe_list_item} on a row explains it."),
+
     ("Bugs, ideas, requests",
      "XeFM is developed in the open. Found a bug, or missing a feature? "
      f"Issues and requests are very welcome at {GITHUB_URL}/issues"),
