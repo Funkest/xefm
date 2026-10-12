@@ -1153,8 +1153,8 @@ class Config:
     SSH_CACHE_ERROR_TTL = 300  # SSH cache TTL in seconds for cached errors (default: 300 seconds / 5 minutes)
     
     # Archive cache settings
-    ARCHIVE_CACHE_MAX_OPEN = 5   # Maximum number of archives to keep open simultaneously
-    ARCHIVE_CACHE_TTL = 300       # Archive cache TTL in seconds (default: 300 seconds / 5 minutes)
+    ARCHIVE_CACHE_MAX_OPEN = 5   # Idle archives kept open before the oldest are closed
+    ARCHIVE_CACHE_TTL = 300       # Seconds an idle remote archive is kept (a local one closes within seconds)
     
     # File monitoring settings
     FILE_MONITORING_ENABLED = True                      # Enable/disable automatic file list reloading

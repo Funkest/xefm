@@ -46,6 +46,8 @@ from puikit.focus import FocusContainer, move_focus
 from puikit.widgets import Button, Checkbox, MarkdownView, show_message_box
 from puikit.widgets.base import Widget
 
+from xefm.archive import (ArchiveInUseError, get_archive_cache,
+                          get_member_archive_path, release_archives_under)
 from xefm.dialog_geometry import OPEN_MS_VIEWER, animate_open, draw_title_bar
 from xefm.path import Path
 from xefm.progress_manager import OperationType, ProgressManager
@@ -146,6 +148,18 @@ def _clone_file(src: Path, dest: Path, overwrite: bool) -> bool:
     except OSError:
         pass  # the clone itself carries the data; stat parity is best-effort
     return True
+
+
+def _pin_source_archives(targets: list, label: str) -> list:
+    """Pin the archive behind each target that is an entry inside one, under
+    ``label``; return the functions that let go."""
+    archives = {}
+    for target in targets:
+        archive = get_member_archive_path(target)
+        if archive is not None:
+            archives.setdefault(str(archive), archive)
+    cache = get_archive_cache() if archives else None
+    return [cache.pin(archive, label) for archive in archives.values()]
 
 
 def recursive_delete(entry: Path) -> None:
@@ -317,9 +331,17 @@ class FileOperationService:
                 on_complete, log, z: int, background: bool) -> None:
         task = Task(f"{_VERB[kind]}…", config=self.config, kind=kind)
         task.progress.start_operation(_OP_TYPE[kind], 0, description="")
+        # The archives this task reads out of are its own from the moment it is
+        # submitted, so they stay open between its reads, and deleting one
+        # meanwhile fails naming the task rather than with a sharing violation.
+        unpins = _pin_source_archives(targets, f"used by a running {kind}")
 
         def run(task: Task) -> dict:
-            return self._run(task, kind, targets, dest_dir, panel, log, z)
+            try:
+                return self._run(task, kind, targets, dest_dir, panel, log, z)
+            finally:
+                for unpin in unpins:
+                    unpin()
 
         self.tasks.submit(task, panel, run=run, on_done=on_complete, z=z,
                           background=background)
@@ -354,6 +376,7 @@ class FileOperationService:
                 result["created"] = [dest.name for _t, dest, _o in plan]
             else:
                 plan, result["skipped"] = self._resolve(task, targets, dest_dir, z, panel)
+            plan = self._release_archives(kind, plan, result, log)
 
             if dest_dir is not None:
                 try:
@@ -405,6 +428,29 @@ class FileOperationService:
                 self.monitor.release_path(d)
             prog.finish_operation()
         return result
+
+    @staticmethod
+    def _release_archives(kind: str, plan: list, result: dict, log) -> list:
+        """Close the archives XeFM holds open inside what ``plan`` will delete,
+        move away or overwrite, and drop — as failed, with the reason — each
+        target one is still in use under (issue #516). On Windows an open
+        archive cannot be removed, and the OS error would not say why."""
+        kept = []
+        for target, dest_base, overwrite in plan:
+            doomed = [target] if kind in ("delete", "move") else []
+            if overwrite and dest_base is not None:
+                doomed.append(dest_base)
+            try:
+                for path in doomed:
+                    release_archives_under(path)
+            except ArchiveInUseError as exc:
+                result["errors"].append((str(target), str(exc)))
+                result["failed"] += 1
+                if log is not None:
+                    log(f"{_VERB[kind]} failed for {target.name}: {exc}")
+                continue
+            kept.append((target, dest_base, overwrite))
+        return kept
 
     def _mutated_dirs(self, kind: str, targets: list,
                       dest_dir: Optional[Path]) -> list:

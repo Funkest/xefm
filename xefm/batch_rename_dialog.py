@@ -32,6 +32,7 @@ from puikit.widgets.base import Widget
 from puikit.widgets.list import ListView
 
 from xefm import name_key
+from xefm.archive import release_archives_under
 from xefm.dialog_geometry import (animate_open, draw_hint_row, draw_title_bar,
                                   hint_content_bottom)
 
@@ -218,6 +219,7 @@ class BatchRenameDialog(FocusContainer, Widget):
             if row["original"] == row["new"]:
                 continue
             try:
+                release_archives_under(row["file"])
                 row["file"].rename(row["file"].parent / row["new"])
                 success += 1
                 renamed[str(row["file"])] = row["new"]

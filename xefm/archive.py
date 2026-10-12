@@ -5,6 +5,8 @@ XeFM Archive Operations - Handles archive creation and extraction with cross-sto
 
 import os
 import calendar
+import contextlib
+import itertools
 import datetime
 import tempfile
 import codecs
@@ -1569,110 +1571,314 @@ def _register_builtin_formats() -> None:
             description=description))
 
 
+#: How long a *local* archive stays open once nothing owns it. Short on purpose:
+#: on Windows an open file cannot be deleted, renamed or overwritten, by XeFM or
+#: by anything else (issue #516), so an archive nobody is using must not sit open.
+#: The grace only spares a walk that reads one archive in many short calls — a
+#: search, a copy of a whole archive — from reopening it between every two.
+ARCHIVE_IDLE_CLOSE = 2.0
+#: How often the reaper looks for idle archives to close, while any is open.
+_REAP_PERIOD = 1.0
+
+
+class ArchiveInUseError(ArchiveError, OSError):
+    """An archive file cannot be deleted, moved or overwritten because something
+    in XeFM is using it — a pane showing it, or a task reading it. The message
+    names who, which a bare OS sharing violation never could."""
+    pass
+
+
+def _key_is_under(key: str, prefix: str) -> bool:
+    """Whether the archive cache key ``key`` names ``prefix`` or something
+    beneath it. Both sides are ``str(Path.absolute())``; ``normcase`` makes the
+    comparison case-insensitive exactly where the filesystem is (Windows)."""
+    key, prefix = os.path.normcase(key), os.path.normcase(prefix)
+    if key == prefix:
+        return True
+    base = prefix.rstrip('/\\')
+    return key.startswith(base + '/') or key.startswith(base + os.sep)
+
+
 class ArchiveCache:
     """
-    Cache for opened archives and their structures.
-    
-    Features:
-    - LRU eviction policy to limit memory usage
-    - Configurable TTL (time-to-live) for cached structures
-    - Thread-safe operations with locks
-    - Lazy initialization of archive handlers
-    - Cache statistics and monitoring
-    - Performance metrics tracking
+    The open archives, and who owns each one.
+
+    Two things used to be one here, and issue #516 is what that cost: keeping an
+    archive open *because someone is using it*, and keeping it open *because it
+    might be used again soon*. The old cache only did the second, closing on a
+    TTL or LRU check that ran on the next access — so an archive the pane had
+    left stayed open indefinitely, and on Windows could not be deleted.
+
+    Now an archive is open while it has an **owner**, and only briefly after:
+
+    - a **lease** — a read in progress (:meth:`lease`) or a task that will read
+      it (:meth:`pin`), each with a label saying who it is;
+    - a **pin source** — a callback (:meth:`add_pin_source`) naming the archives
+      something shows, the panes in practice. Panes are polled rather than made
+      to register, because a pane's path changes in many places.
+
+    With no owner, a local archive closes after :data:`ARCHIVE_IDLE_CLOSE`
+    seconds; a remote one is a private temporary copy that locks nothing, so it
+    keeps the TTL and spares a re-download. A daemon reaper does the closing
+    while anything is open, so nothing waits for a later access to notice.
+
+    Before XeFM itself deletes, moves or overwrites a path, :meth:`release_under`
+    closes every idle archive at or beneath it at once, and reports the owned
+    ones so the operation can fail with a reason (see
+    :func:`release_archives_under`).
+
+    An archive is opened outside the cache lock, under a lock of its own, so a
+    slow open — a remote download, a tar.gz index — holds up only that archive.
     """
-    
-    def __init__(self, max_open: int = 5, ttl: int = 300):
+
+    def __init__(self, max_open: int = 5, ttl: int = 300,
+                 idle_close: float = ARCHIVE_IDLE_CLOSE):
         """
         Initialize cache.
-        
+
         Args:
-            max_open: Maximum number of archives to keep open (default: 5)
-            ttl: Time-to-live for cached structures in seconds (default: 300)
+            max_open: Idle archives beyond this many are closed, oldest first.
+                Owned archives are never closed to make room.
+            ttl: Seconds an idle *remote* archive is kept, and the age at which
+                any archive is reopened on its next use.
+            idle_close: Seconds an idle *local* archive is kept.
         """
         self._max_open = max_open
         self._ttl = ttl
+        self._idle_close = idle_close
         self._handlers: Dict[str, ArchiveHandler] = {}
         self._access_times: Dict[str, float] = {}
+        self._remote: Dict[str, bool] = {}
+        # key -> {token: label}, one per lease or pin currently held.
+        self._owners: Dict[str, Dict[int, str]] = {}
+        self._open_locks: Dict[str, threading.Lock] = {}
+        self._pin_sources: List[Callable[[], Any]] = []
+        self._tokens = itertools.count(1)
         self._lock = threading.RLock()
-        
+        self._reaper: Optional[threading.Thread] = None
+        self.logger = getLogger("Archive")
+
         # Performance metrics
         self._cache_hits = 0
         self._cache_misses = 0
         self._evictions = 0
         self._total_open_time = 0.0
-    
-    def get_handler(self, archive_path: Path) -> ArchiveHandler:
-        """
-        Get or create handler for archive with lazy initialization.
-        
-        Args:
-            archive_path: Path to the archive file
-            
-        Returns:
-            ArchiveHandler: Handler for the archive
-            
-        Raises:
-            ArchiveError: If archive cannot be opened
-        """
-        # Convert path to string for cache key
-        cache_key = str(archive_path.absolute())
-        current_time = time.time()
-        
+
+    @staticmethod
+    def _key(archive_path: Path) -> str:
+        return str(archive_path.absolute())
+
+    # --- owners ---------------------------------------------------------------
+
+    def add_pin_source(self, source: Callable[[], Any]) -> None:
+        """Register ``source``, a callable returning ``(label, archive_path)``
+        pairs for the archive files something currently shows — e.g.
+        ``("shown in the left pane", Path(".../a.zip"))``. It is called from the
+        reaper thread and from file operations, so it must only read."""
         with self._lock:
-            # Check if handler exists and is still valid
-            if cache_key in self._handlers:
-                handler = self._handlers[cache_key]
-                access_time = self._access_times.get(cache_key, 0)
-                
-                # Check if handler has expired
-                if current_time - access_time > self._ttl:
-                    # Handler expired, close and remove it
-                    try:
-                        handler.close()
-                    except Exception:
-                        pass
-                    del self._handlers[cache_key]
-                    del self._access_times[cache_key]
+            self._pin_sources.append(source)
+
+    def _pinned(self) -> Dict[str, List[str]]:
+        """Cache key -> labels, from every pin source. Called outside the lock:
+        a source reads app state and must not be able to deadlock against it."""
+        with self._lock:
+            sources = list(self._pin_sources)
+        pinned: Dict[str, List[str]] = {}
+        for source in sources:
+            try:
+                for label, archive_path in source():
+                    if archive_path is not None:
+                        pinned.setdefault(self._key(archive_path), []).append(label)
+            except Exception as e:
+                self.logger.error(f"Archive pin source failed: {e}")
+        return pinned
+
+    def pin(self, archive_path: Path, label: str) -> Callable[[], None]:
+        """Hold ``archive_path`` for ``label`` without opening it, and return the
+        function that lets go. A task pins the archives it will read for its
+        whole run, so the archive stays open between its reads and an operation
+        on the archive file meanwhile fails naming the task."""
+        key = self._key(archive_path)
+        with self._lock:
+            token = next(self._tokens)
+            self._owners.setdefault(key, {})[token] = label
+        return lambda: self._release(key, token)
+
+    @contextlib.contextmanager
+    def lease(self, archive_path: Path, label: str = "being read"):
+        """The handler for ``archive_path``, opened if need be and guaranteed to
+        stay open until the ``with`` block ends."""
+        key = self._key(archive_path)
+        with self._lock:
+            token = next(self._tokens)
+            self._owners.setdefault(key, {})[token] = label
+            open_lock = self._open_locks.setdefault(key, threading.Lock())
+        try:
+            with open_lock:
+                handler = self._ready_handler(key, archive_path)
+            yield handler
+        finally:
+            self._release(key, token)
+
+    def _release(self, key: str, token: int) -> None:
+        with self._lock:
+            owners = self._owners.get(key)
+            if owners is not None:
+                owners.pop(token, None)
+                if not owners:
+                    del self._owners[key]
+            if key in self._handlers:
+                # Idle time counts from the last owner letting go.
+                self._access_times[key] = time.time()
+
+    def _ready_handler(self, key: str, archive_path: Path) -> ArchiveHandler:
+        """Return the open handler for ``key``, opening it first if need be.
+        Runs under ``key``'s open lock and the caller's lease, never under the
+        cache lock across the open itself."""
+        stale = None
+        with self._lock:
+            handler = self._handlers.get(key)
+            if handler is not None:
+                age = time.time() - self._access_times.get(key, 0)
+                # Reopen an old handler to pick up a changed archive — but never
+                # under another lease, whose read the close would break.
+                if age > self._ttl and len(self._owners.get(key, ())) <= 1:
+                    stale = self._pop(key)
                     self._cache_misses += 1
                 else:
-                    # Handler is valid, update access time and return
-                    self._access_times[cache_key] = current_time
+                    self._access_times[key] = time.time()
                     self._cache_hits += 1
                     return handler
             else:
                 self._cache_misses += 1
-            
-            # Need to create new handler
-            # First, enforce max_open limit using LRU eviction
-            if len(self._handlers) >= self._max_open:
-                self._evict_lru()
-            
-            # Create appropriate handler based on archive format
-            handler = self._create_handler(archive_path)
-            
-            # Open the handler (lazy initialization) and track time
-            open_start = time.time()
-            handler.open()
-            open_duration = time.time() - open_start
-            self._total_open_time += open_duration
-            
-            # Cache the handler
-            self._handlers[cache_key] = handler
-            self._access_times[cache_key] = current_time
-            
+        if stale is not None:
+            self._close(stale)
+
+        handler = self._create_handler(archive_path)
+        open_start = time.time()
+        handler.open()
+        self._total_open_time += time.time() - open_start
+        remote = archive_path.is_remote()
+
+        with self._lock:
+            self._handlers[key] = handler
+            self._access_times[key] = time.time()
+            self._remote[key] = remote
+            self._start_reaper()
+        self._evict_over_limit()
+        return handler
+
+    # --- closing --------------------------------------------------------------
+
+    def _pop(self, key: str) -> ArchiveHandler:
+        """Take ``key``'s handler out of the cache; the caller closes it outside
+        the lock. Caller holds the lock."""
+        handler = self._handlers.pop(key)
+        self._access_times.pop(key, None)
+        self._remote.pop(key, None)
+        if key not in self._owners:
+            self._open_locks.pop(key, None)
+        return handler
+
+    def _close(self, handler: ArchiveHandler) -> None:
+        try:
+            handler.close()
+        except Exception as e:
+            self.logger.error(f"Error closing archive {handler._archive_path}: {e}")
+
+    def _idle_keys(self, pinned: Dict[str, List[str]]) -> List[str]:
+        """Open archives with no owner, oldest first. Caller holds the lock."""
+        idle = [k for k in self._handlers
+                if k not in self._owners and k not in pinned]
+        return sorted(idle, key=lambda k: self._access_times.get(k, 0))
+
+    def sweep(self, now: Optional[float] = None) -> int:
+        """Close every idle archive past its keep time; return how many."""
+        pinned = self._pinned()
+        now = time.time() if now is None else now
+        victims = []
+        with self._lock:
+            for key in self._idle_keys(pinned):
+                keep = self._ttl if self._remote.get(key) else min(self._ttl, self._idle_close)
+                if now - self._access_times.get(key, 0) >= keep:
+                    victims.append(self._pop(key))
+        for handler in victims:
+            self._close(handler)
+        return len(victims)
+
+    def _evict_over_limit(self) -> None:
+        """Close the oldest idle archives while more than ``max_open`` are open."""
+        pinned = self._pinned()
+        victims = []
+        with self._lock:
+            for key in self._idle_keys(pinned):
+                if len(self._handlers) <= self._max_open:
+                    break
+                victims.append(self._pop(key))
+                self._evictions += 1
+        for handler in victims:
+            self._close(handler)
+
+    def _start_reaper(self) -> None:
+        """Run the reaper while anything is open. Caller holds the lock."""
+        if self._reaper is None and self._handlers:
+            self._reaper = threading.Thread(target=self._reap, name="ArchiveReaper",
+                                            daemon=True)
+            self._reaper.start()
+
+    def _reap(self) -> None:
+        while True:
+            time.sleep(_REAP_PERIOD)
+            try:
+                self.sweep()
+            except Exception as e:
+                self.logger.error(f"Archive reaper failed: {e}")
+            with self._lock:
+                if not self._handlers:
+                    self._reaper = None
+                    return
+
+    def release_under(self, path: Path) -> List[Tuple[str, List[str]]]:
+        """Close every idle archive at or beneath ``path`` now, and return the
+        owned ones as ``(cache key, owner labels)`` — what an operation about to
+        delete, move or overwrite ``path`` would trip over."""
+        prefix = self._key(path)
+        pinned = self._pinned()
+        busy: List[Tuple[str, List[str]]] = []
+        victims = []
+        with self._lock:
+            for key in sorted(set(self._handlers) | set(self._owners) | set(pinned)):
+                if not _key_is_under(key, prefix):
+                    continue
+                labels = list(dict.fromkeys(
+                    list(self._owners.get(key, {}).values()) + pinned.get(key, [])))
+                if labels:
+                    busy.append((key, labels))
+                elif key in self._handlers:
+                    victims.append(self._pop(key))
+        for handler in victims:
+            self._close(handler)
+        return busy
+
+    # --- compatibility --------------------------------------------------------
+
+    def get_handler(self, archive_path: Path) -> ArchiveHandler:
+        """
+        Get or create the handler for an archive, without holding it.
+
+        The handler stays open only for the idle grace afterwards, so anything
+        that reads through it later should use :meth:`lease` instead.
+
+        Raises:
+            ArchiveError: If archive cannot be opened
+        """
+        with self.lease(archive_path) as handler:
             return handler
-    
+
     def _create_handler(self, archive_path: Path) -> ArchiveHandler:
         """
         Create appropriate handler for archive format.
-        
-        Args:
-            archive_path: Path to the archive file
-            
-        Returns:
-            ArchiveHandler: Appropriate handler for the archive format
-            
+
         Raises:
             ArchiveFormatError: If archive format is not supported
         """
@@ -1681,70 +1887,33 @@ class ArchiveCache:
             raise ArchiveFormatError(
                 f"Unsupported archive format: {archive_path.name.lower()}")
         return fmt.factory(archive_path)
-    
+
     def invalidate(self, archive_path: Path):
-        """
-        Invalidate cache for specific archive.
-        
-        Args:
-            archive_path: Path to the archive file to invalidate
-        """
-        cache_key = str(archive_path.absolute())
-        
+        """Close and forget one archive, owned or not."""
+        key = self._key(archive_path)
         with self._lock:
-            if cache_key in self._handlers:
-                handler = self._handlers[cache_key]
-                try:
-                    handler.close()
-                except Exception:
-                    pass
-                del self._handlers[cache_key]
-                del self._access_times[cache_key]
-    
+            handler = self._pop(key) if key in self._handlers else None
+        if handler is not None:
+            self._close(handler)
+
     def clear(self):
-        """Clear all cached archives."""
+        """Close and forget every archive, owned or not."""
         with self._lock:
-            # Close all handlers
-            for handler in self._handlers.values():
-                try:
-                    handler.close()
-                except Exception:
-                    pass
-            
-            # Clear caches
-            self._handlers.clear()
-            self._access_times.clear()
-    
-    def _evict_lru(self):
-        """Evict the least recently used cache entry."""
-        if not self._handlers:
-            return
-        
-        # Find the entry with the oldest access time
-        oldest_key = min(self._access_times.keys(), 
-                        key=lambda k: self._access_times[k])
-        
-        # Close and remove the handler
-        handler = self._handlers[oldest_key]
-        try:
-            handler.close()
-        except Exception:
-            pass
-        
-        del self._handlers[oldest_key]
-        del self._access_times[oldest_key]
-        self._evictions += 1
-    
+            victims = [self._pop(key) for key in list(self._handlers)]
+        for handler in victims:
+            self._close(handler)
+
     def get_stats(self) -> Dict[str, Any]:
         """
         Get cache statistics for monitoring.
-        
+
         Returns:
             Dictionary containing cache statistics:
             - open_archives: Number of currently open archives
-            - max_open: Maximum number of archives that can be open
+            - owned_archives: Number of archives with a lease or pin held
+            - max_open: Idle archives kept beyond which the oldest close
             - ttl: Time-to-live in seconds
-            - expired_count: Number of expired entries (not yet evicted)
+            - expired_count: Number of open archives older than the TTL
             - cache_hits: Number of cache hits
             - cache_misses: Number of cache misses
             - hit_rate: Cache hit rate (0.0 to 1.0)
@@ -1757,13 +1926,14 @@ class ArchiveCache:
                 1 for cache_key in self._access_times.keys()
                 if current_time - self._access_times[cache_key] > self._ttl
             )
-            
+
             total_requests = self._cache_hits + self._cache_misses
             hit_rate = self._cache_hits / total_requests if total_requests > 0 else 0.0
             avg_open_time = self._total_open_time / self._cache_misses if self._cache_misses > 0 else 0.0
-            
+
             return {
                 'open_archives': len(self._handlers),
+                'owned_archives': len(self._owners),
                 'max_open': self._max_open,
                 'ttl': self._ttl,
                 'expired_count': expired_count,
@@ -1777,26 +1947,46 @@ class ArchiveCache:
 
 # Global archive cache instance
 _archive_cache = None
+_archive_cache_lock = threading.Lock()
 
 
 def get_archive_cache() -> ArchiveCache:
     """Get or create the global archive cache instance."""
     global _archive_cache
-    if _archive_cache is None:
-        # Get configuration from config if available
-        try:
-            from xefm.config import get_config
-            config = get_config()
-            max_open = config.ARCHIVE_CACHE_MAX_OPEN
-            ttl = config.ARCHIVE_CACHE_TTL
-        except (ImportError, Exception):
-            # Fallback to defaults if config not available
-            max_open = 5
-            ttl = 300
-        
-        _archive_cache = ArchiveCache(max_open=max_open, ttl=ttl)
-    
+    with _archive_cache_lock:
+        if _archive_cache is None:
+            # Get configuration from config if available
+            try:
+                from xefm.config import get_config
+                config = get_config()
+                max_open = config.ARCHIVE_CACHE_MAX_OPEN
+                ttl = config.ARCHIVE_CACHE_TTL
+            except (ImportError, Exception):
+                # Fallback to defaults if config not available
+                max_open = 5
+                ttl = 300
+
+            _archive_cache = ArchiveCache(max_open=max_open, ttl=ttl)
+
     return _archive_cache
+
+
+def release_archives_under(path: Path) -> None:
+    """Ready ``path`` to be deleted, moved or overwritten: close every archive
+    XeFM has open at or beneath it, or raise :class:`ArchiveInUseError` naming
+    whatever still uses one.
+
+    Called once per top-level target *before* the operation touches it, rather
+    than hooked into ``Path.unlink`` and friends: a cross-device move removes
+    its source with ``shutil.rmtree`` and an overwrite writes through
+    ``open('wb')``, and neither passes through a ``Path`` method (#516)."""
+    if _archive_cache is None:
+        return  # nothing has opened an archive yet
+    busy = _archive_cache.release_under(path)
+    if busy:
+        parts = [f"'{os.path.basename(key.rstrip('/'))}' is {', '.join(labels)}"
+                 for key, labels in busy]
+        raise ArchiveInUseError("; ".join(parts))
 
 
 class ArchivePathImpl(PathImpl):
@@ -1878,9 +2068,9 @@ class ArchivePathImpl(PathImpl):
         path = path.replace('\\', '/')
         return path
     
-    def _get_archive_handler(self) -> ArchiveHandler:
-        """Get or create cached archive handler for this archive file."""
-        return self._cache.get_handler(self._archive_path)
+    def _lease(self):
+        """The archive's handler, held open for the ``with`` block (#516)."""
+        return self._cache.lease(self._archive_path)
     
     def _get_entry(self) -> Optional[ArchiveEntry]:
         """Get the ArchiveEntry for this path."""
@@ -1889,8 +2079,8 @@ class ArchivePathImpl(PathImpl):
             return self._metadata['entry']
         
         # Get from archive handler
-        handler = self._get_archive_handler()
-        entry = handler.get_entry_info(self._internal_path)
+        with self._lease() as handler:
+            entry = handler.get_entry_info(self._internal_path)
         
         # Cache the entry
         if entry:
@@ -2186,8 +2376,8 @@ class ArchivePathImpl(PathImpl):
             raise NotADirectoryError(f"Not a directory: {self}")
         
         try:
-            handler = self._get_archive_handler()
-            entries = handler.list_entries(self._internal_path)
+            with self._lease() as handler:
+                entries = handler.list_entries(self._internal_path)
             
             for entry in entries:
                 entry_uri = f"archive://{self._archive_path.absolute()}#{entry.internal_path}"
@@ -2245,8 +2435,8 @@ class ArchivePathImpl(PathImpl):
             raise IsADirectoryError(f"Is a directory: {self}")
         
         try:
-            handler = self._get_archive_handler()
-            data = handler.extract_to_bytes(self._internal_path)
+            with self._lease() as handler:
+                data = handler.extract_to_bytes(self._internal_path)
             
             if 'b' in mode:
                 # Binary mode
@@ -2261,8 +2451,8 @@ class ArchivePathImpl(PathImpl):
     def read_text(self, encoding=None, errors=None) -> str:
         """Open the file in text mode, read it, and close the file."""
         try:
-            handler = self._get_archive_handler()
-            data = handler.extract_to_bytes(self._internal_path)
+            with self._lease() as handler:
+                data = handler.extract_to_bytes(self._internal_path)
             return data.decode(encoding or 'utf-8', errors or 'strict')
         except Exception as e:
             raise OSError(f"Error reading text: {e}")
@@ -2270,8 +2460,8 @@ class ArchivePathImpl(PathImpl):
     def read_bytes(self) -> bytes:
         """Open the file in bytes mode, read it, and close the file."""
         try:
-            handler = self._get_archive_handler()
-            return handler.extract_to_bytes(self._internal_path)
+            with self._lease() as handler:
+                return handler.extract_to_bytes(self._internal_path)
         except Exception as e:
             raise OSError(f"Error reading bytes: {e}")
 
@@ -2290,15 +2480,17 @@ class ArchivePathImpl(PathImpl):
 
         Anything the callback raises propagates: that is how a cancel gets out.
         """
-        handler = self._get_archive_handler()
-        entry = handler.get_entry_info(self._internal_path)
-        total = entry.size if entry is not None else 0
-        written = 0
-        for block in handler.iter_member_bytes(self._internal_path):
-            stream.write(block)
-            written += len(block)
-            if progress_callback is not None:
-                progress_callback(written, total)
+        # The lease spans the whole stream: a tar's member reader seeks in the
+        # archive's own file, which a close mid-copy would pull from under it.
+        with self._lease() as handler:
+            entry = handler.get_entry_info(self._internal_path)
+            total = entry.size if entry is not None else 0
+            written = 0
+            for block in handler.iter_member_bytes(self._internal_path):
+                stream.write(block)
+                written += len(block)
+                if progress_callback is not None:
+                    progress_callback(written, total)
         return written
     
     def write_text(self, data: str, encoding=None, errors=None, newline=None) -> int:
@@ -2486,13 +2678,10 @@ def archive_password_state(path) -> str:
     if archive_path is None:
         return 'ok'
     try:
-        handler = get_archive_cache().get_handler(archive_path)
+        with get_archive_cache().lease(archive_path) as handler:
+            status = handler.encryption_status()
     except Exception:
         # Can't classify (e.g. corrupt archive) — let the normal read path report.
-        return 'ok'
-    try:
-        status = handler.encryption_status()
-    except Exception:
         return 'ok'
     if status == 'unsupported':
         return 'unsupported'
@@ -2510,18 +2699,15 @@ def try_archive_password(path, password: str) -> bool:
     archive_path = get_member_archive_path(path)
     if archive_path is None:
         return False
-    try:
-        handler = get_archive_cache().get_handler(archive_path)
-    except Exception:
-        return False
     pwd = password.encode('utf-8')
     try:
-        if handler.verify_password(pwd):
-            set_archive_password(archive_path, pwd)
-            return True
+        with get_archive_cache().lease(archive_path) as handler:
+            ok = handler.verify_password(pwd)
     except Exception:
         return False
-    return False
+    if ok:
+        set_archive_password(archive_path, pwd)
+    return ok
 
 
 def archive_extraction_survey(path: str) -> Tuple[str, int, int]:

@@ -277,15 +277,49 @@ it names codecs, not what the format readers do with them.
 
 ### ArchiveCache
 
-`ArchiveCache(max_open=5, ttl=300)` keeps recently used handlers open so
-repeated navigation doesn't re-open the archive each time:
+`ArchiveCache(max_open=5, ttl=300, idle_close=2.0)` keeps an archive open
+while something **owns** it, and only briefly after (issue #516). On Windows an
+open file cannot be deleted, renamed or overwritten — by XeFM or by Explorer —
+so the old rule (close on a TTL or LRU check that ran only at the *next*
+access) left a browsed zip undeletable indefinitely.
 
-- **LRU eviction** once `max_open` handlers are live.
-- **TTL expiration** — a handler untouched for `ttl` seconds is closed on next
-  access.
-- **Thread-safe** via a single `threading.RLock`.
-- **Metrics** via `get_stats()` (`open_archives`, `cache_hits`, `cache_misses`,
-  `hit_rate`, `evictions`, `avg_open_time`, …).
+Owners, each with a label that ends up in error messages:
+
+- **Leases** — `with cache.lease(archive_path) as handler:` holds the handler
+  open for the block. Every `ArchivePathImpl` read takes one (label
+  `"being read"`); `extract_to_stream` holds it across the whole member stream,
+  because a tar member reader seeks in the archive's own file.
+- **Pins** — `unpin = cache.pin(archive_path, label)` holds without opening.
+  `FileOperationService` pins the archives a task reads out of from submit to
+  the end of its run (`"used by a running copy"`), the seam a queued task will
+  need.
+- **Pin sources** — `cache.add_pin_source(fn)`, where `fn()` yields
+  `(label, archive_path)`. The app registers the panes
+  (`"shown in the left pane"`); they are polled rather than made to register,
+  because a pane's path is assigned in many places.
+
+With no owner, a local archive closes after `idle_close` seconds (the grace
+spares a search or a whole-archive copy from reopening it between reads); a
+remote one is a private temp copy that locks nothing, so it keeps `ttl` and
+saves a re-download. A daemon `ArchiveReaper` thread sweeps once a second while
+anything is open and exits when nothing is. Idle archives beyond `max_open`
+close oldest first; owned ones are never closed to make room. An archive older
+than `ttl` is reopened on its next use, unless another lease is reading it.
+
+`release_archives_under(path)` is what XeFM calls before it deletes, moves or
+overwrites `path` (file operations per top-level target, single and batch
+rename): it closes every idle archive at or beneath `path` at once, and raises
+`ArchiveInUseError` (an `ArchiveError` *and* an `OSError`) naming the owners of
+any still held — "'a.zip' is shown in the left pane". It is called per
+operation rather than hooked into `Path.unlink` and friends, because a
+cross-device move removes its source with `shutil.rmtree` and an overwrite
+writes through `open('wb')`; neither passes through a `Path` method.
+
+Each archive opens under a lock of its own, outside the cache lock, so a slow
+open — a remote download, a tar.gz index — holds up only that archive.
+`get_handler()` remains for tests: it returns a handler without holding it.
+Metrics come from `get_stats()` (`open_archives`, `owned_archives`,
+`cache_hits`, `cache_misses`, `hit_rate`, `evictions`, `avg_open_time`, …).
 
 `_create_handler` is a lookup in the registry (§1.1) — `archive_format_for_name`
 then `fmt.factory(archive_path)` — raising `ArchiveFormatError` when nothing
@@ -739,8 +773,8 @@ widget itself lives in the PuiKit repo (`puikit/widgets/text_edit.py`).
 
 ```python
 # xefm/_config.py
-ARCHIVE_CACHE_MAX_OPEN = 5      # max archives kept open by the browse cache
-ARCHIVE_CACHE_TTL      = 300    # cache TTL in seconds
+ARCHIVE_CACHE_MAX_OPEN = 5      # idle archives kept open before the oldest close
+ARCHIVE_CACHE_TTL      = 300    # idle remote archive kept / any archive reopened after (s)
 CONFIRM_EXTRACT_ARCHIVE = True  # confirm before extracting
 
 # Key bindings
