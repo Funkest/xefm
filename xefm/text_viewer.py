@@ -38,6 +38,8 @@ from xefm.config import (find_action_for_event, format_key_for_display,
                          get_config, get_keys_for_action)
 from xefm.dialog_geometry import OPEN_MS_VIEWER, animate_open
 from xefm.isearch_bar import ViewerISearch, match_scroll_top
+from xefm import lexer_registry
+from xefm.lexer_registry import PYGMENTS as _PYGMENTS
 from xefm.log_manager import getLogger
 from xefm import migemo_search
 from xefm.text_dialog import keys_markdown, show_markdown
@@ -46,13 +48,6 @@ from xefm.text_encoding import (AUTO_ENCODING, decode_text, encoding_label,
 from xefm.viewer_registry import rich_renderer_for
 
 logger = getLogger("TextViewer")
-
-try:
-    from pygments.lexers import get_lexer_for_filename, get_lexer_by_name, TextLexer
-    from pygments.util import ClassNotFound
-    _PYGMENTS = True
-except ImportError:
-    _PYGMENTS = False
 
 #: Content is fixed-advance so columns (gutter, h-scroll, highlights) align.
 MONO = Font(monospace=True)
@@ -288,15 +283,6 @@ def _syntax_palette(panel) -> dict:
     extra = theme.extras.get("syntax") if theme is not None else None
     return {**DEFAULT_SYNTAX, **extra} if extra else DEFAULT_SYNTAX
 
-_EXT_LEXERS = {
-    ".py": "python", ".js": "javascript", ".ts": "typescript", ".json": "json",
-    ".md": "markdown", ".yml": "yaml", ".yaml": "yaml", ".xml": "xml",
-    ".html": "html", ".css": "css", ".sh": "bash", ".bash": "bash", ".c": "c",
-    ".cpp": "cpp", ".h": "c", ".hpp": "cpp", ".java": "java", ".go": "go",
-    ".rs": "rust", ".php": "php", ".rb": "ruby", ".sql": "sql", ".ini": "ini",
-    ".cfg": "ini", ".conf": "ini", ".toml": "toml",
-}
-
 #: Lexer construction options, on every lexer :func:`_highlight` builds. Pygments
 #: preprocesses its input before lexing, and ``stripnl`` — on by default — eats
 #: the blank lines at the top and bottom of a file, so the token stream would
@@ -424,11 +410,7 @@ def _highlight(lines: list[str], path, palette: dict | None = None) -> list[list
     if not _PYGMENTS or not lines:
         return plain
     try:
-        try:
-            lexer = get_lexer_for_filename(path.name, **_LEXER_OPTS)
-        except ClassNotFound:
-            lexer = get_lexer_by_name(_EXT_LEXERS[path.suffix.lower()], **_LEXER_OPTS) \
-                if path.suffix.lower() in _EXT_LEXERS else TextLexer(**_LEXER_OPTS)
+        lexer = lexer_registry.lexer_for_filename(path.name, **_LEXER_OPTS)
         text = "\n".join(lines)
         result: list[list[tuple[str, Any]]] = []
         current: list[tuple[str, Any]] = []

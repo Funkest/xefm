@@ -44,7 +44,10 @@ page / home / end scroll keys are viewer-local and always active.
 - **Syntax highlighting** is applied automatically when
   [Pygments](https://pygments.org/) is installed — the language is chosen from
   the file's extension. Without Pygments the text still displays, just uncolored.
-  Syntax colors follow the active theme.
+  Syntax colors follow the active theme. For a language Pygments does not know,
+  or a suffix it gives to the wrong one, name the lexer yourself with
+  [`LEXERS`](CUSTOMIZATION_FEATURE.md#your-own-syntax-highlighting-lexers) in
+  `config.py`.
 - **Line wrapping** is off by default (so long lines scroll horizontally with
   `←` / `→`). Press `W` to wrap instead; a `WRAP` indicator shows in the footer.
 

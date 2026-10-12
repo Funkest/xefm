@@ -2,7 +2,7 @@
 
 > **Preview.** Everything on this page is subject to change. The objects your
 > functions receive and the shape of the `ACTIONS`, `EVENT_HOOKS`, `SORT_KEYS`,
-> `FILTERS` and `PATH_SCHEMES` variables may change in any release until `xefm.user_api.API_VERSION` reaches `1` (it is
+> `FILTERS`, `IMAGE_DECODERS`, `PATH_SCHEMES` and `LEXERS` variables may change in any release until `xefm.user_api.API_VERSION` reaches `1` (it is
 > `0` today). XeFM writes one line to the log pane saying so whenever a config
 > uses them. Nothing else in `config.py` is affected.
 
@@ -590,6 +590,84 @@ More, including the format table per platform, in
 
 ---
 
+## Your own syntax highlighting: `LEXERS`
+
+The text viewer colors a file with [Pygments](https://pygments.org/), which
+knows hundreds of languages and picks one from the file name. `LEXERS` is for
+the files it gets wrong: a suffix it does not know, or one it gives to a
+different language.
+
+```python
+from autocad_lexers import DclLexer       # ~/.xefm/extensions/autocad_lexers.py
+
+class Config:
+    LEXERS = {
+        '*.dcl': DclLexer,      # your own lexer
+        '*.mnl': 'newlisp',     # a lexer Pygments already has, for another suffix
+    }
+```
+
+### The key: which files
+
+A file-name pattern, as Pygments writes them: `'*.dcl'`, `'Jenkinsfile'`,
+`'*.conf.in'`. A bare suffix (`'.mnl'`) means the same as `'*.mnl'`. Matching
+ignores case, so `DIALOG.DCL` is a `*.dcl` file. An exact name wins over a
+wildcard; between two wildcards that both match, the later entry wins.
+
+### The value: which lexer
+
+**A name** — any lexer Pygments has. `pygmentize -L lexers` lists them; each
+line's names before the colon are the ones you can use. This is all it takes to
+color another suffix as a language Pygments already reads.
+
+**A class** — a lexer of your own. It is an ordinary Pygments lexer, written the
+way [Pygments' guide](https://pygments.org/docs/lexerdevelopment/) describes,
+with nothing from XeFM in it:
+
+```python
+# ~/.xefm/extensions/autocad_lexers.py
+from pygments.lexer import RegexLexer
+from pygments.token import Comment, Keyword, Text
+
+class DclLexer(RegexLexer):
+    name = 'DCL'
+    aliases = ['dcl']
+    tokens = {
+        'root': [
+            (r'//.*?$', Comment.Single),
+            (r'\w+', Keyword),
+            (r'\s+', Text),
+            (r'.', Text),
+        ],
+    }
+```
+
+Keep it in [`~/.xefm/extensions/`](#your-own-modules-xefmextensions) so a config
+reload picks up your edits. Because it is plain Pygments, asking an AI assistant
+for "a Pygments lexer for <language>" gets you something that drops straight in.
+
+The class's `filenames` attribute, if it has one, is **not** used — the key in
+`LEXERS` alone decides which files it colors, so `config.py` always says the
+whole of it. Its `aliases` are: once the class is in `LEXERS`, its name can be a
+value too (`'*.dclx': 'dcl'`).
+
+### Winning over Pygments
+
+An entry is consulted before Pygments' own choice. Pygments gives `*.dcl` to the
+Clean language, for instance; the entry above is what makes it AutoCAD DCL. A
+lexer you installed as a Pygments plugin package needs no entry at all — Pygments
+already finds it.
+
+### If it goes wrong
+
+An entry naming a lexer that does not exist, or a value that is not a lexer, is
+skipped with a line in the log pane; the rest still load. A lexer whose output
+does not reproduce the file shows that file uncolored rather than misaligned.
+Without Pygments installed nothing is colored, and `LEXERS` says so once in the
+log pane.
+
+---
+
 ## Your own places: `PATH_SCHEMES`
 
 A config can add a browsable location that is not a directory — the Windows
@@ -745,5 +823,6 @@ widget tree. All are additive later.
   external programs, the other way to extend XeFM
 - [`doc/VIRTUAL_FOLDERS_FEATURE.md`](VIRTUAL_FOLDERS_FEATURE.md) — `PATH_SCHEMES`
   in full, with a worked registry browser
+- [`doc/TEXT_VIEWER_FEATURE.md`](TEXT_VIEWER_FEATURE.md) — where `LEXERS` colors
 - [`doc/dev/CUSTOMIZATION_API_IMPLEMENTATION.md`](dev/CUSTOMIZATION_API_IMPLEMENTATION.md)
   — how it is built
