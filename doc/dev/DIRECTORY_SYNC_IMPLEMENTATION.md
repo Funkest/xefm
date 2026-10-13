@@ -116,10 +116,10 @@ directly.
 | Per-item direction, not just exclusion | Yes, `Space`. A directory row skips its subtree. |
 | Display filter | Differences-only (`d`). Filtering by category or by action is not built. |
 | Target-newer files flagged, default skip | Yes. They are counted as `newer_kept` in the summary. |
-| Delete count apart from copies | Yes, with Cancel as the default. |
+| Delete count apart from copies | Yes. Cancel is the default when anything is deleted for good. |
 | Active side as the source | Yes. `Tab` reverses the plan. |
 | `Enter` / `E` while planning, re-evaluated after a merge | Yes. Overrides survive the rescan by relative path. |
-| Mirror deletions to the trash | **No**: there is no trash integration yet (#468). The feature doc says deletions are permanent. |
+| Mirror deletions to the trash | Yes, since #603. `_run_sync` makes each deletion a `trash` step where `FileOperationService.goes_to_trash` says there is a trash (local, and `DELETE_TO_TRASH` on), and a `delete` step elsewhere. A trash step counts as one item. The confirmation names the two groups apart (`_split_deletes`) and starts on Cancel only when something is deleted for good. |
 | Comparison criteria for mixed storage | Unchanged: the viewer compares content, so S3's upload-time `LastModified` only affects the "target newer" default, not what counts as changed. |
 | Exclude patterns (`FILTERS`) | Not built. |
 | Background execution | Not built (#468). The task runs behind the usual progress dialog. |

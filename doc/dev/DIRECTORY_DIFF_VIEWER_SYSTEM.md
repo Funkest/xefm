@@ -87,6 +87,16 @@ flowchart TB
 **TreeNode**
 - A node in the comparison tree: children, left/right `FileInfo`, and `difference_type`
 - Tracks expansion and progressive-scan state
+- A **type mismatch** (`type_mismatch`: a file on one side, a directory on
+  the other) is a difference of its own (#603). `_record_sides` sets
+  `is_directory = False` and `dir_side`, and drops the children. The node is
+  then `CONTENT_DIFFERENT` and is never scanned or compared. Neither
+  `_classify_new_locked` (progressive) nor `DiffEngine` (one-shot, which also
+  stops `_add_path` below it) treats it as a folder. Each side draws its own
+  kind (`is_dir_on`), so the slash shows on the directory side only, and Enter
+  and `E` say why they do nothing. It used to be scanned as a two-sided
+  directory: the file side listed nothing, so an empty directory against a
+  file passed for identical.
 
 ## Key Features
 
@@ -274,7 +284,9 @@ main file manager uses:
   `sub/a.txt` on the active side to `sub/` under the opposite root, keeping the
   two trees aligned.
 - **Delete** (`delete_files`, default `K` / `Del`) — `_delete_focused` removes
-  the focused node from the active side.
+  the focused node from the active side. It goes to the system's trash where
+  `FileOperationService.goes_to_trash` says there is one, as the file list's
+  `K` does (#603), and is deleted for good elsewhere.
 - **Merge** (`edit_file`, default `E`) — `_edit_merge` launches the configured
   `TEXT_DIFF` tool (e.g. `vimdiff`, `code --diff`) on a two-sided local file via
   the backend's suspend/resume.

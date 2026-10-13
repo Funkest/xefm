@@ -211,8 +211,10 @@ def test_update_from_the_viewer(opened, trees):
 
 
 def test_mirror_confirmation_defaults_to_cancel(opened, trees):
+    """Deleting for good asks twice: the confirmation starts on Cancel."""
     panel, view = opened
     left, right = trees
+    view._fileops.config.DELETE_TO_TRASH = False   # no trash: for good
     _start(panel, view, mode_rows_down=1)
     assert view._plan.mode == dir_sync.MIRROR
     panel.dispatch_event(_key("s", "s"))
@@ -226,6 +228,29 @@ def test_mirror_confirmation_defaults_to_cancel(opened, trees):
     panel.dispatch_event(_key("enter"))
     view.join()
     assert not (right / "extra.txt").exists()
+    assert (right / "new.txt").exists()
+
+
+def test_mirror_deletes_to_the_trash_where_there_is_one(opened, trees, monkeypatch):
+    """#603: a Mirror's deletions go to the trash, so the confirmation says so
+    and starts on Sync — what it removes can be put back."""
+    from xefm import trash
+    sent = []
+
+    def send(path):
+        sent.append(str(path))
+        os.remove(str(path))
+
+    monkeypatch.setattr(trash, "available", lambda path: True)
+    monkeypatch.setattr(trash, "send", send)
+    panel, view = opened
+    left, right = trees
+    _start(panel, view, mode_rows_down=1)
+    assert f"to the {trash.NAME}" in view._plan_summary(view._plan.operations(view.root))
+    panel.dispatch_event(_key("s", "s"))
+    panel.dispatch_event(_key("enter"))        # default: Sync
+    view.join()
+    assert sent == [str(right / "extra.txt")]
     assert (right / "new.txt").exists()
 
 

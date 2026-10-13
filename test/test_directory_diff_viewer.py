@@ -477,6 +477,7 @@ def test_move_focused_moves_file_to_other_side(backend, trees, config):
 
 
 def test_delete_focused_removes_file(backend, trees, config):
+    config.DELETE_TO_TRASH = False             # for good: default = Cancel
     panel = Panel(backend)
     view = show_directory_diff_viewer(panel, *trees, background=False, config=config)
     panel.render()
@@ -690,3 +691,79 @@ def test_details_line_marks_nothing_within_the_slack(tmp_path):
     view = _sync_view(Path(str(left)), Path(str(right)))
     view.cursor = view.visible.index(next(n for n in view.visible if n.name == "f.txt"))
     assert "newer" not in view._details_line()
+
+
+# --- a file on one side, a folder on the other (#603) ------------------------
+
+
+@pytest.fixture
+def clash(tmp_path):
+    left, right = tmp_path / "L", tmp_path / "R"
+    (left / "clash").mkdir(parents=True)
+    (left / "clash" / "inner.txt").write_text("x")
+    right.mkdir()
+    (right / "clash").write_text("f")
+    return Path(str(left)), Path(str(right))
+
+
+@pytest.mark.parametrize("background", [False, True])
+def test_a_file_against_a_folder_is_a_difference(clash, background):
+    """It was scanned as a two-sided folder, found nothing to compare inside
+    the file side, and passed for identical."""
+    view = DirectoryDiffView(*clash, background=background)
+    view.join()
+    node = _find(view.root, "clash")
+    assert node.type_mismatch
+    assert node.difference_type is DifferenceType.CONTENT_DIFFERENT
+    assert not node.is_directory and node.children == []
+    assert node.is_dir_on(True) and not node.is_dir_on(False)
+    assert view.root.difference_type is DifferenceType.CONTAINS_DIFFERENCE
+
+
+def test_each_side_draws_what_it_is(clash):
+    backend = MemoryBackend(width=100, height=20, capabilities=PROFILE_TUI)
+    panel = Panel(backend)
+    show_directory_diff_viewer(panel, *clash)
+    for _ in range(50):
+        backend.run_animation_ticks()
+        panel.render()
+        row = next((r for r in backend.snapshot() if "clash" in r), "")
+        if " ! " in row:
+            break
+        time.sleep(0.01)
+    assert "clash/" in row and " ! " in row
+    assert row.count("clash/") == 1                # the file side has no slash
+    assert "▸" not in row                          # not expandable
+
+
+def test_the_sync_plan_shows_it_left_alone(clash):
+    from xefm import dir_sync
+    view = DirectoryDiffView(*clash, background=False)
+    plan = dir_sync.SyncPlan(dir_sync.UPDATE, "left", *clash)
+    node = _find(view.root, "clash")
+    assert plan.action(node) == dir_sync.SKIP
+    assert plan.operations(view.root).mismatched == 1
+
+
+def test_delete_focused_goes_to_the_trash_where_there_is_one(backend, trees, config,
+                                                             monkeypatch):
+    """#603: the viewer's K does what the file list's does."""
+    from xefm import trash
+    sent = []
+
+    def send(path):
+        sent.append(str(path))
+        os.remove(str(path))
+
+    monkeypatch.setattr(trash, "available", lambda path: True)
+    monkeypatch.setattr(trash, "send", send)
+    panel = Panel(backend)
+    view = show_directory_diff_viewer(panel, *trees, background=False, config=config)
+    panel.render()
+    node = _find(view.root, "only_left.txt")
+    view.cursor = view.visible.index(node)
+    view.active = "left"
+    view._delete_focused()        # Move to Trash is the default
+    panel.dispatch_event(_key("enter"))
+    view.join()
+    assert sent == [str(trees[0] / "only_left.txt")]
