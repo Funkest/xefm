@@ -662,6 +662,15 @@ _DETAILS: dict[str, str] = {
         "asks the one you pick which shares it offers, and mounts your choice "
         "through the operating system — the pane then goes there like any "
         "other directory. macOS and Windows."),
+    "new_tab": (
+        "Opens another tab in the active pane, showing the same place, and "
+        "switches to it. Each pane has its own tabs, and each tab keeps its "
+        "own directory, cursor, selection, sort and filter — a search result "
+        "or an imported list too. The tab strip appears above the path once a "
+        "pane has more than one tab."),
+    "close_tab": (
+        "Closes the active pane's current tab and shows the next one. A "
+        "pane's only tab cannot be closed."),
     "open_list_from_clipboard": (
         "Shows the paths on the clipboard, one per line, as the active pane's "
         "listing — the files can be in many directories. Nothing on disk "
@@ -873,6 +882,13 @@ _FILER_ACTIONS = [
     _a("open_list_from_file", FILER,
        "Open the list file under the cursor as the pane's list",
        default_keys=()),
+    # Folder tabs (#563), per pane. All on keys a terminal delivers: Ctrl-TAB
+    # never arrives there, so next/previous are Ctrl-PAGE_DOWN / Ctrl-PAGE_UP.
+    _a("new_tab", FILER, "Open a new tab in this pane, at the same place"),
+    _a("open_in_new_tab", FILER, "Open the directory under the cursor in a new tab"),
+    _a("close_tab", FILER, "Close this pane's current tab"),
+    _a("next_tab", FILER, "Show this pane's next tab"),
+    _a("prev_tab", FILER, "Show this pane's previous tab"),
     # Panes
     _a("sync_current_to_other", FILER, "Go to the other pane's directory"),
     _a("sync_other_to_current", FILER, "Send this directory to the other pane"),

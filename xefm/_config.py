@@ -405,6 +405,15 @@ class Config:
         'connect_server': ['Shift-D'],  # Connect to a network server (macOS/Windows)
         
         # === Pane Management ===
+        # Folder tabs, per pane. T is a bare letter nothing else uses; Ctrl-W
+        # is the close every tabbed program has. Next/previous are on
+        # Ctrl-PAGE_DOWN / Ctrl-PAGE_UP because a terminal never delivers
+        # Ctrl-TAB.
+        'new_tab': ['T'],                      # Open a new tab in this pane at the same place
+        'open_in_new_tab': ['Shift-T'],        # Open the directory under the cursor in a new tab
+        'close_tab': ['Ctrl-W'],               # Close this pane's current tab
+        'next_tab': ['Ctrl-PAGE_DOWN'],        # Show this pane's next tab
+        'prev_tab': ['Ctrl-PAGE_UP'],          # Show this pane's previous tab
         'sync_current_to_other': ['O'],        # Sync current pane directory to other pane
         'sync_other_to_current': ['Shift-O'],  # Sync other pane directory to current pane
         'compare_selection': ['W'],            # Show file and directory comparison options

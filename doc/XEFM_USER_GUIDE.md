@@ -779,6 +779,7 @@ For detailed information about specific features, see these dedicated guides:
 
 ### Navigation and Search
 - [Navigation Dialogs Feature](NAVIGATION_DIALOGS_FEATURE.md) - Favorites, jump, history, and drives pickers
+- [Folder Tabs](FOLDER_TABS_FEATURE.md) - Several places kept open in each pane
 - [Connect to Server](CONNECT_TO_SERVER_FEATURE.md) - Mount a NAS or file server from inside XeFM
 - [Tab Completion Feature](TAB_COMPLETION_FEATURE.md) - Path completion in input dialogs
 - [Migemo Search Feature](MIGEMO_SEARCH_FEATURE.md) - Japanese matching from typed romaji in incremental search
