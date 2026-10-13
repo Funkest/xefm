@@ -45,7 +45,9 @@ and files inside archives.
 
 - **The status bar** starts with what the clipboard holds: `[COPY 3]`,
   `[CUT 1]`, or `[2 from another app]`. It stays there while you search, so
-  "find the destination, then paste" works.
+  "find the destination, then paste" works. **Click it** to see the files it
+  holds, then choose **Paste Here** or **Clear**. **Edit → Show Clipboard…**
+  opens the same list.
 - **Each pane's footer** says how many names a paste there would run into:
   `paste: 2 conflicts`.
 - **The files themselves** show their names in *italics* wherever they are
@@ -64,6 +66,11 @@ and files inside archives.
 Files on SSH, S3 or inside archives can't go on the system clipboard. They
 stay on XeFM's own clipboard only.
 
+**It is one clipboard.** Whatever you copied last is what it holds, as
+everywhere else on your computer. If you copy text after copying files in
+XeFM, in another app or from XeFM's own log, the files are no longer on the
+clipboard: the status bar clears, and their names are no longer in italics.
+
 ## In a terminal, and on Linux
 
 XeFM's own clipboard works the same everywhere, in the desktop apps and in
@@ -75,7 +82,8 @@ system clipboard" would be the wrong one.
 
 When text is highlighted in the log pane, the copy key copies that text
 instead of files, as it always has. **Edit → Copy Log Selection** does that
-too.
+too. Copying text replaces the files on the clipboard, also in a terminal and
+on Linux.
 
 ## Keys from an older config.py
 

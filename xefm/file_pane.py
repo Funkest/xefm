@@ -290,6 +290,9 @@ class FilePane(Widget):
         #: here as an aid only: the status bar is what says what is carried.
         self.clipboard_marks: frozenset = frozenset()
         self.clipboard_cut = False
+        #: The app's FileClipboard, read on every draw so the marks follow the
+        #: clipboard — including a newer copy made in another application.
+        self.clipboard_source = None
         #: Called with ``(row index, modifiers, clicks)`` — the controller makes
         #: this pane active and moves the cursor there, and reads the modifiers
         #: (Cmd/Ctrl toggles a mark, Shift marks a range) and the click count (a
@@ -562,6 +565,9 @@ class FilePane(Widget):
     # --- draw ----------------------------------------------------------------
 
     def draw(self, ctx) -> None:
+        if self.clipboard_source is not None:
+            self.clipboard_marks = self.clipboard_source.marks()
+            self.clipboard_cut = self.clipboard_source.cut
         theme = ctx.theme
         self._abs = ctx.screen_rect
         files = self.pane["files"]
@@ -859,10 +865,12 @@ class FilePane(Widget):
                           on=eff_bg, target=name_target)
         col_fg = ctx.ink(_dim_ink(theme.muted_text, base, dim), on=eff_bg, target=LC_LARGE)
         name_attr = row_attr
+        faded_cut = False
         if self.clipboard_marks and str(entry) in self.clipboard_marks:
             name_attr = row_attr | TextAttribute.ITALIC
             if self.clipboard_cut:
                 name_fg = ctx.ink(_dim_ink(name_fg, base, 0.5), on=eff_bg, target=HIDDEN_LC)
+                faded_cut = True
         # A vector backend composites, so glyphs on any *filled* row (selected /
         # matched / cursor) draw over a transparent bg and land directly on the fill
         # already painted — no per-run bg repaint (which would also break the cursor
@@ -893,7 +901,9 @@ class FilePane(Widget):
         # cursor row the one place the fade survived: a hidden file under the
         # cursor drew visibly darker than the hidden files around it. Opting out
         # once, here, is what makes every hidden row agree.
-        name_ink = not hidden
+        # A cut name is faded the same way, and needs the same opt-out: with
+        # auto-ink on, only the cursor row kept its fade (#577 hand check).
+        name_ink = not hidden and not faded_cut
         ctx.draw_text(content_left, y, name_text,
                       Style(fg=name_fg, bg=text_bg, attr=name_attr, underline_color=under),
                       ink=name_ink)

@@ -117,17 +117,31 @@ class FileClipboard:
             self._os_cache = (count, files)
         return files if files and files.paths else None
 
+    def superseded(self) -> bool:
+        """Whether the OS clipboard has changed since XeFM last wrote it — text
+        copied anywhere, XeFM's own log included, or files from another
+        application. It is one clipboard: the newest copy is the one held, so
+        what XeFM holds no longer counts. Never true without an OS bridge."""
+        count_of = self._bridge("clipboard_change_count")
+        if count_of is None:
+            return False
+        count = count_of()
+        return count is not None and count != self._os_count
+
     def contents(self) -> Optional[Contents]:
         """What a paste would take now, or None when there is nothing."""
         files = self._os_files()
         if files is not None:
             return Contents(tuple(Path(p) for p in files.paths), bool(files.cut), "os")
-        if self.paths:
+        if self.paths and not self.superseded():
             return Contents(tuple(self.paths), self.cut, "xefm")
         return None
 
     def marks(self) -> frozenset:
-        """``str`` of every path XeFM holds, for marking rows."""
+        """``str`` of every path XeFM holds, for marking rows — none once a
+        newer copy has replaced them."""
+        if not self.paths or self.superseded():
+            return frozenset()
         return frozenset(str(p) for p in self.paths)
 
     def status(self) -> str:
