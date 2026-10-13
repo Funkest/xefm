@@ -1309,9 +1309,13 @@ class StatusBar(Widget):
         # then paste" is how it is used.
         x = pad_x
         carried = self.app.clipboard.status()
+        self._clip_hit = None
         if carried:
             carried = elide(carried, avail, where="end", measure=ctx.measure_text)
-            ctx.draw_text(x, 0, carried, Style(fg=ctx.theme.accent, attr=TextAttribute.BOLD))
+            carried_style = Style(fg=ctx.theme.accent, attr=TextAttribute.BOLD)
+            ctx.draw_text(x, 0, carried, carried_style)
+            # A click on it shows what is held (#577 hand check).
+            self._clip_hit = (x, x + ctx.measure_text(carried, carried_style))
             used = ctx.measure_text(carried + "  ")
             x += used
             avail = max(0.0, avail - used)
@@ -1345,6 +1349,10 @@ class StatusBar(Widget):
         if self.app.panel.has_layers:
             return False
         x = event.x or 0.0
+        clip = getattr(self, "_clip_hit", None)
+        if clip is not None and clip[0] <= x < clip[1]:
+            self.app.clipboard_show()
+            return True
         for x0, x1, action in self._hits:
             if x0 <= x < x1:
                 self.app._run_action(_ctx.FILER, action)
@@ -3482,6 +3490,7 @@ class XeFMApp:
                 "clipboard_cut": (lambda: self.clipboard_put(cut=True), True),
                 "clipboard_paste": (self.clipboard_paste, True),
                 "clipboard_clear": (self.clipboard_clear, True),
+                "clipboard_show": (self.clipboard_show, False),
                 "copy_paths": (self.copy_paths_to_clipboard, True),
                 "open_list_from_clipboard": (self.open_list_from_clipboard, True),
                 "open_list_from_command": (self.open_list_from_command, False),
@@ -4248,6 +4257,8 @@ class XeFMApp:
             MenuItem("Paste", on_select=lambda: self._menu("clipboard_paste"),
                      enabled=lambda: self.clipboard.contents() is not None,
                      shortcut=sc("clipboard_paste")),
+            MenuItem("Show Clipboard…", on_select=lambda: self._menu("clipboard_show"),
+                     shortcut=sc("clipboard_show")),
             MenuItem("Clear Clipboard", on_select=lambda: self._menu("clipboard_clear"),
                      enabled=lambda: bool(self.clipboard.paths),
                      shortcut=sc("clipboard_clear")),
@@ -7674,6 +7685,9 @@ class XeFMApp:
                       f"into the folder you are in ({paste})")
         self._clipboard_changed()
 
+    #: Paths the clipboard dialog lists before "and N more".
+    _CLIPBOARD_SHOW_MAX = 20
+
     def clipboard_clear(self) -> None:
         self.clipboard.clear()
         self.log_info("Clipboard cleared")
@@ -7744,9 +7758,47 @@ class XeFMApp:
         """Re-mark the rows on the clipboard in both panes."""
         marks = self.clipboard.marks()
         for view in (self.left_view, self.right_view):
+            view.clipboard_source = self.clipboard
             view.clipboard_marks = marks
             view.clipboard_cut = self.clipboard.cut
         self.status.invalidate()
+
+    def _set_text_clipboard(self, text: str) -> None:
+        """Put ``text`` on the clipboard. It is one clipboard: a text copy
+        replaces the files XeFM was holding, here as on the OS clipboard —
+        explicitly, so it holds where there is no OS bridge (Linux) too."""
+        self.panel.set_clipboard(text)
+        if self.clipboard.paths:
+            self.clipboard.clear()
+            self._clipboard_changed()
+
+    def clipboard_show(self) -> None:
+        """What the clipboard holds, with Paste Here and Clear — also what a
+        click on the status bar's ``[COPY n]`` opens."""
+        contents = self.clipboard.contents()
+        if contents is None:
+            self.log_info("The clipboard is empty")
+            self.panel.render()
+            return
+        verb = "Cut" if contents.cut else "Copied"
+        where = " (from another application)" if contents.from_other_app else ""
+        shown = [str(p) for p in contents.paths[:self._CLIPBOARD_SHOW_MAX]]
+        more = len(contents.paths) - len(shown)
+        lines = shown + ([f"… and {more} more"] if more else [])
+
+        def answered(label: str) -> None:
+            if label == "Paste Here":
+                self.clipboard_paste()
+            elif label == "Clear":
+                self.clipboard_clear()
+            self.panel.render()
+
+        show_message_box(
+            self.panel, "\n".join(lines),
+            title=f"{verb}: {len(contents.paths)} item(s){where}",
+            icon="info", buttons=("Paste Here", "Clear", "Close"),
+            default=0, cancel=2, on_result=answered)
+        self.panel.render()
 
     def _paste_preview(self, pane: dict) -> str:
         """The pane footer's "paste: 2 conflicts" — from the names the pane
@@ -8227,7 +8279,7 @@ class XeFMApp:
             self.log_info(f"No files to copy {label}s from")
             return
         text = "\n".join(render(f) for f in targets)
-        self.panel.set_clipboard(text)
+        self._set_text_clipboard(text)
         count = len(targets)
         self.log_info(f"Copied {count} {label}{'s' if count != 1 else ''} to clipboard")
 
@@ -8244,7 +8296,7 @@ class XeFMApp:
         text = self.log.selection_text()
         if not text:
             return
-        self.panel.set_clipboard(text)
+        self._set_text_clipboard(text)
         self.log.clear_selection()
 
     def copy_log_all(self) -> None:
@@ -8257,7 +8309,7 @@ class XeFMApp:
         if not lines:
             self.log_info("Log is empty")
             return
-        self.panel.set_clipboard("\n".join(lines))
+        self._set_text_clipboard("\n".join(lines))
         count = len(lines)
         self.log_info(f"Copied {count} log line{'s' if count != 1 else ''} to clipboard")
 
@@ -10100,6 +10152,7 @@ class XeFMApp:
             ("clipboard_copy", "Copy files to the clipboard (or the log's selected text)"),
             ("clipboard_cut", "Cut files to the clipboard: they move when pasted"),
             ("clipboard_paste", "Paste the clipboard into this folder"),
+            ("clipboard_show", "Show what the file clipboard holds (Edit menu)"),
             ("clipboard_clear", "Empty the file clipboard (Edit menu)"),
             ("copy_names", "Copy selection's name(s) to the clipboard"),
             ("copy_paths", "Copy selection's full path(s) to the clipboard"),
@@ -10599,7 +10652,7 @@ class XeFMApp:
         )
 
     def _copy_dir_path(self, pane: dict) -> None:
-        self.panel.set_clipboard(str(pane["path"]))
+        self._set_text_clipboard(str(pane["path"]))
         self.log_info(f"Copied path to clipboard: {pane['path']}")
 
     def _open_dir_in_os(self, pane: dict) -> None:

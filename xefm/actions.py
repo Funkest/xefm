@@ -972,6 +972,7 @@ _FILER_ACTIONS = [
     _a("clipboard_cut", FILER, "Cut files to the clipboard"),
     _a("clipboard_paste", FILER, "Paste the clipboard into this folder"),
     _a("clipboard_clear", FILER, "Empty the file clipboard", default_keys=()),
+    _a("clipboard_show", FILER, "Show what the file clipboard holds", default_keys=()),
     # Quick view (#569): the other pane previews the cursor item.
     _a("quick_view", FILER, "Preview the item under the cursor in the other pane"),
     # Background jobs (#567). Ctrl-G: a plain Ctrl+letter every terminal sends

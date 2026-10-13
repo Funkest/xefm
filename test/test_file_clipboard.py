@@ -94,12 +94,17 @@ class Model(unittest.TestCase):
         clip.take_os()
         self.assertIsNone(clip.contents())
 
-    def test_text_on_the_clipboard_is_not_files(self):
+    def test_a_newer_text_copy_replaces_the_files(self):
+        """It is one clipboard: text copied after XeFM's files — in another
+        application, or XeFM's own log — is what the clipboard holds now, so
+        the files are no longer there to paste or to mark."""
         panel = _Panel()
         clip = FileClipboard(panel)
         clip.put([Path("/a/x.txt")], cut=False, local_paths=["/a/x.txt"])
         panel.backend.set_clipboard("some text")
-        self.assertEqual(clip.contents().origin, "xefm")
+        self.assertIsNone(clip.contents())
+        self.assertEqual(clip.marks(), frozenset())
+        self.assertEqual(clip.status(), "")
 
     def test_conflict_preview(self):
         clip = FileClipboard(None)
@@ -211,13 +216,47 @@ class InTheApp(unittest.TestCase):
         files = self.b.get_clipboard_files()
         self.assertEqual(files.paths, (os.path.join(self.src, "a.txt"),))
 
-    def test_paste_is_refused_into_a_list(self):
+    def test_copying_log_text_replaces_the_files(self):
+        """One clipboard (#577 hand check): Cmd/Ctrl-C on a log selection
+        copies the text, and the files XeFM held are no longer held."""
         self._focus("a.txt")
         self.app.dispatch("clipboard_copy")
+        self.assertTrue(self.app.clipboard.paths)
+        self.app.log_info("a line to copy")
+        self.app.panel.render()
+        self.app.log._select_all()
+        self.app.dispatch("clipboard_copy")
+        self.assertEqual(self.app.clipboard.paths, [])
+        self.assertEqual(self.app.clipboard.status(), "")
+        self.assertIn("a line to copy", self.b.get_clipboard())
+
+    def test_clicking_the_status_shows_what_is_held(self):
+        from puikit.event import Event, EventType
+        from puikit.widgets.message_box import MessageBox
+        self._focus("a.txt")
+        self.app.dispatch("clipboard_copy")
+        self.app.panel.render()
+        x0, x1 = self.app.status._clip_hit
+        self.app.status.handle_event(Event(type=EventType.MOUSE_CLICK,
+                                           x=(x0 + x1) / 2, y=0.0, button="left"))
+        box = self.app.panel._layers[-1].widget
+        self.assertIsInstance(box, MessageBox)
+        self.assertIn("a.txt", box.message)
+        self.assertEqual(box.buttons, ["Paste Here", "Clear", "Close"])
+        box._close(box.buttons.index("Clear"))
+        self.assertEqual(self.app.clipboard.paths, [])
+
+    def test_paste_is_refused_into_a_list(self):
+        # The list comes from text on the clipboard, so it is made first: a
+        # text copy replaces files on the one clipboard.
         self.app.panel.set_clipboard(os.path.join(self.dst, "a.txt"))
         self.app.dispatch("switch_pane")
         self.app.dispatch("open_list_from_clipboard")
         self.app._settle_listings()
+        self.app.dispatch("switch_pane")
+        self._focus("a.txt")
+        self.app.dispatch("clipboard_copy")
+        self.app.dispatch("switch_pane")
         self.app.dispatch("clipboard_paste")
         self.assertIn("not a folder", self._logs()[-1])
 
