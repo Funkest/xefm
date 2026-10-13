@@ -33,8 +33,22 @@ from xefm.log_manager import getLogger
 
 logger = getLogger("Keymap")
 
-DEFAULT = "default"
+#: XeFM's own letter layout, named for its lineage: the single-key Japanese
+#: filers — the X68000 ones, then AFX (あふ), then cfiler — rather than for
+#: being the default, which says nothing about what it is. Not a replica of
+#: AFX's table; the direction, not the details.
+AFX = "afx"
 ORTHODOX = "orthodox"
+#: The preset that ships. Its name stays a name, not "default".
+DEFAULT = AFX
+#: Earlier spellings still accepted, so a config or a saved menu choice that
+#: says ``'default'`` keeps meaning what it meant.
+ALIASES = {"default": AFX}
+
+
+def canonical(name: Optional[str]) -> Optional[str]:
+    """``name`` with an old spelling (``'default'``) replaced by its preset."""
+    return ALIASES.get(name, name) if name else name
 
 
 @dataclass(frozen=True)
@@ -101,14 +115,15 @@ _ORTHODOX = Preset(
     },
 )
 
-PRESETS: dict[str, Optional[Preset]] = {DEFAULT: None, ORTHODOX: _ORTHODOX}
+PRESETS: dict[str, Optional[Preset]] = {AFX: None, ORTHODOX: _ORTHODOX}
 
-LABELS = {DEFAULT: "Default (letters)", ORTHODOX: _ORTHODOX.label}
+LABELS = {AFX: "AFX style (letters)", ORTHODOX: _ORTHODOX.label}
 
 
 def get(name: Optional[str]) -> Optional[Preset]:
     """The preset called ``name``, or None for the default keymap (and for a
     name nothing answers to, which is logged)."""
+    name = canonical(name)
     if not name or name == DEFAULT:
         return None
     preset = PRESETS.get(name)
@@ -120,8 +135,8 @@ def get(name: Optional[str]) -> Optional[Preset]:
 def resolve(config, chosen: Optional[str]) -> str:
     """The preset in force: ``KEY_PRESET`` from the config when it names one,
     else ``chosen`` (the View menu's choice), else the default."""
-    configured = getattr(config, "KEY_PRESET", None)
-    name = configured or chosen or DEFAULT
+    configured = canonical(getattr(config, "KEY_PRESET", None))
+    name = configured or canonical(chosen) or DEFAULT
     return name if name in PRESETS else DEFAULT
 
 
@@ -152,7 +167,7 @@ def _typing_contexts() -> set:
 
 def apply(config, name: Optional[str], template: Optional[dict] = None) -> None:
     """Make ``config.KEY_BINDINGS`` the table for preset ``name`` (None or
-    ``'default'`` for the shipped keymap), and set ``config._KEY_TYPE_AHEAD``.
+    ``'afx'`` — or its old name ``'default'`` — for the shipped keymap), and set ``config._KEY_TYPE_AHEAD``.
 
     ``template`` is the shipped ``KEY_BINDINGS`` — what an action holds when
     the user has not touched it — read from :mod:`xefm._config` when omitted."""

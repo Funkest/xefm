@@ -9,11 +9,19 @@ managers, switch to a **preset**.
 
 | Preset | Bare letters | Commands are on |
 |--------|--------------|-----------------|
-| **Default** | run commands | letters (`C`, `M`, `K`, `V`, …) |
+| **AFX style** (the default) | run commands | letters (`C`, `M`, `K`, `V`, …) |
 | **Orthodox** | search for a file | function keys (`F3`, `F5`, `F8`, …) |
 
 The change applies at once. The help dialog (`F1`), the menus and the status
 bar show the new keys, and XeFM remembers your choice for later sessions.
+
+## AFX style
+
+XeFM's own layout, and the one it starts with. One letter runs one command,
+which is the style of the Japanese single-key filers: the X68000 file managers,
+then AFX (あふ) on Windows, then cfiler. XeFM follows that style rather than
+copying any one of them key for key, so details differ from AFX. Deleting, for
+example, is `K`.
 
 ## Orthodox
 
@@ -81,8 +89,10 @@ preset, letters included. To change a key in a preset, rebind it in
 ## Choosing it in config.py
 
 ```python
-KEY_PRESET = 'orthodox'   # or 'default'
+KEY_PRESET = 'orthodox'   # or 'afx'
 ```
+
+`'default'`, the name this preset had first, still works and means `'afx'`.
 
 A `KEY_PRESET` in `config.py` overrides the menu, and the menu says so if you
 try to change it there. Leave it as `None` to let the menu decide.

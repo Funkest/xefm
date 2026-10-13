@@ -3802,7 +3802,8 @@ class XeFMApp:
         """Switch to keymap preset ``name`` now and for later sessions. Help,
         the menus and the status bar relabel at once. ``KEY_PRESET`` in
         ``config.py`` wins over this, and is said to."""
-        configured = getattr(self.config, "KEY_PRESET", None)
+        configured = keymap_presets.canonical(getattr(self.config, "KEY_PRESET", None))
+        name = keymap_presets.canonical(name)
         if configured and configured != name:
             self.log_info(f"KEY_PRESET = {configured!r} in config.py decides "
                           f"the keymap — change it there")

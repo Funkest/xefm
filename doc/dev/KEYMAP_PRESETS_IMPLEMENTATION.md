@@ -7,9 +7,19 @@ in [`doc/KEYMAP_PRESETS_FEATURE.md`](../KEYMAP_PRESETS_FEATURE.md).
 ## Shape
 
 `xefm/keymap_presets.py` holds `Preset` (name, label, `bindings`,
-`free_letters`, `type_ahead`) and the `PRESETS` table: `default` (None) and
+`free_letters`, `type_ahead`) and the `PRESETS` table: `afx` (None) and
 `orthodox`. Discussion #343 asked for one mechanism with several presets on
 it, not a special-cased beginner mode, and that is the reason for this shape.
+
+The shipped preset is named for its lineage, like `orthodox`. That lineage is
+the single-key Japanese filers: the X68000 file managers, then AFX (あふ), then
+cfiler. The name says what the layout is, not that it is the default.
+`DEFAULT = AFX` keeps the code's notion of "the one that ships". The preset
+follows the style of those filers, not their exact keys.
+`ALIASES = {"default": "afx"}` and `canonical()` keep the first name working,
+both in `KEY_PRESET` and in a View-menu choice saved under it.
+`set_keymap_preset` compares canonical names, so `KEY_PRESET = 'default'`
+does not block choosing AFX style from the menu.
 A per-platform Explorer/Finder preset is one more entry.
 
 ## `apply(config, name)`
@@ -48,8 +58,9 @@ unbound).
 ## Choosing
 
 `resolve(config, chosen)`: `KEY_PRESET` from the config when set, else the
-View menu's choice (state key `keymap.preset`), else `default`. An unknown
-name falls back to `default` and is logged.
+View menu's choice (state key `keymap.preset`), else `afx`, with old names
+mapped through `canonical`. An unknown name falls back to `afx` and is
+logged.
 
 `XeFMApp._apply_keymap_preset` runs right after the state manager exists, and
 again in `reload_config` after the new config replaces the old one. It

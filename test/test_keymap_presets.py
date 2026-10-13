@@ -112,12 +112,21 @@ class Apply(unittest.TestCase):
 
     def test_resolve(self):
         config = types.SimpleNamespace(KEY_PRESET=None)
-        self.assertEqual(keymap_presets.resolve(config, None), "default")
+        self.assertEqual(keymap_presets.resolve(config, None), "afx")
         self.assertEqual(keymap_presets.resolve(config, "orthodox"), "orthodox")
-        config.KEY_PRESET = "default"
-        self.assertEqual(keymap_presets.resolve(config, "orthodox"), "default")
+        config.KEY_PRESET = "afx"
+        self.assertEqual(keymap_presets.resolve(config, "orthodox"), "afx")
         config.KEY_PRESET = "nonsense"
-        self.assertEqual(keymap_presets.resolve(config, None), "default")
+        self.assertEqual(keymap_presets.resolve(config, None), "afx")
+
+    def test_default_is_the_old_name_of_afx(self):
+        config = types.SimpleNamespace(KEY_PRESET="default")
+        self.assertEqual(keymap_presets.resolve(config, "orthodox"), "afx")
+        config.KEY_PRESET = None
+        self.assertEqual(keymap_presets.resolve(config, "default"), "afx",
+                         "a menu choice saved under the old name")
+        self.assertIsNone(keymap_presets.get("default"))
+        self.assertEqual(keymap_presets.LABELS["afx"], "AFX style (letters)")
 
 
 def _key(key, char=None, mods=()):
@@ -150,7 +159,7 @@ class InTheApp(unittest.TestCase):
 
     def tearDown(self):
         # Leave the shared config as it was found for the next test file.
-        self.app.set_keymap_preset("default")
+        self.app.set_keymap_preset("afx")
         self.app.file_monitor.stop_monitoring()
         self.b.close()
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -192,7 +201,7 @@ class InTheApp(unittest.TestCase):
         self.app.config.KEY_PRESET = "default"
         try:
             self.app.set_keymap_preset("orthodox")
-            self.assertEqual(self.app._keymap_preset, "default")
+            self.assertEqual(self.app._keymap_preset, "afx")
             self.assertIn("KEY_PRESET", self.app.log.lines[-1][0])
         finally:
             self.app.config.KEY_PRESET = None
