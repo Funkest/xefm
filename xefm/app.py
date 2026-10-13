@@ -86,6 +86,7 @@ from xefm.isearch_bar import ISearchBar
 from xefm import filters
 from xefm import name_key
 from xefm import tree_walk
+from xefm.file_clipboard import FileClipboard, conflicts as clipboard_conflicts
 from xefm.log_manager import (LOG_ERROR_SOURCE, LOG_SOURCE, clear_log_sink,
                               getLogger, route_library_logger, set_log_sink)
 from xefm.pane_manager import PaneManager
@@ -915,7 +916,9 @@ class PaneFooter(Widget):
         filt = (f"  |  Filter: {filters.label(pane['filter_pattern'])}"
                 if pane["filter_pattern"] else "")
         sort = self.app.flm.get_sort_description(pane)
-        text = f"{dirs} dirs, {files} files{sel}  |  {sort}{filt}"
+        preview = self.app._paste_preview(pane)
+        paste = f"  |  {preview}" if preview else ""
+        text = f"{dirs} dirs, {files} files{sel}  |  {sort}{filt}{paste}"
         fg = ctx.theme.text if active else ctx.theme.muted_text
         style = Style(fg=fg, attr=TextAttribute.BOLD if active else TextAttribute.NORMAL)
 
@@ -1050,8 +1053,19 @@ class StatusBar(Widget):
         if ctx.vector_shapes:
             pad_x += 1.0
         avail = max(0.0, ctx.size_units[0] - 2 * pad_x)
+        # What the file clipboard carries leads the bar (#577), in every state
+        # the bar has — a search included, since "search for the destination,
+        # then paste" is how it is used.
+        x = pad_x
+        carried = self.app.clipboard.status()
+        if carried:
+            carried = elide(carried, avail, where="end", measure=ctx.measure_text)
+            ctx.draw_text(x, 0, carried, Style(fg=ctx.theme.accent, attr=TextAttribute.BOLD))
+            used = ctx.measure_text(carried + "  ")
+            x += used
+            avail = max(0.0, avail - used)
         text = elide(self._text(), avail, where="end", measure=ctx.measure_text)
-        ctx.draw_text(pad_x, 0, text, Style(fg=ctx.theme.muted_text))
+        ctx.draw_text(x, 0, text, Style(fg=ctx.theme.muted_text))
 
     def measure(self, ctx, axis, available) -> SizeRequest:
         # Reserve a strip of bottom padding below the hints (vector backends);
@@ -1399,6 +1413,9 @@ class XeFMApp:
         self._drag_cancelled_in_place = False
 
         self.panel = Panel(backend)
+        # The file clipboard (#577): XeFM's own, with the OS one as a bridge
+        # where the backend has it (macOS / Windows desktop).
+        self.clipboard = FileClipboard(self.panel)
         # Where to learn which image formats this backend draws from a path —
         # ImageIO's list on macOS, the installed WIC codecs on Windows, Pillow's
         # registry in a terminal. It decides both which files the image viewer
@@ -2804,6 +2821,10 @@ class XeFMApp:
                 "create_file": (self.create_file, False),
                 "rename": (self.rename, False),
                 "copy_names": (self.copy_names_to_clipboard, True),
+                "clipboard_copy": (lambda: self.clipboard_put(cut=False), True),
+                "clipboard_cut": (lambda: self.clipboard_put(cut=True), True),
+                "clipboard_paste": (self.clipboard_paste, True),
+                "clipboard_clear": (self.clipboard_clear, True),
                 "copy_paths": (self.copy_paths_to_clipboard, True),
                 "open_list_from_clipboard": (self.open_list_from_clipboard, True),
                 "open_list_from_command": (self.open_list_from_command, False),
@@ -3379,6 +3400,17 @@ class XeFMApp:
         # activation renders nothing on its own, so the line would sit
         # unpainted until the next event (#253).
         edit_menu = Menu(
+            MenuItem("Copy", on_select=lambda: self._menu("clipboard_copy"),
+                     enabled=has_files, shortcut=sc("clipboard_copy")),
+            MenuItem("Cut", on_select=lambda: self._menu("clipboard_cut"),
+                     enabled=has_files, shortcut=sc("clipboard_cut")),
+            MenuItem("Paste", on_select=lambda: self._menu("clipboard_paste"),
+                     enabled=lambda: self.clipboard.contents() is not None,
+                     shortcut=sc("clipboard_paste")),
+            MenuItem("Clear Clipboard", on_select=lambda: self._menu("clipboard_clear"),
+                     enabled=lambda: bool(self.clipboard.paths),
+                     shortcut=sc("clipboard_clear")),
+            SEPARATOR,
             MenuItem("Copy Name(s)", on_select=lambda: self._menu("copy_names"),
                      enabled=has_files, shortcut=sc("copy_names")),
             MenuItem("Copy Full Path(s)", on_select=lambda: self._menu("copy_paths"),
@@ -5611,6 +5643,128 @@ class XeFMApp:
         root = virtual["root"] if virtual else None
         self._copy_to_clipboard(lambda f: name_key.rel_name(f, root), "name")
 
+    # --- the file clipboard (#577) ------------------------------------------------
+
+    def clipboard_put(self, *, cut: bool) -> None:
+        """Copy (or cut) the selection — or the cursor item — to the file
+        clipboard. Nothing on disk changes: the files are copied or moved when
+        they are pasted, wherever the user is standing then.
+
+        With text selected in the log pane, the copy chord copies that text
+        instead — the highlight is on screen, so the chord acts on what can
+        be seen, as it did before the file clipboard existed."""
+        if not cut and self.log.selection_text():
+            self.copy_log_selection()
+            return
+        pane = self.active_pane()
+        targets = self._selected_or_focused(pane)
+        if not targets:
+            self.log_info("Nothing to copy" if not cut else "Nothing to cut")
+            return
+        local = [str(t) for t in targets if self._is_local(t)]
+        to_os = self.clipboard.put(targets, cut=cut, local_paths=local)
+        n = len(targets)
+        what = f"{n} item{'' if n == 1 else 's'}"
+        paste = self._keys_label("clipboard_paste")
+        verb = "Cut" if cut else "Copied"
+        then = "they move when you paste" if cut else "paste puts copies"
+        note = " (also on the system clipboard)" if to_os else ""
+        self.log_info(f"{verb} {what} to the clipboard{note} — {then} "
+                      f"into the folder you are in ({paste})")
+        self._clipboard_changed()
+
+    def clipboard_clear(self) -> None:
+        self.clipboard.clear()
+        self.log_info("Clipboard cleared")
+        self._clipboard_changed()
+
+    def clipboard_paste(self) -> None:
+        """Paste the clipboard into the active pane's folder: copy what was
+        copied, move what was cut, through the shared engine (confirmation
+        and conflict dialog as for C / M). Files another application put on
+        the system clipboard after XeFM's last copy are what is pasted then,
+        and the log says so."""
+        contents = self.clipboard.contents()
+        if contents is None:
+            self.log_info("The clipboard is empty")
+            return
+        pane = self.active_pane()
+        if pane.get("virtual"):
+            self.log_info("Cannot paste here: this pane is a list of results, "
+                          "not a folder")
+            return
+        if self._is_archive(pane["path"]):
+            self.log_info("Cannot paste here: this is a read-only archive")
+            return
+        dest = pane["path"]
+        sources = list(contents.paths)
+        if contents.cut:
+            # A cut pasted where it already is moves nothing.
+            sources = [p for p in sources if str(p.parent) != str(dest)]
+            if not sources:
+                self.log_info("Nothing to move: the cut items are already here")
+                return
+        origin = " from another app" if contents.from_other_app else ""
+        kind = "move" if contents.cut else "copy"
+
+        def on_complete(result: dict) -> None:
+            self._relist(self.pm.left_pane)
+            self._relist(self.pm.right_pane)
+            self.log_info(format_op_summary(kind.capitalize(), result) + origin)
+            self._report_op_failures(kind.capitalize(), result)
+            if not result.get("cancelled"):
+                if contents.from_other_app:
+                    if contents.cut:
+                        self.clipboard.take_os()
+                else:
+                    self.clipboard.consume()
+            self._clipboard_changed()
+            self._clipboard_ramp_hint()
+            self.panel.render()
+
+        op = self._fileops.move if contents.cut else self._fileops.copy
+        op(self.panel, sources, dest, on_complete=on_complete, log=self.log_info)
+        self.panel.render()
+
+    _clipboard_ramp_shown = False
+
+    def _clipboard_ramp_hint(self) -> None:
+        """Once per session, after a paste: the two-pane way is one key. The
+        clipboard is a ramp, not a destination (#342)."""
+        if self._clipboard_ramp_shown:
+            return
+        self._clipboard_ramp_shown = True
+        c, m = self._keys_label("copy_files"), self._keys_label("move_files")
+        if c and m:
+            self.log_info(f"Tip: {c} / {m} copy or move the selection straight to "
+                          f"the other pane, in one step")
+
+    def _clipboard_changed(self) -> None:
+        """Re-mark the rows on the clipboard in both panes."""
+        marks = self.clipboard.marks()
+        for view in (self.left_view, self.right_view):
+            view.clipboard_marks = marks
+            view.clipboard_cut = self.clipboard.cut
+        self.status.invalidate()
+
+    def _paste_preview(self, pane: dict) -> str:
+        """The pane footer's "paste: 2 conflicts" — from the names the pane
+        already lists, cached until the clipboard or the listing changes."""
+        if pane.get("virtual"):
+            return ""
+        contents = self.clipboard.contents()
+        if contents is None:
+            return ""
+        key = (id(pane["files"]), len(pane["files"]), str(pane["path"]),
+               self.clipboard.version, contents.paths)
+        cache = pane.get("_paste_preview")
+        if cache is not None and cache[0] == key:
+            return cache[1]
+        n = clipboard_conflicts(contents, pane["path"], (f.name for f in pane["files"]))
+        text = f"paste: {n} conflict{'' if n == 1 else 's'}" if n else ""
+        pane["_paste_preview"] = (key, text)
+        return text
+
     def copy_paths_to_clipboard(self) -> None:
         """Copy the active pane's selected full path(s) — or the cursor entry's
         path when nothing is selected — to the system clipboard, one per
@@ -7684,6 +7838,10 @@ class XeFMApp:
             ("create_file", "Create new file"),
             ("rename", "Rename file/directory"),
             ("copy_files", "Copy selection to the other pane"),
+            ("clipboard_copy", "Copy files to the clipboard (or the log's selected text)"),
+            ("clipboard_cut", "Cut files to the clipboard: they move when pasted"),
+            ("clipboard_paste", "Paste the clipboard into this folder"),
+            ("clipboard_clear", "Empty the file clipboard (Edit menu)"),
             ("copy_names", "Copy selection's name(s) to the clipboard"),
             ("copy_paths", "Copy selection's full path(s) to the clipboard"),
             ("move_files", "Move selection to the other pane"),
@@ -7738,7 +7896,7 @@ class XeFMApp:
             ("adjust_log_up", "Make the log pane larger"),
             ("adjust_log_down", "Make the log pane smaller"),
             ("reset_log_height", "Reset the log pane height"),
-            ("copy_log_selection", "Copy the log's selected text (drag to select)"),
+            ("copy_log_selection", "Copy the log's selected text — the copy key does it too (Edit menu)"),
             # These three carry their menu: nothing binds them out of the box,
             # so a row saying only "—" would name a feature and then withhold
             # the one way to reach it. The menu is stated rather than "unbound

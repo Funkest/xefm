@@ -153,9 +153,10 @@ or a note.
 
 Drag across the log with the mouse to highlight lines (double-click selects a
 word, triple-click a line, and dragging past the top or bottom edge keeps
-selecting), then run `copy_log_selection` — the macOS desktop app answers the
-platform's own copy chord for it as well. The highlight clears once the text is
-on the clipboard.
+selecting), then press the copy key (`Ctrl-C`, or `Command-C` in the macOS
+app). With text highlighted in the log, that key copies the text. Without, it
+puts files on the [file clipboard](FILE_CLIPBOARD_FEATURE.md). The highlight
+clears once the text is on the clipboard.
 
 The chord copies whatever the log has highlighted, whichever pane you were
 last clicking in — so selecting in the log and then going back to the file list
@@ -178,8 +179,8 @@ It ships without a key of its own. To give it one, bind `copy_log_all` in
 KEY_BINDINGS['copy_log_all'] = ['Ctrl-G']
 ```
 
-`copy_log_selection` is bound the same way if you would rather it answered some
-other chord.
+`copy_log_selection` (the log-only action, unbound by default) is bound the
+same way if you want a key that never touches files.
 
 ### Copied format
 

@@ -351,6 +351,16 @@ class Config:
         'copy_names': ['Ctrl-N'],              # Copy selected/focused file name(s) to clipboard
         'copy_paths': ['Ctrl-P'],              # Copy selected/focused full path(s) to clipboard
 
+        # === File Clipboard ===
+        # Copy or cut now, paste wherever you go next -- the folder you stand
+        # in, or (macOS / Windows) another application. C / M above stay the
+        # one-step way to the other pane. The copy key copies the log's
+        # selected text instead when the log has a selection.
+        'clipboard_copy': ['Ctrl-C', 'Y'],     # Copy files to the clipboard
+        'clipboard_cut': ['Ctrl-X', 'Shift-Y'],  # Cut files to the clipboard (moved on paste)
+        'clipboard_paste': ['Ctrl-V', 'G'],    # Paste the clipboard into this folder
+        'clipboard_clear': [],                 # Empty the file clipboard (Edit menu)
+
         # === File Operations ===
         'copy_files': {'keys': ['C'], 'selection': 'required'},  # Copy selected files to other pane
         'move_files': {'keys': ['M'], 'selection': 'required'},  # Move selected files to other pane
@@ -423,7 +433,7 @@ class Config:
         # Drag across the log with the mouse to select, then copy. Ctrl-C works
         # everywhere; the macOS desktop adds Command-C below, because copying
         # text is the one place that chord is the whole platform's convention.
-        'copy_log_selection': ['Ctrl-C'],      # Copy the log pane's selected text
+        'copy_log_selection': [],              # Copy the log pane's selected text (Edit menu; the copy key below does it when the log has a selection)
         'copy_log_all': [],                    # Copy the whole log (unbound; Edit menu, or bind a key here)
         
         # === Text Viewer ===
@@ -688,8 +698,11 @@ class Config:
         if sys.platform == 'darwin':
             # The Finder gesture: a modifier on the same Enter that opens.
             KEY_BINDINGS['open_with_os'] = ['Command-ENTER', 'Ctrl-O']
-            # Copying text on macOS is Command-C, wherever the text is.
-            KEY_BINDINGS['copy_log_selection'] = ['Command-C', 'Ctrl-C']
+            # Copy, cut and paste on macOS are Command-C / X / V, wherever --
+            # files in a pane, text in the log.
+            KEY_BINDINGS['clipboard_copy'] = ['Command-C', 'Ctrl-C', 'Y']
+            KEY_BINDINGS['clipboard_cut'] = ['Command-X', 'Ctrl-X', 'Shift-Y']
+            KEY_BINDINGS['clipboard_paste'] = ['Command-V', 'Ctrl-V', 'G']
         elif sys.platform == 'win32':
             KEY_BINDINGS['open_with_os'] = ['Ctrl-ENTER', 'Ctrl-O']
 

@@ -130,7 +130,7 @@ with two per-case additions where a desktop platform owns the gesture outright:
 
 | Case | What is added |
 |---|---|
-| macOS desktop | `Command-ENTER` for `open_with_os`, `Command-C` for `copy_log_selection` |
+| macOS desktop | `Command-ENTER` for `open_with_os`; `Command-C` / `X` / `V` for the [file clipboard](FILE_CLIPBOARD_FEATURE.md) (copy also copies the log's selected text) |
 | Windows desktop | `Ctrl-ENTER` for `open_with_os` |
 | Any terminal | nothing — the common table is the whole keymap |
 
@@ -189,7 +189,7 @@ the lines by hand if your config predates the change:
 | `reveal_in_os` | `Alt-ENTER` / `Ctrl-Shift-E` (Windows) | `Ctrl-R` |
 | `copy_names` | `Command-Shift-C` / `Ctrl-Shift-C` (Windows) | `Ctrl-N` |
 | `copy_paths` | `Command-Shift-P` / `Ctrl-Shift-P` (Windows) | `Ctrl-P` |
-| `copy_log_selection` | `Command-C`, `Ctrl-C` | `Ctrl-C`, plus `Command-C` in the macOS app |
+| `copy_log_selection` | `Command-C`, `Ctrl-C` | unbound (Edit menu): `Ctrl-C` is now `clipboard_copy`, which copies the log's selected text when there is some, and files otherwise |
 | `toggle_select_up` | `Shift-SPACE` | unbound — the key went to `select_range` (see below) |
 | `isearch.toggle_select_down` | `Shift-DOWN` | `Ctrl-SPACE` |
 | `isearch.toggle_select_up` | `Shift-UP` | unbound |
