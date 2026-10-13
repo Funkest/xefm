@@ -1185,12 +1185,13 @@ _CONFLICT_ACTIONS = (
     ("cancel", "Cancel", "c"),
 )
 
-#: The dialog's default action: initially focused *and* drawn as the accent
-#: "primary" button. The two must name the same button — an accent fill reads as
-#: "this is what Enter does", so putting it on a button Enter would not press is
-#: a lie about the default. Skip is the safe resolution, matching the app's other
-#: destructive confirms (Delete, archive overwrite), where the accent sits on the
-#: harmless choice rather than the one that destroys data.
+#: The dialog's default action: the button focus starts on, so the one a bare
+#: Enter presses. Skip is the safe resolution, matching the app's other
+#: destructive confirms (Delete, archive overwrite), where focus starts on the
+#: harmless choice rather than the one that destroys data. No button wears the
+#: accent "primary" fill: Enter presses the focused button and focus always
+#: rests on one, so the focus ring is the one cue for what Enter does — as in
+#: PuiKit's MessageBox.
 _DEFAULT_CONFLICT_ACTION = "skip"
 
 #: Widest the dialog grows (it shrinks to the window): enough for the six
@@ -1199,6 +1200,10 @@ _DIALOG_W = 84
 #: Gap between the message and the checkbox row below it: one blank row, the
 #: same on a grid and on a vector backend.
 _MSG_GAP = 1.0
+#: Gap between the checkbox row and the buttons on a vector backend, where
+#: both are taller than a row and would otherwise touch. A grid keeps them on
+#: adjacent rows, which already read apart.
+_CHECKBOX_GAP = 0.5
 
 
 class ConflictSide:
@@ -1317,8 +1322,7 @@ class ConflictDialog(FocusContainer, Widget):
         self._actions = [a for a in _CONFLICT_ACTIONS
                          if a[0] != "compare" or comparable]
         self._buttons = [
-            Button(label,
-                   variant=("primary" if action == _DEFAULT_CONFLICT_ACTION else "secondary"),
+            Button(label, variant="secondary",
                    on_click=(lambda a=action: self._resolve(a)))
             for action, label, _key in self._actions
         ]
@@ -1346,7 +1350,7 @@ class ConflictDialog(FocusContainer, Widget):
         # size/date table's height is the backend's, not a row count), title.
         lc = panel.layout_context()
         msg_h = self._msg.measure(lc, "y", w - 4).preferred
-        h = (title_content_top(lc) + msg_h + _MSG_GAP + 1.0
+        h = (title_content_top(lc) + msg_h + _MSG_GAP + self._checkbox_h(lc)
              + self._buttons_h(lc, w - 4) + 1.0)
         if not lc.vector_shapes:
             h = float(math.ceil(h))  # whole rows on a grid
@@ -1388,24 +1392,32 @@ class ConflictDialog(FocusContainer, Widget):
         y = draw_title_bar(ctx, self.title, surface_bg=surface_bg, border=border, y=1.0)
         self._child_rects = []
 
-        # Button rows along the bottom; the checkbox sits one row above them,
-        # snapped to an integer grid row (a Checkbox clips at a fractional y on
-        # the character grid). The message fills the gap between title and
-        # checkbox.
+        # Button rows along the bottom; the checkbox sits above them (a gap
+        # apart on a vector backend), snapped to a whole row on a grid (a
+        # Checkbox clips at a fractional y there). The message fills the space
+        # between title and checkbox.
         lc = ctx.layout_context()
         bh = self._buttons[0].measure(lc, "y", 0.0).preferred
         rows = self._button_rows(lc, box_w - 4)
         # a full row of bottom padding (clear of the border)
         by = box_h - 1.0 - self._buttons_h(lc, box_w - 4)
-        cb_y = by - 1.0 if ctx.vector_shapes else float(int(by) - 1)
+        cb_h = self._checkbox.measure(lc, "y", 0.0).preferred
+        cb_y = by - self._checkbox_h(lc)
+        if not ctx.vector_shapes:
+            cb_y = float(math.floor(cb_y))  # a whole grid row (it clips otherwise)
 
         # Markdown message (the filename as a `code` span), on the popup surface.
         self._msg.style = Style(bg=surface_bg)
-        ctx.draw_child(self._msg, 2, y, max(1.0, box_w - 4), max(1.0, cb_y - y - _MSG_GAP))
+        # Children draw on the popup surface: without the "bg" hint they inherit
+        # the layer's own background, which a grid paints as the terminal's
+        # default under the table borders and the checkbox label.
+        ctx.draw_child(self._msg, 2, y, max(1.0, box_w - 4), max(1.0, cb_y - y - _MSG_GAP),
+                       hints={"bg": surface_bg})
 
-        ctx.draw_child(self._checkbox, 2, cb_y, box_w - 4, 1.0,
-                       hints={"focused": self._focused is self._checkbox})
-        self._child_rects.append((self._checkbox, (2.0, box_w - 2.0, cb_y, cb_y + 1.0)))
+        ctx.draw_child(self._checkbox, 2, cb_y, box_w - 4, cb_h,
+                       hints={"focused": self._focused is self._checkbox,
+                              "bg": surface_bg})
+        self._child_rects.append((self._checkbox, (2.0, box_w - 2.0, cb_y, cb_y + cb_h)))
 
         for row in rows:
             bx = 2.0
@@ -1415,6 +1427,11 @@ class ConflictDialog(FocusContainer, Widget):
                 self._child_rects.append((btn, (bx, bx + bw, by, by + bh)))
                 bx += bw + 1.0
             by += bh + 1.0
+
+    def _checkbox_h(self, lc: Any) -> float:
+        """Height of the checkbox row, with its gap above the buttons."""
+        cb_h = self._checkbox.measure(lc, "y", 0.0).preferred
+        return cb_h + (_CHECKBOX_GAP if lc.vector_shapes else 0.0)
 
     def _buttons_h(self, lc: Any, avail: float) -> float:
         """Height of the button rows at ``avail`` wide, a row of gap between."""

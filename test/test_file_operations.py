@@ -617,15 +617,14 @@ def test_conflict_dialog_renders_message_checkbox_and_buttons():
     assert "Compare" not in text                      # nothing to compare without sides
 
 
-def test_conflict_dialog_accent_button_is_the_focused_default():
-    """The accent ("primary") fill marks the button Enter presses, so exactly one
-    button wears it and it is the one focus starts on — the safe Skip, matching
-    the app's other destructive confirms."""
+def test_conflict_dialog_default_is_marked_by_focus_alone():
+    """Focus starts on the safe Skip, matching the app's other destructive
+    confirms. Enter presses the focused button, so no button wears the accent
+    fill — it would mark a button Enter no longer presses once focus moves."""
     from xefm.file_operations import ConflictDialog
     dlg = ConflictDialog("a.txt", 1, 1, on_result=lambda a: None)
-    primary = [b for b in dlg._buttons if b.variant == "primary"]
-    assert [b.label for b in primary] == ["Skip"]
-    assert dlg._focused is primary[0]
+    assert {b.variant for b in dlg._buttons} == {"secondary"}
+    assert dlg._focused.label == "Skip"
 
 
 def test_conflict_dialog_arrow_keys_move_focus():
@@ -703,6 +702,27 @@ def test_conflict_dialog_is_sized_to_its_message(tmp_path, profile):
         msg = dlg._msg
         assert msg._wrap_width == dlg._size[0] - 4          # no scrollbar gutter
         assert 0 <= msg._view_h - msg._row_tops[-1] < 1.0   # no spare row
+
+
+def test_conflict_dialog_children_sit_on_the_popup_surface(tmp_path):
+    """On a grid, the table's borders and the checkbox label take the popup
+    surface — not the terminal default the layer would otherwise hand down."""
+    from xefm.file_operations import ConflictDialog
+    source, existing = _sides(tmp_path)
+    backend = MemoryBackend(width=100, height=30, capabilities=PROFILE_TUI)
+    panel = Panel(backend)
+    dlg = ConflictDialog("a.txt", 1, 1, on_result=lambda a: None,
+                         source=source, existing=existing)
+    dlg.show(panel)
+    for _ in range(50):
+        backend.run_animation_ticks()
+    panel.render()
+    rect = panel._layers[-1].rect
+    x0, y0 = int(rect.x), int(rect.y)
+    unpainted = [(x, y) for y in range(y0 + 1, y0 + int(rect.h) - 1)
+                 for x in range(x0 + 1, x0 + int(rect.w) - 1)
+                 if backend.style_at(x, y).bg is None]
+    assert unpainted == []
 
 
 def test_conflict_dialog_offers_no_compare_for_folders(tmp_path):

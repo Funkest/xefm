@@ -96,7 +96,7 @@ For copy/move, `_resolve` prompts per collision through the task's UI bridge —
 
 The box is sized to its content, not to a row count. `show` asks the message for its height — `MarkdownView.measure(panel.layout_context(), "y", w - 4)`, the same layout its draw runs — because the table's height is the backend's: a GUI table's border and cell rows are not whole base units, so any fixed row estimate leaves spare space on one backend or scrolls on the other. Title (`title_content_top`), message, a one-row gap, the checkbox and the button rows add up to the height, rounded up to whole rows on a grid. Six buttons do not fit one row of a narrow dialog, so `_button_rows` breaks them into rows by measured width; `show` runs the same breaking with the same `LayoutContext` for the height, and `draw` places what it returns.
 
-**Skip is the default** (`_DEFAULT_CONFLICT_ACTION`): it starts focused *and* wears the accent `primary` fill, while the others are `secondary`. The two must name the same button — the accent reads as "this is what Enter does", so it belongs on the safe resolution, matching the app's other destructive confirms (Delete, archive overwrite), which put the accent on Cancel.
+**Skip is the default** (`_DEFAULT_CONFLICT_ACTION`): focus starts on it, so a bare Enter skips — the safe resolution, matching the app's other destructive confirms (Delete, archive overwrite), whose focus starts on Cancel. Every button is `secondary`: Enter presses the *focused* button and focus always rests on one, so the focus ring is the one cue for what Enter does. An accent fill pinned to Skip would only repeat that until focus moved, then mark a button Enter no longer presses. PuiKit's `MessageBox` follows the same rule.
 
 ### Overwrite older
 
