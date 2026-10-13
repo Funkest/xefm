@@ -78,6 +78,7 @@ from xefm.connect_dialog import open_connect_server, run_connecting
 from xefm.input_dialog import show_input
 from xefm.choice_dialog import show_choice_dialog
 from xefm import favorites
+from xefm import tags
 from xefm import netmount
 from xefm.options import OptionSet
 from xefm.progressive_search_dialog import show_progressive_search
@@ -1315,6 +1316,21 @@ def _search_rules(show_hidden: bool, recursive: bool):
 
     return shows, descend
 
+class _TagJump:
+    """A tag row in the J picker (#585)."""
+    __slots__ = ("tag",)
+
+    def __init__(self, tag):
+        self.tag = tag
+
+
+def _tag_label(tag) -> str:
+    """A tag as a picker row names it: its color in words, since a list row
+    cannot carry a colored dot."""
+    color = tag.color_name
+    return f"{tag.name} · {color}" if color and color != tag.name.casefold() else tag.name
+
+
 class XeFMApp:
     """Controller: owns pane state and maps key actions onto it."""
 
@@ -1451,6 +1467,11 @@ class XeFMApp:
             on_drag=lambda i, ev: self._start_drag("right", i, ev),
             on_drop=lambda i, paths: self._on_drop("right", i, paths),
         )
+        # Tag markers (#585): each pane reads the tags of the rows it draws on a
+        # worker, which flags a repaint through the pump when they land.
+        self._tags_dirty = False
+        for view in (self.left_view, self.right_view):
+            view.tag_cache = tags.TagCache(on_ready=self._on_tags_ready)
         # Same chrome inset as the bars: the log's surface fills its slot, its
         # text breathes in from the frame (BAR_PAD_PX on GUI, flush on the grid).
         self.log = LogView(max_lines=2000, auto_scroll=True, wrap=True, padding_px=BAR_PAD_PX)
@@ -1844,7 +1865,13 @@ class XeFMApp:
         listed = self._process_result_queue()
         loading = self._pump_loading_indicator()
         captured = self._drain_captured_output()
-        return listed or loading or captured
+        tagged, self._tags_dirty = getattr(self, "_tags_dirty", False), False
+        return listed or loading or captured or tagged
+
+    def _on_tags_ready(self) -> None:
+        """Worker thread: tags for drawn rows landed; ask for a repaint."""
+        self._tags_dirty = True
+        self._wake_pump()
 
     #: Log-pane styles for captured streams. stdout leaves its color unset so it
     #: resolves to ``theme.text`` at draw time (tracking the theme like
@@ -4284,7 +4311,11 @@ class XeFMApp:
         with :meth:`add_favorite` (see :mod:`xefm.favorites`). The picker's
         remove key forgets an added one; a config row stays, since the next
         config load would only bring it back."""
-        rows = favorites.get_favorites()
+        rows = list(favorites.get_favorites())
+        # Tags follow the favorites (#585): picking one lists the files under
+        # this pane's directory that carry it.
+        if tags.store_for(self.active_pane()["path"]) is not None:
+            rows += [_TagJump(tag) for tag in self._known_tags()]
         if not rows:
             key = keys_label_for_action("add_favorite")
             hint = f" Press {key} to add one." if key else ""
@@ -4292,13 +4323,30 @@ class XeFMApp:
                              title="Favorites", icon="info")
             self.panel.render()
             return
+
+        def label(row) -> str:
+            if isinstance(row, _TagJump):
+                return f"Tag: {_tag_label(row.tag)}  —  files tagged here and below"
+            return f"{row.name}  —  {row.path}"
+
+        def accept(row) -> None:
+            if isinstance(row, _TagJump):
+                self.find_by_tag(row.tag.name)
+            else:
+                self._jump_to_favorite(row)
+
+        def remove(row) -> bool:
+            if isinstance(row, _TagJump):
+                return self._forget_known_tag(row.tag)
+            return self._forget_favorite(row)
+
         # Middle-elide the "name — path" rows so a long path keeps its tail (the
         # leaf directory) rather than being clipped away (issue #211).
         show_filter_list(
-            self.panel, rows, title="Go to Favorite",
-            to_label=lambda fav: f"{fav.name}  —  {fav.path}",
-            on_accept=self._jump_to_favorite,
-            on_remove=self._forget_favorite,
+            self.panel, rows, title="Go to Favorite or Tag",
+            to_label=label,
+            on_accept=accept,
+            on_remove=remove,
             region=self._active_pane_region(),
             elide_where="middle",
         )
@@ -4314,9 +4362,10 @@ class XeFMApp:
         return True
 
     def add_favorite(self) -> None:
-        """B: remember a place in the favorites picker (J).
+        """B: mark something — a place in the favorites picker (J), or files
+        with tags (#585, the tag rows after the favorite ones).
 
-        Two candidates, offered as a choice: the directory the pane is showing
+        Two favorite candidates, offered as a choice: the directory the pane is showing
         (first, so Enter alone takes it) and the item under the cursor — which
         may be a file, so a favorite can name the thing to land on and not only
         the place to go. Where there is only one candidate (a search-results
@@ -4329,29 +4378,298 @@ class XeFMApp:
         candidates = []
         if not pane.get("virtual"):
             here = pane["path"]
-            candidates.append(((here, False),
-                               f"This directory: {here.name or str(here)}"))
+            candidates.append((("fav", (here, False)),
+                               f"Favorite: This directory: {here.name or str(here)}"))
         cursor = self._cursor_favorite_target(pane)
         if cursor is not None:
             entry, is_file = cursor
             label = entry.name + ("" if is_file else "/")
-            candidates.append((cursor, f"Under the cursor: {label}"))
+            candidates.append((("fav", cursor), f"Favorite: Under the cursor: {label}"))
+        # The same key marks things in the other way too: tags (#585), on the
+        # selection or the cursor item, where their storage keeps tags at all.
+        candidates += self._tag_rows(pane)
         if not candidates:
             self.log_info("Nothing to add to favorites")
             return
-        if len(candidates) == 1:
-            self._name_favorite(*candidates[0][0])
+        if len(candidates) == 1 and candidates[0][0][0] == "fav":
+            self._name_favorite(*candidates[0][0][1])
             return
 
         def on_result(choice) -> None:
             if choice is None:
                 self.panel.render()
                 return
-            self._name_favorite(*choice)
+            kind, value = choice
+            if kind == "fav":
+                self._name_favorite(*value)
+            elif kind == "tag-toggle":
+                self._toggle_tag(self._tag_targets(pane), *value)
+            elif kind == "tag-edit":
+                self._edit_tags(self._tag_targets(pane))
 
-        show_choice_dialog(self.panel, "Add to Favorites", candidates,
+        show_choice_dialog(self.panel, "Bookmark or Tag", candidates,
                            on_result=on_result)
         self.panel.render()
+
+    # --- tags (#585) ------------------------------------------------------------
+
+    #: How many known tags the B dialog offers as one-key toggles.
+    _TAG_ROWS = 8
+    #: How many tags XeFM remembers having applied, for the pickers.
+    _KNOWN_TAGS_MAX = 40
+    #: Above this many targets, B skips reading their tags to mark the rows.
+    _TAG_MARK_LIMIT = 200
+
+    def _tag_targets(self, pane: dict) -> list:
+        """What a tag operation acts on: the selection, else the cursor item."""
+        return [e for e in self._selected_or_focused(pane) if e.name != ".."]
+
+    def _tag_store_of(self, targets: list):
+        """The one store all ``targets`` share, or None (unsupported, or mixed)."""
+        stores = {id(s): s for s in (tags.store_for(t) for t in targets)}
+        if len(stores) != 1:
+            return None
+        return next(iter(stores.values()))
+
+    def _known_tags(self) -> list:
+        """Tags to offer: the ones XeFM applied (most recent first), then the
+        ones seen on files this session."""
+        out, seen = [], set()
+        for item in self.state_manager.get_state("tags.known", []) or []:
+            try:
+                tag = tags.Tag(str(item[0]), int(item[1]))
+            except (TypeError, ValueError, IndexError):
+                continue
+            if tag.name.casefold() not in seen:
+                seen.add(tag.name.casefold())
+                out.append(tag)
+        for view in (self.left_view, self.right_view):
+            cache = getattr(view, "tag_cache", None)
+            for key, tag in list(cache.seen.items()) if cache else []:
+                if key not in seen:
+                    seen.add(key)
+                    out.append(tag)
+        return out
+
+    def _remember_tags(self, applied: list) -> None:
+        known = [[t.name, t.color] for t in applied]
+        names = {t.name.casefold() for t in applied}
+        for item in self.state_manager.get_state("tags.known", []) or []:
+            if isinstance(item, list) and item and str(item[0]).casefold() not in names:
+                known.append(item)
+        self.state_manager.set_state("tags.known", known[:self._KNOWN_TAGS_MAX])
+
+    def _forget_known_tag(self, tag) -> bool:
+        known = [i for i in self.state_manager.get_state("tags.known", []) or []
+                 if not (isinstance(i, list) and i
+                         and str(i[0]).casefold() == tag.name.casefold())]
+        self.state_manager.set_state("tags.known", known)
+        for view in (self.left_view, self.right_view):
+            if getattr(view, "tag_cache", None):
+                view.tag_cache.seen.pop(tag.name.casefold(), None)
+        self.log_info(f"Forgot tag {tag.name} (files keep it)")
+        return True
+
+    def _tag_rows(self, pane: dict) -> list:
+        """The B dialog's tag rows for the current targets: one toggle per known
+        tag, checked where every target has it, then a free-form editor."""
+        targets = self._tag_targets(pane)
+        store = self._tag_store_of(targets) if targets else None
+        if store is None:
+            return []
+        current = None
+        if store.cheap and len(targets) <= self._TAG_MARK_LIMIT:
+            found = store.read_many(targets)
+            if not any(isinstance(v, Exception) for v in found.values()):
+                current = {t.name.casefold() for t in tags.common(list(found.values()))}
+        rows = []
+        for tag in self._known_tags()[:self._TAG_ROWS]:
+            on = current is not None and tag.name.casefold() in current
+            mark = "✓" if on else " "
+            rows.append((("tag-toggle", (tag, on if current is not None else None)),
+                         f"Tag: {mark} {_tag_label(tag)}"))
+        what = targets[0].name if len(targets) == 1 else f"{len(targets)} selected"
+        rows.append((("tag-edit", None), f"Tag: Edit tags… ({what})"))
+        return rows
+
+    def _read_tags_then(self, targets: list, then) -> None:
+        """Read ``targets``' tags — inline from a cheap store, in a task from
+        one that pays per call (S3, SSH) — and hand ``{path: tags}`` to
+        ``then``; a target that failed maps to its error."""
+        store = self._tag_store_of(targets)
+        if store is None:
+            self.log_info("Tags are not supported here")
+            return
+        if store.cheap:
+            then(store.read_many(targets))
+            return
+        task = Task("Reading tags", config=self.config, kind="tags",
+                    busy_label="Reading tags…")
+        self.tasks.submit(task, self.panel,
+                          run=lambda t: {"found": store.read_many(targets)},
+                          on_done=lambda res: then(res.get("found", {})))
+
+    def _write_tags(self, targets: list, compute, message: str) -> None:
+        """Read the targets' tags, give each the list ``compute(current)``
+        returns, write them back, and report — inline or as a task, as
+        :meth:`_read_tags_then` reads."""
+        store = self._tag_store_of(targets)
+        if store is None:
+            self.log_info("Tags are not supported here")
+            return
+
+        def work() -> dict:
+            found = store.read_many(targets)
+            changes, failed = [], []
+            for target in targets:
+                current = found.get(str(target), [])
+                if isinstance(current, Exception):
+                    failed.append(f"{target.name}: {current}")
+                    continue
+                new = compute(current)
+                if new != current:
+                    changes.append((target, new))
+            failed += store.write_many(changes)
+            return {"changed": len(changes) - len(failed), "failed": failed}
+
+        def done(res: dict) -> None:
+            for line in res.get("failed", []):
+                self.log_info(f"Tags not changed: {line}")
+            self.log_info(message + f" ({res.get('changed', 0)} item(s))")
+            for view in (self.left_view, self.right_view):
+                if getattr(view, "tag_cache", None):
+                    view.tag_cache.forget(targets)
+            self.panel.render()
+
+        if store.cheap:
+            done(work())
+            return
+        task = Task("Writing tags", config=self.config, kind="tags",
+                    busy_label="Writing tags…")
+        self.tasks.submit(task, self.panel, run=lambda t: work(), on_done=done)
+
+    def _toggle_tag(self, targets: list, tag, on) -> None:
+        """B's tag row: take ``tag`` off when every target has it, else put it
+        on every target. ``on`` is None when B could not afford to look; the
+        write reads the tags anyway, so it decides there."""
+        store = self._tag_store_of(targets)
+        if store is None:
+            return
+        self._remember_tags([tag])
+
+        def decide(found: dict) -> None:
+            lists = [v for v in found.values() if not isinstance(v, Exception)]
+            has_all = bool(lists) and all(
+                any(t.name.casefold() == tag.name.casefold() for t in l) for l in lists)
+            if has_all:
+                self._write_tags(targets, lambda cur: tags.apply_change(cur, remove=[tag.name]),
+                                 f"Removed tag {tag.name}")
+            else:
+                new = tags.new_tag(tag.name, store, [tag])
+                self._write_tags(targets, lambda cur: tags.apply_change(cur, add=[new]),
+                                 f"Tagged {tag.name}")
+
+        if on is not None:
+            decide({"_": [tag]} if on else {"_": []})
+        else:
+            self._read_tags_then(targets, decide)
+
+    def _edit_tags(self, targets: list) -> None:
+        """B's "Edit tags…": the tags every target shares, as a comma-separated
+        line to edit. Names taken out are removed from every target, names
+        added are added to every target; tags only some targets have are left
+        as they are."""
+        store = self._tag_store_of(targets)
+        if store is None:
+            self.log_info("Tags are not supported here")
+            return
+
+        def show(found: dict) -> None:
+            lists = [v for v in found.values() if not isinstance(v, Exception)]
+            shared = tags.common(lists) if lists else []
+            known = self._known_tags() + [t for l in lists for t in l]
+
+            def accept(text: str) -> None:
+                names = tags.parse_names(text)
+                before = {t.name.casefold() for t in shared}
+                after = {n.casefold() for n in names}
+                add = [tags.new_tag(n, store, known) for n in names
+                       if n.casefold() not in before]
+                remove = [t.name for t in shared if t.name.casefold() not in after]
+                if not add and not remove:
+                    self.panel.render()
+                    return
+                self._remember_tags(add + [t for t in shared if t.name.casefold() in after])
+                self._write_tags(
+                    targets, lambda cur: tags.apply_change(cur, add=add, remove=remove),
+                    "Tags updated")
+
+            what = targets[0].name if len(targets) == 1 else f"{len(targets)} items"
+            show_input(self.panel, title=f"Tags — {what}",
+                       prompt="Tags, separated by commas:",
+                       text=", ".join(t.name for t in shared), on_accept=accept,
+                       region=self._active_pane_region())
+            self.panel.render()
+
+        self._read_tags_then(targets, show)
+
+    def find_by_tag(self, name: str) -> None:
+        """List the files under the active pane's directory that carry tag
+        ``name``, as a virtual listing. An index answers where one exists
+        (Spotlight on macOS, locally or on a macOS host over SSH; getfattr -R
+        on a Linux host); otherwise the tree is walked, reading tags as it
+        goes, in a cancellable task."""
+        pane_name = self.pm.active_pane
+        root = self.active_pane()["path"]
+        store = tags.store_for(root)
+        if store is None:
+            self.log_info("Tags are not supported here")
+            return
+        task = Task(f"Finding tag {name}", config=self.config, kind="tags",
+                    busy_label="Searching…")
+
+        def run(t: Task) -> dict:
+            hits = store.find(root, name, checkpoint=t.checkpoint)
+            if hits is None:
+                hits = self._walk_for_tag(t, root, store, name)
+            return {"hits": hits, "cancelled": t.cancelled()}
+
+        def on_done(res: dict) -> None:
+            hits = res.get("hits") or []
+            if res.get("cancelled"):
+                self.log_info(f"Finding tag {name}: cancelled")
+            elif not hits:
+                self.log_info(f"No files tagged {name} under {root}")
+            else:
+                self.open_path_list(pane_name, hits, title=f"Tag: {name}")
+            self.panel.render()
+
+        self.tasks.submit(task, self.panel, run=run, on_done=on_done)
+
+    @staticmethod
+    def _walk_for_tag(t, root, store, name: str) -> list:
+        """The walk :meth:`find_by_tag` falls back on, batching reads so a
+        per-call store reads a directory's worth at a time."""
+        folded, hits, stack = name.casefold(), [], [root]
+        while stack:
+            t.checkpoint()
+            directory = stack.pop()
+            try:
+                children = list(directory.iterdir())
+            except (OSError, Exception):  # noqa: BLE001 — unreadable: skip
+                continue
+            found = store.read_many(children)
+            for child in children:
+                got = found.get(str(child))
+                if isinstance(got, list) and any(tg.name.casefold() == folded for tg in got):
+                    hits.append(str(child))
+                try:
+                    if child.is_dir() and not child.is_symlink():
+                        stack.append(child)
+                except Exception:  # noqa: BLE001
+                    pass
+            t.counted += len(children)
+        return hits
 
     def _cursor_favorite_target(self, pane: dict):
         """``(entry, is_file)`` for the item under ``pane``'s cursor, or ``None``
@@ -7642,8 +7960,8 @@ class XeFMApp:
             ("switch_pane", "Switch active pane"),
             ("nav_left", "Focus left pane / go to parent"),
             ("nav_right", "Focus right pane / go to parent"),
-            ("favorites", "Go to a favorite directory or file"),
-            ("add_favorite", "Add this directory or the item under the cursor to favorites"),
+            ("favorites", "Go to a favorite, or find files by tag"),
+            ("add_favorite", "Add a favorite, or tag the selection"),
             ("context_menu", "Open the context menu for the item under the cursor"),
             ("context_menu_dir", "Open the context menu for the current directory"),
             ("jump_to_path", "Jump to a typed path"),

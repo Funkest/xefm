@@ -48,6 +48,7 @@ from puikit.focus import FocusContainer, move_focus
 from puikit.widgets import Button, Checkbox, MarkdownView, show_message_box
 from puikit.widgets.base import Widget
 
+from xefm import tags
 from xefm.archive import (ArchiveInUseError, get_archive_cache,
                           get_member_archive_path, release_archives_under)
 from xefm.dialog_geometry import (OPEN_MS_VIEWER, animate_open, draw_title_bar,
@@ -763,6 +764,7 @@ class FileOperationService:
                 errors.append((str(src), str(exc)))
                 return 0
             prog.update_progress(src.name)  # counted once it exists, like files
+            tags.carry(src, dest)  # a folder's Finder / xdg tags, best-effort
             ok = 1  # the directory itself
             for child in src.iterdir():
                 ok += self._copy_tree(task, child, dest / child.name,
@@ -811,11 +813,15 @@ class FileOperationService:
         local = same and src.get_scheme() == "file"
         if local and not src.is_symlink() and _clone_file(src, dest, overwrite):
             prog.file_bytes(slot, size, size)  # one syscall, all bytes landed
-            return True
+            return True  # a clone carries every xattr, tags included
         if not src.is_symlink() and (not same or size >= _BYTE_BAR_MIN):
             self._copy_bytes(task, src, dest, size, overwrite, local, prog, slot)
         else:
             src.copy_to(dest, overwrite=overwrite)
+        # Neither path keeps tags everywhere: copystat copies xattrs on Linux
+        # only, and nothing carries them across storages (#585).
+        if not src.is_symlink():
+            tags.carry(src, dest)
         return True
 
     @staticmethod

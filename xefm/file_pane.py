@@ -35,6 +35,7 @@ from puikit.font import Font
 from puikit.text import elide
 from puikit.widgets.base import Widget
 
+from xefm import tags as tags_mod
 from xefm import name_key
 from xefm.dir_scan import is_hidden_path
 
@@ -250,6 +251,12 @@ def _dim_ink(color, bg, amount: float):
     return color if amount <= 0.0 else _mix(color, bg, amount)
 
 
+#: The tag marker and how many a row shows before the name runs out of room.
+_TAG_DOT = "●"
+_MAX_TAG_DOTS = 3
+_TAG_RGB = tags_mod.RGB
+
+
 class FilePane(Widget):
     def __init__(
         self,
@@ -313,6 +320,9 @@ class FilePane(Widget):
         #: (refreshed/sorted/filtered lists are fresh objects), so we measure the
         #: whole pane once per listing rather than every frame.
         self._ext_cache: tuple[int, float] = (0, 0.0)
+        #: The app's :class:`xefm.tags.TagCache` for this pane, or None for no
+        #: tag markers. Rows show their tags as colored dots after the name.
+        self.tag_cache = None
 
     # --- helpers -------------------------------------------------------------
 
@@ -717,7 +727,16 @@ class FilePane(Widget):
         name = basename
         size = info["size_str"]
         date = info["date_str"] if show_date else ""
-        name_text = elide(name, name_w, where=name_elide, measure=measure)
+        # Tag markers: one dot per tag (at most _MAX_TAG_DOTS) after the name,
+        # in the tag's Finder color, or muted for a tag without one. The name
+        # gives up the room they need rather than pushing them out of view.
+        file_tags = (self.tag_cache.get(self.pane.get("files"), entry)
+                     if self.tag_cache is not None else None) or []
+        dots = file_tags[:_MAX_TAG_DOTS]
+        dot_w = measure(_TAG_DOT) if dots else 0.0
+        dots_w = (len(dots) * dot_w + measure(" ")) if dots else 0.0
+        name_text = elide(name, max(0.0, name_w - dots_w), where=name_elide,
+                          measure=measure)
         ext_text = elide(ext, ext_w, where="end", measure=measure) if ext_w > 0 else ""
 
         # Row background carries "selected": the pane background tinted toward the
@@ -840,6 +859,16 @@ class FilePane(Widget):
         ctx.draw_text(content_left, y, name_text,
                       Style(fg=name_fg, bg=text_bg, attr=row_attr, underline_color=under),
                       ink=name_ink)
+        if dots:
+            x = content_left + measure(name_text) + measure(" ")
+            for tag in dots:
+                rgb = _TAG_RGB.get(tag.color_name)
+                fg = (ctx.ink(_dim_ink(rgb, base, dim), on=eff_bg, target=LC_LARGE)
+                      if rgb else col_fg)
+                ctx.draw_text(x, y, _TAG_DOT,
+                              Style(fg=fg, bg=text_bg, attr=row_attr, underline_color=under),
+                              ink=False)
+                x += dot_w
         if ext_text:
             ctx.draw_text(ext_x, y, ext_text,
                           Style(fg=name_fg, bg=text_bg, attr=row_attr, underline_color=under),
