@@ -34,6 +34,7 @@ import re
 import shutil
 import socket
 import subprocess
+import tempfile
 import threading
 import time
 import types
@@ -105,6 +106,9 @@ from xefm.user_api import (ActionContext, PaneApi, hooks as _hooks,
                            load_user_entries, preview_notice,
                            report_user_failure, run_guarded)
 from xefm.batch_rename_dialog import show_batch_rename
+from xefm.remote_edit import EditSessions, RemoteChanged, can_write_back
+from xefm.rename_in_editor import (UnlistableName, apply_plan, names_text,
+                                   parse_plan)
 from xefm.compare_dialog import show_compare_select
 from xefm.compare_selection import compute_compare_selection
 from xefm.sort_dialog import show_sort_dialog
@@ -2007,6 +2011,7 @@ class XeFMApp:
         _hooks.fire("quit", self._user_ctx)
         if getattr(self, "file_monitor", None) is not None:
             self.file_monitor.stop_monitoring()
+        self._close_edit_sessions()
         self._save_application_state()
         self.backend.quit()
 
@@ -3095,6 +3100,7 @@ class XeFMApp:
                 "create_directory": (self.create_directory, False),
                 "create_file": (self.create_file, False),
                 "rename": (self.rename, False),
+                "rename_in_editor": (self.rename_in_editor, False),
                 "copy_names": (self.copy_names_to_clipboard, True),
                 "clipboard_copy": (lambda: self.clipboard_put(cut=False), True),
                 "clipboard_cut": (lambda: self.clipboard_put(cut=True), True),
@@ -3822,6 +3828,8 @@ class XeFMApp:
             MenuItem("New Folder…", on_select=self.create_directory, shortcut=sc("create_directory")),
             MenuItem("New File…", on_select=self.create_file, shortcut=sc("create_file")),
             MenuItem("Rename…", on_select=self.rename, enabled=has_files, shortcut=sc("rename")),
+            MenuItem("Rename in Editor…", on_select=self.rename_in_editor,
+                     enabled=has_files, shortcut=sc("rename_in_editor")),
             MenuItem("Duplicate", on_select=self.duplicate_files,
                      enabled=has_files, shortcut=sc("duplicate_files")),
             MenuItem("Copy to Other Pane", on_select=self.copy_files,
@@ -4192,12 +4200,19 @@ class XeFMApp:
         in one launch (``vim a b``), so a multi-file edit is one editor
         session, not a chain of them. An association set explicitly to
         ``None`` means "no editor for this kind of file" and is honored rather
-        than falling back. Local files only; directories and remote paths are
-        skipped."""
+        than falling back. Directories are skipped. A remote file is edited
+        through a local copy that is uploaded on each save
+        (:meth:`_edit_remote`); one in an archive or another read-only place is
+        skipped with a note."""
         files = []
+        remote = []
         for entry in targets:
             if not self._is_local(entry):
-                self.log_info(f"{entry.name}: edit is only available for local files")
+                if self._is_archive(entry) or not can_write_back(entry):
+                    self.log_info(f"{entry.name}: read-only here — copy it out "
+                                  "to edit it")
+                else:
+                    remote.append(entry)
                 continue
             try:
                 if entry.is_dir():
@@ -4206,6 +4221,8 @@ class XeFMApp:
             except Exception:
                 pass
             files.append(entry)
+        if remote:
+            self._edit_remote(remote)
         if not files:
             return
         # Resolve each file's editor, batching files that share one. A failed
@@ -4236,6 +4253,161 @@ class XeFMApp:
                 return
             self._run_in_terminal(argv + [str(e) for e in fallback])
             self.log_info(f"Edited {self._files_label(fallback)}")
+
+    # --- edit anywhere (#581) ---------------------------------------------------
+
+    #: Seconds between looks at the edited copies of remote files.
+    _EDIT_POLL_SECONDS = 1.0
+
+    @property
+    def edit_sessions(self) -> EditSessions:
+        sessions = getattr(self, "_edit_sessions", None)
+        if sessions is None:
+            sessions = self._edit_sessions = EditSessions(
+                config_manager.config_dir / "edit")
+        return sessions
+
+    def _edit_remote(self, entries: list) -> None:
+        """Edit remote ``entries`` through local copies: download them (a task —
+        the remote may be slow), open the copies with the ordinary editor
+        machinery, and from then on upload each copy whenever it is saved
+        (:meth:`_poll_edit_sessions`). Skipping the directories happens here,
+        on the worker, because asking a remote is a round trip."""
+        sessions = self.edit_sessions
+        task = Task("Downloading for edit", config=self.config, kind="edit_download")
+
+        def run(t: Task) -> dict:
+            opened, failed = [], []
+            for entry in entries:
+                t.checkpoint()
+                try:
+                    if entry.is_dir():
+                        failed.append(f"{entry.name} is a directory")
+                        continue
+                    opened.append(sessions.open(entry))
+                except Exception as exc:
+                    failed.append(f"{entry.name}: {exc}")
+            return {"opened": opened, "failed": failed, "cancelled": t.cancelled()}
+
+        def on_done(res: dict) -> None:
+            for message in res.get("failed", []):
+                self.log_info(f"Could not open for editing: {message}")
+            opened = res.get("opened", [])
+            if not opened:
+                self.panel.render()
+                return
+            for session in opened:
+                self.log_info(f"Editing {session.remote} — saves are uploaded "
+                              f"from {session.local}")
+            self._edit_entries([Path(str(s.local)) for s in opened])
+            # A terminal editor has returned by now, so its saves are already on
+            # disk: send them without waiting for the next poll.
+            self._poll_edit_sessions(reschedule=False)
+            self._schedule_edit_poll()
+
+        self.tasks.submit(task, self.panel, run=run, on_done=on_done)
+
+    def _schedule_edit_poll(self) -> None:
+        """Keep one poll timer running while any edit session lives."""
+        if getattr(self, "_edit_poll_cancel", None) is not None:
+            return
+        if not len(self.edit_sessions):
+            return
+        self._edit_poll_cancel = self.panel.call_later(
+            self._EDIT_POLL_SECONDS, self._poll_edit_sessions)
+
+    def _poll_edit_sessions(self, reschedule: bool = True) -> None:
+        """Upload the copies saved since the last look. One upload task at a
+        time: while another task owns the screen the saves wait for the next
+        poll — they are found again, since an unsent copy stays pending."""
+        if reschedule:
+            self._edit_poll_cancel = None
+        if self.tasks.has_active():
+            if reschedule:
+                self._schedule_edit_poll()
+            return
+        saved = self.edit_sessions.saved()
+        if saved:
+            self._upload_edits(saved)
+        if reschedule:
+            self._schedule_edit_poll()
+
+    def _upload_edits(self, sessions: list) -> None:
+        """Send saved copies back, asking first about any whose remote file
+        changed since it was downloaded or last uploaded. Failures are loud — a
+        message box naming the copy that still holds the edit — because a quiet
+        one would lose the user's work the moment they stopped looking."""
+        manager = self.edit_sessions
+        task = Task("Uploading edit", config=self.config, kind="edit_upload")
+
+        def ask_overwrite(session):
+            def show(panel, deliver):
+                show_message_box(
+                    panel,
+                    f"{session.remote}\n\nchanged on the server since you "
+                    "opened it. Overwrite it with your edit?\n\nYour edit "
+                    f"stays in {session.local} either way.",
+                    title="Remote file changed", icon="warning",
+                    buttons=("Overwrite", "Keep Remote"), default=1, cancel=1,
+                    on_result=lambda label: deliver(label == "Overwrite"))
+            return show
+
+        def run(t: Task) -> dict:
+            sent, kept = [], []
+            for session in sessions:
+                t.checkpoint()
+                try:
+                    try:
+                        manager.upload(session)
+                    except RemoteChanged:
+                        if not t.ask(ask_overwrite(session), headless=False):
+                            session.error = "the remote file changed; not overwritten"
+                            kept.append(session)
+                            continue
+                        manager.upload(session, force=True)
+                    sent.append(session)
+                except Cancelled:
+                    raise
+                except Exception as exc:
+                    session.error = str(exc)
+                    kept.append(session)
+            return {"sent": sent, "kept": kept, "cancelled": t.cancelled()}
+
+        def on_done(res: dict) -> None:
+            for session in res.get("sent", []):
+                self.log_info(f"Uploaded {session.remote}")
+                self._relist_showing(session.remote)
+            kept = res.get("kept", [])
+            for session in kept:
+                self.log_info(f"Upload of {session.remote} failed: "
+                                  f"{session.error}; the edit is kept in "
+                                  f"{session.local}")
+            if kept:
+                body = "\n\n".join(f"{s.remote}: {s.error}\nYour edit is in "
+                                    f"{s.local}" for s in kept)
+                show_message_box(self.panel, body, title="Not uploaded",
+                                 icon="error")
+            self.panel.render()
+
+        self.tasks.submit(task, self.panel, run=run, on_done=on_done)
+
+    def _relist_showing(self, path) -> None:
+        """Re-read each pane that lists ``path``'s directory, so an upload's new
+        size and time show without waiting out a remote listing cache."""
+        parent = str(path.parent)
+        for pane in (self.pm.left_pane, self.pm.right_pane):
+            if str(pane["path"]) == parent:
+                self._relist(pane)
+
+    def _close_edit_sessions(self) -> None:
+        """End every edit session at exit: copies the remote already matches are
+        removed; a copy holding an unsent edit stays, and the log says where."""
+        sessions = getattr(self, "_edit_sessions", None)
+        if sessions is None:
+            return
+        for session in sessions.close_all():
+            self.log_info(f"Unsent edit of {session.remote} kept in "
+                                f"{session.local}")
 
     def subshell(self) -> None:
         """Drop to an interactive shell in the active pane's directory. In
@@ -6432,6 +6604,148 @@ class XeFMApp:
             self.panel.render()
 
         show_batch_rename(self.panel, files, on_done=done)
+        self.panel.render()
+
+    #: An editor that hands control back faster than this, leaving the list
+    #: untouched, is taken to have opened a window of its own and not to be
+    #: done yet — so the user is asked to say when they are.
+    _EDITOR_RETURNED_AT_ONCE = 1.0
+    #: Changes listed by name in the rename confirmation; the rest are counted.
+    _RENAME_PREVIEW_ROWS = 20
+
+    def rename_in_editor(self) -> None:
+        """Rename the selection — or the focused entry — by editing its names
+        in ``TEXT_EDITOR`` (#581): the names go to a temp file one per line, and
+        every line changed when the editor is done is a rename of the file that
+        line stood for, confirmed before anything moves. Planning and applying
+        live in :mod:`xefm.rename_in_editor`; this is the editor round trip."""
+        pane = self.active_pane()
+        if self._is_archive(pane["path"]):
+            self.log_info("Cannot rename inside a read-only archive")
+            return
+        files = [f for f in self._selected_or_focused(pane) if f.name != ".."]
+        if not files:
+            self.log_info("No file to rename")
+            return
+        try:
+            text = names_text(files)
+        except UnlistableName as exc:
+            self.log_info(f"Cannot rename in the editor: {exc}")
+            return
+        argv = self._editor_argv()
+        if not argv:
+            self.log_info("No editor configured: set TEXT_EDITOR in "
+                          "~/.xefm/config.py")
+            return
+        fd, name = tempfile.mkstemp(prefix="xefm-rename-", suffix=".txt")
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+        self._rename_edit_round(pane, files, name, argv, text)
+
+    def _rename_edit_round(self, pane: dict, files: list, list_path: str,
+                           argv: list, written: str) -> None:
+        """One trip to the editor and back for :meth:`rename_in_editor`; the
+        review that follows may send the user round again ("Edit Again")."""
+        started = time.monotonic()
+        self._run_in_terminal(argv + [list_path])
+        quick = time.monotonic() - started < self._EDITOR_RETURNED_AT_ONCE
+        if self._read_rename_list(list_path) == written and (
+                is_desktop_mode() or quick):
+            # The editor came straight back without the list changing: a
+            # window of its own, still open. Wait for the user to say so.
+            def answered(label: str) -> None:
+                if label == "Apply":
+                    self._review_rename_list(pane, files, list_path, argv)
+                else:
+                    self._discard_rename_list(list_path, "Rename cancelled")
+
+            show_message_box(
+                self.panel,
+                f"Edit the names in your editor and save the file, then "
+                f"choose Apply.\n\n{list_path}",
+                title="Rename in Editor", icon="info",
+                buttons=("Apply", "Cancel"), default=0, cancel=1,
+                on_result=answered)
+            self.panel.render()
+            return
+        self._review_rename_list(pane, files, list_path, argv)
+
+    @staticmethod
+    def _read_rename_list(list_path: str) -> str | None:
+        try:
+            with open(list_path, encoding="utf-8", newline="") as f:
+                return f.read()
+        except (OSError, UnicodeDecodeError):
+            return None
+
+    def _discard_rename_list(self, list_path: str, message: str) -> None:
+        try:
+            os.unlink(list_path)
+        except OSError:
+            pass
+        self.log_info(message)
+        self.panel.render()
+
+    def _review_rename_list(self, pane: dict, files: list, list_path: str,
+                            argv: list) -> None:
+        """Read the edited list back, refuse it with reasons or list what it
+        would rename, and rename only on the user's say-so."""
+        text = self._read_rename_list(list_path)
+        if text is None:
+            self._discard_rename_list(list_path, "Rename cancelled: the name "
+                                      "list could not be read as UTF-8")
+            return
+        plan = parse_plan(files, text)
+
+        def again_or_cancel(label: str) -> None:
+            if label == "Edit Again":
+                self._rename_edit_round(pane, files, list_path, argv,
+                                        self._read_rename_list(list_path))
+            elif label == "Rename":
+                self._apply_rename_plan(pane, plan, list_path)
+            else:
+                self._discard_rename_list(list_path, "Rename cancelled")
+
+        if not plan.ok:
+            show_message_box(self.panel, "\n".join(plan.errors),
+                             title="Cannot rename", icon="error",
+                             buttons=("Edit Again", "Cancel"), default=0,
+                             cancel=1, on_result=again_or_cancel)
+            self.panel.render()
+            return
+        if not plan.renames:
+            self._discard_rename_list(list_path, "No names changed")
+            return
+        rows = [f"{name_key.nfc(e.name)}  →  {new}"
+                for e, new in plan.renames[:self._RENAME_PREVIEW_ROWS]]
+        more = len(plan.renames) - len(rows)
+        if more:
+            rows.append(f"… and {more} more")
+        show_message_box(self.panel, "\n".join(rows),
+                         title=f"Rename {len(plan.renames)} item(s)?",
+                         icon="question",
+                         buttons=("Rename", "Edit Again", "Cancel"), default=0,
+                         cancel=2, on_result=again_or_cancel)
+        self.panel.render()
+
+    def _apply_rename_plan(self, pane: dict, plan, list_path: str) -> None:
+        entry = self._focused_entry()
+        focused = str(entry) if entry is not None else None
+
+        def rename(src, dst) -> None:
+            release_archives_under(src)
+            src.rename(dst)
+
+        renamed, errors = apply_plan(plan, rename)
+        for err in errors:
+            self.log_info(f"Rename failed: {err}")
+        self._discard_rename_list(
+            list_path, f"Renamed {len(renamed)} item(s) in the editor"
+            + (f", {len(errors)} failed" if errors else ""))
+        pane["selected_files"].clear()
+        new_name = renamed.get(focused) if focused else None
+        self._relist(pane, on_ready=(
+            (lambda p: self._select_by_name(p, new_name)) if new_name else None))
         self.panel.render()
 
     def _ensure_archive_password(self, entry, on_ready) -> None:
@@ -9079,6 +9393,7 @@ class XeFMApp:
             ("create_directory", "Create new directory"),
             ("create_file", "Create new file"),
             ("rename", "Rename file/directory"),
+            ("rename_in_editor", "Rename the selection in the TEXT_EDITOR"),
             ("copy_files", "Copy selection to the other pane"),
             ("clipboard_copy", "Copy files to the clipboard (or the log's selected text)"),
             ("clipboard_cut", "Cut files to the clipboard: they move when pasted"),

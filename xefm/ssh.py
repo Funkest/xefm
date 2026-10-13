@@ -319,6 +319,10 @@ class SSHPathImpl(PathImpl):
         # SSH paths are always absolute
         return True
     
+    def forget_cached_metadata(self) -> None:
+        from xefm.ssh_cache import get_ssh_cache
+        get_ssh_cache().invalidate_path(self.hostname, self.remote_path)
+
     def stat(self):
         """Return the result of os.stat() on this path"""
         conn = self._get_connection()

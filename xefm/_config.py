@@ -388,6 +388,7 @@ class Config:
         'move_files_to': {'keys': ['Shift-M'], 'selection': 'required'},  # Move selected files to a typed directory
         'delete_files': {'keys': ['K', 'DELETE'], 'selection': 'required'}, # Delete selected files/directories
         'rename': ['R'],                  # Rename selected file/directory
+        'rename_in_editor': ['Shift-R'],  # Rename the selection by editing a name list in TEXT_EDITOR
         'create_file': ['Shift-E'],            # Create new file (prompts for filename)
         'create_directory': {'keys': ['M'], 'selection': 'none'},  # Create new directory (only when no files selected)
         
