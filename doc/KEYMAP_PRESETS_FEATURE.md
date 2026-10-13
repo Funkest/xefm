@@ -52,10 +52,18 @@ digit starts [incremental search](XEFM_USER_GUIDE.md) with that character, so
 `F5`, `F6` and `F8` act on the marked items, or on the item under the cursor
 when nothing is marked.
 
-A few commands that had letter keys have no key in this preset: sort dialog,
-sync panes (`O`), compare and select (`W`), subshell, jump to path, connect to
-server and file details. They are in the menus and the command palette
-(`Ctrl-T`), which also shows each command's current key.
+These commands have no key in this preset:
+
+- the sort dialog, file details, compare and select
+- go to / send to the other pane's directory
+- jump to path, connect to server, add to favorites
+- move to a typed directory, the subshell
+- toggle-select all files / all items, unselect all
+- incremental search's own key (typing a letter already starts one)
+- redraw, reset the pane split
+
+They are all in the menus and the command palette (`Ctrl-T`), which also shows
+each command's current key.
 
 Function keys and modified function keys have terminal sequences, so the
 layout works in a terminal as well as in the desktop app. A terminal may still
