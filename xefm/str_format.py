@@ -6,7 +6,14 @@ Common string formatting functions used throughout XeFM.
 """
 
 import re
+from datetime import datetime
 from pathlib import Path
+
+
+def format_timestamp(timestamp: float) -> str:
+    """A modification time as ``YYYY-MM-DD HH:MM`` (local time) — the form the
+    conflict dialog and the directory diff viewer show side by side."""
+    return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M")
 
 
 def format_size(size: int, compact: bool = False) -> str:

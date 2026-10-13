@@ -85,6 +85,11 @@ a centre separator glyph between the two columns carries each node's verdict:
 - **Identical** — the same on both sides (shown muted).
 - **Pending** — not yet scanned or compared.
 
+The row above the footer details the focused item: its size and modification
+time on each side, with **newer** after the side that is newer. Times less than
+two seconds apart count as the same (FAT/exFAT store times in 2-second steps),
+the same rule the copy conflict dialog's **Overwrite older** uses.
+
 ### Controls
 
 | Key | Action |
