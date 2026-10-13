@@ -858,6 +858,8 @@ _FILER_ACTIONS = [
     _a("context_menu_dir", FILER, "Open the context menu for the current directory"),
     _a("jump_to_path", FILER, "Jump to a typed path"),
     _a("history", FILER, "Go to a recently visited directory"),
+    _a("go_back", FILER, "Go back to the directory shown before"),
+    _a("go_forward", FILER, "Go forward again after going back"),
     _a("drives", FILER, "Show drives and volumes",
        aliases=("drives_dialog",)),
     _a("connect_server", FILER, "Connect to a network server",
