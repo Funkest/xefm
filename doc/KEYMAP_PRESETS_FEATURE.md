@@ -15,7 +15,8 @@ remembers your choice for later sessions.
 ## The first launch
 
 On its first start, XeFM shows a **Keymap** dialog with one button per preset.
-**Later** (or `Esc`) uses AFX style for now and asks again next time.
+It has no Cancel, and `Esc` does not close it: choose one to go on. You can
+switch later from View → Keymap.
 
 If you used an earlier version of XeFM, there is no question. XeFM keeps AFX
 style, the keymap you have been using, and says so in the log. View → Keymap

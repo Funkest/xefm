@@ -361,12 +361,13 @@ class InTheApp(unittest.TestCase):
                           lambda *a, **k: asked.append(k)):
             self.app._ask_keymap_preset()
         self.assertEqual(asked[0]["buttons"],
-                         ("AFX style (letters)", "Orthodox (function keys)", "Later"))
+                         ("AFX style (letters)", "Orthodox (function keys)"))
+        self.assertFalse(asked[0]["dismissable"], "there is no Cancel")
         asked[0]["on_result"]("Orthodox (function keys)")
         self.assertEqual(self.app._keymap_preset, "orthodox")
         self.assertEqual(self._action(_key("f5")), "copy_files")
 
-    def test_later_asks_again_at_the_next_launch(self):
+    def test_quitting_unanswered_asks_again_at_the_next_launch(self):
         self._reopen(created=True)
         # Next launch: config.py exists now, but the question is still open.
         self.app.file_monitor.stop_monitoring()

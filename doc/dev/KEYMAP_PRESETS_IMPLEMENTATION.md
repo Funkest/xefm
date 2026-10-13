@@ -134,16 +134,16 @@ apply. When `resolve` already gives a preset, it does nothing. Otherwise:
   because there was none. That is a first launch, so the question stays open:
   state `keymap.ask = True`, and `_keymap_preset` stays None.
 - `keymap.ask` already True means a first launch whose question was never
-  answered (Later, Esc, or quit). It stays open.
+  answered (XeFM quit with the dialog open). It stays open.
 - Neither means an install carried over from before presets existed. It gets
   `keymap.preset = 'afx'`, the keymap it was running, and `run()` logs one
   line saying so. The log pane does not exist yet in `__init__`.
 
 `run()` calls `_ask_keymap_preset` when `_keymap_preset` is None, in place
 of that launch's tip of the day, so two dialogs never stack. It is a
-markdown message box with one button per preset plus **Later**, which is the
-cancel button. A preset button calls `set_keymap_preset`, which also clears
-`keymap.ask`. `__init__` never opens the dialog, because tests construct the
+markdown message box with one button per preset and no Cancel, opened with
+PuiKit's `dismissable=False` so Esc does nothing. A preset button calls
+`set_keymap_preset`, which also clears `keymap.ask`. `__init__` never opens the dialog, because tests construct the
 app without `run()`.
 
 `XeFMApp._apply_keymap_preset` runs right after the state manager exists, and
@@ -211,7 +211,7 @@ The app half covers:
 - switching relabeling the keymap;
 - a typed letter opening search with it, and no type-ahead under AFX;
 - the choice surviving a restart, and `KEY_PRESET` winning over the menu;
-- the first launch: carried over → AFX, fresh → asked, Later → asked again;
+- the first launch: carried over → AFX, fresh → asked with no Cancel, quit unanswered → asked again;
 - the log line on switching with overriding entries.
 
 It isolates itself from the developer's `~/.xefm/config.py` by emptying the

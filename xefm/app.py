@@ -4943,9 +4943,9 @@ class XeFMApp:
         config_manager._key_bindings = None
 
     def _ask_keymap_preset(self) -> None:
-        """The first launch's question: which keymap. Neither is the default;
-        "Later" (and Esc) keeps asking at each launch, with
-        :data:`keymap_presets.FALLBACK` meanwhile."""
+        """The first launch's question: which keymap. Neither is the default,
+        so there is no Cancel and Esc does nothing; one must be chosen. Quit
+        before choosing, and the next launch asks again."""
         names = list(keymap_presets.PRESETS)
         labels = [keymap_presets.LABELS[n] for n in names]
         lines = ["Choose how XeFM's keys work. **View > Keymap** changes it "
@@ -4955,17 +4955,13 @@ class XeFMApp:
             lines.append("")
 
         def answered(label: str) -> None:
-            if label in labels:
-                self.set_keymap_preset(names[labels.index(label)])
-            else:
-                self.log_info("Keymap not chosen yet — XeFM asks again at the "
-                              "next launch; View > Keymap chooses now")
+            self.set_keymap_preset(names[labels.index(label)])
             self.panel.render()
 
         show_message_box(
             self.panel, "\n".join(lines).rstrip(), title="Keymap",
-            icon="question", buttons=(*labels, "Later"),
-            default=0, cancel=len(labels), on_result=answered, markdown=True)
+            icon="question", buttons=tuple(labels), default=0,
+            on_result=answered, markdown=True, dismissable=False)
         self.panel.render()
 
     def set_keymap_preset(self, name: str) -> None:
