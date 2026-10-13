@@ -316,8 +316,7 @@ KEY_BINDINGS = {
 
 ### Safety Features
 - **Confirmation Dialogs**: User confirmation for destructive operations
-- **Conflict Resolution**: Handle file name conflicts with Overwrite, Skip, Rename, or Cancel options
-- **Rename on Conflict**: Specify alternative filenames when conflicts occur during copy/move/extract
+- **Conflict Resolution**: See both files' size and date, then Overwrite, Overwrite older, Skip, Keep both, Compare, or Cancel — once or for all remaining conflicts
 - **Permission Checks**: Validate file system permissions
 - **Undo Prevention**: Clear warnings about irreversible operations
 

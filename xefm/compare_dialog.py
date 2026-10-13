@@ -27,7 +27,6 @@ from typing import Any, Callable, Optional
 from puikit.backend import Style
 from puikit.event import Event, EventType
 from puikit.focus import FocusContainer
-from puikit.font import Font
 from puikit.layout import LayoutContext, SizeRequest
 from puikit.theme import DEFAULT_THEME
 from puikit.widgets import Checkbox
@@ -135,24 +134,6 @@ class ConditionRow(Widget):
         return False
 
 
-def _layout_context(backend):
-    """Build a ``LayoutContext`` for ``backend`` off-draw, so :meth:`show` can
-    measure row heights (and thus size the box) before a DrawContext exists.
-    Mirrors ``DrawContext.layout_context`` — the same capability resolution."""
-    cw, ch = backend.base_size
-    caps = backend.capabilities
-    return LayoutContext(
-        cw, ch,
-        snap=not caps.supports("pixel_layout"),
-        hairline=caps.supports("hairline"),
-        native_menus=caps.supports("native_menus"),
-        measure=backend.measure_text,
-        line_height=backend.measure_line_height,
-        scrollbar_units=backend.scrollbar_units,
-        image_size=backend.image_size,
-    )
-
-
 class CompareSelectDialog(FocusContainer, Widget):
     """Modal criteria picker. Construct via :func:`show_compare_select`, which sizes
     and pushes the layer; this class owns layout, focus, and events."""
@@ -228,9 +209,9 @@ class CompareSelectDialog(FocusContainer, Widget):
     def _content_width(self, measure) -> float:
         """Width of the widest content line (base units), so the box hugs its text
         instead of a fixed span: the intro, the longest key hint, the plain
-        checkboxes, and the widest condition row (gutter + segments). ``measure`` must
-        be the *rendering* text measurer (proportional on GUI) — a LayoutContext's
-        monospace measure would over-size the box on a proportional backend."""
+        checkboxes, and the widest condition row (gutter + segments). ``measure``
+        measures in the face the text is drawn in (a LayoutContext's or a draw
+        context's ``measure_text``), so the box fits what renders."""
         opt_x0 = self._opt_gutter(measure)
         row_w = max(
             opt_x0 + sum(measure(o) for o in r.options)
@@ -248,14 +229,11 @@ class CompareSelectDialog(FocusContainer, Widget):
     def show(self, panel: Any, *, region=None, z: int = 70) -> None:
         self._panel = panel
         sw, sh = panel.backend.size_units
-        # Size to the content up front, measuring through the backend with the
-        # proportional UI font — the same face it renders in (a bare column count
-        # would over-size the box on a GUI backend). Grid backends ignore the font
-        # and count columns. This mirrors how show_message_box sizes itself, so no
-        # draw-time re-fit is needed.
-        prop = Style(font=Font())
-        measure = lambda t: panel.backend.measure_text(t, prop)  # noqa: E731
-        lc = _layout_context(panel.backend)
+        # Size to the content up front, measured the way it will draw (the
+        # Panel's LayoutContext folds a font-less style to the UI font on a
+        # GUI, as a draw does), so no draw-time re-fit is needed.
+        lc = panel.layout_context()
+        measure = lc.measure_text
         row_h = self._size.measure(lc, "y", 0.0).preferred
         w = float(min(int(sw) - 4, self._content_width(measure) + 4.0))  # +2 margin/side
         h = float(min(sh - 2.0, self._box_height(self._TITLE_ROWS, row_h)))

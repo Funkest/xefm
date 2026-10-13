@@ -119,6 +119,16 @@ def gui_title_bar_height(ctx: Any, title_style: Any) -> float:
     return ctx.line_height(title_style) + 2.0 * _GUI_TITLE_PAD
 
 
+def title_content_top(lc: Any, y: float = 1.0) -> float:
+    """The first content row under a title bar drawn at ``y`` — what
+    :func:`draw_title_bar` returns — from a ``LayoutContext``, so a dialog can
+    size its box before it is shown (``panel.layout_context()``)."""
+    if lc.vector_shapes:
+        title_h = lc.measure_line_height(Style(attr=TextAttribute.BOLD))
+        return title_h + 2.0 * _GUI_TITLE_PAD + _GUI_CONTENT_GAP
+    return y + 2.0
+
+
 def draw_title_bar(
     ctx: Any,
     title: str,

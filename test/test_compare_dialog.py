@@ -14,8 +14,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
 from xefm import app as xefm_app  # noqa: E402
-from xefm.compare_dialog import (CompareSelectDialog, ConditionRow,  # noqa: E402
-                                 _layout_context)
+from xefm.compare_dialog import CompareSelectDialog, ConditionRow  # noqa: E402
 from xefm.path import Path  # noqa: E402
 from xefm.state_manager import XeFMStateManager  # noqa: E402
 from puikit.backends import create_backend  # noqa: E402
@@ -378,7 +377,7 @@ class CompareDialogApp(unittest.TestCase):
 
     def test_the_dialog_grows_a_row_for_it(self):
         plain = self._open()
-        row_h = plain._size.measure(_layout_context(self.b), "y", 0.0).preferred
+        row_h = plain._size.measure(plain._panel.layout_context(), "y", 0.0).preferred
         plain_h = plain._box_height(plain._TITLE_ROWS, row_h)
         plain.handle_event(_key("escape"))
         virtual = self._open_virtual()

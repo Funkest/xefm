@@ -1,6 +1,7 @@
 """Tests for the shared file-operation engine (xefm.file_operations) and the
 central task system (xefm.task): recursive counting, per-file execution, the
-conflict resolution (skip / overwrite / keep-both + apply-to-all),
+conflict resolution (skip / overwrite / overwrite older / keep-both +
+apply-to-all),
 cancellation, and the worker↔main-thread UI bridge."""
 
 import os
@@ -434,6 +435,96 @@ def test_resolve_cancel_raises(tmp_path, cfg, svc):
         svc._resolve(task, [_P(src / "c.txt")], _P(dst), 70, None)
 
 
+# --- overwrite older (#545) ---------------------------------------------------
+
+def _aged(path, age):
+    """Set ``path``'s mtime ``age`` seconds into the past."""
+    t = time.time() - age
+    os.utime(path, (t, t))
+
+
+def test_resolve_overwrite_older_file(tmp_path, cfg, svc):
+    """A file is overwritten only where the destination is older; a newer
+    destination is skipped like an explicit Skip."""
+    src, dst = tmp_path / "s", tmp_path / "d"
+    src.mkdir(); dst.mkdir()
+    for n in ("stale.txt", "fresh.txt"):
+        (src / n).write_text("new")
+        (dst / n).write_text("old")
+    _aged(dst / "stale.txt", 3600)
+    _aged(src / "fresh.txt", 3600)
+    task = _scripted_task(cfg, [("overwrite_older", True)])
+    plan, skipped = svc._resolve(task, [_P(src / "stale.txt"), _P(src / "fresh.txt")],
+                                 _P(dst), 70, None)
+    assert skipped == 1
+    assert [(t.name, ow) for t, _d, ow in plan] == [("stale.txt", True)]
+
+
+def test_overwrite_older_slack_treats_close_times_as_equal(tmp_path):
+    """Within the 2-second slack (FAT's mtime resolution) nothing is "older"."""
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.write_text("x"); b.write_text("x")
+    _aged(a, 0)
+    _aged(b, 1)
+    assert not F._dest_is_older(_P(a), _P(b))
+    _aged(b, 10)
+    assert F._dest_is_older(_P(a), _P(b))
+
+
+def _merge_tree(tmp_path):
+    """A source folder colliding with a destination folder: ``old.txt`` is newer
+    at the source, ``new.txt`` newer at the destination, ``only.txt`` absent."""
+    src, dst = tmp_path / "s" / "f", tmp_path / "d" / "f"
+    src.mkdir(parents=True); dst.mkdir(parents=True)
+    for n in ("old.txt", "new.txt", "only.txt"):
+        (src / n).write_text("SRC")
+    for n in ("old.txt", "new.txt"):
+        (dst / n).write_text("DST")
+    _aged(dst / "old.txt", 3600)
+    _aged(src / "new.txt", 3600)
+    return src, dst
+
+
+@pytest.mark.parametrize("concurrency", ["none", "auto"])
+def test_overwrite_older_merges_folder_file_by_file(tmp_path, cfg, svc, concurrency):
+    cfg.TRANSFER_CONCURRENCY = concurrency
+    src, dst = _merge_tree(tmp_path)
+    task = _scripted_task(cfg, [("overwrite_older", False)])
+    logs = []
+    res = svc._run(task, "copy", [_P(src)], _P(dst.parent), None, logs.append, 70)
+    assert not res["errors"]
+    assert (dst / "old.txt").read_text() == "SRC"   # destination was older
+    assert (dst / "new.txt").read_text() == "DST"   # destination was newer: kept
+    assert (dst / "only.txt").read_text() == "SRC"  # no collision: copied
+    assert any("Kept 'new.txt'" in m for m in logs)
+
+
+@pytest.mark.parametrize("concurrency", ["none", "auto"])
+def test_overwrite_older_move_keeps_source_when_a_file_was_kept(tmp_path, cfg, svc,
+                                                                 concurrency):
+    """A move never deletes the source of a file it did not carry over."""
+    cfg.TRANSFER_CONCURRENCY = concurrency
+    src, dst = _merge_tree(tmp_path)
+    task = _scripted_task(cfg, [("overwrite_older", False)])
+    svc._run(task, "move", [_P(src)], _P(dst.parent), None, None, 70)
+    assert (dst / "old.txt").read_text() == "SRC"
+    assert (dst / "new.txt").read_text() == "DST"
+    assert (src / "new.txt").read_text() == "SRC"   # still there to decide about
+
+
+@pytest.mark.parametrize("concurrency", ["none", "auto"])
+def test_overwrite_older_move_drops_source_when_everything_moved(tmp_path, cfg, svc,
+                                                                  concurrency):
+    cfg.TRANSFER_CONCURRENCY = concurrency
+    src, dst = _merge_tree(tmp_path)
+    (src / "new.txt").unlink()
+    (dst / "new.txt").unlink()
+    task = _scripted_task(cfg, [("overwrite_older", False)])
+    svc._run(task, "move", [_P(src)], _P(dst.parent), None, None, 70)
+    assert (dst / "old.txt").read_text() == "SRC"
+    assert not src.exists()
+
+
 # --- counting + cancellation -------------------------------------------------
 
 def test_count_nodes_and_bytes(tmp_path, svc):
@@ -521,19 +612,19 @@ def test_conflict_dialog_renders_message_checkbox_and_buttons():
     text = "\n".join(backend.snapshot())
     assert "report.final.pdf" in text                 # the message / filename
     assert "Apply to all remaining" in text           # the checkbox
-    for label in ("Overwrite", "Skip", "Keep both", "Cancel"):
+    for label in ("Overwrite", "Overwrite older", "Skip", "Keep both", "Cancel"):
         assert label in text
+    assert "Compare" not in text                      # nothing to compare without sides
 
 
-def test_conflict_dialog_accent_button_is_the_focused_default():
-    """The accent ("primary") fill marks the button Enter presses, so exactly one
-    button wears it and it is the one focus starts on — the safe Skip, matching
-    the app's other destructive confirms."""
+def test_conflict_dialog_default_is_marked_by_focus_alone():
+    """Focus starts on the safe Skip, matching the app's other destructive
+    confirms. Enter presses the focused button, so no button wears the accent
+    fill — it would mark a button Enter no longer presses once focus moves."""
     from xefm.file_operations import ConflictDialog
     dlg = ConflictDialog("a.txt", 1, 1, on_result=lambda a: None)
-    primary = [b for b in dlg._buttons if b.variant == "primary"]
-    assert [b.label for b in primary] == ["Skip"]
-    assert dlg._focused is primary[0]
+    assert {b.variant for b in dlg._buttons} == {"secondary"}
+    assert dlg._focused.label == "Skip"
 
 
 def test_conflict_dialog_arrow_keys_move_focus():
@@ -545,6 +636,8 @@ def test_conflict_dialog_arrow_keys_move_focus():
     def key(name):
         dlg.handle_event(Event(EventType.KEY, key=name, char=None, modifiers=set()))
 
+    key("left")
+    assert dlg._focused.label == "Overwrite older"
     key("left")
     assert dlg._focused.label == "Overwrite"
     key("left")                                   # wraps to the row's end
@@ -560,6 +653,125 @@ def test_conflict_dialog_arrow_keys_move_focus():
     key("up")
     key("right")                                  # from the checkbox, into the row
     assert dlg._focused.label == "Overwrite"
+
+
+def _sides(tmp_path, src_text="new content", dst_text="old", dirs=False):
+    from xefm.file_operations import ConflictSide
+    a, b = tmp_path / "a.txt", tmp_path / "b.txt"
+    if dirs:
+        a.mkdir(); b.mkdir()
+    else:
+        a.write_text(src_text); b.write_text(dst_text)
+    _aged(b, 86400)
+    return ConflictSide.of(_P(a)), ConflictSide.of(_P(b))
+
+
+def test_conflict_dialog_shows_both_sides_and_marks_newer_larger(tmp_path):
+    from xefm.file_operations import ConflictDialog
+    source, existing = _sides(tmp_path)
+    backend = MemoryBackend(width=100, height=30, capabilities=PROFILE_GUI_DESKTOP)
+    panel = Panel(backend)
+    dlg = ConflictDialog("a.txt", 1, 1, on_result=lambda a: None,
+                         source=source, existing=existing)
+    dlg.show(panel)
+    panel.render()
+    lines = backend.snapshot()
+    src_row = next(line for line in lines if "Source" in line)
+    dst_row = next(line for line in lines if "Existing" in line)
+    assert "11 B" in src_row and "larger" in src_row and "newer" in src_row
+    assert "3 B" in dst_row and "larger" not in dst_row and "newer" not in dst_row
+    assert "Compare" in "\n".join(lines)
+
+
+@pytest.mark.parametrize("profile", ["PROFILE_TUI", "PROFILE_GUI_DESKTOP"])
+def test_conflict_dialog_is_sized_to_its_message(tmp_path, profile):
+    """The box is sized to the message as it lays out (the table's height is
+    the backend's), so the message neither scrolls nor leaves spare rows."""
+    from xefm.file_operations import ConflictDialog
+    source, existing = _sides(tmp_path)
+    for width in (100, 56):  # one-row and wrapped buttons / table cells
+        backend = MemoryBackend(width=width, height=40,
+                                capabilities=globals()[profile])
+        panel = Panel(backend)
+        dlg = ConflictDialog("a.txt", 1, 1, on_result=lambda a: None,
+                             source=source, existing=existing)
+        dlg.show(panel)
+        for _ in range(50):          # let the open animation settle
+            backend.run_animation_ticks()
+        panel.render()
+        msg = dlg._msg
+        assert msg._wrap_width == dlg._size[0] - 4          # no scrollbar gutter
+        assert 0 <= msg._view_h - msg._row_tops[-1] < 1.0   # no spare row
+
+
+def test_conflict_dialog_children_sit_on_the_popup_surface(tmp_path):
+    """On a grid, the table's borders and the checkbox label take the popup
+    surface — not the terminal default the layer would otherwise hand down."""
+    from xefm.file_operations import ConflictDialog
+    source, existing = _sides(tmp_path)
+    backend = MemoryBackend(width=100, height=30, capabilities=PROFILE_TUI)
+    panel = Panel(backend)
+    dlg = ConflictDialog("a.txt", 1, 1, on_result=lambda a: None,
+                         source=source, existing=existing)
+    dlg.show(panel)
+    for _ in range(50):
+        backend.run_animation_ticks()
+    panel.render()
+    rect = panel._layers[-1].rect
+    x0, y0 = int(rect.x), int(rect.y)
+    unpainted = [(x, y) for y in range(y0 + 1, y0 + int(rect.h) - 1)
+                 for x in range(x0 + 1, x0 + int(rect.w) - 1)
+                 if backend.style_at(x, y).bg is None]
+    assert unpainted == []
+
+
+def test_conflict_dialog_offers_no_compare_for_folders(tmp_path):
+    from xefm.file_operations import ConflictDialog
+    source, existing = _sides(tmp_path, dirs=True)
+    dlg = ConflictDialog("a.txt", 1, 1, on_result=lambda a: None,
+                         source=source, existing=existing)
+    assert "Compare" not in [b.label for b in dlg._buttons]
+
+
+def test_conflict_dialog_buttons_wrap_in_a_narrow_window(tmp_path):
+    """Six buttons do not fit one row of a narrow dialog; they wrap, and every
+    one stays inside the box."""
+    from xefm.file_operations import ConflictDialog
+    source, existing = _sides(tmp_path)
+    backend = MemoryBackend(width=56, height=40, capabilities=PROFILE_TUI)
+    panel = Panel(backend)
+    dlg = ConflictDialog("a.txt", 1, 1, on_result=lambda a: None,
+                         source=source, existing=existing)
+    dlg.show(panel)
+    panel.render()
+    box_w = dlg._size[0]
+    rects = [r for w, r in dlg._child_rects if w is not dlg._checkbox]
+    assert len(rects) == 6
+    assert all(x1 <= box_w - 2 for _x0, x1, _y0, _y1 in rects)
+    assert len({y0 for _x0, _x1, y0, _y1 in rects}) == 2
+
+
+def test_conflict_dialog_compare_opens_diff_and_returns(tmp_path):
+    """Compare (``d`` or ``=``) opens the diff viewer above the dialog without
+    answering it; closing the viewer lands back on the still-open dialog."""
+    from xefm.file_operations import ConflictDialog
+    source, existing = _sides(tmp_path)
+    answers = []
+    backend = MemoryBackend(width=100, height=30, capabilities=PROFILE_GUI_DESKTOP)
+    panel = Panel(backend)
+    dlg = ConflictDialog("a.txt", 1, 1, on_result=answers.append,
+                         source=source, existing=existing)
+    dlg.show(panel)
+    panel.render()
+    for char in ("d", "="):
+        panel.dispatch_event(Event(EventType.KEY, key=char, char=char, modifiers=set()))
+        assert _top(panel) == "DiffViewer"
+        assert answers == []
+        panel.dispatch_event(Event(EventType.KEY, key="escape", char=None,
+                                   modifiers=set()))
+        assert _top(panel) == "ConflictDialog"
+    panel.dispatch_event(Event(EventType.KEY, key="u", char="u", modifiers=set()))
+    assert answers == [("overwrite_older", False)]
 
 
 def test_op_errors_body_and_none():

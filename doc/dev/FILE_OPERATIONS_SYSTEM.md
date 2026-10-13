@@ -27,7 +27,7 @@ sequenceDiagram
     W->>W: _resolve() — build plan of survivors
     loop each colliding destination
         W->>U: ask() → ConflictDialog (via pump)
-        U-->>W: Overwrite / Skip / Keep both / Cancel
+        U-->>W: Overwrite / Overwrite older / Skip / Keep both / Cancel
     end
     W->>W: _count() → set progress total
     loop each planned target
@@ -81,18 +81,30 @@ A top-level target is `done` if any of its entries succeeded; `failed` only if i
 
 ## Conflict resolution (`ConflictDialog`)
 
-For copy/move, `_resolve` prompts per collision through the task's UI bridge — `task.ask(_conflict_prompt(...))` pushes a `ConflictDialog` (a `FocusContainer` + `Widget`) that stacks just above the progress dialog. It offers four actions plus an **apply-to-all-remaining** checkbox, and reports `(action, apply_to_all)`:
+For copy/move, `_resolve` prompts per collision through the task's UI bridge — `task.ask(_conflict_prompt(...))` pushes a `ConflictDialog` (a `FocusContainer` + `Widget`) that stacks just above the progress dialog. `_conflict_prompt` stats both sides into a `ConflictSide` (path, folder?, size, mtime) **on the task thread** before posting the prompt, so a remote stat never blocks the UI; the dialog renders them as a Markdown table under the message (`_sides_markdown`), marking the newer and the larger side. It offers these actions plus an **apply-to-all-remaining** checkbox, and reports `(action, apply_to_all)`:
 
 | Action | Key | Effect |
 |---|---|---|
 | Overwrite | `o` | replace the destination (`overwrite=True`) |
+| Overwrite older | `u` | a file: `overwrite=True` if `_dest_is_older`, else counted as skipped. A folder merge: `overwrite=OverwriteOlder()`, decided per file (below) |
 | Skip | `s` | leave it; increment `skipped` |
 | Keep both | `k` | write to a fresh `name (N)` (via `_unique_dest`) |
+| Compare | `d` / `=` | not an answer: `show_diff_viewer` above the dialog (`z + 5`); closing the viewer lands back on the dialog, still waiting. Offered only when both sides are files |
 | Cancel | `c` / `Esc` | raise `Cancelled` — abort the whole operation |
 
-`a` / Space toggles apply-to-all, Tab moves focus, Enter activates the focused button. Left/Right walk the button row (wrapping at its ends, as `MessageBox` does); Up/Down hop between the row and the checkbox above it, returning to the button last focused. When apply-to-all is checked, the chosen action is reused for every remaining collision without prompting.
+`a` / Space toggles apply-to-all, Tab moves focus, Enter activates the focused button. Left/Right walk the buttons (wrapping at the ends, as `MessageBox` does); Up/Down hop between the buttons and the checkbox above them, returning to the button last focused. When apply-to-all is checked, the chosen action is reused for every remaining collision without prompting — for Overwrite older that still means a per-item date check, which is what makes it "overwrite all older".
 
-**Skip is the default** (`_DEFAULT_CONFLICT_ACTION`): it starts focused *and* wears the accent `primary` fill, while the other three are `secondary`. The two must name the same button — the accent reads as "this is what Enter does", so it belongs on the safe resolution, matching the app's other destructive confirms (Delete, archive overwrite), which put the accent on Cancel.
+The box is sized to its content, not to a row count. `show` asks the message for its height — `MarkdownView.measure(panel.layout_context(), "y", w - 4)`, the same layout its draw runs — because the table's height is the backend's: a GUI table's border and cell rows are not whole base units, so any fixed row estimate leaves spare space on one backend or scrolls on the other. Title (`title_content_top`), message, a one-row gap, the checkbox and the button rows add up to the height, rounded up to whole rows on a grid. Six buttons do not fit one row of a narrow dialog, so `_button_rows` breaks them into rows by measured width; `show` runs the same breaking with the same `LayoutContext` for the height, and `draw` places what it returns.
+
+**Skip is the default** (`_DEFAULT_CONFLICT_ACTION`): focus starts on it, so a bare Enter skips — the safe resolution, matching the app's other destructive confirms (Delete, archive overwrite), whose focus starts on Cancel. Every button is `secondary`: Enter presses the *focused* button and focus always rests on one, so the focus ring is the one cue for what Enter does. An accent fill pinned to Skip would only repeat that until focus moved, then mark a button Enter no longer presses. PuiKit's `MessageBox` follows the same rule.
+
+### Overwrite older
+
+`_dest_is_older(src, dest)` is true when the source's mtime exceeds the destination's by more than `_MTIME_SLACK` (2 s — FAT/exFAT's resolution, the same allowance as rsync's `--modify-window`). An unreadable time on either side answers false: the rule never overwrites on a guess. The dialog's "newer" mark uses the same slack, so what it shows is what the action will do.
+
+Collisions are resolved at the top level only, so a folder merged under this rule carries the rule down as its `overwrite` value: an `OverwriteOlder` instance, truthy so every flag-style check treats it as a merge. `_copy_file` is the one place that looks inside — on an inner collision it overwrites when `_dest_is_older`, otherwise returns False (skipped, logged by `_log_kept`) and sets the instance's `kept`. It hands only a plain `bool` on to the storage layer. One instance per target, shared by the parallel pool's jobs for that target; `kept` is only ever assigned True, so no lock is needed.
+
+A move removes its source after a merge only when nothing failed **and** nothing was kept (`_kept_any`) — in both the sequential `_execute_one` and the parallel `_run_parallel` — so a file whose destination was newer is never deleted from the source without having been carried over.
 
 ## Duplicate
 
