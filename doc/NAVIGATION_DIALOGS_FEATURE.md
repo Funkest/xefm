@@ -111,9 +111,9 @@ not removed there: delete them from your config.
 
 ### Tags in the same dialogs
 
-**B** also tags files, and **J** also finds them by tag. The **B** dialog
-lists your tags after the favorite rows, and the **J** list shows them after
-your favorites. See [File Tags](FILE_TAGS_FEATURE.md).
+**B** also tags files: the **B** dialog lists your tags after the favorite
+rows. Finding files by tag is a search, not a place to go, so it is
+**View → Search Tags…**, not **J**. See [File Tags](FILE_TAGS_FEATURE.md).
 
 ### Default favorites
 

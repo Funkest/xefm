@@ -126,6 +126,7 @@ _ORTHODOX = Preset(
         "clear_filter": ["Ctrl-F10"],           # TC: show all files
         "isearch": [],                          # typing a letter searches
         "index_search": [],
+        "find_by_tag": [],
         # Places
         "open_item": ["ENTER", "Ctrl-PAGE_DOWN"],
         "go_parent": ["BACKSPACE", "Ctrl-PAGE_UP"],

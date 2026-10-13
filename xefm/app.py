@@ -1681,14 +1681,6 @@ def _search_rules(show_hidden: bool, recursive: bool):
 
     return shows, descend
 
-class _TagJump:
-    """A tag row in the J picker (#585)."""
-    __slots__ = ("tag",)
-
-    def __init__(self, tag):
-        self.tag = tag
-
-
 def _tag_label(tag) -> str:
     """A tag as a picker row names it: its color in words, since a list row
     cannot carry a colored dot."""
@@ -3531,6 +3523,7 @@ class XeFMApp:
                 "connect_server": (self.show_connect_server, False),
                 "find_files": (self.show_search, False),
                 "index_search": (self.index_search, False),
+                "find_by_tag": (self.show_tag_search, False),
                 "find_in_files": (self.show_content_search, False),
                 "history": (self.show_history, False),
                 "go_back": (self.go_back, False),
@@ -4454,6 +4447,9 @@ class XeFMApp:
                      on_select=lambda: self._menu("index_search"),
                      enabled=lambda: os_index.engine() is not None,
                      shortcut=sc("index_search")),
+            MenuItem("Search Tags…", on_select=lambda: self._menu("find_by_tag"),
+                     enabled=lambda: tags.store_for(self.active_pane()["path"]) is not None,
+                     shortcut=sc("find_by_tag")),
             SEPARATOR,
             MenuItem("Show Hidden Files", on_select=lambda: self._menu("toggle_hidden"),
                      checked=lambda: self.flm.show_hidden, shortcut=sc("toggle_hidden")),
@@ -5828,10 +5824,6 @@ class XeFMApp:
         remove key forgets an added one; a config row stays, since the next
         config load would only bring it back."""
         rows = list(favorites.get_favorites())
-        # Tags follow the favorites (#585): picking one lists the files under
-        # this pane's directory that carry it.
-        if tags.store_for(self.active_pane()["path"]) is not None:
-            rows += [_TagJump(tag) for tag in self._known_tags()]
         if not rows:
             key = keys_label_for_action("add_favorite")
             hint = f" Press {key} to add one." if key else ""
@@ -5840,29 +5832,13 @@ class XeFMApp:
             self.panel.render()
             return
 
-        def label(row) -> str:
-            if isinstance(row, _TagJump):
-                return f"Tag: {_tag_label(row.tag)}  —  files tagged here and below"
-            return f"{row.name}  —  {row.path}"
-
-        def accept(row) -> None:
-            if isinstance(row, _TagJump):
-                self.find_by_tag(row.tag.name)
-            else:
-                self._jump_to_favorite(row)
-
-        def remove(row) -> bool:
-            if isinstance(row, _TagJump):
-                return self._forget_known_tag(row.tag)
-            return self._forget_favorite(row)
-
         # Middle-elide the "name — path" rows so a long path keeps its tail (the
         # leaf directory) rather than being clipped away (issue #211).
         show_filter_list(
-            self.panel, rows, title="Go to Favorite or Tag",
-            to_label=label,
-            on_accept=accept,
-            on_remove=remove,
+            self.panel, rows, title="Go to Favorite",
+            to_label=lambda row: f"{row.name}  —  {row.path}",
+            on_accept=self._jump_to_favorite,
+            on_remove=self._forget_favorite,
             region=self._active_pane_region(),
             elide_where="middle",
         )
@@ -6128,6 +6104,27 @@ class XeFMApp:
             self.panel.render()
 
         self._read_tags_then(targets, show)
+
+    def show_tag_search(self) -> None:
+        """Search Tags (#605): pick a tag — or type one not listed — and the
+        pane lists the files under its directory that carry it. A search, so
+        it has its own action rather than riding the favorites picker (J),
+        which goes to places. The remove key forgets a tag from the list; the
+        files keep it."""
+        root = self.active_pane()["path"]
+        if tags.store_for(root) is None:
+            self.log_info("Tags are not supported here")
+            self.panel.render()
+            return
+        rows = self._known_tags()
+        show_filter_list(
+            self.panel, rows, title="Search Tags",
+            to_label=_tag_label,
+            on_accept=lambda tag: self.find_by_tag(tag.name),
+            on_accept_text=lambda text: text.strip() and self.find_by_tag(text.strip()),
+            on_remove=self._forget_known_tag,
+            region=self._active_pane_region())
+        self.panel.render()
 
     def find_by_tag(self, name: str) -> None:
         """List the files under the active pane's directory that carry tag

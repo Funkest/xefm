@@ -699,6 +699,11 @@ _DETAILS: dict[str, str] = {
         "would in Spotlight (words, kind:pdf, date:today, metadata like "
         "kMDItemPixelWidth > 4000) or in Windows Search (words; where … for "
         "a raw SQL condition). Earlier queries are offered again."),
+    "find_by_tag": (
+        "Lists your tags; pick one, or type a name that is not listed, and "
+        "the pane shows every file under this folder that carries it. "
+        "Spotlight answers on macOS; elsewhere the folders are read. The "
+        "remove key drops a tag from the list without touching any file."),
     "clipboard_copy": (
         "Puts the selected files — or the one under the cursor — on the "
         "clipboard. Nothing is copied yet: paste copies them into whatever "
@@ -969,6 +974,7 @@ _FILER_ACTIONS = [
        default_keys=()),
     # The OS search index (#579): Spotlight on macOS, Windows Search on Windows.
     _a("index_search", FILER, "Search the OS index under this folder"),
+    _a("find_by_tag", FILER, "Find the files with a tag under this folder"),
     # The file clipboard (#577): copy / cut now, paste wherever you go next.
     # Letters (Y, Shift-Y, G) as well as chords, so it is an expert path too.
     _a("clipboard_copy", FILER, "Copy files to the clipboard"),
