@@ -1,11 +1,11 @@
-# Branch View
+# Flat View
 
-Branch view swaps the pane's listing for **every file below the current
+Flat view swaps the pane's listing for **every file below the current
 directory**, in one flat list. Press the key again to go back.
 
 | Action | Key | Menu |
 |--------|-----|------|
-| `branch_view` | `Shift-B` | Go → Branch View |
+| `flat_view` | `Shift-B` | Go → Flat View |
 
 It is also in the command palette (`Ctrl-T`).
 
@@ -39,7 +39,7 @@ You can also view, edit, rename, delete, compare and get details as usual.
   neither listed nor looked into.
 - **Symbolic links to directories are not followed**, so a link that points
   back up the tree can't make the list endless. A link to a file is listed.
-- The pane header reads `[Branch] /the/directory`.
+- The pane header reads `[Flat view] /the/directory`.
 
 ## Flattening only part of the tree
 
@@ -52,7 +52,7 @@ appears as itself. To flatten the whole directory, clear the selection first
 
 The progress dialog counts the files as they are found, and `Esc` stops the
 walk. Stopping leaves the pane as it was rather than showing part of the tree.
-Branch view works under `ssh://`, `s3://` and inside archives, the same as
+Flat view works under `ssh://`, `s3://` and inside archives, the same as
 any other location.
 
 ## Going back
@@ -69,13 +69,13 @@ the item it was on.
   the other pane puts both directly into that directory, so the second one
   meets the first and you get the usual
   [conflict dialog](FILE_OPERATIONS_FEATURE.md).
-- Branch view works on directories. On a search-results pane or an imported
+- Flat view works on directories. On a search-results pane or an imported
   list it says so and does nothing.
 
 ## Changing the key
 
 ```python
-KEY_BINDINGS['branch_view'] = ['Ctrl-B']
+KEY_BINDINGS['flat_view'] = ['Ctrl-B']
 ```
 
 `Ctrl-B` is not the default because it is tmux's prefix key, so inside tmux it

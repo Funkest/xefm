@@ -305,7 +305,7 @@ class Config:
         'go_root': ['\\'],                     # Go to the root of the current drive/location
         # Shift-B, not Ctrl-B: that is tmux's prefix, so inside tmux it would
         # never arrive. A capital is a glyph, which every terminal delivers.
-        'branch_view': ['Shift-B'],            # Show every file below this directory as one flat list (again to go back)
+        'flat_view': ['Shift-B'],            # Show every file below this directory as one flat list (again to go back)
         'switch_pane': ['TAB'],                # Switch between left and right panes
         'nav_left': ['LEFT'],                  # Left pane: go to parent, Right pane: switch to left pane
         'nav_right': ['RIGHT'],                # Right pane: go to parent, Left pane: switch to right pane

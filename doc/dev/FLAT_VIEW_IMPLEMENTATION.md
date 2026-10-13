@@ -1,10 +1,10 @@
-# Branch View — Implementation
+# Flat View — Implementation
 
 [#559](https://github.com/crftwr/xefm/issues/559), from discussion
 [#547](https://github.com/crftwr/xefm/discussions/547). User-facing behavior is
-in [`doc/BRANCH_VIEW_FEATURE.md`](../BRANCH_VIEW_FEATURE.md).
+in [`doc/FLAT_VIEW_FEATURE.md`](../FLAT_VIEW_FEATURE.md).
 
-Branch view is a third kind of virtual pane, next to a search feed and an
+Flat view is a third kind of virtual pane, next to a search feed and an
 imported list. The pane model, its listing worker and the operations on it are
 described in
 [SEARCH_RESULTS_PANE_IMPLEMENTATION.md](SEARCH_RESULTS_PANE_IMPLEMENTATION.md)
@@ -16,17 +16,17 @@ pane.
 
 | Piece | Where |
 |---|---|
-| The action, and its toggle back | `XeFMApp.branch_view` (action `branch_view`, `Shift-B`, Go → Branch View) |
-| The walk on a task | `XeFMApp._run_branch_walk` |
-| What the walk lists and descends | `_branch_files` (module level in `xefm/app.py`) on `tree_walk.walk` |
-| Entering the pane | `XeFMApp._open_branch` → `_list_virtual(..., entries=…)` |
+| The action, and its toggle back | `XeFMApp.flat_view` (action `flat_view`, `Shift-B`, Go → Flat View) |
+| The walk on a task | `XeFMApp._run_flat_walk` |
+| What the walk lists and descends | `_flat_files` (module level in `xefm/app.py`) on `tree_walk.walk` |
+| Entering the pane | `XeFMApp._open_flat` → `_list_virtual(..., entries=…)` |
 | Installing read entries without a probe | `FileListManager.compute_virtual_listing(..., entries=…)` |
-| Header | `_virtual_header_text`, which handles `"branch"` the same way as `"list"` |
+| Header | `_virtual_header_text`, which handles `"flat"` the same way as `"list"` |
 
 ## The virtual dict
 
 ```python
-{"kind": "branch", "title": "Branch", "root": <the pane's directory>,
+{"kind": "flat", "title": "Flat", "root": <the pane's directory>,
  "results": [Path, ...], "meta": {}, "return_to": <focused row's name>}
 ```
 
@@ -39,14 +39,14 @@ cursor was on without any change. The action's toggle back is simply
 
 ## The walk
 
-`_branch_files(root, cancel, show_hidden)` is `tree_walk.walk` with two rules:
+`_flat_files(root, cancel, show_hidden)` is `tree_walk.walk` with two rules:
 
 - **shows**: not hidden, unless the pane shows hidden entries. This is the same
   rule a filename search uses (`_search_rules`).
 - **descend**: a directory, not a symbolic link, and shown.
 
 It yields files only. Unlike a search, it does not descend into links to
-directories. A search is bounded by the dialog's result cap, but branch view
+directories. A search is bounded by the dialog's result cap, but flat view
 has no cap, so a link back up the tree would never end. `is_dir` describes a
 link's target (see
 [DIRECTORY_SCAN_SYSTEM.md](DIRECTORY_SCAN_SYSTEM.md)), so the `is_link` check
@@ -111,7 +111,7 @@ itself.
 
 ## Tests
 
-`test/test_branch_view.py`, headless on the memory backend. It covers files
+`test/test_flat_view.py`, headless on the memory backend. It covers files
 only and relative names, hidden entries following the pane, a link loop not
 descended, the toggle back landing on the original row, `go_parent`, a
 selection narrowing the walk, an empty tree leaving the pane alone, a list not

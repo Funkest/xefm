@@ -204,7 +204,7 @@ class FileListManager:
         ``show_hidden``, has no single directory whose dotfiles to hide.
 
         ``entries`` — ``[(Path, attrs), …]`` already read, by a walk that had
-        them from its own listings (branch view) — stands in for the probe:
+        them from its own listings (flat view) — stands in for the probe:
         reading every row again would double the round trips on a remote tree,
         to learn nothing the walk did not."""
         if entries is not None:

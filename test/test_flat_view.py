@@ -1,11 +1,11 @@
-"""Branch view: every file below a directory as one flat list (#547).
+"""Flat view: every file below a directory as one flat list (#547).
 
 Driven headless on the ``memory`` backend, as ``test_path_list.py`` drives the
-clipboard import: branch view enters the same virtual pane, so what is under
+clipboard import: flat view enters the same virtual pane, so what is under
 test here is the walk — what it lists, what it skips, what it descends — and
 the way in and out.
 
-Run with: python -m pytest test/test_branch_view.py -v
+Run with: python -m pytest test/test_flat_view.py -v
 """
 
 import os
@@ -23,7 +23,7 @@ from xefm.path import Path  # noqa: E402
 from xefm.state_manager import XeFMStateManager  # noqa: E402
 
 
-class BranchView(unittest.TestCase):
+class FlatView(unittest.TestCase):
 
     def setUp(self):
         from puikit.backends import create_backend
@@ -59,8 +59,8 @@ class BranchView(unittest.TestCase):
         self.app._relist(self.pane)
         self.app._settle_listings()
 
-    def _branch(self):
-        self.assertTrue(self.app.dispatch("branch_view"))
+    def _flat(self):
+        self.assertTrue(self.app.dispatch("flat_view"))
         # The walk runs on a task, on a worker where the backend drives frame
         # ticks: wait for it to hand over, then for the listing it starts.
         deadline = time.monotonic() + 10
@@ -89,9 +89,9 @@ class BranchView(unittest.TestCase):
         self._write(os.path.join("a", "b", "two.txt"))
         os.makedirs(os.path.join(self.tmp, "empty"))
         self._list()
-        self._branch()
+        self._flat()
         virtual = self.pane["virtual"]
-        self.assertEqual(virtual["kind"], "branch")
+        self.assertEqual(virtual["kind"], "flat")
         self.assertEqual(str(virtual["root"]), str(Path(self.tmp)))
         # Files only: no row for a, a/b or the empty directory.
         self.assertEqual(self._shown(), sorted([
@@ -104,13 +104,13 @@ class BranchView(unittest.TestCase):
         self._write(".dot")
         self._write(os.path.join(".hidden", "inside.txt"))
         self._list()
-        self._branch()
+        self._flat()
         self.assertEqual(self._shown(), ["seen.txt"])
 
-        self._branch()
+        self._flat()
         self.app.flm.show_hidden = True
         self._list()
-        self._branch()
+        self._flat()
         self.assertEqual(self._shown(), sorted([
             ".dot", "seen.txt", os.path.join(".hidden", "inside.txt")]))
 
@@ -120,7 +120,7 @@ class BranchView(unittest.TestCase):
         # A link back up the tree: descending it would never end.
         os.symlink(self.tmp, os.path.join(self.tmp, "real", "loop"))
         self._list()
-        self._branch()
+        self._flat()
         self.assertEqual(self._shown(), [os.path.join("real", "f.txt")])
 
     def test_the_same_key_goes_back_to_the_row_it_came_from(self):
@@ -129,9 +129,9 @@ class BranchView(unittest.TestCase):
         self._list()
         names = [f.name for f in self.pane["files"]]
         self.pane["focused_index"] = names.index("z")
-        self._branch()
+        self._flat()
         self.assertIsNotNone(self.pane["virtual"])
-        self._branch()
+        self._flat()
         self.assertIsNone(self.pane["virtual"])
         self.assertEqual(str(self.pane["path"]), str(Path(self.tmp)))
         self.assertEqual(self.pane["files"][self.pane["focused_index"]].name, "z")
@@ -139,7 +139,7 @@ class BranchView(unittest.TestCase):
     def test_go_parent_leaves_it_too(self):
         self._write(os.path.join("a", "one.txt"))
         self._list()
-        self._branch()
+        self._flat()
         self.app.dispatch("go_parent")
         self.app._settle_listings()
         self.assertIsNone(self.pane["virtual"])
@@ -152,7 +152,7 @@ class BranchView(unittest.TestCase):
         self._write("left.txt")
         self._list()
         self._select("in", "picked.txt")
-        self._branch()
+        self._flat()
         self.assertEqual(self._shown(), sorted([
             "picked.txt", os.path.join("in", "deep", "x.txt")]))
         # Entering starts with nothing selected, as every virtual pane does.
@@ -162,7 +162,7 @@ class BranchView(unittest.TestCase):
         os.makedirs(os.path.join(self.tmp, "empty"))
         self._list()
         before = list(self.pane["files"])
-        self._branch()
+        self._flat()
         self.assertIsNone(self.pane["virtual"])
         self.assertEqual(self.pane["files"], before)
         self.assertIn("no files below", self._last_log())
@@ -172,7 +172,7 @@ class BranchView(unittest.TestCase):
         self.app.panel.set_clipboard(a)
         self.app.dispatch("open_list_from_clipboard")
         self.app._settle_listings()
-        self._branch()
+        self._flat()
         self.assertEqual(self.pane["virtual"]["kind"], "list")
         self.assertIn("showing a list", self._last_log())
 
@@ -180,19 +180,19 @@ class BranchView(unittest.TestCase):
         a = self._write(os.path.join("d", "a.txt"))
         b = self._write(os.path.join("d", "b.txt"))
         self._list()
-        self._branch()
+        self._flat()
         os.remove(a)
         self.app._refresh(self.pane)
         self.app._settle_listings()
         self.assertEqual([str(f) for f in self.pane["files"]], [b])
-        self.assertEqual(self.pane["virtual"]["kind"], "branch")
+        self.assertEqual(self.pane["virtual"]["kind"], "flat")
 
     def test_the_header_names_it_and_its_root(self):
         self._write(os.path.join("d", "a.txt"))
         self._list()
-        self._branch()
+        self._flat()
         text = xefm_app._virtual_header_text(self.pane["virtual"], 500)
-        self.assertTrue(text.startswith("[Branch] "))
+        self.assertTrue(text.startswith("[Flat view] "))
         self.assertIn(os.path.basename(self.tmp), text)
 
 
