@@ -105,6 +105,8 @@ the same rule the copy conflict dialog's **Overwrite older** uses.
 | `M` | Move the focused item to the other side |
 | `K` / `Del` | Delete the focused item (on the active side) |
 | `E` | Merge the two sides in your configured `TEXT_DIFF` tool |
+| `s` | Sync: plan copying from the active side, then press again to run — see [Directory Sync](DIRECTORY_SYNC_FEATURE.md) |
+| `d` | Show only the differences, or everything |
 | `r` | Rescan |
 | `Q` / `Esc` | Close the viewer |
 
@@ -124,5 +126,6 @@ terminal, or `code --diff` in the desktop app).
 ## See also
 
 - [Text Viewer](TEXT_VIEWER_FEATURE.md) — the single-file viewer the diff reuses
+- [Directory Sync](DIRECTORY_SYNC_FEATURE.md) — applying a directory diff in bulk
 - [File Associations](FILE_ASSOCIATIONS_FEATURE.md) — configuring `TEXT_DIFF` and viewers
 - Developer notes: `doc/dev/TEXT_VIEWER_SYSTEM.md`

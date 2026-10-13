@@ -12,9 +12,11 @@ that takes filename arguments works.
    one launch (`vim a.txt b.txt`), so you get one session over all of them.
 3. Edit, save, and exit the editor — XeFM redraws where you left off.
 
-Editing is available for local files only. Directories (and the `..` parent)
-can't be edited, and a warning is shown if you try; in a mixed selection they
-are simply skipped. `E` is rebindable via the `edit_file` action in your
+Files on SSH and S3 panes can be edited too: XeFM edits a local copy and
+uploads it each time you save — see [Remote Editing](REMOTE_EDIT_FEATURE.md).
+Files inside archives are read-only and can't be edited in place. Directories
+(and the `..` parent) can't be edited, and a warning is shown if you try; in a
+mixed selection they are simply skipped. `E` is rebindable via the `edit_file` action in your
 config's `KEY_BINDINGS`.
 
 ## Which editor is used
@@ -64,6 +66,8 @@ and restores the file view.
 
 ## See also
 
+- [Remote Editing](REMOTE_EDIT_FEATURE.md) — editing files on SSH and S3
+- [Rename in the Editor](RENAME_IN_EDITOR_FEATURE.md) — rename many files by editing their names
 - [File Associations](FILE_ASSOCIATIONS_FEATURE.md) — per-file-type editors and viewers
 - [Diff Viewer](DIFF_VIEWER_FEATURE.md) — `TEXT_DIFF` sets the external merge / diff tool
 - [Text Viewer](TEXT_VIEWER_FEATURE.md) — read-only viewing with `V`

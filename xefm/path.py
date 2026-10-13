@@ -480,6 +480,16 @@ class PathImpl(ABC):
         """Return the path as a URI"""
         pass
 
+    def forget_cached_metadata(self) -> None:
+        """Drop whatever this backend remembers about this path's metadata, so
+        the next :meth:`stat` asks the storage itself.
+
+        Remote backends cache stats for a while, which is right for browsing and
+        wrong for the one question editing a remote file in place asks before
+        each upload — *has anyone changed it since I read it?* (#581). The
+        default does nothing, the right answer for a backend that caches
+        nothing."""
+
     # Display methods for UI presentation
     def get_display_title(self) -> str:
         """A human-readable title for viewers, info dialogs and title bars.
@@ -502,6 +512,16 @@ class PathImpl(ABC):
         """
         return {'type': self.SCHEME or 'unknown', 'details': [],
                 'format_hint': 'standard'}
+
+    def target(self) -> Optional['Path']:
+        """The real place this path stands for, when it is a reference to one
+        rather than a place itself — an entry of a ``.xefml`` tree (#573). The
+        pane-sync keys reveal it, and bulk work on a selection acts on it.
+
+        ``None`` for every path that is itself the place, which is every path
+        but a reference. Not abstract: a backend written before this existed
+        keeps working (#426's rule for the published base)."""
+        return None
     
     # Compatibility methods
     @abstractmethod
@@ -1194,6 +1214,11 @@ class Path:
         version has never heard of, is ``False``."""
         return self._impl.supports(capability)
 
+    def forget_cached_metadata(self) -> None:
+        """Make the next :meth:`stat` ask the storage, not a cache — see
+        :meth:`PathImpl.forget_cached_metadata`."""
+        self._impl.forget_cached_metadata()
+
     # Display methods delegation
     def get_display_title(self) -> str:
         """Return a formatted title for display in viewers and dialogs"""
@@ -1203,6 +1228,11 @@ class Path:
     def get_extended_metadata(self) -> dict:
         """Return storage-specific metadata for display in info dialogs"""
         return self._impl.get_extended_metadata()
+
+    def target(self) -> Optional['Path']:
+        """The real place a reference stands for, or ``None`` — see
+        :meth:`PathImpl.target`."""
+        return self._impl.target()
     
     def move_to(self, destination: 'Path', overwrite: bool = False) -> bool:
         """
