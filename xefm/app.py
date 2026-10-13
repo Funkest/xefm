@@ -26,6 +26,7 @@ archive browsing, and remote storage (S3 / SFTP).
 import argparse
 import getpass
 import importlib.util
+import itertools
 import os
 import platform
 import queue
@@ -770,6 +771,25 @@ def _virtual_header_text(virtual: dict, avail: float, measure=len) -> str:
     return elide(label, avail, where="end", measure=measure)
 
 
+def _tab_label(pane: dict) -> str:
+    """What a tab is called in the strip: a directory's last component (the
+    whole path at a root, so ``/`` and ``s3://bucket/`` still say something),
+    an archive by its file name, a list by its title, a search by its query."""
+    virtual = pane.get("virtual")
+    if virtual:
+        if virtual.get("kind") == "search":
+            return f'⌕ {virtual.get("query", "")}'
+        root = virtual.get("root")
+        name = getattr(root, "name", "") if root is not name_key.WHOLE_PATH else ""
+        title = virtual.get("title", "")
+        return f"[{title}] {name}" if name else f"[{title}]"
+    path_str = str(pane["path"])
+    if path_str.startswith("archive://"):
+        label = _archive_header_label(path_str)
+        return label.rsplit("/", 1)[-1] or label
+    return pane["path"].name or path_str
+
+
 def _archive_header_label(path_str: str) -> str:
     """Render an ``archive://…#internal`` URI for the pane header as
     ``[archive.zip]/internal/path`` (or ``[archive.zip]`` at the archive root),
@@ -853,6 +873,13 @@ class PaneHeader(Widget):
         # path text's left inset.
         self._abs: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
         self._pad_x = 0.0
+        #: The tab strip's row and each tab's ``(x0, x1, index)``, captured
+        #: each draw so a click can tell which tab it landed on.
+        self._tab_row: tuple[float, float] | None = None
+        self._tab_hits: list[tuple[float, float, int]] = []
+
+    def _tabs(self) -> list:
+        return self.app.pm.tabs[self.pane_name]
 
     def menu_anchor(self) -> tuple[float, float]:
         """Where the directory's context menu opens from the keyboard: hanging
@@ -885,12 +912,72 @@ class PaneHeader(Widget):
             # every name still on screen is one the user can actually read.
             text = abbreviate_path(str(pane["path"]), avail, measure=ctx.measure_text)
         fg = ctx.theme.accent if active else ctx.theme.text
-        ctx.draw_text(pad_x, pad_y, text, Style(fg=fg, attr=TextAttribute.BOLD))
+        path_y = pad_y
+        tabs = self._tabs()
+        if len(tabs) > 1:
+            self._draw_tabs(ctx, tabs, pad_x, pad_y, avail, active)
+            path_y += 1.0
+        else:
+            self._tab_row = None
+            self._tab_hits = []
+        ctx.draw_text(pad_x, path_y, text, Style(fg=fg, attr=TextAttribute.BOLD))
+
+    def _draw_tabs(self, ctx, tabs, pad_x, y, avail, active) -> None:
+        """The tab strip: one label per tab, ``1 src  2 docs  3 ⌕ TODO``, the
+        current one bold on a selection band (accent while the pane is active),
+        the others muted. Every tab gets an equal share when they do not all
+        fit, each label elided to its share."""
+        theme = ctx.theme
+        current = self.app.pm.tab_index[self.pane_name]
+        gap = 1.0
+        labels = [f"{i + 1} {_tab_label(t)}" for i, t in enumerate(tabs)]
+        widths = [ctx.measure_text(lab) + 1.0 for lab in labels]
+        share = (avail - gap * (len(tabs) - 1)) / len(tabs)
+        if sum(widths) + gap * (len(tabs) - 1) > avail:
+            widths = [min(w, max(share, 2.0)) for w in widths]
+        band = getattr(theme, "selection_active_bg" if active
+                       else "selection_inactive_bg", None) or theme.accent
+        x = pad_x
+        self._tab_row = (y, y + 1.0)
+        self._tab_hits = []
+        for i, (label, w) in enumerate(zip(labels, widths)):
+            if x >= pad_x + avail:
+                break
+            w = min(w, pad_x + avail - x)
+            shown = elide(label, max(0.0, w - 1.0), where="end",
+                          measure=ctx.measure_text)
+            if i == current:
+                ctx.fill_rect(x, y, w, 1.0, Style(bg=band))
+                style = Style(fg=theme.text, bg=band, attr=TextAttribute.BOLD)
+            else:
+                style = Style(fg=theme.muted_text)
+            ctx.draw_text(x + 0.5, y, shown, style)
+            self._tab_hits.append((x, x + w, i))
+            x += w + gap
+
+    def handle_event(self, event) -> bool:
+        """A click on a tab shows it."""
+        if (event.type is EventType.MOUSE_CLICK and self._tab_row is not None
+                and self._tab_row[0] <= (event.y or 0.0) < self._tab_row[1]):
+            ex = event.x or 0.0
+            for x0, x1, index in self._tab_hits:
+                if x0 <= ex < x1:
+                    self.app.select_tab(self.pane_name, index)
+                    self.app.panel.render()
+                    return True
+        return False
 
     def measure(self, ctx, axis, available) -> SizeRequest:
         # Reserve a strip of top padding above the path (vector backends); the
         # bar is placed with size="content" so this height wins. See _bar_height.
-        return _bar_height(ctx) if axis == "y" else SizeRequest()
+        # A pane with more than one tab adds a row for the tab strip.
+        if axis != "y":
+            return SizeRequest()
+        req = _bar_height(ctx)
+        if len(self._tabs()) > 1:
+            h = req.preferred + 1.0
+            return SizeRequest(min=h, preferred=h, max=h)
+        return req
 
 
 class PaneFooter(Widget):
@@ -1317,6 +1404,13 @@ def _search_rules(show_hidden: bool, recursive: bool):
 
     return shows, descend
 
+#: Listing generations, unique across every pane and tab. A result names the
+#: side it was listed for and the generation it was started under; with tabs, a
+#: side's pane can be a different dict by the time it lands, and per-pane
+#: counters could hand that dict a number matching the stale result (#563).
+_LOAD_GENS = itertools.count(1)
+
+
 def _flat_files(root, cancel, show_hidden: bool):
     """Yield ``(entry, attrs)`` for every file below ``root`` — flat view's
     walk. A hidden entry is skipped unless the pane shows them, and is not
@@ -1737,6 +1831,8 @@ class XeFMApp:
 
             self._restore_one_pane('left', self.pm.left_pane, self._left_provided)
             self._restore_one_pane('right', self.pm.right_pane, self._right_provided)
+            self._restore_tabs('left', self._left_provided)
+            self._restore_tabs('right', self._right_provided)
         except Exception:
             pass
 
@@ -1807,6 +1903,7 @@ class XeFMApp:
             self.state_manager.save_pane_state('right', self.pm.right_pane)
             self.pm.save_cursor_position(self.pm.left_pane)
             self.pm.save_cursor_position(self.pm.right_pane)
+            self._save_tabs()
 
             # Persist the full visited-directory trail (most-recent-first,
             # de-duplicated) so the History picker survives restarts (#220),
@@ -1908,7 +2005,18 @@ class XeFMApp:
         return appended
 
     def _pane_name_of(self, pane: dict) -> str:
-        return "left" if pane is self.pm.left_pane else "right"
+        """The side ``pane`` belongs to, whichever of its tabs it is."""
+        return self.pm.side_of(pane) or "right"
+
+    def _hold_if_hidden(self, pane: dict) -> bool:
+        """For a pane that is a tab not on screen: note that it owes a re-list,
+        and return True so the caller does nothing now — a listing is installed
+        on whichever tab its side is showing, so it must not start for another.
+        :meth:`_show_tab` re-lists it on the way in."""
+        if self.pm.is_shown(pane):
+            return False
+        pane["_stale"] = True
+        return True
 
     #: How long a listing may run before the pane shows a "Loading…" indicator.
     #: Below this, a fast (local) listing lands and swaps in with no flash; only a
@@ -1944,7 +2052,7 @@ class XeFMApp:
         a change the user never made — see #239."""
         pane = self.pane(pane_name)
         self._fire_directory_changed(pane_name, pane)
-        gen = pane["_load_gen"] = pane.get("_load_gen", 0) + 1
+        gen = pane["_load_gen"] = next(_LOAD_GENS)
         # "A listing is in flight", tracked separately from ``loading`` because
         # the two answer different questions: ``loading`` means "this pane is
         # blanked and showing (or about to show) an indicator", which a
@@ -2427,6 +2535,8 @@ class XeFMApp:
 
         This is the "no directory change" sibling of :meth:`_refresh`, which adds
         the cursor reset and the history record a navigation needs."""
+        if self._hold_if_hidden(pane):
+            return
         anchor = self._cursor_anchor(pane) if keep_cursor else None
 
         def landed(p: dict) -> None:
@@ -2485,8 +2595,10 @@ class XeFMApp:
         caller that reports what was left out (``missing``, ``unreachable``);
         ``on_ready(pane)`` runs once the rows are in place. Both on the UI
         thread; so does ``on_empty(result)``."""
+        if self._hold_if_hidden(pane):
+            return
         pane_name = self._pane_name_of(pane)
-        gen = pane["_load_gen"] = pane.get("_load_gen", 0) + 1
+        gen = pane["_load_gen"] = next(_LOAD_GENS)
         pane["_load_pending"] = True
         entering = pane.get("virtual") is not virtual
         # Snapshot every input: the worker must not read the pane dict.
@@ -2573,13 +2685,15 @@ class XeFMApp:
         False. The file is the one focused when the sort was *asked for*: the old
         rows stay live while the worker runs, so a cursor moved in the meantime
         lands back on what the user was looking at when they pressed the key."""
+        if self._hold_if_hidden(pane):
+            return
         entries = pane.get("_listing_entries")
         if entries is None:
             self._relist(pane, keep_cursor=keep_cursor, on_ready=on_ready)
             return
 
         pane_name = self._pane_name_of(pane)
-        gen = pane["_load_gen"] = pane.get("_load_gen", 0) + 1
+        gen = pane["_load_gen"] = next(_LOAD_GENS)
         pane["_load_pending"] = True
 
         # Snapshot every input: the worker must not read the pane dict, which the
@@ -2763,6 +2877,11 @@ class XeFMApp:
                 "open_item": (lambda: self._open(self.active_pane()), True),
                 "go_parent": (lambda: self._go_parent(self.active_pane()), True),
                 "go_root": (lambda: self._go_root(self.active_pane()), True),
+                "new_tab": (self.new_tab, True),
+                "open_in_new_tab": (self.open_in_new_tab, True),
+                "close_tab": (self.close_tab, True),
+                "next_tab": (self.next_tab, True),
+                "prev_tab": (self.prev_tab, True),
                 "flat_view": (self.flat_view, True),
                 "nav_left": (self._act_nav_left, True),
                 "nav_right": (self._act_nav_right, True),
@@ -3334,6 +3453,155 @@ class XeFMApp:
         self._go_to_dir(pane, root, self._top_level_name(path, root))
         self.log_info(f"Up to {root}")
 
+    # --- folder tabs (#563) --------------------------------------------------
+
+    def new_tab(self) -> None:
+        """Open a new tab in the active pane at the place it shows, after the
+        current one, cursor on the same row. A virtual pane's new tab is its
+        directory: the results stay where they are, in their own tab."""
+        side = self.pm.active_pane
+        pane = self.pane(side)
+        files = pane["files"]
+        idx = pane["focused_index"]
+        focus = files[idx].name if files and 0 <= idx < len(files) \
+            and not pane.get("virtual") else None
+        self._open_tab(side, pane["path"], focus=focus)
+
+    def open_in_new_tab(self) -> None:
+        """Open the directory under the cursor in a new tab of the active pane
+        — the tab to go into it in, keeping this one where it is."""
+        pane = self.active_pane()
+        entry = self._focused_entry()
+        info = (pane.get("file_info") or {}).get(str(entry)) if entry else None
+        if entry is None or not (info or {}).get("is_dir"):
+            self.log_info("Open in New Tab: put the cursor on a directory")
+            return
+        self._open_tab(self.pm.active_pane, entry)
+
+    def _open_tab(self, side: str, path, *, focus: str | None = None) -> None:
+        pane = self.pane(side)
+        self._remember_cursor(pane)
+        tab = self.pm.new_pane(path, like=pane)
+        self.pm.open_tab(side, tab)
+        self._show_tab(side, focus=focus)
+        n = len(self.pm.tabs[side])
+        self.log_info(f"New tab: {path}  ({self.pm.tab_index[side] + 1} of {n})")
+
+    def close_tab(self) -> None:
+        """Close the active pane's current tab and show the next one. A pane's
+        only tab stays: a pane always shows something."""
+        side = self.pm.active_pane
+        pane = self.pane(side)
+        if len(self.pm.tabs[side]) < 2:
+            self.log_info("This is the pane's only tab")
+            return
+        self._remember_cursor(pane)
+        self.pm.close_tab(side)
+        self._show_tab(side)
+        self.log_info(f"Closed tab: {_tab_label(pane)}")
+
+    def next_tab(self) -> None:
+        self._step_tab(+1)
+
+    def prev_tab(self) -> None:
+        self._step_tab(-1)
+
+    def _step_tab(self, delta: int) -> None:
+        side = self.pm.active_pane
+        if len(self.pm.tabs[side]) < 2:
+            self.log_info("This pane has one tab — "
+                          f"{self._keys_label('new_tab')} opens another")
+            return
+        self.select_tab(side, self.pm.tab_index[side] + delta)
+
+    def select_tab(self, side: str, index: int) -> None:
+        """Show tab ``index`` of ``side`` (wrapping), and make that pane
+        active — what a click on a tab means."""
+        self.pm.active_pane = side
+        self._sync_active()
+        if index % len(self.pm.tabs[side]) == self.pm.tab_index[side]:
+            return
+        self._remember_cursor(self.pane(side))
+        self.pm.select_tab(side, index)
+        self._show_tab(side)
+
+    def _show_tab(self, side: str, *, focus: str | None = None) -> None:
+        """Put ``side``'s current tab on screen.
+
+        A directory tab is re-read on the way in, keeping its rows on screen
+        while it is (a monitor reload's ``keep_visible``): its directory went
+        unwatched while hidden, and a file operation in the other pane may
+        have changed it. A tab never listed yet — a new one, or one restored
+        from the last session — is listed like a navigation. A virtual tab is
+        re-read only if something asked it to be while it was hidden (see
+        :meth:`_hold_if_hidden`); otherwise it is shown as it was left."""
+        pane = self.pane(side)
+        view = self.left_view if side == "left" else self.right_view
+        view.pane = pane
+        stale = pane.pop("_stale", False)
+        if pane.get("virtual"):
+            if stale or pane.get("_load_pending"):
+                self._relist(pane)
+            return
+        if pane.get("_listing_entries") is None and not pane.get("files"):
+            def landed(p: dict) -> None:
+                if focus is not None:
+                    self._select_by_name(p, focus)
+                else:
+                    self._restore_remembered_cursor(p)
+
+            self._refresh(pane, on_ready=landed)
+            return
+        anchor = self._cursor_anchor(pane)
+        self._list_pane(side, keep_visible=True,
+                        on_ready=lambda p: self._apply_cursor_anchor(p, anchor))
+
+    def _save_tabs(self) -> None:
+        """Every pane's tabs — path, sort, filter — and which is current, for
+        the next session. A virtual tab is saved as its directory."""
+        for side in ("left", "right"):
+            tabs = [{"path": str(t["path"]), "sort_mode": t["sort_mode"],
+                     "sort_reverse": t["sort_reverse"],
+                     "filter_pattern": t.get("filter_pattern", "")}
+                    for t in self.pm.tabs[side]]
+            self.state_manager.set_state(
+                f"tabs.{side}", {"active": self.pm.tab_index[side], "tabs": tabs})
+
+    def _restore_tabs(self, side: str, cmdline_provided: bool) -> None:
+        """Rebuild ``side``'s saved tabs around its current one, which
+        :meth:`_restore_one_pane` already restored. Nothing is read here: the
+        others are listed the first time they are shown, so a tab on a remote
+        host does not connect at startup. A pane opened on a directory from the
+        command line opens that alone."""
+        if cmdline_provided:
+            return
+        saved = self.state_manager.get_state(f"tabs.{side}", None)
+        if not isinstance(saved, dict):
+            return
+        entries = saved.get("tabs")
+        active = saved.get("active", 0)
+        if (not isinstance(entries, list) or len(entries) < 2
+                or not isinstance(active, int) or not 0 <= active < len(entries)):
+            return
+        current = self.pane(side)
+        tabs = []
+        for i, entry in enumerate(entries):
+            if i == active:
+                tabs.append(current)
+                continue
+            try:
+                tab = self.pm.new_pane(Path(entry["path"]), like=current)
+            except Exception:  # noqa: BLE001 — a bad entry costs that tab only
+                continue
+            mode = sort_keys.canonical(entry.get("sort_mode", tab["sort_mode"]))
+            if sort_keys.is_known(mode):
+                tab["sort_mode"] = mode
+            tab["sort_reverse"] = bool(entry.get("sort_reverse", tab["sort_reverse"]))
+            tab["filter_pattern"] = entry.get("filter_pattern", "") or ""
+            tabs.append(tab)
+        self.pm.tabs[side] = tabs
+        self.pm.tab_index[side] = next(i for i, t in enumerate(tabs) if t is current)
+
     # --- menus & dialogs -----------------------------------------------------
 
     def _build_menu(self) -> Menu:
@@ -3513,6 +3781,21 @@ class XeFMApp:
                      shortcut=sc("toggle_color_scheme")),
             SEPARATOR,
             MenuItem("Switch Pane", on_select=lambda: self._menu("switch_pane"), shortcut=sc("switch_pane")),
+            SEPARATOR,
+            # Folder tabs (#563): per pane, so every item acts on the active one.
+            MenuItem("New Tab", on_select=lambda: self._menu("new_tab"),
+                     shortcut=sc("new_tab")),
+            MenuItem("Open in New Tab", on_select=lambda: self._menu("open_in_new_tab"),
+                     enabled=has_files, shortcut=sc("open_in_new_tab")),
+            MenuItem("Close Tab", on_select=lambda: self._menu("close_tab"),
+                     enabled=lambda: len(self.pm.tabs[self.pm.active_pane]) > 1,
+                     shortcut=sc("close_tab")),
+            MenuItem("Next Tab", on_select=lambda: self._menu("next_tab"),
+                     enabled=lambda: len(self.pm.tabs[self.pm.active_pane]) > 1,
+                     shortcut=sc("next_tab")),
+            MenuItem("Previous Tab", on_select=lambda: self._menu("prev_tab"),
+                     enabled=lambda: len(self.pm.tabs[self.pm.active_pane]) > 1,
+                     shortcut=sc("prev_tab")),
             title="View",
         )
         help_menu = Menu(
@@ -7768,6 +8051,11 @@ class XeFMApp:
             ("go_parent", "Go to parent directory"),
             ("go_root", "Go to the root of the current drive or location"),
             ("switch_pane", "Switch active pane"),
+            ("new_tab", "Open a new tab in this pane, at the same place"),
+            ("open_in_new_tab", "Open the directory under the cursor in a new tab"),
+            ("close_tab", "Close this pane's current tab"),
+            ("next_tab", "Show this pane's next tab"),
+            ("prev_tab", "Show this pane's previous tab"),
             ("nav_left", "Focus left pane / go to parent"),
             ("nav_right", "Focus right pane / go to parent"),
             ("favorites", "Go to a favorite directory or file"),

@@ -149,6 +149,11 @@ the mouse for the first, take the whole buffer with the second. See
 | Theme ▸ | (submenu of installed themes) |
 | Next Theme | `toggle_color_scheme` *(ships unbound)* |
 | Switch Pane | `switch_pane` |
+| New Tab | `new_tab` — see [Folder Tabs](FOLDER_TABS_FEATURE.md) |
+| Open in New Tab | `open_in_new_tab` |
+| Close Tab | `close_tab` |
+| Next Tab | `next_tab` |
+| Previous Tab | `prev_tab` |
 
 ### Tools Menu
 
