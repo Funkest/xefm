@@ -39,7 +39,7 @@ import sys
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
-from datetime import datetime
+from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from puikit.backend import Style
@@ -55,7 +55,7 @@ from xefm.dialog_geometry import (OPEN_MS_VIEWER, animate_open, draw_title_bar,
 from xefm.diff_viewer import show_diff_viewer
 from xefm.path import Path
 from xefm.progress_manager import OperationType, ProgressManager
-from xefm.str_format import format_size
+from xefm.str_format import format_size, format_timestamp
 from xefm.task import Cancelled, Task, TaskManager
 
 #: Operation kind -> (verb label, progress-manager op type).
@@ -495,8 +495,10 @@ class FileOperationService:
             idx += 1
             action = apply_all
             if action is None:
+                summary = (_merge_summary(task, t, dest)
+                           if _merges_into(t, dest) else None)
                 action, apply = task.ask(
-                    _conflict_prompt(t, dest, idx, total, z),
+                    _conflict_prompt(t, dest, idx, total, z, summary),
                     headless=("skip", False))
                 if apply:
                     apply_all = action
@@ -1141,12 +1143,25 @@ def _mtime(path: Path) -> Optional[float]:
         return None
 
 
+def compare_mtimes(a: Optional[float], b: Optional[float]) -> int:
+    """1 when ``a`` is clearly newer than ``b``, -1 when ``b`` is, 0 when they
+    are within :data:`_MTIME_SLACK` of each other or either is unknown. The one
+    rule behind "Overwrite older" and every "newer" mark XeFM shows, so what a
+    dialog or viewer marks is what the action does."""
+    if a is None or b is None:
+        return 0
+    if a - b > _MTIME_SLACK:
+        return 1
+    if b - a > _MTIME_SLACK:
+        return -1
+    return 0
+
+
 def _dest_is_older(src: Path, dest: Path) -> bool:
     """True when ``dest`` was modified clearly before ``src`` — the case
     "overwrite older" replaces. Either time unreadable means no: the rule
     never overwrites on a guess."""
-    s, d = _mtime(src), _mtime(dest)
-    return s is not None and d is not None and s - d > _MTIME_SLACK
+    return compare_mtimes(_mtime(src), _mtime(dest)) > 0
 
 
 class OverwriteOlder:
@@ -1237,12 +1252,8 @@ def _sides_markdown(source: ConflictSide, existing: ConflictSide) -> str:
     """A two-row table of both sides' size and modification time, the newer and
     the larger side each marked. Times closer than :data:`_MTIME_SLACK` are not
     called newer — the same rule "Overwrite older" decides by."""
-    newer = larger = None
-    if source.mtime is not None and existing.mtime is not None:
-        if source.mtime - existing.mtime > _MTIME_SLACK:
-            newer = source
-        elif existing.mtime - source.mtime > _MTIME_SLACK:
-            newer = existing
+    newer = {1: source, -1: existing}.get(compare_mtimes(source.mtime, existing.mtime))
+    larger = None
     if source.size is not None and existing.size is not None \
             and source.size != existing.size:
         larger = source if source.size > existing.size else existing
@@ -1259,7 +1270,7 @@ def _sides_markdown(source: ConflictSide, existing: ConflictSide) -> str:
         if side.mtime is None:
             when = "?"
         else:
-            when = datetime.fromtimestamp(side.mtime).strftime("%Y-%m-%d %H:%M")
+            when = format_timestamp(side.mtime)
             if side is newer:
                 when += " · **newer**"
         return f"| **{label}** | {size} | {when} |"
@@ -1268,16 +1279,102 @@ def _sides_markdown(source: ConflictSide, existing: ConflictSide) -> str:
                       row("Source", source), row("Existing", existing)])
 
 
-def _conflict_prompt(target: Path, dest: Path, index: int, total: int, z: int):
+#: How many source files a folder conflict's summary counts before it stops —
+#: a huge or remote tree would otherwise hold the prompt back for as long as
+#: walking it takes.
+_SUMMARY_LIMIT = 10_000
+
+
+@dataclass
+class MergeSummary:
+    """What merging a source folder into an existing one would meet, counted
+    file by file: ``older`` files exist at the destination and are older there
+    (what "Overwrite older" replaces), ``not_older`` exist and are not,
+    ``only_source`` do not exist there yet. ``capped`` when the count stopped
+    at :data:`_SUMMARY_LIMIT`."""
+    older: int = 0
+    not_older: int = 0
+    only_source: int = 0
+    capped: bool = False
+
+
+def _merge_summary(task: Task, src: Path, dest: Path,
+                   limit: int = _SUMMARY_LIMIT) -> MergeSummary:
+    """Walk ``src`` (symlinks are not followed, as the copy does not) and
+    classify each file against its counterpart under ``dest`` with the rule
+    "Overwrite older" applies. A subtree missing at the destination is counted
+    without a stat per file. Runs on the task thread and stops on cancel."""
+    summary = MergeSummary()
+    counted = 0
+
+    def walk(s: Path, d: Path, d_exists: bool) -> bool:
+        nonlocal counted
+        try:
+            children = list(s.iterdir())
+        except Exception:  # noqa: BLE001 — unreadable: the copy will report it
+            return True
+        for child in children:
+            task.checkpoint()
+            counterpart = d / child.name
+            there = d_exists and counterpart.exists()
+            if child.is_dir() and not child.is_symlink():
+                if not walk(child, counterpart, there and counterpart.is_dir()):
+                    return False
+                continue
+            if counted >= limit:
+                summary.capped = True
+                return False
+            counted += 1
+            if not there:
+                summary.only_source += 1
+            elif _dest_is_older(child, counterpart):
+                summary.older += 1
+            else:
+                summary.not_older += 1
+        return True
+
+    walk(src, dest, True)
+    return summary
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n:,} {word}" if n == 1 else f"{n:,} {word}s"
+
+
+def _summary_markdown(summary: MergeSummary) -> str:
+    """The folder conflict's body: what the merge meets, in the terms the
+    choices act on — "Overwrite older" replaces exactly the ``older`` count."""
+    both = summary.older + summary.not_older
+    lines = []
+    if both:
+        lines.append(f"- **{_plural(both, 'file')}** in both: "
+                     f"**{summary.older:,}** older at the destination, "
+                     f"{summary.not_older:,} not")
+    elif summary.capped:
+        lines.append("- No file is in both among those counted")
+    else:
+        lines.append("- No file is in both — nothing would be overwritten")
+    if summary.only_source:
+        lines.append(f"- {_plural(summary.only_source, 'file')} only in the source")
+    if summary.capped:
+        lines.append(f"\n*Counted the first {_SUMMARY_LIMIT:,} files; the rest "
+                     "were not checked.*")
+    return "\n".join(lines)
+
+
+def _conflict_prompt(target: Path, dest: Path, index: int, total: int, z: int,
+                     summary: Optional[MergeSummary] = None):
     """Return a ``show_fn(panel, deliver)`` for ``Task.ask``: it pushes a
     :class:`ConflictDialog` whose result ``(action, apply_to_all)`` is handed to
     ``deliver``. Both sides are stat'ed here, on the task thread; the dialog
-    stacks just above the progress dialog (``z + 5``)."""
+    stacks just above the progress dialog (``z + 5``). ``summary`` is a folder
+    merge's count (:func:`_merge_summary`), shown in place of the two folders'
+    own size and date, which say nothing about their contents."""
     source, existing = ConflictSide.of(target), ConflictSide.of(dest)
 
     def show(panel: Any, deliver: Callable[[Any], None]) -> None:
         dialog = ConflictDialog(target.name, index, total, on_result=deliver,
-                                source=source, existing=existing)
+                                source=source, existing=existing, summary=summary)
         dialog.show(panel, z=z + 5)
         panel.render()
     return show
@@ -1301,9 +1398,12 @@ class ConflictDialog(FocusContainer, Widget):
     def __init__(self, name: str, index: int, total: int,
                  on_result: Callable[[tuple[str, bool]], None], *,
                  source: Optional[ConflictSide] = None,
-                 existing: Optional[ConflictSide] = None):
+                 existing: Optional[ConflictSide] = None,
+                 summary: Optional[MergeSummary] = None):
         self.name = name
-        self.title = f"File exists ({index} of {total})" if total > 1 else "File exists"
+        noun = "Folder" if summary is not None else "File"
+        self.title = (f"{noun} exists ({index} of {total})" if total > 1
+                      else f"{noun} exists")
         self.on_result = on_result
         self.source, self.existing = source, existing
         self._panel: Any = None
@@ -1312,7 +1412,11 @@ class ConflictDialog(FocusContainer, Widget):
         # The filename renders as a Markdown `code` span so it stands out from the
         # prose (matching the confirm dialogs). Display-only — not a focus child.
         text = f"{_code(name)} already exists in the destination."
-        if source is not None and existing is not None:
+        if summary is not None:
+            # Two folders' own times and sizes say nothing about the files the
+            # merge decides on, so the body counts those instead.
+            text += " The folders are merged.\n\n" + _summary_markdown(summary)
+        elif source is not None and existing is not None:
             text += "\n\n" + _sides_markdown(source, existing)
         self._msg = MarkdownView(text)
         self._checkbox = Checkbox("Apply to all remaining", checked=False)

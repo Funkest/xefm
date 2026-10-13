@@ -46,7 +46,7 @@ from puikit.widgets.base import Widget
 from xefm.dir_scan import is_hidden_path
 from xefm.external_programs import command_argv, resolve_command
 from xefm.path import Path
-from xefm.str_format import abbreviate_path, format_size
+from xefm.str_format import abbreviate_path, format_size, format_timestamp
 from xefm.text_viewer import (MONO, _ScrollBody, _header_bg, draw_status_bar,
                              footer_key, footer_pair, viewer_layer_hints,
                              viewer_pad)
@@ -56,7 +56,7 @@ from xefm.text_dialog import keys_markdown, show_markdown
 from xefm.actions import DIR_DIFF as _CONTEXT
 from xefm.config import (KeyBindings, find_action_for_event,
                          format_key_for_display, get_keys_for_action)
-from xefm.file_operations import FileOperationService
+from xefm.file_operations import FileOperationService, compare_mtimes
 
 
 class DifferenceType(Enum):
@@ -1365,23 +1365,40 @@ class DirectoryDiffView(Widget):
         return " " + " · ".join(parts) + " "
 
     def _details_line(self) -> str:
-        """The focused node's size on each side (the details pane, condensed to a
-        single row)."""
+        """The focused node's size and modification time on each side (the
+        details pane, condensed to a single row), the newer side marked by the
+        rule "Overwrite older" decides with (:func:`compare_mtimes`)."""
         node = self._current()
         if node is None:
             return ""
 
-        def side(path: Optional[Path]) -> str:
+        def stat(path: Optional[Path]):
             if path is None:
-                return "—"
+                return None
             try:
-                if path.is_dir():
-                    return "dir"
-                return format_size(path.stat().st_size)
+                return path.is_dir(), path.stat()
             except Exception:
-                return "?"
+                return False, None
 
-        return f" {node.name}    L: {side(node.left_path)}    R: {side(node.right_path)}"
+        left, right = stat(node.left_path), stat(node.right_path)
+
+        def mtime(info) -> Optional[float]:
+            return info[1].st_mtime if info is not None and info[1] is not None else None
+
+        newer = compare_mtimes(mtime(left), mtime(right))
+
+        def side(info, mark: bool) -> str:
+            if info is None:
+                return "—"
+            is_dir, st = info
+            if st is None:
+                return "?"
+            size = "dir" if is_dir else format_size(st.st_size)
+            text = f"{size}  {format_timestamp(st.st_mtime)}"
+            return text + "  newer" if mark else text
+
+        return (f" {node.name}    L: {side(left, newer > 0)}"
+                f"    R: {side(right, newer < 0)}")
 
     @property
     def _body(self) -> _ScrollBody:

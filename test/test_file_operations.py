@@ -471,6 +471,90 @@ def test_overwrite_older_slack_treats_close_times_as_equal(tmp_path):
     assert F._dest_is_older(_P(a), _P(b))
 
 
+def test_compare_mtimes():
+    assert F.compare_mtimes(100.0, 90.0) == 1
+    assert F.compare_mtimes(90.0, 100.0) == -1
+    assert F.compare_mtimes(100.0, 99.0) == 0      # within the 2 s slack
+    assert F.compare_mtimes(None, 100.0) == 0      # unknown: no verdict
+
+
+def _summary_tree(tmp_path):
+    """src/f merging into dst/f: one file older at the destination, one newer,
+    one the same, one only in the source, and a subfolder missing at the
+    destination with two files."""
+    src, dst = tmp_path / "s" / "f", tmp_path / "d" / "f"
+    (src / "sub").mkdir(parents=True); dst.mkdir(parents=True)
+    for n in ("older.txt", "newer.txt", "same.txt", "only.txt"):
+        (src / n).write_text("S")
+    for n in ("older.txt", "newer.txt", "same.txt"):
+        (dst / n).write_text("D")
+    (src / "sub" / "a").write_text("x")
+    (src / "sub" / "b").write_text("x")
+    _aged(dst / "older.txt", 3600)
+    _aged(src / "newer.txt", 3600)
+    now = time.time()
+    for p in (src / "same.txt", dst / "same.txt"):
+        os.utime(p, (now, now))
+    return src, dst
+
+
+def test_merge_summary_counts_with_the_overwrite_older_rule(tmp_path, cfg):
+    src, dst = _summary_tree(tmp_path)
+    s = F._merge_summary(Task("Copy…", config=cfg), _P(src), _P(dst))
+    assert (s.older, s.not_older, s.only_source, s.capped) == (1, 2, 3, False)
+
+
+def test_merge_summary_stops_at_its_limit(tmp_path, cfg):
+    src, dst = _summary_tree(tmp_path)
+    s = F._merge_summary(Task("Copy…", config=cfg), _P(src), _P(dst), limit=2)
+    assert s.capped and s.older + s.not_older + s.only_source == 2
+
+
+def test_folder_conflict_shows_the_summary_not_the_folders_dates(tmp_path):
+    """Two folders' own size and date say nothing about the files the merge
+    decides on, so the dialog counts those instead."""
+    from xefm.file_operations import ConflictDialog, ConflictSide, MergeSummary
+    (tmp_path / "a").mkdir(); (tmp_path / "b").mkdir()
+    backend = MemoryBackend(width=100, height=30, capabilities=PROFILE_TUI)
+    panel = Panel(backend)
+    dlg = ConflictDialog("photos", 1, 1, on_result=lambda a: None,
+                         source=ConflictSide.of(_P(tmp_path / "a")),
+                         existing=ConflictSide.of(_P(tmp_path / "b")),
+                         summary=MergeSummary(older=8, not_older=4, only_source=40))
+    dlg.show(panel)
+    for _ in range(50):
+        backend.run_animation_ticks()
+    panel.render()
+    text = "\n".join(backend.snapshot())
+    assert "Folder exists" in text and "folders are merged" in text
+    assert "12 files in both: 8 older at the destination, 4 not" in text
+    assert "40 files only in the source" in text
+    assert "Modified" not in text and "newer" not in text
+    assert "Compare" not in text
+
+
+def test_resolve_counts_a_folder_merge_for_the_prompt(tmp_path, cfg, svc):
+    src, dst = _summary_tree(tmp_path)
+    task = Task("Copy…", config=cfg)
+    shown = {}
+
+    def ask(show_fn, headless):
+        shown["fn"] = show_fn
+        return ("skip", False)
+    task.ask = ask  # type: ignore[assignment]
+    svc._resolve(task, [_P(src)], _P(dst.parent), 70, None)
+    backend = MemoryBackend(width=100, height=30, capabilities=PROFILE_TUI)
+    panel = Panel(backend)
+    shown["fn"](panel, lambda answer: None)      # the prompt the task posted
+    for _ in range(50):
+        backend.run_animation_ticks()
+    panel.render()
+    text = "\n".join(backend.snapshot())
+    assert "Folder exists" in text
+    assert "3 files in both: 1 older at the destination, 2 not" in text
+    assert "3 files only in the source" in text
+
+
 def _merge_tree(tmp_path):
     """A source folder colliding with a destination folder: ``old.txt`` is newer
     at the source, ``new.txt`` newer at the destination, ``only.txt`` absent."""

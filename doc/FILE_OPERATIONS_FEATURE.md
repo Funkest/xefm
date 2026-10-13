@@ -177,6 +177,29 @@ every later conflict of the same operation without asking again. With
 **Overwrite older** that is "overwrite all older": each remaining file is
 still judged on its own dates.
 
+### When a folder already exists
+
+Copying or moving a folder onto a folder of the same name **merges** them: the
+dialog asks once for the folder, not for each file inside, and the choice acts on
+the files in it — **Overwrite** replaces every file that exists in both,
+**Overwrite older** replaces only those older at the destination, **Skip** leaves
+the whole folder, **Keep both** copies it as `name (1)`.
+
+So instead of the two folders' own size and date, which say nothing about their
+contents, the dialog counts what the merge would meet:
+
+```
+ Folder exists
+ photos already exists in the destination. The folders are merged.
+
+ • 12 files in both: 8 older at the destination, 4 not
+ • 40 files only in the source
+```
+
+"8 older at the destination" is exactly what **Overwrite older** would replace.
+The count stops after 10,000 files, so a huge or remote folder doesn't hold the
+question back; the dialog then says the rest were not checked.
+
 ### What "older" means
 
 The existing item counts as older when its modification time is more than

@@ -658,3 +658,35 @@ def test_deferred_build_leaves_files_pending():
     tree = DiffEngine(left, right, compare_content=False).build_tree()
     assert _find(tree, "a.txt").difference_type is DifferenceType.PENDING
     assert tree.difference_type is DifferenceType.PENDING
+
+
+def test_details_line_shows_both_times_and_marks_the_newer(tmp_path):
+    """The details row carries each side's modification time, and "newer"
+    lands on the side the conflict dialog's rule calls newer."""
+    left, right = tmp_path / "L", tmp_path / "R"
+    left.mkdir(); right.mkdir()
+    (left / "f.txt").write_text("new content")
+    (right / "f.txt").write_text("old")
+    old = time.time() - 86400
+    os.utime(right / "f.txt", (old, old))
+    view = _sync_view(Path(str(left)), Path(str(right)))
+    node = next(n for n in view.visible if n.name == "f.txt")
+    view.cursor = view.visible.index(node)
+    line = view._details_line()
+    left_part, right_part = line.split("R:")
+    stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(old))
+    assert "newer" in left_part and "11 B" in left_part
+    assert "newer" not in right_part and stamp in right_part
+
+
+def test_details_line_marks_nothing_within_the_slack(tmp_path):
+    left, right = tmp_path / "L", tmp_path / "R"
+    left.mkdir(); right.mkdir()
+    (left / "f.txt").write_text("a")
+    (right / "f.txt").write_text("b")
+    now = time.time()
+    os.utime(left / "f.txt", (now, now))
+    os.utime(right / "f.txt", (now - 1, now - 1))
+    view = _sync_view(Path(str(left)), Path(str(right)))
+    view.cursor = view.visible.index(next(n for n in view.visible if n.name == "f.txt"))
+    assert "newer" not in view._details_line()
