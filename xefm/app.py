@@ -2567,6 +2567,11 @@ class XeFMApp:
             if on_ready:
                 on_ready(pane)
             applied = True
+        if applied:
+            # A directory change settles its cursor when the listing lands,
+            # after the key that asked for it — follow it then too, or the
+            # preview stays on the empty, still-loading pane (#569 hand check).
+            self._quick_view_follow()
         return applied
 
     def _animate_pane_text(self, pane_name: str) -> None:
@@ -2832,6 +2837,14 @@ class XeFMApp:
 
     _quick_view = None
 
+    #: Actions aimed at the other pane, refused while quick view stands in for
+    #: it: the target directory would be one that is not on screen.
+    _OTHER_PANE_ACTIONS = frozenset({
+        "copy_files", "move_files", "sync_current_to_other",
+        "sync_other_to_current", "compare_selection", "diff_files",
+        "diff_directories",
+    })
+
     def quick_view(self) -> None:
         """Toggle the inactive pane into a preview of the active pane's cursor
         item (:mod:`xefm.quick_view`). The inactive pane's own directory,
@@ -2852,7 +2865,8 @@ class XeFMApp:
         self._quick_view = view
         self._quick_view_side = side
         self._quick_view_follow()
-        self.log_info(f"Quick view — {self._keys_label('quick_view')} closes it")
+        self.log_info(f"Quick view — {self._keys_label('quick_view')} or Esc "
+                      f"closes it")
 
     def _close_quick_view(self) -> None:
         view = self._quick_view
@@ -3549,6 +3563,13 @@ class XeFMApp:
         handler, redraw = self._filer_handlers().get(action, (None, False))
         if handler is None:
             return False
+        if self._quick_view is not None and action in self._OTHER_PANE_ACTIONS:
+            # The other pane is a preview: its directory is hidden behind it,
+            # so an operation aimed there would land somewhere not on screen.
+            self.log_info(f"Quick view is open — close it "
+                          f"({self._keys_label('quick_view')} or Esc) to "
+                          f"work with the other pane")
+            return True
         # Guarded like a user action, and for the same reason: a built-in
         # handler reads the config too, so a mistake there (#428) must cost one
         # logged traceback in the log pane, not the running file manager.
@@ -10882,6 +10903,11 @@ class XeFMApp:
             if self.dispatch(action):
                 self.panel.render()
             elif action is None and self._menu_mnemonic(event):
+                self.panel.render()
+            elif (action is None and event.key == "escape"
+                    and self._quick_view is not None):
+                self._close_quick_view()
+                self.log_info("Quick view closed")
                 self.panel.render()
             elif action is None and self._type_ahead(event):
                 self.panel.render()

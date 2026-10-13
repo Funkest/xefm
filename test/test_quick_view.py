@@ -153,6 +153,43 @@ class InTheApp(unittest.TestCase):
         self.assertIs(self.app.pane_splitter.second, right_column)
         self.assertEqual(self.app.pm.active_pane, "right")
 
+    # --- from the hand check ------------------------------------------------
+
+    def test_entering_a_folder_previews_the_item_the_cursor_lands_on(self):
+        """The new listing lands after the key that asked for it; the preview
+        follows the cursor then, rather than staying on the empty pane."""
+        from puikit.event import Event, EventType
+        self.app.dispatch("quick_view")
+        self._focus("folder")
+        self.app.on_event(Event(type=EventType.KEY, key="enter"))
+        self.app._settle_listings()
+        self.app._pump_monitoring()
+        view = self.app._quick_view
+        self.assertIsNotNone(view.entry)
+        self.assertEqual(str(view.entry.parent), os.path.join(self.tmp, "folder"))
+
+    def test_esc_closes_it(self):
+        from puikit.event import Event, EventType
+        right_column = self.app.pane_splitter.second
+        self.app.dispatch("quick_view")
+        self.app.on_event(Event(type=EventType.KEY, key="escape"))
+        self.assertIsNone(self.app._quick_view)
+        self.assertIs(self.app.pane_splitter.second, right_column)
+
+    def test_operations_on_the_other_pane_are_refused(self):
+        """The other pane's directory is hidden behind the preview, so a copy
+        there would land somewhere not on screen."""
+        calls = []
+        self.app._fileops.copy = lambda *a, **k: calls.append(a)
+        self.app.dispatch("quick_view")
+        self._focus("notes.py")
+        self.app.dispatch("copy_files")
+        self.assertEqual(calls, [])
+        self.assertIn("Quick view is open", self.app.log.lines[-1][0])
+        self.app.dispatch("quick_view")
+        self.app.dispatch("copy_files")
+        self.assertEqual(len(calls), 1, "allowed again once it is closed")
+
 
 if __name__ == "__main__":
     unittest.main()

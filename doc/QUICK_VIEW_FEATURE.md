@@ -2,7 +2,7 @@
 
 Press `Shift-V` (**View → Quick View**) and the **other pane becomes a
 preview** of the item under the cursor. Move the cursor and the preview
-follows. Press `Shift-V` again to close it.
+follows. Press `Shift-V` again, or `Esc`, to close it.
 
 | Item under the cursor | The preview shows |
 |-----------------------|-------------------|
@@ -15,15 +15,19 @@ Above the content, a header line names the item, with its size and date.
 
 ## Working with it
 
-- **The keyboard stays on the file list.** Move, select, copy and delete as
-  usual. The preview only watches.
+- **The keyboard stays on the file list.** Move, select, open folders, delete
+  and so on as usual. The preview only watches, and follows the cursor into a
+  folder you open too.
 - **Scroll the preview with the mouse wheel.**
 - **The other pane is kept.** Its folder, cursor and selection come back
   exactly as they were when quick view closes.
 - **Switching panes closes quick view** (`Tab`). The preview is not a pane you
   can work in.
-- Copy and move still go to the other pane's folder, even while it is hidden
-  behind the preview.
+- **Copying or moving to the other pane is refused while quick view is
+  open.** That pane's folder is hidden behind the preview, so the files would
+  land somewhere you can't see. The same goes for comparing with the other
+  pane and syncing the two panes' folders. Close quick view first; the log
+  says so.
 
 ## Speed
 
