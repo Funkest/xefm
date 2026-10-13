@@ -19,6 +19,7 @@ import unittest
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
+from xefm import keymap_afx  # noqa: E402
 from xefm import app as xefm_app  # noqa: E402
 from xefm.state_manager import XeFMStateManager  # noqa: E402
 from puikit.backends import create_backend  # noqa: E402
@@ -101,8 +102,8 @@ class CursorSelectionJump(unittest.TestCase):
 
     def test_default_bindings_exist(self):
         from xefm._config import Config
-        self.assertEqual(Config.KEY_BINDINGS["cursor_next_selected"], ["Ctrl-DOWN"])
-        self.assertEqual(Config.KEY_BINDINGS["cursor_prev_selected"], ["Ctrl-UP"])
+        self.assertEqual(keymap_afx.bindings()["cursor_next_selected"], ["Ctrl-DOWN"])
+        self.assertEqual(keymap_afx.bindings()["cursor_prev_selected"], ["Ctrl-UP"])
 
 
 if __name__ == "__main__":

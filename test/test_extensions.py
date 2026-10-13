@@ -715,7 +715,7 @@ class ConfigManagerIntegration(_Home):
         manager.user_extensions_dir = self.home / "extensions"
         config = manager.load_config()
         self.assertIn("palette.greet", config.ACTIONS)
-        self.assertIn("rename", config.KEY_BINDINGS, "template filled in first")
+        self.assertTrue(hasattr(config, "FONT_SIZE"), "template filled in first")
         self.assertEqual([m.id for m in manager.extension_report.loaded], ["palette"])
         self.assertEqual(ext.settings_for("palette").LIMIT, 9)
 

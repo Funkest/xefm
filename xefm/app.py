@@ -4905,18 +4905,43 @@ class XeFMApp:
         else:
             self.reload_config()
 
-    #: State key for the keymap preset chosen from View > Keymap.
+    #: State key for the keymap preset chosen at first launch or from View >
+    #: Keymap.
     _KEYMAP_STATE = "keymap.preset"
-
     def _apply_keymap_preset(self) -> None:
         """Lay the preset in force over ``config.KEY_BINDINGS`` and rebuild
         every keymap built from it: the app's, and the shared one the help
-        dialog and the menus resolve through."""
+        dialog and the menus resolve through. ``_keymap_preset`` is None until
+        a preset has been chosen; :data:`keymap_presets.FALLBACK` stands in
+        until :meth:`run` has asked."""
         chosen = self.state_manager.get_state(self._KEYMAP_STATE, None)
         self._keymap_preset = keymap_presets.resolve(self.config, chosen)
         keymap_presets.apply(self.config, self._keymap_preset)
         self.keys = KeyBindings(self.config.KEY_BINDINGS)
         config_manager._key_bindings = None
+
+    def _ask_keymap_preset(self) -> None:
+        """Which keymap, asked at the first launch with none chosen — a new
+        install and one from before presets alike (#597). Neither is the
+        default, so there is no Cancel and Esc does nothing; one must be
+        chosen. Quit before choosing, and the next launch asks again."""
+        names = list(keymap_presets.PRESETS)
+        labels = [keymap_presets.LABELS[n] for n in names]
+        lines = ["Choose how XeFM's keys work. **View > Keymap** changes it "
+                 "at any time.", ""]
+        for name, label in zip(names, labels):
+            lines.append(f"**{label}** — {keymap_presets.PRESETS[name].description}")
+            lines.append("")
+
+        def answered(label: str) -> None:
+            self.set_keymap_preset(names[labels.index(label)])
+            self.panel.render()
+
+        show_message_box(
+            self.panel, "\n".join(lines).rstrip(), title="Keymap",
+            icon="question", buttons=tuple(labels), default=0,
+            on_result=answered, markdown=True, dismissable=False)
+        self.panel.render()
 
     def set_keymap_preset(self, name: str) -> None:
         """Switch to keymap preset ``name`` now and for later sessions. Help,
@@ -4935,6 +4960,15 @@ class XeFMApp:
         hint = (" — typing a letter searches; F1 lists every key"
                 if keymap_presets.type_ahead(self.config) else "")
         self.log_info(f"Keymap: {keymap_presets.LABELS[self._keymap_preset]}{hint}")
+        replaced = keymap_presets.replaced(self.config, name)
+        if replaced:
+            # A config.py from before the presets were peers carries the whole
+            # AFX table, which now replaces this preset's keys too.
+            self.log_info(
+                f"KEY_BINDINGS in config.py replaces this keymap's keys for "
+                f"{len(replaced)} action(s): {', '.join(replaced[:5])}"
+                f"{' …' if len(replaced) > 5 else ''} — delete the entries you "
+                f"did not mean to keep")
         self.panel.render()
 
     def _type_ahead(self, event) -> bool:
@@ -10939,9 +10973,13 @@ class XeFMApp:
         # which is the whole reason the event exists: a config's module body runs
         # long before any of that is true.
         _hooks.fire("startup", self._user_ctx)
-        # After the first full render, so the tip dialog opens over a live UI.
+        # After the first full render, so the dialog opens over a live UI.
         # Here rather than __init__: tests construct the app without run().
-        self._maybe_show_startup_tip()
+        # The first launch's keymap question comes before any tip of the day.
+        if self._keymap_preset is None:
+            self._ask_keymap_preset()
+        else:
+            self._maybe_show_startup_tip()
         try:
             self.backend.run_event_loop(self.on_event)
         finally:

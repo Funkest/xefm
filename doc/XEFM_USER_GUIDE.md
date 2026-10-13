@@ -832,11 +832,10 @@ from what your keys do. The menu bar shows the same keys next to the items they
 run.
 
 This guide names **actions** rather than keys for that reason — `copy_files`,
-`find_files`, `jump_to_path` — and one place holds the keys they ship on:
-`~/.xefm/config.py`, which is a copy of
-[`xefm/_config.py`](../xefm/_config.py) with every default written out and
-commented. Reading that file is how you learn the defaults; editing it is how you
-change them.
+`find_files`, `jump_to_path` — because the keys depend on the
+[keymap preset](KEYMAP_PRESETS_FEATURE.md) you chose. The AFX-style table, with
+every key commented, is [`xefm/keymap_afx.py`](../xefm/keymap_afx.py). To
+change a key, add the action to `KEY_BINDINGS` in `~/.xefm/config.py`.
 
 - Which chords work where (a terminal cannot send everything a window can), and
   which ones your terminal or editor takes first:

@@ -105,15 +105,12 @@ class TestConfigCompleteness(unittest.TestCase):
                               f"Config missing {setting}")
     
     def test_jump_dialog_key_binding_exists(self):
-        """Test that jump dialog key binding exists in both configs"""
-        # Check default config
-        self.assertIn('jump_to_path', self.default_config.KEY_BINDINGS)
-        self.assertIn('Shift-J', self.default_config.KEY_BINDINGS['jump_to_path'])
+        """Test that the AFX keymap binds the jump dialog"""
+        from xefm import keymap_afx
+        bindings = keymap_afx.bindings()
+        self.assertIn('jump_to_path', bindings)
+        self.assertIn('Shift-J', bindings['jump_to_path'])
 
-        # Check user config
-        self.assertIn('jump_to_path', self.user_config.KEY_BINDINGS)
-        self.assertIn('Shift-J', self.user_config.KEY_BINDINGS['jump_to_path'])
-    
     def test_config_values_consistency(self):
         """Test that default and user config have consistent values for key settings"""
         # These settings should have the same default values

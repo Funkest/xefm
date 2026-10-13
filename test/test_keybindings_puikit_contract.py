@@ -1,18 +1,17 @@
 """Key-binding matching against the PuiKit keyboard contract.
 
-Drives XeFM's real default keymap (`_config.py`) through
+Drives XeFM's real AFX keymap (`keymap_afx.py`) through
 ``find_action_for_event`` using **PuiKit** ``Event`` objects shaped exactly as
 the curses/macOS backends now produce them (see
 ``doc/dev/PUIKIT_KEYBOARD_CONTRACT.md``).
 """
 
 import contextlib
-import importlib
 import os
 import sys
 import unittest
 
-from xefm import _config
+from xefm import keymap_afx  # noqa: E402
 from puikit import Event, EventType
 from xefm.config import KeyBindings
 
@@ -23,10 +22,9 @@ def key(name, char=None, mods=()):
 
 @contextlib.contextmanager
 def case(platform_name, backend):
-    """Re-read the default keymap as one of its three cases sees it — macOS
-    desktop, Windows desktop, or any terminal — by reloading ``_config`` with
-    the platform and backend it branches on. The module is reloaded again on the
-    way out, so the rest of the suite sees the table it started with."""
+    """Read the AFX keymap as one of its three cases sees it — macOS desktop,
+    Windows desktop, or any terminal — with the platform and backend it
+    branches on. The table is built on each call, so nothing is reloaded."""
     from xefm import backend_detector
     saved_platform = sys.platform
     saved_backend = os.environ.get("XEFM_BACKEND")
@@ -34,8 +32,7 @@ def case(platform_name, backend):
     os.environ["XEFM_BACKEND"] = backend
     backend_detector._cached_backend = None
     try:
-        importlib.reload(_config)
-        yield KeyBindings(_config.Config.KEY_BINDINGS)
+        yield KeyBindings(keymap_afx.bindings())
     finally:
         sys.platform = saved_platform
         if saved_backend is None:
@@ -43,14 +40,13 @@ def case(platform_name, backend):
         else:
             os.environ["XEFM_BACKEND"] = saved_backend
         backend_detector._cached_backend = None
-        importlib.reload(_config)
 
 
 class TestKeybindingsPuikitContract(unittest.TestCase):
     def setUp(self):
-        # Build against the canonical template defaults (_config.py), so the
+        # Build against the AFX keymap (keymap_afx.py), so the
         # test is deterministic and independent of any ~/.xefm/config.py.
-        self.kb = KeyBindings(_config.Config.KEY_BINDINGS)
+        self.kb = KeyBindings(keymap_afx.bindings())
 
     def action(self, event, has_selection=False):
         return self.kb.find_action_for_event(event, has_selection)
@@ -108,7 +104,7 @@ class TestKeybindingsPuikitContract(unittest.TestCase):
         # binding is on the named key rather than the character: a char-mode
         # match would ignore shift and both would mark one item. Only a console
         # that reports modifiers on a printable can deliver it — a POSIX
-        # terminal sends a bare space (see the Three cases note in _config.py).
+        # terminal sends a bare space (see the Three cases note in keymap_afx.py).
         self.assertEqual(
             self.action(key("space", " ", {"shift"})), "select_range"
         )
@@ -169,7 +165,7 @@ class TestKeybindingsPuikitContract(unittest.TestCase):
 
 
 class TestThreeCases(unittest.TestCase):
-    """The per-case overrides at the foot of ``_config.py``: two platform
+    """The per-case overrides at the foot of ``keymap_afx.py``: two platform
     idioms on the desktop, and nothing a terminal cannot send anywhere."""
 
     def test_macos_desktop_adds_command_chords(self):
@@ -209,7 +205,7 @@ class TestThreeCases(unittest.TestCase):
         # arrives; Ctrl-Shift-<letter> is the same control byte as Ctrl-<letter>;
         # Ctrl-ENTER and Alt-ENTER are plain Enter (or hijacked).
         with case("linux", "vt") as kb:
-            for name, binding in _config.Config.KEY_BINDINGS.items():
+            for name, binding in keymap_afx.bindings().items():
                 keys, _ = KeyBindings._binding_parts(binding)
                 for expr in keys:
                     ident, mods, _mode = kb._parse_key_expression(expr)

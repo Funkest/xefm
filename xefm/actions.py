@@ -133,8 +133,8 @@ class Action:
     everything that must be known *without* a running instance — the name, what
     it does, and how it is bound by default.
 
-    ``default_keys`` of ``None`` means "read the shipped ``_config.py``
-    template", which is where every pre-registry action's defaults already live.
+    ``default_keys`` of ``None`` means "read the AFX keymap table"
+    (:mod:`xefm.keymap_afx`), which is where every built-in action's keys live.
     An explicit tuple (including an empty one, for a deliberately unbound
     action) overrides that lookup.
     """
@@ -180,26 +180,29 @@ class Action:
 
 
 # --------------------------------------------------------------------------- #
-# Template defaults
+# Built-in defaults
 # --------------------------------------------------------------------------- #
 
 _template_cache: dict[str, tuple[tuple[str, ...], str]] | None = None
 
 
 def _template_bindings() -> dict[str, tuple[tuple[str, ...], str]]:
-    """``{name: (keys, selection)}`` from the shipped ``_config.py`` template.
+    """``{name: (keys, selection)}`` from the AFX keymap table
+    (:mod:`xefm.keymap_afx`) — what an action is bound to when the table in
+    force never mentions it. Every preset's table starts from that one, so
+    only an action no table names reaches this.
 
-    Read lazily and cached: importing the template at module import would drag
-    the whole external-programs / backend-detection stack into every consumer of
-    this module, and tests import the registry standalone.
+    Read lazily and cached: importing the table at module import would drag
+    the backend-detection stack into every consumer of this module, and tests
+    import the registry standalone.
     """
     global _template_cache
     if _template_cache is not None:
         return _template_cache
     table: dict[str, tuple[tuple[str, ...], str]] = {}
     try:
-        from xefm._config import Config as _TemplateConfig
-        raw = getattr(_TemplateConfig, "KEY_BINDINGS", None) or {}
+        from xefm.keymap_afx import bindings as _afx_bindings
+        raw = _afx_bindings()
         for name, binding in raw.items():
             if isinstance(binding, dict):
                 keys = tuple(binding.get("keys") or ())
@@ -378,7 +381,7 @@ def _new_registry() -> ActionRegistry:
 #
 # Order matters: it is the order two actions of the same context are tried in
 # when a key matches both, and the order the generated help lists them. Actions
-# whose ``default_keys`` are omitted read them from the ``_config.py`` template.
+# whose ``default_keys`` are omitted read them from the AFX keymap table.
 
 def _a(name, context, description, **kw) -> Action:
     if context in (FILER, COMMON):

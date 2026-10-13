@@ -1,12 +1,15 @@
-"""Keymap presets — a second layout over the shipped key bindings (#565).
+"""Keymap presets (#565, #597): the whole keymap, chosen as one.
 
-XeFM's default keymap runs commands on bare letters: ``C`` copies, ``K``
-deletes. A preset swaps that layout for another one users already know,
-without touching what they rebound themselves.
+A preset is a complete keymap. The presets are peers: none is the default
+the others are laid over, and a launch with none chosen — a new install or
+an upgrade from before presets alike — asks which one to use.
+
+- **AFX** (:mod:`xefm.keymap_afx`) — one letter runs one command.
+- **Orthodox** — function keys, and typing a letter searches.
 
 A preset is **a key table plus behavior flags**:
 
-- ``bindings`` — action name → keys, replacing that action's keys;
+- ``bindings`` — action name → keys;
 - ``free_letters`` — take every bare letter and digit (``K``, ``Shift-K``,
   ``1``) off the file list's actions and the shared ones (``quit``,
   ``edit_file``), so typing a letter never runs anything;
@@ -14,12 +17,19 @@ A preset is **a key table plus behavior flags**:
   incremental search with that character, the way typing in a file list does
   almost everywhere else.
 
+The viewers, dialogs and search bars have one set of keys under every preset
+— they take typed text or have no file list — and that set lives in the AFX
+table, so a preset other than AFX starts from it, frees the letters, and lays
+its own ``bindings`` on top.
+
+``config.py``'s ``KEY_BINDINGS`` is laid over the preset in force, action by
+action, **always**: an entry there replaces that action's keys whatever the
+preset says. It ships with examples only.
+
 :func:`apply` writes the result into ``config.KEY_BINDINGS`` itself, so every
 reader — the app's keymap, the help dialog, the menus, the directory diff
-viewer — sees one table. It changes an action **only where the config still
-holds the shipped value**: an action the user rebound in ``config.py`` keeps
-their keys under every preset. The table the config was loaded with is kept
-on the config (``_KEY_BINDINGS_BASE``), so presets can be switched back and
+viewer — sees one table. The table ``config.py`` was loaded with is kept on
+the config (``_KEY_BINDINGS_BASE``), so presets can be switched back and
 forth at runtime without compounding.
 """
 
@@ -39,8 +49,9 @@ logger = getLogger("Keymap")
 #: AFX's table; the direction, not the details.
 AFX = "afx"
 ORTHODOX = "orthodox"
-#: The preset that ships. Its name stays a name, not "default".
-DEFAULT = AFX
+#: The table in force for the moment a launch with no preset chosen spends
+#: before its question is answered. Not a default: nothing is stored.
+FALLBACK = AFX
 #: Earlier spellings still accepted, so a config or a saved menu choice that
 #: says ``'default'`` keeps meaning what it meant.
 ALIASES = {"default": AFX}
@@ -158,29 +169,38 @@ _ORTHODOX = Preset(
     },
 )
 
-PRESETS: dict[str, Optional[Preset]] = {AFX: None, ORTHODOX: _ORTHODOX}
+_AFX = Preset(
+    name=AFX,
+    label="AFX style (letters)",
+    description=("C copy, M move, K delete, V view, E edit; one letter runs "
+                 "one command."),
+)
 
-LABELS = {AFX: "AFX style (letters)", ORTHODOX: _ORTHODOX.label}
+PRESETS: dict[str, Preset] = {AFX: _AFX, ORTHODOX: _ORTHODOX}
+
+LABELS = {name: preset.label for name, preset in PRESETS.items()}
 
 
-def get(name: Optional[str]) -> Optional[Preset]:
-    """The preset called ``name``, or None for the default keymap (and for a
-    name nothing answers to, which is logged)."""
+def get(name: Optional[str]) -> Preset:
+    """The preset called ``name``; :data:`FALLBACK` for None and for a name
+    nothing answers to (which is logged)."""
     name = canonical(name)
-    if not name or name == DEFAULT:
-        return None
-    preset = PRESETS.get(name)
+    preset = PRESETS.get(name) if name else None
     if preset is None:
-        logger.warning(f"Unknown keymap preset {name!r}; using the default keymap")
+        if name:
+            logger.warning(f"Unknown keymap preset {name!r}; using {FALLBACK!r}")
+        preset = PRESETS[FALLBACK]
     return preset
 
 
-def resolve(config, chosen: Optional[str]) -> str:
+def resolve(config, chosen: Optional[str]) -> Optional[str]:
     """The preset in force: ``KEY_PRESET`` from the config when it names one,
-    else ``chosen`` (the View menu's choice), else the default."""
-    configured = canonical(getattr(config, "KEY_PRESET", None))
-    name = configured or canonical(chosen) or DEFAULT
-    return name if name in PRESETS else DEFAULT
+    else ``chosen`` (the first-launch or View menu choice). None when neither
+    names a preset — nothing has been chosen yet."""
+    for name in (canonical(getattr(config, "KEY_PRESET", None)), canonical(chosen)):
+        if name in PRESETS:
+            return name
+    return None
 
 
 def _keys_of(value) -> list:
@@ -208,38 +228,22 @@ def _typing_contexts() -> set:
         {a.name for a in registry.actions(COMMON)}
 
 
-def apply(config, name: Optional[str], template: Optional[dict] = None) -> None:
-    """Make ``config.KEY_BINDINGS`` the table for preset ``name`` (None or
-    ``'afx'`` — or its old name ``'default'`` — for the shipped keymap), and set ``config._KEY_TYPE_AHEAD``.
-
-    ``template`` is the shipped ``KEY_BINDINGS`` — what an action holds when
-    the user has not touched it — read from :mod:`xefm._config` when omitted."""
-    if template is None:
-        from xefm._config import Config as _Template
-        template = _Template.KEY_BINDINGS
-    base = getattr(config, "_KEY_BINDINGS_BASE", None)
-    if base is None:
-        base = copy.deepcopy(config.KEY_BINDINGS)
-        config._KEY_BINDINGS_BASE = base
-    table = copy.deepcopy(base)
+def table(name: Optional[str]) -> dict:
+    """Preset ``name``'s whole keymap, before ``config.py`` is laid over it."""
+    from xefm import keymap_afx
     preset = get(name)
-    config._KEY_TYPE_AHEAD = bool(preset and preset.type_ahead)
-    if preset is None:
-        config.KEY_BINDINGS = table
-        return
-
-    def untouched(action: str) -> bool:
-        return action not in base or base[action] == template.get(action)
-
+    result = keymap_afx.bindings()
+    if preset.name == AFX:
+        return result
     if preset.free_letters:
         typing = _typing_contexts()
-        for action, value in list(table.items()):
-            if action not in typing or not untouched(action):
+        for action, value in list(result.items()):
+            if action not in typing:
                 continue
             kept = [k for k in _keys_of(value) if not is_typing_key(k)]
             if len(kept) != len(_keys_of(value)):
-                table[action] = (dict(value, keys=kept) if isinstance(value, dict)
-                                 else kept)
+                result[action] = (dict(value, keys=kept) if isinstance(value, dict)
+                                  else kept)
     # A preset's keys are a plain list, dropping any selection gate: an
     # orthodox F5 copies the cursor item when nothing is marked.
     from xefm.actions import FILER, registry
@@ -248,9 +252,63 @@ def apply(config, name: Optional[str], template: Optional[dict] = None) -> None:
         # binding them would only claim their keys for nothing.
         if registry.resolve(FILER, action) is None:
             continue
-        if untouched(action):
-            table[action] = list(keys)
-    config.KEY_BINDINGS = table
+        result[action] = list(keys)
+    return result
+
+
+def _current_name(name: str) -> str:
+    """The current name of the action ``name`` refers to — an old name
+    (``branch_view``) resolves to the one the preset tables use."""
+    from xefm.actions import FILER, registry
+    context = name.split(".", 1)[0] if "." in name else FILER
+    for ctx in dict.fromkeys((context, FILER)):
+        try:
+            current = registry.canonical(ctx, name)
+        except Exception as e:
+            logger.error(f"Could not resolve action name {name!r}: {e}")
+            current = None
+        if current:
+            return current
+    return name
+
+
+def overrides(config) -> dict:
+    """``config.py``'s own ``KEY_BINDINGS`` — what :func:`apply` lays over
+    the preset — as it was loaded."""
+    base = getattr(config, "_KEY_BINDINGS_BASE", None)
+    if base is None:
+        base = copy.deepcopy(getattr(config, "KEY_BINDINGS", None) or {})
+        config._KEY_BINDINGS_BASE = base
+    return base
+
+
+def replaced(config, name: Optional[str]) -> list:
+    """The actions whose keys ``config.py``'s ``KEY_BINDINGS`` changes from
+    preset ``name``'s — an empty list when it changes none."""
+    preset_table = table(name)
+    result = []
+    for action, value in overrides(config).items():
+        current = _current_name(action) if isinstance(action, str) else action
+        if preset_table.get(current) != value:
+            result.append(action)
+    return result
+
+
+def apply(config, name: Optional[str]) -> None:
+    """Make ``config.KEY_BINDINGS`` preset ``name``'s keymap with
+    ``config.py``'s entries laid over it, and set ``config._KEY_TYPE_AHEAD``.
+    None applies :data:`FALLBACK`."""
+    own = overrides(config)
+    result = table(name)
+    for action, value in own.items():
+        # Under an old name, the entry still replaces the action: the preset's
+        # entry under the current name would otherwise be matched first.
+        current = _current_name(action) if isinstance(action, str) else action
+        if current != action:
+            result.pop(current, None)
+        result[action] = copy.deepcopy(value)
+    config._KEY_TYPE_AHEAD = get(name).type_ahead
+    config.KEY_BINDINGS = result
 
 
 def type_ahead(config) -> bool:
