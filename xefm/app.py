@@ -87,7 +87,7 @@ from xefm import search_options as search_opts
 from xefm.isearch_bar import ISearchBar
 from xefm import filters
 from xefm import name_key
-from xefm import keymap_presets, tree_walk
+from xefm import keymap_presets, tree_walk, xefml
 from xefm.log_manager import (LOG_ERROR_SOURCE, LOG_SOURCE, clear_log_sink,
                               getLogger, route_library_logger, set_log_sink)
 from xefm.pane_manager import PaneManager
@@ -771,6 +771,27 @@ def _virtual_header_text(virtual: dict, avail: float, measure=len) -> str:
     return elide(label, avail, where="end", measure=measure)
 
 
+def _xefml_header_text(path, avail: float, measure=len) -> str:
+    """``[results.xefml]/group`` for a pane inside a ``.xefml`` tree, and —
+    while its producer is still rewriting it — that the groups may change,
+    with the producer's progress. That part has priority over the path: acting
+    on a provisional group without knowing it is the mistake to prevent."""
+    file_path, key = xefml.split(path)
+    label = f"[{_StdPath(file_path).name}]" + (f"/{key}" if key else "")
+    try:
+        doc = xefml.load(file_path)
+    except OSError:
+        doc = None
+    if doc is None or not doc.provisional:
+        return abbreviate_path(label, avail, measure=measure)
+    pct = doc.progress_text()
+    note = f"  ·  scanning{' ' + pct if pct else ''} — groups may change"
+    room = avail - measure(note)
+    if room < measure("x" * 8):
+        return elide(note.strip(" ·"), avail, where="end", measure=measure)
+    return abbreviate_path(label, room, measure=measure) + note
+
+
 def _tab_label(pane: dict) -> str:
     """What a tab is called in the strip: a directory's last component (the
     whole path at a root, so ``/`` and ``s3://bucket/`` still say something),
@@ -907,6 +928,8 @@ class PaneHeader(Widget):
             # A browsed archive: show [archive.zip]/sub rather than the raw URI.
             label = _archive_header_label(str(pane["path"]))
             text = abbreviate_path(label, avail, measure=ctx.measure_text)
+        elif xefml.is_xefml_path(pane["path"]):
+            text = _xefml_header_text(pane["path"], avail, measure=ctx.measure_text)
         else:
             # Drop whole directory components rather than cutting mid-name, so
             # every name still on screen is one the user can actually read.
@@ -1989,7 +2012,8 @@ class XeFMApp:
         listed = self._process_result_queue()
         loading = self._pump_loading_indicator()
         captured = self._drain_captured_output()
-        return listed or loading or captured
+        trees = self._pump_xefml()
+        return listed or loading or captured or trees
 
     #: Log-pane styles for captured streams. stdout leaves its color unset so it
     #: resolves to ``theme.text`` at draw time (tracking the theme like
@@ -2081,6 +2105,8 @@ class XeFMApp:
         reload it empties the pane for the length of a full re-scan in response to
         a change the user never made — see #239."""
         pane = self.pane(pane_name)
+        if xefml.is_xefml_path(pane["path"]):
+            self._note_xefml_anchor(pane)
         self._fire_directory_changed(pane_name, pane)
         gen = pane["_load_gen"] = next(_LOAD_GENS)
         # "A listing is in flight", tracked separately from ``loading`` because
@@ -3371,6 +3397,30 @@ class XeFMApp:
         placeholder for binaries (issue #212). A file inside a
         password-protected zip prompts for the password first (#180).
         """
+        # A reference in a .xefml tree that points at a directory goes there:
+        # wrapping the real directory inside the tree would turn a snapshot
+        # into a live view (#573).
+        target = entry.target()
+        if target is not None:
+            try:
+                is_dir = target.is_dir()
+            except Exception:  # noqa: BLE001 — unreachable: open it as a file
+                is_dir = False
+            if is_dir:
+                self._go_to_dir(pane, target, None)
+                self.log_info(f"Go to: {target}")
+                return
+        # A .xefml file is entered like an archive, whatever FILE_ASSOCIATIONS
+        # says: the extension means nothing else, and a config written before
+        # it existed has no rule for it.
+        if entry.suffix.lower() == xefml.SUFFIX and not xefml.is_xefml_path(entry):
+            self._remember_cursor(pane)
+            self._exit_virtual(pane)
+            pane["path"] = Path(xefml.uri_for(entry.absolute()))
+            self._refresh(pane, on_ready=self._restore_remembered_cursor)
+            self.log_info(f"Opened {entry.name}")
+            self._watch_xefml()
+            return
         configured, handler = get_builtin_handler_for_file(entry.name)
         if configured and handler is None:
             self.log_info(f"Nothing configured to open {entry.name}")
@@ -5437,11 +5487,19 @@ class XeFMApp:
 
     @staticmethod
     def _virtual_focused_entry(pane: dict):
-        """The ``Path`` under the cursor of a virtual (search-results) ``pane``, or
-        ``None`` if the pane isn't virtual / has no rows. Used by the reveal keys
-        to find *which* highlighted result to open."""
-        if not pane.get("virtual"):
+        """The real ``Path`` under the cursor of a ``pane`` that shows entries
+        standing for places elsewhere — the row of a virtual (search-results)
+        pane, or the target of a reference in a ``.xefml`` tree (#573) — or
+        ``None``. Used by the reveal keys to find *which* place to open."""
+        files = pane["files"]
+        idx = pane["focused_index"]
+        if not (files and 0 <= idx < len(files)):
             return None
+        if pane.get("virtual"):
+            return files[idx]
+        if xefml.is_xefml_path(pane["path"]):
+            return files[idx].target()
+        return None
         files = pane["files"]
         idx = pane["focused_index"]
         if files and 0 <= idx < len(files):
@@ -5480,6 +5538,8 @@ class XeFMApp:
         set intact here — reveal without leaving virtual mode. Only meaningful when
         the active pane is the virtual one; returns False otherwise."""
         pane = self.active_pane()
+        if xefml.is_xefml_path(pane["path"]) and pane["selected_files"]:
+            return self._reveal_selected_targets(pane)
         entry = self._virtual_focused_entry(pane)
         if entry is None:
             return False
@@ -5492,6 +5552,157 @@ class XeFMApp:
         self.log_info(f"Revealed in other pane: {entry.parent}")
         self.panel.render()
         return True
+
+    def _reveal_selected_targets(self, pane: dict) -> bool:
+        """``sync_other_to_current`` over a selection in a ``.xefml`` tree:
+        open every selected reference's real file in the other pane as one
+        list, where duplicates spread over many folders can be dealt with
+        together (#549 decision 4). A provisional tree asks first — its groups
+        may still change under the selection."""
+        selected = [f for f in pane["files"] if str(f) in pane["selected_files"]]
+        targets = []
+        for entry in selected:
+            target = entry.target()
+            if target is not None:
+                targets.append(target)
+            elif entry.is_dir():
+                targets.extend(t for t in (c.target() for c in entry.iterdir()) if t)
+        if not targets:
+            self.log_info("Nothing selected points at a file")
+            return True
+        file_path, _key = xefml.split(pane["path"])
+        title = f"{_StdPath(file_path).name}: {len(targets)} selected"
+        other_name = "right" if self.pm.active_pane == "left" else "left"
+
+        def go() -> None:
+            self.open_path_list(other_name, [str(t) for t in targets], title=title)
+            self.panel.render()
+
+        try:
+            doc = xefml.load(file_path)
+        except OSError:
+            doc = None
+        if doc is not None and doc.provisional:
+            def on_result(label: str) -> None:
+                if label == "Open":
+                    go()
+                self.panel.render()
+
+            show_message_box(
+                self.panel,
+                f"This tree is still being written ({doc.progress_text() or 'in progress'}), "
+                f"and its groups may change.\n\nOpen the **{len(targets)}** selected "
+                f"file(s) in the other pane anyway?",
+                title="Provisional groups", icon="warning", buttons=("Open", "Cancel"),
+                default=1, cancel=1, on_result=on_result, markdown=True)
+            self.panel.render()
+            return True
+        go()
+        return True
+
+    # --- .xefml trees being rewritten (#573) ---------------------------------
+
+    _xefml_poller = None
+
+    def _watch_xefml(self) -> None:
+        """While a pane shows a provisional ``.xefml`` tree, look at the file
+        every two seconds and re-read the pane when a producer has rewritten
+        it. The poller ends once no pane shows a provisional tree."""
+        poller = self._xefml_poller
+        if poller is not None and poller.is_alive():
+            return
+
+        def provisional_files() -> set:
+            files = set()
+            for name in ("left", "right"):
+                path = self.pane(name)["path"]
+                if xefml.is_xefml_path(path):
+                    file_path, _key = xefml.split(path)
+                    try:
+                        if xefml.load(file_path).provisional:
+                            files.add(file_path)
+                    except OSError:
+                        pass
+            return files
+
+        def poll() -> None:
+            stamps = {}
+            while True:
+                time.sleep(2.0)
+                files = provisional_files()
+                if not files:
+                    self._xefml_dirty = True
+                    self._wake_pump()
+                    return
+                for f in files:
+                    try:
+                        stamp = xefml.load(f).stamp
+                    except OSError:
+                        continue
+                    if stamps.get(f) not in (None, stamp):
+                        self._xefml_dirty = True
+                        self._wake_pump()
+                    stamps[f] = stamp
+
+        self._xefml_poller = threading.Thread(target=poll, name="xefm-xefml-poll",
+                                              daemon=True)
+        self._xefml_poller.start()
+
+    def _pump_xefml(self) -> bool:
+        """On the UI thread: re-read every pane inside a ``.xefml`` tree that
+        changed. A pane whose group a rewrite renamed follows it by its
+        anchor; one whose group is gone returns to the top, and says why."""
+        if not getattr(self, "_xefml_dirty", False):
+            return False
+        self._xefml_dirty = False
+        changed = False
+        for name in ("left", "right"):
+            pane = self.pane(name)
+            if not xefml.is_xefml_path(pane["path"]):
+                continue
+            changed = True
+            file_path, key = xefml.split(pane["path"])
+            if pane["path"].exists():
+                self._relist(pane)
+                continue
+            top = key.split("/", 1)[0]
+            old = pane.get("_xefml_anchor")
+            try:
+                doc = xefml.load(file_path)
+                moved = xefml.find_group(doc, old) if old else None
+            except OSError:
+                moved = None
+            if moved:
+                rest = key.split("/", 1)[1] if "/" in key else ""
+                new = Path(xefml.uri_for(file_path) + moved + (f"/{rest}" if rest else ""))
+                pane["path"] = new if new.exists() else Path(xefml.uri_for(file_path) + moved)
+                self._refresh(pane)
+            else:
+                pane["path"] = Path(xefml.uri_for(file_path))
+                self._refresh(pane)
+                self.log_info(f"The group '{top}' changed while the scan went on; "
+                              f"back at the top of the tree")
+        return changed
+
+    def _note_xefml_anchor(self, pane: dict) -> None:
+        """Called as a pane lists a ``.xefml`` path: remember the anchor of the
+        group it is in, so a rewrite that renames the group can be followed
+        (:meth:`_pump_xefml`), and watch the file if it is provisional."""
+        path = pane["path"]
+        pane["_xefml_anchor"] = None
+        if not xefml.is_xefml_path(path):
+            return
+        file_path, key = xefml.split(path)
+        try:
+            doc = xefml.load(file_path)
+        except OSError:
+            return
+        if doc.provisional:
+            self._watch_xefml()
+        top = key.split("/", 1)[0]
+        node = doc.root.child(top) if top else None
+        if node is not None and node.is_group:
+            pane["_xefml_anchor"] = node.anchor_target()
 
     @staticmethod
     def _sniff_text_encoding(path, sample_size: int = 1024) -> str | None:
