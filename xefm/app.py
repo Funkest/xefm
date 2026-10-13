@@ -87,7 +87,7 @@ from xefm import search_options as search_opts
 from xefm.isearch_bar import ISearchBar
 from xefm import filters
 from xefm import name_key
-from xefm import tree_walk
+from xefm import keymap_presets, tree_walk
 from xefm.log_manager import (LOG_ERROR_SOURCE, LOG_SOURCE, clear_log_sink,
                               getLogger, route_library_logger, set_log_sink)
 from xefm.pane_manager import PaneManager
@@ -1113,6 +1113,21 @@ class StatusBar(Widget):
             self._isearch_cache = "   ".join(parts)
         return self._isearch_cache
 
+    def _quick_hints(self) -> str:
+        """The Orthodox type-ahead search's line: it owns only these keys, and
+        every other one acts on the file list — which is what the line has to
+        say."""
+        walk = "/".join(k for k in (self._isearch_key("isearch.prev_match"),
+                                    self._isearch_key("isearch.next_match")) if k)
+        close = self._isearch_key("isearch.cancel")
+        parts = ["I-Search"]
+        if walk:
+            parts.append(f"{walk} prev/next match")
+        if close:
+            parts.append(f"{close} close")
+        parts.append("other keys act on the file")
+        return "   ".join(parts)
+
     def _text(self) -> str:
         """What the bar says right now.
 
@@ -1123,6 +1138,8 @@ class StatusBar(Widget):
         to show, which is the point of a footer overlay.
         """
         if self.app._isearch_active:
+            if getattr(self.app, "_isearch_quick", False):
+                return self._quick_hints()
             return self._isearch_hints()
         if self.app.panel.has_layers:
             return ""
@@ -1457,6 +1474,9 @@ class XeFMApp:
         # positions, recent dirs). Injectable so tests can supply a temp-db
         # manager instead of touching ~/.xefm/state.db.
         self.state_manager = state_manager if state_manager is not None else get_state_manager()
+        # The keymap preset (View > Keymap, or KEY_PRESET in config.py) is
+        # written into KEY_BINDINGS itself, so every surface reads one table.
+        self._apply_keymap_preset()
         self._left_provided = left_provided
         self._right_provided = right_provided
         self.flm = FileListManager(self.config)
@@ -1492,6 +1512,7 @@ class XeFMApp:
         #: cursor (restored on cancel); ``_isearch_matches`` caches the current
         #: hit indices for Up/Down navigation; ``_isearch_active`` only drives the
         #: bottom status-bar hint line.
+        self._isearch_quick = False
         self._isearch_active = False
         self._isearch_origin = 0
         self._isearch_matches: list[int] = []
@@ -2850,6 +2871,7 @@ class XeFMApp:
                 "command_palette": (self.show_command_palette, False),
                 "menu": (self.menu_bar.open_menu, None),
                 "redraw": (lambda: None, True),
+                "reread": (self.reread, False),
                 # --- cursor ---
                 "cursor_up": (self._act_cursor_up, True),
                 "cursor_down": (self._act_cursor_down, True),
@@ -3782,6 +3804,10 @@ class XeFMApp:
             SEPARATOR,
             MenuItem("Switch Pane", on_select=lambda: self._menu("switch_pane"), shortcut=sc("switch_pane")),
             SEPARATOR,
+            MenuItem("Keymap", submenu=Menu(*[
+                MenuItem(label, on_select=lambda n=name: self.set_keymap_preset(n),
+                         checked=lambda n=name: self._keymap_preset == n)
+                for name, label in keymap_presets.LABELS.items()])),
             # Folder tabs (#563): per pane, so every item acts on the active one.
             MenuItem("New Tab", on_select=lambda: self._menu("new_tab"),
                      shortcut=sc("new_tab")),
@@ -4089,6 +4115,64 @@ class XeFMApp:
         else:
             self.reload_config()
 
+    #: State key for the keymap preset chosen from View > Keymap.
+    _KEYMAP_STATE = "keymap.preset"
+
+    def _apply_keymap_preset(self) -> None:
+        """Lay the preset in force over ``config.KEY_BINDINGS`` and rebuild
+        every keymap built from it: the app's, and the shared one the help
+        dialog and the menus resolve through."""
+        chosen = self.state_manager.get_state(self._KEYMAP_STATE, None)
+        self._keymap_preset = keymap_presets.resolve(self.config, chosen)
+        keymap_presets.apply(self.config, self._keymap_preset)
+        self.keys = KeyBindings(self.config.KEY_BINDINGS)
+        config_manager._key_bindings = None
+
+    def set_keymap_preset(self, name: str) -> None:
+        """Switch to keymap preset ``name`` now and for later sessions. Help,
+        the menus and the status bar relabel at once. ``KEY_PRESET`` in
+        ``config.py`` wins over this, and is said to."""
+        configured = keymap_presets.canonical(getattr(self.config, "KEY_PRESET", None))
+        name = keymap_presets.canonical(name)
+        if configured and configured != name:
+            self.log_info(f"KEY_PRESET = {configured!r} in config.py decides "
+                          f"the keymap — change it there")
+            return
+        self.state_manager.set_state(self._KEYMAP_STATE, name)
+        self._apply_keymap_preset()
+        self.status.invalidate()
+        self.menu_bar.set_menu(self._build_menu())
+        hint = (" — typing a letter searches; F1 lists every key"
+                if keymap_presets.type_ahead(self.config) else "")
+        self.log_info(f"Keymap: {keymap_presets.LABELS[self._keymap_preset]}{hint}")
+        self.panel.render()
+
+    def _type_ahead(self, event) -> bool:
+        """Under a preset that frees the letters, an unbound typed key starts
+        incremental search with that character. True when it did."""
+        if not keymap_presets.type_ahead(self.config):
+            return False
+        char = getattr(event, "char", None)
+        if (not char or len(char) != 1 or not char.isprintable() or char == " "
+                or set(event.modifiers or ()) & {"ctrl", "alt", "cmd"}):
+            return False
+        self.enter_isearch(quick=True)
+        if not self._isearch_active:
+            return False
+        # The bar is the top layer now; the key that opened it is its first
+        # character.
+        self.panel.dispatch_event(event)
+        return True
+
+    def reread(self) -> None:
+        """Read both panes' directories again — Total Commander's F2. File
+        monitoring usually makes it unnecessary; it is for a location nothing
+        watches (a network share, a remote) and for a listing in doubt."""
+        self._relist(self.pm.left_pane)
+        self._relist(self.pm.right_pane)
+        self.log_info("Re-read both panes")
+        self.panel.render()
+
     def reload_config(self) -> None:
         """Re-read ``~/.xefm/config.py`` and apply what can change at runtime.
 
@@ -4106,8 +4190,9 @@ class XeFMApp:
             self.log_info(f"Config warning: {err}")
 
         self.config = new_config
-        # Rebuild the keymap from the (possibly rebound) KEY_BINDINGS.
-        self.keys = KeyBindings(new_config.KEY_BINDINGS)
+        # Rebuild the keymap from the (possibly rebound) KEY_BINDINGS, with
+        # the keymap preset laid over it again.
+        self._apply_keymap_preset()
         # The two surfaces that quote a key name instead of reading one on
         # demand: the status bar caches its hint line, and the menu holds the
         # shortcut strings resolved when it was built. Both were left naming the
@@ -7565,7 +7650,7 @@ class XeFMApp:
             region=self._active_pane_region())
         self.panel.render()
 
-    def enter_isearch(self) -> None:
+    def enter_isearch(self, quick: bool = False) -> None:
         """Incremental search over the active pane (the 'F' key).
 
         The prompt is not a centered modal: an ``ISearchBar`` overlay is pinned to
@@ -7581,7 +7666,14 @@ class XeFMApp:
         pattern's tokens — issue #347) and ``isearch.select_matches`` marks every
         match at once; ``isearch.accept`` stops at the current match;
         ``isearch.cancel`` restores the pre-search cursor. Reuses
-        ``FileListManager.find_matches`` for the hits."""
+        ``FileListManager.find_matches`` for the hits.
+
+        ``quick`` is the Orthodox keymap's type-ahead. It matches as above, and
+        closes the way the function-key file managers' quick search does: Esc
+        leaves the cursor on the match, and any other key that is not typing —
+        Enter, F5, an arrow sideways — closes the search and acts on the file
+        list, so Enter opens the match and F5 copies it. Up / Down still walk
+        the matches."""
         if self._isearch_active or not self.active_pane()["files"]:
             return
         footer = self._footers.get(self.pm.active_pane)
@@ -7589,6 +7681,7 @@ class XeFMApp:
             return  # footer not drawn yet — nothing to anchor to
         x, y, w, h = footer.rect
         self._isearch_active = True
+        self._isearch_quick = quick
         self._isearch_origin = self.active_pane()["focused_index"]
         self._isearch_matches = []
         # Migemo only ever matches a *non-ASCII* name (migemo_search.has_hit),
@@ -7599,15 +7692,24 @@ class XeFMApp:
         self._isearch_migemo = any(
             not f.name.isascii() for f in self.active_pane()["files"])
         self._active_view().search_matches = set()
-        self._isearch_bar = ISearchBar(
-            on_change=self._isearch_recompute,
-            on_navigate=self._isearch_step,
-            on_select=self._isearch_toggle_select,
-            on_select_all=self._isearch_select_matches,
-            on_submit=self._isearch_stop,
-            on_cancel=self._isearch_cancel,
-            get_status=self._isearch_status,
-        )
+        if quick:
+            self._isearch_bar = ISearchBar(
+                on_change=self._isearch_recompute,
+                on_navigate=self._isearch_step,
+                on_cancel=self._isearch_stop,
+                get_status=self._isearch_status,
+                on_passthrough=self._isearch_passthrough,
+            )
+        else:
+            self._isearch_bar = ISearchBar(
+                on_change=self._isearch_recompute,
+                on_navigate=self._isearch_step,
+                on_select=self._isearch_toggle_select,
+                on_select_all=self._isearch_select_matches,
+                on_submit=self._isearch_stop,
+                on_cancel=self._isearch_cancel,
+                get_status=self._isearch_status,
+            )
         # Positioned exactly over the footer, with its "status" surface so it
         # reads as the footer bar. No shadow/dim: the pane stays fully lit.
         self.panel.push_layer(self._isearch_bar, z=70,
@@ -7705,6 +7807,7 @@ class XeFMApp:
     def _isearch_close(self) -> None:
         """Tear down the isearch overlay and clear the pane's match highlights."""
         self._isearch_active = False
+        self._isearch_quick = False
         self._isearch_matches = []
         self._active_view().search_matches = set()
         if (self.panel.has_layers
@@ -7724,6 +7827,13 @@ class XeFMApp:
         real, deliberately composed filter out of the history.
         """
         self._isearch_close()
+        self.panel.render()
+
+    def _isearch_passthrough(self, event) -> None:
+        """Quick search: a key the bar does not own ends the search at the
+        current match and then does what it does in the file list."""
+        self._isearch_close()
+        self.on_event(event)
         self.panel.render()
 
     def _isearch_cancel(self) -> None:
@@ -8769,6 +8879,8 @@ class XeFMApp:
             if self.dispatch(action):
                 self.panel.render()
             elif action is None and self._menu_mnemonic(event):
+                self.panel.render()
+            elif action is None and self._type_ahead(event):
                 self.panel.render()
             return
         if event.type in self._MOUSE:
