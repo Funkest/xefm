@@ -179,14 +179,14 @@ class LogClipboardActions(unittest.TestCase):
         the registry default when KEY_BINDINGS never names the action — the flat
         lookup it used to do showed nothing at all.
 
-        The app loads the developer's own config, which may well name the
-        action (a config regenerated from the template says ``[]``), so the
-        test takes it out to be the config it is about."""
+        Checked on Copy Full Path(s): the log copy itself ships unbound since
+        the file clipboard took its key (#577). The app loads the developer's
+        own config, which may name the action, so the test takes it out to be
+        the config it is about."""
         bindings = dict(self.app.config.KEY_BINDINGS)
-        bindings.pop("copy_log_selection", None)
+        bindings.pop("copy_paths", None)
         with patch.object(self.app, "keys", KeyBindings(bindings)):
-            edit = _find_item(self.app._build_menu(), "Edit")
-            item = _find_item(edit.submenu, "Copy Log Selection")
+            item = _find_item(self.app._build_menu(), "Copy Full Path(s)")
         self.assertIsNotNone(item.shortcut)
 
     def test_copy_log_selection_item_is_disabled_without_a_selection(self):
