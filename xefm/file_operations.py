@@ -310,6 +310,13 @@ class FileOperationService:
         self._start(panel, "delete", targets, None, on_complete, log, z, background,
                     note=note)
 
+    def goes_to_trash(self, path) -> bool:
+        """Whether deleting ``path`` sends it to the system's trash: there is
+        one there, and ``DELETE_TO_TRASH`` is not turned off. A sync's
+        deletions and the directory diff's ``K`` ask this per item (#603)."""
+        return (getattr(self.config, "DELETE_TO_TRASH", True)
+                and trash_mod.available(path))
+
     def trash(self, panel: Any, targets: list, *,
               on_complete: Optional[Callable[[dict], None]] = None,
               log: Optional[Callable[[str], None]] = None,
@@ -374,12 +381,17 @@ class FileOperationService:
             steps = [("copy", src, dest, ow) for src, dest, ow in steps]
             doomed = self._release_archives(
                 "delete", [(p, None, False) for p in deletes], result, log)
-            steps += [("delete", p, None, False) for p, _d, _o in doomed]
+            # To the trash wherever there is one (#603): a Mirror can delete a
+            # great deal, and that is where being able to undo matters most.
+            steps += [("trash" if self.goes_to_trash(p) else "delete", p, None, False)
+                      for p, _d, _o in doomed]
 
             copy_items, copy_bytes = self._count(
                 task, "copy", None, [s[1] for s in steps if s[0] == "copy"])
             del_items, _ = self._count(
                 task, "delete", None, [s[1] for s in steps if s[0] == "delete"])
+            # A trash is one move per target, a directory included.
+            del_items += sum(1 for s in steps if s[0] == "trash")
             prog.update_operation_total(copy_items + del_items,
                                         total_bytes=copy_bytes)
             for kind, target, dest, overwrite in steps:

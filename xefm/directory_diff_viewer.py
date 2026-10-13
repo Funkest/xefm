@@ -58,6 +58,7 @@ from xefm.config import (KeyBindings, find_action_for_event,
                          format_key_for_display, get_keys_for_action)
 from xefm.file_operations import FileOperationService, compare_mtimes
 from xefm import dir_sync
+from xefm import trash as trash_mod
 from xefm.choice_dialog import show_choice_dialog
 
 
@@ -121,9 +122,19 @@ class TreeNode:
     #: the target" check — None where the side is absent or unreadable.
     left_mtime: Optional[float] = None
     right_mtime: Optional[float] = None
-    #: A file on one side and a directory of the same name on the other. The
-    #: node is shown as a directory; a sync never copies one over the other.
+    #: A file on one side and a directory of the same name on the other: a
+    #: difference of its own, never scanned or compared, not expandable, each
+    #: side drawn as what it is (``dir_side`` names the directory's side). A
+    #: sync never copies one over the other.
     type_mismatch: bool = False
+    dir_side: Optional[str] = None
+
+    def is_dir_on(self, side_is_left: bool) -> bool:
+        """Whether this node is a directory on that side — which differs from
+        :attr:`is_directory` only for a type mismatch."""
+        if self.type_mismatch:
+            return self.dir_side == ("left" if side_is_left else "right")
+        return self.is_directory
 
 
 #: Scan-task priorities (higher = pulled off the queue first).
@@ -251,6 +262,8 @@ class DiffEngine:
             current_path = f"{current_path}/{part}" if current_path else part
             existing = next((c for c in node.children if c.name == part), None)
             if existing is not None:
+                if existing.type_mismatch:
+                    return  # the directory side's contents are not compared
                 node = existing
                 continue
             left = self.left_files.get(current_path)
@@ -277,6 +290,8 @@ class DiffEngine:
         node.difference_type = self.classify_node(node)
 
     def classify_node(self, node: TreeNode) -> DifferenceType:
+        if node.type_mismatch:
+            return DifferenceType.CONTENT_DIFFERENT
         if node.depth > 0:
             exists_left = node.left_path is not None
             exists_right = node.right_path is not None
@@ -319,6 +334,11 @@ def _record_sides(node: TreeNode, left: Optional[FileInfo],
         node.right_mtime = right.mtime if right.is_accessible else None
     if left is not None and right is not None:
         node.type_mismatch = left.is_directory != right.is_directory
+        if node.type_mismatch:
+            # Neither a directory to descend nor a file to compare (#603).
+            node.is_directory = False
+            node.dir_side = "left" if left.is_directory else "right"
+            node.children = []
 
 
 def summarize_directory(node: TreeNode) -> DifferenceType:
@@ -487,7 +507,8 @@ class DirectoryDiffView(Widget):
             self._scanned = len(left_files) + len(right_files)
             self._compared = self._compare_total = sum(
                 1 for n in self._iter_nodes(self.root)
-                if not n.is_directory and n.left_path is not None and n.right_path is not None)
+                if not n.is_directory and not n.type_mismatch
+                and n.left_path is not None and n.right_path is not None)
             self._finalize_locked()
             self._dirty = True
             self._scanning = False
@@ -686,7 +707,10 @@ class DirectoryDiffView(Widget):
         comparison queue; one-sided nodes are already fully classified."""
         left = node.left_path is not None
         right = node.right_path is not None
-        if left and not right:
+        if node.type_mismatch:
+            # A file against a directory differs, whatever either holds.
+            node.difference_type = DifferenceType.CONTENT_DIFFERENT
+        elif left and not right:
             node.difference_type = DifferenceType.ONLY_LEFT
         elif right and not left:
             node.difference_type = DifferenceType.ONLY_RIGHT
@@ -1021,6 +1045,9 @@ class DirectoryDiffView(Widget):
     def _open_file_diff(self) -> None:
         """Enter/`d` on a two-sided differing file opens the per-file diff."""
         node = self._current()
+        if node is not None and node.type_mismatch:
+            self._notify("A file on one side, a folder on the other: no diff to show.")
+            return
         if (node is not None and not node.is_directory
                 and node.left_path is not None and node.right_path is not None
                 and self._panel is not None):
@@ -1096,8 +1123,11 @@ class DirectoryDiffView(Widget):
         if path is None:
             self._notify(f"'{node.name}' does not exist on the {self.active} side.")
             return
-        self._fileops.delete(self._panel, [path], on_complete=self._on_op_complete,
-                             z=self._child_z, background=self._op_background)
+        # The file list's K goes to the trash where there is one; this K does
+        # the same (#603).
+        op = self._fileops.trash if self._fileops.goes_to_trash(path) else self._fileops.delete
+        op(self._panel, [path], on_complete=self._on_op_complete,
+           z=self._child_z, background=self._op_background)
 
     def _edit_merge(self) -> None:
         """Launch the configured ``TEXT_DIFF`` tool (e.g. ``vimdiff`` / ``code
@@ -1107,6 +1137,9 @@ class DirectoryDiffView(Widget):
         only."""
         node = self._current()
         if node is None or node.is_directory or self._panel is None:
+            return
+        if node.type_mismatch:
+            self._notify("Merge needs a file on both sides.")
             return
         if node.left_path is None or node.right_path is None:
             self._notify("Merge needs the file present on both sides.")
@@ -1532,7 +1565,8 @@ class DirectoryDiffView(Widget):
             return
         lines = self._tree_lines(node, branch=True, side_is_left=side_is_left)
         marker = ("▾ " if node.is_expanded else "▸ ") if node.is_directory else ""
-        label = lines + marker + node.name + ("/" if node.is_directory else "") + suffix
+        slash = "/" if node.is_dir_on(side_is_left) else ""
+        label = lines + marker + node.name + slash + suffix
         ctx.draw_text(x, y, truncate_to_width(label, col_w), Style(fg=fg, bg=row_bg, font=MONO))
         if lines:  # redraw the tree lines muted over the label's start
             ctx.draw_text(x, y, lines[:col_w], Style(fg=self._muted, bg=row_bg, font=MONO))
@@ -1582,7 +1616,7 @@ class DirectoryDiffView(Widget):
                 ctx.fill_rect(cx, y, lw, 1.0, line_style)
         if path is None:
             return
-        label = node.name + ("/" if node.is_directory else "") + suffix
+        label = node.name + ("/" if node.is_dir_on(side_is_left) else "") + suffix
         name_x = label_x
         avail = col_w - depth * _INDENT
         if node.is_directory:
@@ -1888,10 +1922,23 @@ class DirectoryDiffView(Widget):
         if ops.mismatched:
             lines.append(f"- Skip {ops.mismatched} name(s) that are a file on "
                          f"one side and a folder on the other")
-        if ops.deletes:
-            lines += ["", f"**Delete {len(ops.deletes)} item(s) on "
-                          f"{plan.target}. This cannot be undone.**"]
+        trashed, gone = self._split_deletes(ops.deletes)
+        if trashed:
+            lines += ["", f"Move **{len(trashed)}** item(s) on {plan.target} "
+                          f"to the {trash_mod.NAME}."]
+        if gone:
+            lines += ["", f"**Delete {len(gone)} item(s) on {plan.target}. "
+                          f"There is no {trash_mod.NAME} there: this cannot be "
+                          f"undone.**"]
         return "\n".join(lines)
+
+    def _split_deletes(self, deletes: list) -> tuple[list, list]:
+        """``deletes`` as ``(to the trash, for good)`` — what the sync will do
+        with each (#603)."""
+        if self._fileops is None:
+            return [], list(deletes)
+        trashed = [p for p in deletes if self._fileops.goes_to_trash(p)]
+        return trashed, [p for p in deletes if p not in trashed]
 
     def _confirm_plan(self) -> None:
         if self._panel is None or self._plan is None:
@@ -1904,7 +1951,9 @@ class DirectoryDiffView(Widget):
         if ops.empty:
             self._notify("Nothing to sync: every difference is skipped.")
             return
-        deleting = bool(ops.deletes)
+        # Asking twice is for what cannot be undone: a deletion to the trash
+        # can be (#603).
+        deleting = bool(self._split_deletes(ops.deletes)[1])
 
         def on_result(label: str) -> None:
             if label == "Sync":

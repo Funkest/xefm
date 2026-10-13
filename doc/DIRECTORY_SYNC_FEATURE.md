@@ -61,14 +61,20 @@ is worked out again. Your other changes are kept.
   starts at "leave alone". Press `Space` to copy it anyway. The summary counts
   how many were left alone this way.
 - **Replace a file with a folder, or a folder with a file.** When a name is a
-  file on one side and a folder on the other, it is always left alone.
-- **Delete without asking twice.** When the plan deletes anything, the summary
-  shows the count separately, and the dialog starts on **Cancel**.
+  file on one side and a folder on the other, the comparison marks it as
+  different (`!`, with the slash only on the folder's side), and sync always
+  leaves it alone.
+- **Delete for good without asking twice.** The summary shows deletions
+  apart from the copies. When anything would be deleted for good, the dialog
+  starts on **Cancel**.
 
 ## Things to know
 
-- **Deletions are permanent.** XeFM has no trash support yet, so a Mirror's
-  deletions cannot be undone. Read the delete count before you confirm.
+- **Deletions go to the Trash** (the Recycle Bin on Windows) wherever there
+  is one, so a Mirror's deletions can be put back. Where there is none (on
+  `ssh://`, `s3://`, a removable or network drive on Windows), they are
+  permanent, and the summary says so. `DELETE_TO_TRASH = False` in
+  `config.py` makes them all permanent.
 - **Copies run before deletions.** If you cancel a sync partway (`Esc` in the
   progress dialog), it stops wherever it is, but anything it has removed was
   removed only after every copy had finished. What was done stays done.
