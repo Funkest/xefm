@@ -45,7 +45,7 @@ from xefm import migemo_search
 from xefm.text_dialog import keys_markdown, show_markdown
 from xefm.text_encoding import (AUTO_ENCODING, decode_text, encoding_label,
                                looks_binary_bytes, picker_encodings)
-from xefm.viewer_registry import rich_renderer_for
+from xefm.viewer_registry import RichRenderer, rich_renderer_for
 
 logger = getLogger("TextViewer")
 
@@ -611,8 +611,12 @@ class TextViewer(Widget):
                    "stagger_ms": 0, "max_rows": 0}
 
     def __init__(self, path, *, syntax: dict | None = None, state_manager=None,
-                 on_edit=None):
+                 on_edit=None, document=None):
         self.path = path
+        #: An extracted document (:class:`xefm.document_text.Extracted`) shown
+        #: in place of the file's bytes — a PDF or an Office file read as text
+        #: (#575). Raw mode is its plain text, rich mode its Markdown.
+        self._document = document
         self._syntax = syntax
         # ``on_edit`` is the app's editor machinery (associations +
         # TEXT_EDITOR), called with the viewed path on the ``edit_file``
@@ -623,8 +627,11 @@ class TextViewer(Widget):
         # header. Viewer-local, deliberately not persisted: a wrong detection
         # is per-file, not a preference.
         self.forced_encoding: str | None = None
-        self.lines, self.is_error, self.encoding = _read_lines(path)
-        self.highlighted = _highlight(self.lines, path, syntax)
+        if document is not None:
+            self._load_document(document)
+        else:
+            self.lines, self.is_error, self.encoding = _read_lines(path)
+            self.highlighted = _highlight(self.lines, path, syntax)
         # Optional rich (formatted) renderer for this file type — Markdown for
         # *.md today (see xefm.viewer_registry). When a renderer exists,
         # ``toggle_view_mode`` swaps to it in place; the rich widget is built
@@ -635,7 +642,8 @@ class TextViewer(Widget):
         # manager, e.g. ".md" -> "rich"), so a preference for rendered Markdown
         # survives close/reopen and restarts (issue #217). It falls back to raw
         # "text" when the type has no renderer or nothing was stored.
-        self._rich = rich_renderer_for(path)
+        self._rich = (self._document_renderer() if document is not None
+                      else rich_renderer_for(path))
         self._state_manager = state_manager
         self.mode = self._remembered_view_mode()
         self._rich_widget: Widget | None = None
@@ -695,6 +703,26 @@ class TextViewer(Widget):
         self._edge_dir = 0
 
     # --- layout helpers ------------------------------------------------------
+
+    def _load_document(self, document) -> None:
+        """Take an extracted document's text as the raw view. A document with
+        nothing to read shows why, as the binary placeholder does."""
+        self._document = document
+        lines = [_expand_tabs(line) for line in document.lines]
+        if document.problem and not lines:
+            self.lines, self.is_error = [document.problem], True
+        else:
+            self.lines, self.is_error = lines, False
+        self.encoding = document.label
+        self.highlighted = [[(line, None)] for line in self.lines]
+
+    def _document_renderer(self):
+        """The rich mode of an extracted document: its Markdown, rendered."""
+        doc = self._document
+        if doc is None or not doc.markdown.strip():
+            return None
+        from xefm.viewer_registry import _build_markdown
+        return RichRenderer(doc.label.split(" · ")[0] or "Document", _build_markdown)
 
     def _gutter_w(self) -> int:
         return len(str(max(1, len(self.lines)))) + 1
@@ -962,14 +990,15 @@ class TextViewer(Widget):
         pan_seg = self._pan_hint_segment()
         # When a rich renderer exists, advertise the toggle to it (e.g. "M markdown");
         # elide handles the longer hint on a narrow window.
+        enc_seg = "" if self._document is not None else f"{enc_k} encoding · "
         if self._rich is not None:
             view_k = _label("toggle_view_mode", "M")
             hint = (f" {scroll_seg}{wrap_k} wrap · {search_k} search · "
-                    f"{view_k} {self._rich.name.lower()} · {enc_k} encoding · "
+                    f"{view_k} {self._rich.name.lower()} · {enc_seg}"
                     f"{edit_seg}{quit_k}/Esc close ")
         else:
             hint = (f" {scroll_seg}{pan_seg}{wrap_k} wrap · {search_k} search · "
-                    f"{enc_k} encoding · {edit_seg}{quit_k}/Esc close ")
+                    f"{enc_seg}{edit_seg}{quit_k}/Esc close ")
         draw_status_bar(ctx, fy, hint, pad_x=pad_x, bottom_pad=pad_y)
 
     def _draw_rich(self, ctx, wu, hu, pad_x, pad_y, iw, head_h) -> None:
@@ -996,8 +1025,9 @@ class TextViewer(Widget):
         # embedded renderer, which scrolls on its own arrows — a rebound
         # ``text_viewer.scroll_down`` does nothing in this mode, so naming it
         # would advertise a key that does not scroll.
+        enc_seg = "" if self._document is not None else f"{enc_k} encoding · "
         hint = (f" ↑↓ scroll · {wrap_seg}{search_k} search · {view_k} raw text · "
-                f"{enc_k} encoding · {self._edit_hint_segment()}{quit_k}/Esc close ")
+                f"{enc_seg}{self._edit_hint_segment()}{quit_k}/Esc close ")
         draw_status_bar(ctx, fy, hint, pad_x=pad_x, bottom_pad=pad_y)
 
     def _draw_rows(self, ctx) -> None:
@@ -1149,7 +1179,8 @@ class TextViewer(Widget):
             return False
         if self._rich_widget is not None:
             return True
-        source = _read_source(self.path, self.forced_encoding)
+        source = (self._document.markdown if self._document is not None
+                  else _read_source(self.path, self.forced_encoding))
         if source is None:
             logger.warning(f"Cannot render {self.path.name}: unreadable as text")
             return False
@@ -1185,9 +1216,15 @@ class TextViewer(Widget):
         defaulting to raw "text" when nothing is stored or persistence doesn't
         apply. Read once at construction to pick the opening mode (issue #217)."""
         key = self._view_mode_state_key()
+        # An extracted document opens rendered the first time: its structure
+        # is the point, and its raw text is one key away.
+        default = "rich" if self._document is not None and self._rich is not None else "text"
         if key is None:
-            return "text"
-        return "rich" if self._state_manager.get_state(key) == "rich" else "text"
+            return default
+        stored = self._state_manager.get_state(key)
+        if stored is None:
+            return default
+        return "rich" if stored == "rich" else "text"
 
     def _remember_view_mode(self) -> None:
         """Persist the current view mode for this file's type, so files of the
@@ -1471,7 +1508,9 @@ class TextViewer(Widget):
         applied via :meth:`_apply_encoding`. The picker seeds on the choice in
         effect and its Auto row names what detection chose, so it doubles as an
         indicator."""
-        if self._panel is None:
+        if self._panel is None or self._document is not None:
+            # An extracted document has no bytes to re-decode: the format
+            # itself says how its text is encoded.
             return
         names = picker_encodings(getattr(get_config(), "TEXT_ENCODINGS", None))
         detected = (self.encoding or None) if self.forced_encoding is None else None
@@ -1499,9 +1538,13 @@ class TextViewer(Widget):
         search chrome are dropped — their line/column coordinates described
         the old text; the cached rich widget is discarded so a rendered view
         rebuilds from the re-read source on its next draw."""
-        self.lines, self.is_error, self.encoding = _read_lines(self.path,
-                                                               self.forced_encoding)
-        self.highlighted = _highlight(self.lines, self.path, self._syntax)
+        if self._document is not None:
+            from xefm.document_text import extract
+            self._load_document(extract(self.path))
+        else:
+            self.lines, self.is_error, self.encoding = _read_lines(self.path,
+                                                                   self.forced_encoding)
+            self.highlighted = _highlight(self.lines, self.path, self._syntax)
         self._max_line = max((len(line) for line in self.lines), default=0)
         self._wrap_w = -1  # the wrap layout cache derives from the old lines
         self._sel.clear()
@@ -1573,7 +1616,7 @@ class TextViewer(Widget):
 
 
 def show_text_viewer(panel: Any, path, z: int = 80, state_manager=None,
-                     on_edit=None) -> TextViewer:
+                     on_edit=None, document=None) -> TextViewer:
     """Push a full-window modal :class:`TextViewer` over ``panel``. The ``reflow``
     callback re-derives the layer rect from the live window size each render, so
     the viewer follows terminal / window resizes. When a ``state_manager`` is
@@ -1583,7 +1626,8 @@ def show_text_viewer(panel: Any, path, z: int = 80, state_manager=None,
     the app's editor launcher (called with the viewed path on the ``edit_file``
     binding); without one the viewer offers no edit action."""
     viewer = TextViewer(path, syntax=_syntax_palette(panel),
-                        state_manager=state_manager, on_edit=on_edit)
+                        state_manager=state_manager, on_edit=on_edit,
+                        document=document)
     sw, sh = panel.backend.size_units
     viewer._panel = panel
     viewer._child_z = z + 10  # help overlay stacks above the viewer's own layer
