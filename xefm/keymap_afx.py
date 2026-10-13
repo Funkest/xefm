@@ -152,6 +152,7 @@ def bindings() -> dict:
         'find_in_files': ['Shift-G'],         # Show content search dialog (grep)
         # The OS's own index: Spotlight on macOS, Windows Search on Windows.
         'index_search': ['Ctrl-F'],           # Search the OS index under this folder (results as a list)
+        'find_by_tag': [],                    # Find files by tag under this folder (View > Search Tags…)
         'filter': [';'],                       # Enter filter mode to show only matching files
         'clear_filter': [':'],                 # Clear current file filter
         

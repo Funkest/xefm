@@ -54,6 +54,12 @@ class Helpers(unittest.TestCase):
         self.assertEqual(tags.parse_finder(plistlib.dumps(["A\n99", 3, ""])),
                          [Tag("A", 0)])
 
+    def test_a_tag_without_a_color_is_written_as_finder_writes_it(self):
+        """Finder shows a colorless tag only as "Name\n0" (#605)."""
+        import plistlib
+        data = tags.format_finder([Tag("Work"), Tag("Red", 6)])
+        self.assertEqual(plistlib.loads(data), ["Work\n0", "Red\n6"])
+
     def test_apply_change_ignores_case_and_keeps_order(self):
         cur = [Tag("Work"), Tag("Red", 6)]
         self.assertEqual(tags.apply_change(cur, add=[Tag("work"), Tag("New")],
@@ -370,13 +376,19 @@ class AppIntegration(_Tmp):
             self.assertEqual([t.name for t in self.store.read(
                 os.path.join(self.tmp, name))], ["Shared"])
 
-    def test_j_lists_the_tag_and_finds_tagged_files_below(self):
+    def test_search_tags_lists_the_tag_and_finds_tagged_files_below(self):
+        """Search Tags (#605) is its own action: J goes to places only."""
         self.store.write(self.deep, [Tag("Deep")])
         self.app._remember_tags([Tag("Deep")])
         self.app.show_favorites()
         dialog = self.top()
+        labels = [dialog.to_label(r) for r in getattr(dialog, "all_items", [])]
+        self.assertFalse(any("Deep" in label for label in labels), labels)
+        self.app.panel.pop_layer()
+        self.app.dispatch("find_by_tag")
+        dialog = self.top()
         labels = [dialog.to_label(r) for r in dialog.all_items]
-        self.assertTrue(any(label.startswith("Tag: Deep") for label in labels), labels)
+        self.assertTrue(any(label.startswith("Deep") for label in labels), labels)
         self.app.panel.pop_layer()
         with patch.object(type(self.store), "find", return_value=None):
             self.app.find_by_tag("deep")

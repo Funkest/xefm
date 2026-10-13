@@ -34,21 +34,27 @@ that row stays first.
 ## Seeing tags
 
 Each tagged file shows up to three dots after its name, in the tag's color, or
-gray for a tag without a color. The dots are read in the background as rows
+gray for a tag without a color. Finder's list shows only the colored ones,
+and a tag without a color appears in **Get Info**. XeFM shows those too,
+since it has no column for tag names. The dots are read in the background as rows
 come into view, so a slow network folder never holds up the list.
 
 Files on S3 and over SSH don't show dots: each lookup there is a separate
-network request. Their tags still work through **B** and **J**.
+network request. Their tags still work through **B** and **Search Tags**.
 
-## Finding by tag: J
+## Finding by tag: View → Search Tags…
 
-**J** lists your tags after your favorites. Pick `Tag: Work` and the pane shows
-every file tagged *Work* in the current directory and below, as a list you can
-work on like any other. Press Backspace to go back. On macOS, Spotlight answers
-this instantly. Elsewhere, or when Spotlight finds nothing, XeFM searches the
-folders, and you can press Esc to stop.
+**View → Search Tags…** lists your tags. Pick `Work`, or type a tag name that
+is not in the list, and the pane shows every file tagged *Work* in the current
+directory and below, as a list you can work on like any other. Press Backspace
+to go back. On macOS, Spotlight answers this instantly. Elsewhere, or when
+Spotlight finds nothing, XeFM searches the folders, and you can press Esc to
+stop.
 
-To take a tag off the **J** list, highlight it and press the remove key
+The action is `find_by_tag`. It has no key in either keymap; bind one in
+`KEY_BINDINGS`, or run it from the command palette.
+
+To take a tag off the list, highlight it and press the remove key
 (**Shift-Delete**). That only drops it from XeFM's list. Files keep the tag.
 
 ## Where tags are kept

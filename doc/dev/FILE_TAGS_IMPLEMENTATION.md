@@ -98,9 +98,11 @@ inactive pane. The name's elide width shrinks by the width of the dots.
 - **Known tags**: `state.db` key `tags.known`, a list of `[name, color]`, most
   recent first, capped at `_KNOWN_TAGS_MAX`. They are merged with
   `TagCache.seen` (tags seen on files this session).
-- **J** (`show_favorites`): `_TagJump` rows follow the favorites when the
-  pane's directory has a store. Accepting one calls `find_by_tag(name)`, which
-  runs a `Task`:
+- **Search Tags** (`find_by_tag` action → `show_tag_search`, View → Search
+  Tags…, no default key): a filter list of the known tags, with
+  `on_accept_text` for a name not listed. It used to be `_TagJump` rows under
+  **J**. #605 moved it out because J goes to places and this is a search.
+  Accepting calls `find_by_tag(name)`, which runs a `Task`:
   1. Ask `store.find`.
   2. If that returns `None`, fall back to `_walk_for_tag`, which reads one
      directory's children per `read_many` call, so SSH costs one remote
@@ -108,6 +110,12 @@ inactive pane. The name's elide width shrinks by the width of the dots.
   3. Show the hits with `open_path_list(..., title="Tag: name")`.
 
   The remove key on a tag row forgets it from `tags.known`; files keep the tag.
+- **Finder's format.** `format_finder` writes every tag as `"Name\nN"`,
+  `"Work\n0"` for a tag without a color, which is what `NSURLTagNamesKey`
+  writes (#605). Foundation reads a bare `"Work"` too. In the hand check
+  Finder's list showed only the colored tags, and *Get Info* showed `Work`.
+  That is how Finder treats colorless tags, and the bare form was a deviation
+  worth removing anyway.
 
 ## Tests
 
@@ -122,8 +130,8 @@ inactive pane. The name's elide width shrinks by the width of the dots.
 - S3 with a stub client;
 - `carry`;
 - `TagCache`;
-- app tests: B edit then toggle, B on a selection, J's tag row, and
-  `find_by_tag` through the walk.
+- app tests: B edit then toggle, B on a selection, Search Tags listing
+  the tag (and J not), and `find_by_tag` through the walk.
 
 ## Hand checks owed
 
