@@ -324,13 +324,34 @@ def app(tmp_path):
 def test_the_status_bar_names_the_running_job(app):
     task, release, done = _held_task(app.tasks, app.panel, detached=True)
     _second, release2, _ = _held_task(app.tasks, app.panel, detached=True)
-    assert app._jobs_text() == "⟳ Copy 0% +1"      # short: no key, no "queued"
+    assert app._jobs_parts() == [("busy", "Copy 0% +1")]   # short: no key, no "queued"
     third, release3, _ = _held_task(app.tasks, app.panel)
     app.tasks.detach(third)                    # sent back: suspended, queued
-    assert app._jobs_text() == "⟳ Copy 0% +2"
+    assert app._jobs_parts() == [("busy", "Copy 0% +2")]
     release3.set()
     release.set()
     release2.set()
+
+
+def test_the_running_job_gets_the_spinner(app):
+    _task, release, _ = _held_task(app.tasks, app.panel, detached=True)
+    drawn = []
+    real = app.status._busy.draw
+    app.status._busy.draw = lambda ctx: (drawn.append(True), real(ctx))
+    app.panel.render()
+    assert drawn, "the busy indicator was drawn in the status bar"
+    assert "Copy 0%" in "\n".join(app.panel.backend.snapshot())
+    release.set()
+
+
+def test_a_job_waiting_on_a_prompt_is_marked(app):
+    task, release, _ = _held_task(app.tasks, app.panel, detached=True)
+    task._requests.put(object())               # a prompt it is waiting on
+    assert app._jobs_parts() == [("attention", "Copy")]
+    app.panel.render()
+    assert "⚠ Copy" in "\n".join(app.panel.backend.snapshot())
+    task._requests.get_nowait()
+    release.set()
 
 
 def test_a_click_on_the_job_segment_opens_the_list(app):

@@ -15,10 +15,11 @@ XeFM: browse, view files, even start another operation.
 The right end of the status bar shows the job:
 
 ```
-⟳ Copy 42% +1
+⠋ Copy 42% +1
 ```
 
-`+1` is how many more jobs wait behind it.
+The spinner in front turns while the job runs. `+1` is how many more jobs
+wait behind it.
 
 **Click it**, or choose **View → Background Jobs…** (`Ctrl-G`), to list every
 job: what it does, from where to where, and how far it is.

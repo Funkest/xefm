@@ -89,11 +89,17 @@ to `TaskManager.submit`.
 
 ## The app
 
-- `StatusBar.draw` draws `XeFMApp._jobs_text()` at the right end, in the
+- `StatusBar.draw` draws `XeFMApp._jobs_parts()` at the right end, in the
   accent color, and the key hints give way to it. The segment is kept short
-  (#599): `⟳ Copy 42% +2`, `⚠ Copy` for a job waiting on a prompt, and no key
-  hint. Its rect is kept as `_jobs_hit`, and a click there opens
-  `show_jobs`, the way `_clip_hit` opens the clipboard.
+  (#599): `Copy 42% +2`, no key hint. Each part is `(kind, text)`. A `busy`
+  part is drawn behind PuiKit's `BusyIndicator`, which runs its own animation
+  ticks and is one cell wide on every backend. That is why it is not an
+  emoji: emoji widths disagree between terminals, and an emoji ignores the
+  accent color. `attention` (a job waiting on a prompt), `done` and `failed`
+  get a still glyph, `⚠` or `✓`. When the bar is short of room, the texts are
+  elided and the marks are kept. The segment's rect is kept as `_jobs_hit`,
+  and a click there opens `show_jobs`, the way `_clip_hit` opens the
+  clipboard.
 - `show_jobs` (action `jobs`, `Ctrl-G`, View → Background Jobs…) is a
   `ChoiceDialog` of `background_tasks()`. Each row is the title,
   `Task.detail` (set by `FileOperationService` through

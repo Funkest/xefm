@@ -26,7 +26,7 @@ next time XeFM starts it tells you what finished while it was closed.
 The status bar's right end shows how it is going:
 
 ```
-⟳ Similar videos extract 42%
+⠋ Similar videos extract 42%
 ```
 
 and says when it is done:

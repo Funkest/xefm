@@ -70,9 +70,10 @@ reboot, but a status that stopped changing cannot be mistaken for a live one.
   `_pump_monitoring` calls `_pump_scans()`, which refreshes the rows, logs a
   scan that has just finished, and asks for a frame only when the rows
   changed. The poller ends with the last running scan.
-- `_jobs_text` appends running scans (`⟳ Similar videos extract 42%`) and
-  finished, unseen ones (`✓ … 12 groups`, `⚠` for stopped, failed or lost)
-  after the in-process jobs.
+- `_jobs_parts` appends running scans (`busy`, drawn behind the spinner:
+  `Similar videos extract 42%`) and finished, unseen ones (`done`, `✓ … 12
+  groups`; `failed`, `⚠`, for stopped, failed or lost) after the in-process
+  jobs.
 - `show_jobs` lists in-process jobs and scans together. A running scan offers
   **Look at the groups so far** (once `result.xefml` exists), **Stop the scan**
   (`job.stop()`) and **Show its log**. A finished one is marked seen. For both,

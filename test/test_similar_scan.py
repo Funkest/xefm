@@ -226,7 +226,7 @@ def test_launching_watching_and_opening_a_scan(app, dirs, monkeypatch):
     assert _wait(job) == similar_scan.DONE
     app._scans_dirty = True
     app._pump_scans()
-    assert "1 group" in app._jobs_text()
+    assert any("1 group" in text for _kind, text in app._jobs_parts())
     assert any("1 group" in text for text, _s in app.log.lines)
 
     app.show_jobs()
@@ -236,7 +236,7 @@ def test_launching_watching_and_opening_a_scan(app, dirs, monkeypatch):
     assert str(pane["path"]).startswith("xefml://") and str(pane["path"]).endswith("#")
     assert [f.name for f in pane["files"]] == ["a.bin (1)"]
     assert job.seen
-    assert app._jobs_text() == ""
+    assert app._jobs_parts() == []
 
 
 def test_a_remote_pane_is_refused(app):
