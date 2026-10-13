@@ -8049,24 +8049,27 @@ class XeFMApp:
             self.panel.render()
 
         show_history_input(
-            self.panel, self._history(self._INDEX_STATE),
+            self.panel, self._query_history(self._INDEX_STATE),
             title=f"Search {os_index.engine()}", prompt="Query:",
             accept_label="search", on_accept=run,
             on_remove=lambda q: self._forget_history(self._INDEX_STATE, q),
             on_cancel=self.panel.render, region=self._active_pane_region())
         self.panel.render()
 
-    def _history(self, key: str) -> list:
+    def _query_history(self, key: str) -> list:
+        """The queries stored under state ``key``, most recent first. Not
+        ``_history``: that is the directory history list, set per instance,
+        which shadowed this method and broke the index search (#607)."""
         history = self.state_manager.get_state(key, [])
         return [c for c in history if isinstance(c, str)] if isinstance(history, list) else []
 
     def _record_history(self, key: str, entry: str) -> None:
-        history = [c for c in self._history(key) if c != entry]
+        history = [c for c in self._query_history(key) if c != entry]
         history.insert(0, entry)
         self.state_manager.set_state(key, history[:self._LIST_COMMAND_HISTORY_MAX])
 
     def _forget_history(self, key: str, entry: str) -> bool:
-        history = self._history(key)
+        history = self._query_history(key)
         if entry not in history:
             return False
         history.remove(entry)
