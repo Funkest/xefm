@@ -662,6 +662,11 @@ _DETAILS: dict[str, str] = {
         "asks the one you pick which shares it offers, and mounts your choice "
         "through the operating system — the pane then goes there like any "
         "other directory. macOS and Windows."),
+    "flat_view": (
+        "Shows every file below the active pane's directory as one flat list, "
+        "named relative to it — sort, filter and copy work across the whole "
+        "tree. With a selection, only the selected directories and files are "
+        "flattened. Press it again, or Backspace, to go back."),
     "open_list_from_clipboard": (
         "Shows the paths on the clipboard, one per line, as the active pane's "
         "listing — the files can be in many directories. Nothing on disk "
@@ -862,6 +867,9 @@ _FILER_ACTIONS = [
        aliases=("drives_dialog",)),
     _a("connect_server", FILER, "Connect to a network server",
        aliases=("connect_to_server",)),
+    # Every file below the directory as one list (#547). Shift-B rather than
+    # Ctrl-B, which is tmux's prefix and would never reach XeFM inside it.
+    _a("flat_view", FILER, "Show every file below this directory as one list"),
     # A list of paths in place of a directory (Go > Open List), "open" as
     # open_item opens an archive: the pane shows something else, and
     # go_parent leaves it. Unbound. Not "paste" -- nothing is written, and a
