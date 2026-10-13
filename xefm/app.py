@@ -4526,8 +4526,17 @@ class XeFMApp:
         list — or, when it did not finish, to its log."""
         state = job.state()
         if state in (similar_scan.RUNNING, similar_scan.STARTING):
+            rows = []
+            if job.result_path.exists():
+                # The tree is rewritten with provisional groups as the scan
+                # goes (#573): they can be looked at already.
+                rows.append(("look", "Look at the groups so far (they may change)"))
+            rows += [("stop", "Stop the scan"), ("log", "Show its log")]
+
             def act(choice) -> None:
-                if choice == "stop":
+                if choice == "look":
+                    self._open_scan_result(job)
+                elif choice == "stop":
                     job.stop()
                     self.log_info(f"{job.label} scan: stopping — the groups found "
                                   f"so far will be kept")
@@ -4536,20 +4545,26 @@ class XeFMApp:
                 self.panel.render()
 
             show_choice_dialog(self.panel, f"{job.label} — {job.progress_text()}",
-                               [("stop", "Stop the scan"), ("log", "Show its log")],
-                               on_result=act)
+                               rows, on_result=act)
             return
         job.mark_seen()
         self._refresh_scans()
-        groups = job.groups_dir
-        if state in (similar_scan.DONE, similar_scan.CANCELLED) and groups.is_dir() \
-                and any(groups.iterdir()):
-            self._go_to_dir(self.active_pane(), Path(str(groups)), None)
+        if state in (similar_scan.DONE, similar_scan.CANCELLED) and job.result_path.exists():
+            self._open_scan_result(job)
             self.log_info(f"{job.label}: {job.summary()} — Enter opens a group")
         elif state in (similar_scan.DONE, similar_scan.CANCELLED):
             self.log_info(f"{job.label}: nothing found")
         else:
             self._show_scan_log(job)
+
+    def _open_scan_result(self, job) -> None:
+        """Take the active pane into a scan's tree file: its groups are
+        folders, ``Shift-O`` reaches the real files (#573)."""
+        pane = self.active_pane()
+        self._remember_cursor(pane)
+        self._exit_virtual(pane)
+        pane["path"] = Path(xefml.uri_for(job.result_path))
+        self._refresh(pane)
 
     def _show_scan_log(self, job) -> None:
         if job.log_path.exists():

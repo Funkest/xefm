@@ -13,7 +13,11 @@ One folder per scan, under :func:`scans_dir`::
       status.json   what similar-files says (its --status file)
       stop          created to stop the scan (its --stop-file)
       scan.log      the scan's stdout and stderr
-      groups/       one .m3u8 per group (its --out)
+      result.xefml  every group, one tree file (its --out, --format tree)
+
+The tree is rewritten every few minutes while the scan runs, with
+provisional groups (#549, #573), so the groups can be looked at long before a
+video scan ends.
 
 The watcher and the scan share nothing but these files — no pipe, no signal —
 so it works the same on every platform and across XeFM restarting. Nothing is
@@ -74,6 +78,7 @@ def unavailable(method: str) -> Optional[str]:
     try:
         import similar_files  # noqa: F401
         import similar_files.status  # noqa: F401 — 0.2's --status / --stop-file
+        import similar_files.tree  # noqa: F401 — 0.2's --format tree
     except ImportError:
         return ("needs similar-files 0.2 or later: "
                 "pip install 'similar-files>=0.2'")
@@ -138,8 +143,9 @@ class ScanJob:
         return self.folder.name
 
     @property
-    def groups_dir(self) -> _StdPath:
-        return self.folder / "groups"
+    def result_path(self) -> _StdPath:
+        """The scan's tree file — written while it runs, final at the end."""
+        return self.folder / "result.xefml"
 
     @property
     def log_path(self) -> _StdPath:
@@ -241,7 +247,7 @@ def start(roots: list, method: str, *, base: Optional[_StdPath] = None,
     job = ScanJob(folder)
     python = python or xefm_python
     command = [python, "-m", "similar_files", "scan", *[str(r) for r in roots],
-               "--out", str(job.groups_dir), "--method", method,
+               "--out", str(job.result_path), "--format", "tree", "--method", method,
                "--status", str(folder / "status.json"),
                "--stop-file", str(folder / "stop")]
     env = dict(os.environ)

@@ -36,13 +36,21 @@ and says when it is done:
 ## Looking at the results
 
 Open **View → Background Jobs…** (`Ctrl-G`) and choose the scan. The pane
-goes to its results: **one playlist per group**, with the file the others were
-compared with on the first line.
+goes into its results, a [tree file](TREE_FILES_FEATURE.md) with one folder
+per group. In each group, the file the others were compared with comes
+first.
 
-- `Enter` on a group shows its files as a list. Copy, move, delete, view and
-  compare work there as anywhere else.
-- `Backspace` goes back to the groups.
-- Select several groups and press `Enter` to see them all as one list.
+- `Enter` on a group shows its files. View and compare them there.
+- To delete or move the real files, select them (or whole groups) and press
+  `Shift-O`. The other pane shows them as one list, wherever they live.
+- `Backspace` goes back up.
+
+**You don't have to wait for the end.** While a scan runs, choosing it in the
+jobs list offers **Look at the groups so far**. The results are rewritten
+every few minutes as the scan goes, and the pane follows. Those groups are
+provisional: a file the scan reads later can still join a group or start a
+new one. The header says so until the scan is done. Groups of identical files
+never change once they appear.
 
 Nothing is ever deleted for you. Deciding which copy to keep is up to you.
 
@@ -60,7 +68,7 @@ same scan again picks up quickly.
 - **Local folders only.** A mounted network share counts as local. Folders on
   `ssh://` or `s3://` can't be scanned from here yet.
 - **Results are kept in `~/.xefm/scans/`**, one folder per scan, with the
-  scan's log. Nothing is written beside your files. The ten most recent
+  results file (`result.xefml`) and the scan's log. Nothing is written beside your files. The ten most recent
   finished scans are kept.
 - If a scan ends without finishing (its process was killed, for example), the
   jobs list says so, and choosing it shows its log.
@@ -70,5 +78,5 @@ same scan again picks up quickly.
 
 ## See also
 
-- [File lists](FILE_LIST_IMPORT_FEATURE.md): how a playlist opens as a list
+- [Tree Files](TREE_FILES_FEATURE.md): browsing the results, and acting on the real files
 - [Background Jobs](BACKGROUND_JOBS_FEATURE.md): the jobs list

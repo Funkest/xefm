@@ -69,8 +69,11 @@ def test_an_identical_scan_runs_to_the_end_and_writes_its_groups(dirs):
     src, base = dirs
     job = _start(src, base)
     assert _wait(job) == similar_scan.DONE, job.log_path.read_text()
-    playlists = list(job.groups_dir.iterdir())
-    assert [p.suffix for p in playlists] == [".m3u8"]
+    from xefm import xefml
+    doc = xefml.load(str(job.result_path))
+    assert doc.final and doc.complete
+    (group,) = doc.root.children
+    assert sorted(c.name for c in group.children) == ["a.bin", "b.bin"]
     assert job.summary() == "1 group"
     info = job.info()
     assert info["method"] == "identical" and info["roots"] == [str(src)]
@@ -230,8 +233,8 @@ def test_launching_watching_and_opening_a_scan(app, dirs, monkeypatch):
     app.panel.dispatch_event(_key("enter"))          # the scan
     app._settle_listings()
     pane = app.active_pane()
-    assert str(pane["path"]) == str(job.groups_dir)
-    assert [f.suffix for f in pane["files"]] == [".m3u8"]
+    assert str(pane["path"]).startswith("xefml://") and str(pane["path"]).endswith("#")
+    assert [f.name for f in pane["files"]] == ["a.bin (1)"]
     assert job.seen
     assert app._jobs_text() == ""
 
@@ -241,3 +244,24 @@ def test_a_remote_pane_is_refused(app):
     app.active_pane()["path"] = Path("s3://bucket/photos")
     app.find_similar()
     assert "local folders" in app.log.lines[-1][0]
+
+
+def test_a_running_scan_offers_its_provisional_groups(app, dirs):
+    src, base = dirs
+    job = _job(base, "20260101-000000-run", status={"state": "running"}, pid=os.getpid())
+    job.result_path.write_text(json.dumps({
+        "format": "xefml", "version": 1, "final": False,
+        "progress": {"done": 1, "total": 4},
+        "nodes": [{"name": "g (1)", "children": [
+            {"name": "a.bin", "target": str(src / "a.bin"), "extra": {"role": "anchor"}},
+            {"name": "b.bin", "target": str(src / "sub" / "b.bin")}]}]}))
+    app._refresh_scans()
+    app._open_scan(job)
+    app.panel.render()
+    assert "groups so far" in "\n".join(app.backend.snapshot())
+    app.panel.dispatch_event(_key("enter"))          # Look at the groups so far
+    app._settle_listings()
+    pane = app.active_pane()
+    assert [f.name for f in pane["files"]] == ["g (1)"]
+    from xefm import app as xefm_app
+    assert "groups may change" in xefm_app._xefml_header_text(pane["path"], 200)

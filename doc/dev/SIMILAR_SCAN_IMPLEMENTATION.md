@@ -15,8 +15,8 @@ what it wrote.
 
 The two share **only files**, with no pipe and no signal. That makes it work
 the same on every platform, and across XeFM quitting and starting again.
-similar-files 0.2 added the two options this needs (its
-`doc/STATUS_FORMAT.md`):
+similar-files 0.2 added the options this needs (its `doc/STATUS_FORMAT.md`,
+and `--format tree` / `--snapshot-interval`):
 
 - `--status FILE`: progress as JSON, replaced whole on each write, rewritten
   every 5 s while the scan runs, with a final `state` and `exit_code`;
@@ -27,7 +27,7 @@ similar-files 0.2 added the two options this needs (its
 
 | Piece | |
 |---|---|
-| `start(roots, method, base=, python=)` | Makes the job folder, writes `job.json`, starts `python -m similar_files scan … --out groups --method M --status status.json --stop-file stop`, with stdout and stderr going to `scan.log` |
+| `start(roots, method, base=, python=)` | Makes the job folder, writes `job.json`, starts `python -m similar_files scan … --out result.xefml --format tree --method M --status status.json --stop-file stop`, with stdout and stderr going to `scan.log` |
 | `ScanJob` | One folder: `info()`, `status()`, `state()`, `progress_text()`, `summary()`, `seen` / `mark_seen()`, `stop()` |
 | `jobs(base)` | Every scan folder, newest first (ids are `YYYYmmdd-HHMMSS-<hex>`) |
 | `prune(base, keep=10)` | Removes finished scans beyond the newest ten. Never a running one |
@@ -74,9 +74,24 @@ reboot, but a status that stopped changing cannot be mistaken for a live one.
   finished, unseen ones (`✓ … 12 groups`, `⚠` for stopped, failed or lost)
   after the in-process jobs.
 - `show_jobs` lists in-process jobs and scans together. A running scan offers
-  **Stop the scan** (`job.stop()`) and **Show its log**. A finished one is
-  marked seen and the active pane goes to `groups/`. #504's `'enter': 'list'`
-  on `*.m3u8` does the rest. A failed or lost one opens its log.
+  **Look at the groups so far** (once `result.xefml` exists), **Stop the scan**
+  (`job.stop()`) and **Show its log**. A finished one is marked seen. For both,
+  the active pane goes into `xefml://<job>/result.xefml#` (#573), and the
+  tree's own provisional handling (header, re-read on rewrite, follow by
+  anchor) does the rest. A failed or lost one opens its log.
+
+## Why a tree file, rewritten
+
+The output was first one `.m3u8` per group in a `groups/` folder. It became
+one `.xefml` tree (similar-files `--format tree`, #549) so that a long scan's
+groups can be looked at **before it ends**. Appending finished groups works
+for identical files only: similar-files closes a size bucket at a time. For
+similar files, anchors are chosen over all features, largest file first, so a
+file read later can join a group or become a new anchor. Partial results are
+therefore **provisional**. similar-files regroups what it has read every few
+minutes and replaces the file whole (`final: false`, `generation` counting
+up). The last write is final, and a stopped scan keeps its last snapshot with
+`complete: false`.
 - At startup, the log says how many scans finished while XeFM was closed and
   how many still run.
 
@@ -99,8 +114,9 @@ similarity in the list.
 ## Tests
 
 `test/test_similar_scan.py`, skipped without similar-files 0.2. A real
-identical scan runs to the end and writes its playlist, runs in its own
-session, and lists newest first. Hand-written job folders cover a fresh
+identical scan runs to the end and writes its final tree, runs in its own
+session, and lists newest first; a running scan with a tree offers its
+provisional groups. Hand-written job folders cover a fresh
 heartbeat, stale with a dead pid (`lost`), stale with a live pid (`running`),
 finished states, no status yet, the stop file, and prune keeping running
 scans. In the app, the launcher's dialog starts a scan, the poller's pump
