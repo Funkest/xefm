@@ -662,6 +662,20 @@ _DETAILS: dict[str, str] = {
         "asks the one you pick which shares it offers, and mounts your choice "
         "through the operating system — the pane then goes there like any "
         "other directory. macOS and Windows."),
+    "new_tab": (
+        "Opens another tab in the active pane, showing the same place, and "
+        "switches to it. Each pane has its own tabs, and each tab keeps its "
+        "own directory, cursor, selection, sort and filter — a search result "
+        "or an imported list too. The tab strip appears above the path once a "
+        "pane has more than one tab."),
+    "close_tab": (
+        "Closes the active pane's current tab and shows the next one. A "
+        "pane's only tab cannot be closed."),
+    "flat_view": (
+        "Shows every file below the active pane's directory as one flat list, "
+        "named relative to it — sort, filter and copy work across the whole "
+        "tree. With a selection, only the selected directories and files are "
+        "flattened. Press it again, or Backspace, to go back."),
     "open_list_from_clipboard": (
         "Shows the paths on the clipboard, one per line, as the active pane's "
         "listing — the files can be in many directories. Nothing on disk "
@@ -862,6 +876,9 @@ _FILER_ACTIONS = [
        aliases=("drives_dialog",)),
     _a("connect_server", FILER, "Connect to a network server",
        aliases=("connect_to_server",)),
+    # Every file below the directory as one list (#547). Shift-B rather than
+    # Ctrl-B, which is tmux's prefix and would never reach XeFM inside it.
+    _a("flat_view", FILER, "Show every file below this directory as one list"),
     # A list of paths in place of a directory (Go > Open List), "open" as
     # open_item opens an archive: the pane shows something else, and
     # go_parent leaves it. Unbound. Not "paste" -- nothing is written, and a
@@ -873,6 +890,13 @@ _FILER_ACTIONS = [
     _a("open_list_from_file", FILER,
        "Open the list file under the cursor as the pane's list",
        default_keys=()),
+    # Folder tabs (#563), per pane. All on keys a terminal delivers: Ctrl-TAB
+    # never arrives there, so next/previous are Ctrl-PAGE_DOWN / Ctrl-PAGE_UP.
+    _a("new_tab", FILER, "Open a new tab in this pane, at the same place"),
+    _a("open_in_new_tab", FILER, "Open the directory under the cursor in a new tab"),
+    _a("close_tab", FILER, "Close this pane's current tab"),
+    _a("next_tab", FILER, "Show this pane's next tab"),
+    _a("prev_tab", FILER, "Show this pane's previous tab"),
     # Panes
     _a("sync_current_to_other", FILER, "Go to the other pane's directory"),
     _a("sync_other_to_current", FILER, "Send this directory to the other pane"),
@@ -1033,6 +1057,15 @@ _DIR_DIFF_ACTIONS = [
        default_keys=("[",)),
     _a("dir_diff.split_right", DIR_DIFF, "Move the centre split right",
        default_keys=("]",)),
+    # Sync (#560): s opens a plan from the active side and, pressed again,
+    # runs it; Space changes one node's action. Not f: that is isearch, which
+    # every surface inherits from common.
+    _a("dir_diff.sync", DIR_DIFF, "Sync: plan from the active side, or run it",
+       default_keys=("s",)),
+    _a("dir_diff.cycle_sync_action", DIR_DIFF, "Change the focused node's sync action",
+       default_keys=("SPACE",)),
+    _a("dir_diff.toggle_identical", DIR_DIFF,
+       "Show or hide the items that are the same on both sides", default_keys=("d",)),
 ]
 
 _ISEARCH_ACTIONS = [
