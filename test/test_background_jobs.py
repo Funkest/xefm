@@ -287,9 +287,23 @@ def test_the_delete_confirmation_still_defaults_to_cancel(panel, tmp_path):
     victim.write_text("x")
     service = FileOperationService(_config.Config())
     service.delete(panel, [Path(str(victim))])
+    panel.render()
+    screen = "\n".join(panel.backend.snapshot())
+    assert "Background" not in screen          # a delete is quick (#601)
     panel.dispatch_event(_key("enter"))
     assert victim.exists()
     assert manager_idle(service)
+
+
+def test_delete_is_one_step_from_its_default(panel, tmp_path):
+    """Delete, Cancel: the default is Cancel, and Delete is the one beside it."""
+    victim = tmp_path / "v.txt"
+    victim.write_text("x")
+    service = FileOperationService(_config.Config())
+    service.delete(panel, [Path(str(victim))], background=False)
+    panel.dispatch_event(_key("left"))
+    panel.dispatch_event(_key("enter"))
+    assert not victim.exists()
 
 
 def manager_idle(service):

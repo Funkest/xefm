@@ -5,8 +5,10 @@ XeFM: browse, view files, even start another operation.
 
 ## Sending an operation to the background
 
-- **When it asks to start.** The Copy, Move and Delete confirmations have a
+- **When it asks to start.** The Copy and Move confirmations have a
   **Background** button. The operation starts with no progress dialog.
+  Delete has none, because deleting is usually over at once. A long delete
+  can still be sent back from its progress dialog.
 - **While it runs.** Press the progress dialog's **Run in background**
   button. Its other button, **Cancel**, asks before it stops anything.
 

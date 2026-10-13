@@ -82,9 +82,11 @@ stray Enter or Esc changes nothing.
 ## `FileOperationService`
 
 The `CONFIRM_*` box gains **Background** between the verb and Cancel, for
-copy, move and delete when `background=True` (synchronous test runs have no
-pump to run a detached task on). The defaults are unchanged: the verb for
-copy and move, Cancel for delete. `_submit(..., detached=)` passes it through
+copy and move when `background=True` (synchronous test runs have no pump to
+run a detached task on). The defaults are unchanged: the verb. Delete and
+trash had it too at first, and #601 took it away. A delete is usually over at
+once, and on the permanent delete, whose default is Cancel, the button put
+Delete two steps away from the focus. `_submit(..., detached=)` passes it through
 to `TaskManager.submit`.
 
 ## The app
