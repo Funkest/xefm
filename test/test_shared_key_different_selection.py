@@ -8,6 +8,7 @@ from pathlib import Path
 import unittest
 from xefm.config import ConfigManager
 from xefm._config import Config
+from xefm import keymap_afx
 
 
 class TestSharedKeyDifferentSelection(unittest.TestCase):
@@ -17,6 +18,8 @@ class TestSharedKeyDifferentSelection(unittest.TestCase):
         """Set up test fixtures."""
         self.config_manager = ConfigManager()
         self.config_manager.config = Config()
+        # The AFX keymap, which is what shares M between the two.
+        self.config_manager.config.KEY_BINDINGS = keymap_afx.bindings()
     
     def test_m_key_behavior_based_on_selection(self):
         """Test that 'M' key behaves differently based on selection status."""

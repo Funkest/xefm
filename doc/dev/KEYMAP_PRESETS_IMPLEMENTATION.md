@@ -1,53 +1,85 @@
 # Keymap Presets — Implementation
 
-[#565](https://github.com/crftwr/xefm/issues/565), from discussion
+[#565](https://github.com/crftwr/xefm/issues/565) and
+[#597](https://github.com/crftwr/xefm/issues/597), from discussion
 [#343](https://github.com/crftwr/xefm/discussions/343). User-facing behavior is
 in [`doc/KEYMAP_PRESETS_FEATURE.md`](../KEYMAP_PRESETS_FEATURE.md).
 
 ## Shape
 
-`xefm/keymap_presets.py` holds `Preset` (name, label, `bindings`,
-`free_letters`, `type_ahead`) and the `PRESETS` table: `afx` (None) and
+`xefm/keymap_presets.py` holds `Preset` (name, label, description,
+`bindings`, `free_letters`, `type_ahead`) and the `PRESETS` table: `afx` and
 `orthodox`. Discussion #343 asked for one mechanism with several presets on
 it, not a special-cased beginner mode, and that is the reason for this shape.
 
-The shipped preset is named for its lineage, like `orthodox`. That lineage is
-the single-key Japanese filers: the X68000 file managers, then AFX (あふ), then
-cfiler. The name says what the layout is, not that it is the default.
-`DEFAULT = AFX` keeps the code's notion of "the one that ships". The preset
-follows the style of those filers, not their exact keys.
-`ALIASES = {"default": "afx"}` and `canonical()` keep the first name working,
-both in `KEY_PRESET` and in a View-menu choice saved under it.
-`set_keymap_preset` compares canonical names, so `KEY_PRESET = 'default'`
-does not block choosing AFX style from the menu.
+Since [#597](https://github.com/crftwr/xefm/issues/597) the presets are
+**peers**. Each one is a complete keymap, the first launch asks which, and
+`config.py`'s `KEY_BINDINGS` is laid over whichever is in force. Before
+#597, the AFX table *was* the template's `KEY_BINDINGS`, and a preset changed
+only the "untouched" actions (equal to the shipped value). That made AFX the
+default, and the untouched test could not tell an old shipped value from a
+deliberate one.
+
+The AFX table lives in `xefm/keymap_afx.py`, as `bindings()`. The table moved
+there verbatim from `_config.py`, comments and the per-platform desktop
+overrides included. It is a function because those overrides branch on
+`is_desktop_mode()` and `sys.platform`, and every call returns a new dict.
+It is also where the viewers', dialogs' and search bars' keys live. Those
+surfaces are the same under every preset, so the other presets start from
+this table's copy of them.
+
+Both presets are named for their lineage. AFX's is the single-key Japanese
+filers: the X68000 file managers, then AFX (あふ), then cfiler. The preset
+follows their style, not their exact keys. `FALLBACK = AFX` is the table in
+force while nothing has been chosen. `ALIASES = {"default": "afx"}` and
+`canonical()` keep the first name working, both in `KEY_PRESET` and in a
+saved menu choice. `set_keymap_preset` compares canonical names, so
+`KEY_PRESET = 'default'` does not block choosing AFX style from the menu.
 A per-platform Explorer/Finder preset is one more entry.
 
-## `apply(config, name)`
+`actions._template_bindings`, the built-in default for an action no table
+mentions, reads `keymap_afx.bindings()` too. Every preset's table starts from
+it, so only an action absent from all of them reaches that fallback.
 
-The preset is written **into `config.KEY_BINDINGS`**. The keymap is built from
-that table in several places: the app's `self.keys`, the shared
+## `table(name)` and `apply(config, name)`
+
+`table(name)` builds one preset's whole keymap:
+
+1. Start from `keymap_afx.bindings()`. For AFX, that is the result.
+2. `free_letters` removes **typing keys** (`is_typing_key`: a bare letter or
+   digit, or `Shift-<letter>`) from every action of the `filer` and `common`
+   contexts. A viewer's own actions keep their letters, because nothing is
+   typed into a viewer.
+3. `bindings` replaces those actions' keys with a plain list. That drops any
+   `selection` gate: AFX's `copy_files` is `{'keys': ['C'], 'selection':
+   'required'}`, and an orthodox `F5` copies the cursor item when nothing is
+   marked, which `_transfer` already does.
+
+`apply` writes the result **into `config.KEY_BINDINGS`**. The keymap is built
+from that table in several places: the app's `self.keys`, the shared
 `config_manager.get_key_bindings()` that help and the menus resolve through,
 and `DirectoryDiffView`'s own `KeyBindings`. Rewriting the one table they all
 read is what makes a preset reach every surface without touching any of them.
 
-1. The table the config was loaded with is stashed on the config as
+1. `overrides(config)` is the table `config.py` was loaded with (extension
+   key suggestions included). It is stashed on the config as
    `_KEY_BINDINGS_BASE` the first time, so switching presets back and forth
    starts from it each time instead of compounding.
-2. **Untouched** means `base[action] == template[action]`, where the template
-   is `xefm._config.Config.KEY_BINDINGS`, or the action is missing from the
-   user's table. A user's `config.py` holds a full copy of the template's
-   table, so equality with the shipped value is the only way to tell a key
-   left alone from a key chosen. A rebound action keeps the user's keys,
-   letters included.
-3. `free_letters` removes **typing keys** (`is_typing_key`: a bare letter or
-   digit, or `Shift-<letter>`) from untouched actions of the `filer` and
-   `common` contexts. A viewer's own actions keep their letters, because
-   nothing is typed into a viewer.
-4. `bindings` replaces untouched actions' keys with a plain list. That drops
-   any `selection` gate: the template's `copy_files` is `{'keys': ['C'],
-   'selection': 'required'}`, and an orthodox `F5` copies the cursor item when
-   nothing is marked, which `_transfer` already does.
-5. `config._KEY_TYPE_AHEAD` records the flag.
+2. Every entry in it replaces the preset's, whatever it equals. An entry
+   under an **old action name** (`rename_file`) also removes the preset's
+   entry under the current one (`rename`). `KeyBindings` matches current
+   names first, so the preset's entry would otherwise win.
+3. `config._KEY_TYPE_AHEAD` records the flag.
+
+`replaced(config, name)` lists the `config.py` entries whose value differs
+from preset `name`'s. `set_keymap_preset` logs it when non-empty. That is the
+whole migration story for a `config.py` holding the old full AFX copy. Under
+AFX the copy replaces nothing and stays silent. Under Orthodox the log names
+what it overrides. Nothing deletes the entries automatically: telling a
+copied default from a chosen key is exactly the guess #597 removed.
+
+The shipped `_config.py` `KEY_BINDINGS` is `{}` with commented examples, each
+one meaningful under every preset.
 
 `test_no_two_actions_share_a_key_in_the_file_list` keeps the orthodox table
 free of clashes. The ones it had to resolve: `F5` was `redraw` (now unbound),
@@ -88,10 +120,31 @@ view, back/forward, the file clipboard, `delete_permanently`. `apply` skips an
 action the registry does not resolve, so the preset is right on a build with or
 without them, and a missing action never holds a key for nothing.
 
-`resolve(config, chosen)`: `KEY_PRESET` from the config when set, else the
-View menu's choice (state key `keymap.preset`), else `afx`, with old names
-mapped through `canonical`. An unknown name falls back to `afx` and is
-logged.
+`resolve(config, chosen)` returns `KEY_PRESET` from the config when it names a
+preset, else the saved choice (state key `keymap.preset`), else **None**:
+nothing has been chosen. Old names are mapped through `canonical`. `get(None)`
+and an unknown name give `FALLBACK`; an unknown name is also logged.
+
+### The first launch
+
+`XeFMApp._settle_keymap_choice` runs once in `__init__`, before the first
+apply. When `resolve` already gives a preset, it does nothing. Otherwise:
+
+- `config_manager.created_config` is set when this process wrote `config.py`
+  because there was none. That is a first launch, so the question stays open:
+  state `keymap.ask = True`, and `_keymap_preset` stays None.
+- `keymap.ask` already True means a first launch whose question was never
+  answered (Later, Esc, or quit). It stays open.
+- Neither means an install carried over from before presets existed. It gets
+  `keymap.preset = 'afx'`, the keymap it was running, and `run()` logs one
+  line saying so. The log pane does not exist yet in `__init__`.
+
+`run()` calls `_ask_keymap_preset` when `_keymap_preset` is None, in place
+of that launch's tip of the day, so two dialogs never stack. It is a
+markdown message box with one button per preset plus **Later**, which is the
+cancel button. A preset button calls `set_keymap_preset`, which also clears
+`keymap.ask`. `__init__` never opens the dialog, because tests construct the
+app without `run()`.
 
 `XeFMApp._apply_keymap_preset` runs right after the state manager exists, and
 again in `reload_config` after the new config replaces the old one. It
@@ -134,15 +187,33 @@ The I-Search key (`enter_isearch()` with no argument) is unchanged.
 
 ## Not done
 
-The Explorer/Finder preset, a first-run prompt, and presets as data packages
+The Explorer/Finder preset, and presets as data packages
 (#543).
 
 ## Tests
 
-`test/test_keymap_presets.py`. The pure half covers the orthodox table
-landing, no selection gate, letters freed from the file list but not from a
-viewer, rebound actions kept, switching back and forth without compounding,
-no key clashes, `is_typing_key`, and `resolve`. The app half covers switching
-relabeling the keymap, a typed letter opening search with it, no type-ahead
-under the default keymap, the choice surviving a restart, and `KEY_PRESET`
-winning over the menu.
+`test/test_keymap_presets.py`.
+
+The pure half covers:
+
+- each preset as a whole table;
+- the orthodox table landing, with no selection gate;
+- letters freed from the file list but not from a viewer;
+- `config.py` overriding every preset, even with a value equal to AFX's,
+  and under an old action name;
+- `replaced`;
+- switching back and forth without compounding;
+- no key clashes, `is_typing_key`, `resolve`;
+- the shipped `KEY_BINDINGS` being empty.
+
+The app half covers:
+
+- switching relabeling the keymap;
+- a typed letter opening search with it, and no type-ahead under AFX;
+- the choice surviving a restart, and `KEY_PRESET` winning over the menu;
+- the first launch: carried over → AFX, fresh → asked, Later → asked again;
+- the log line on switching with overriding entries.
+
+It isolates itself from the developer's `~/.xefm/config.py` by emptying the
+shared config's `_KEY_BINDINGS_BASE`. Tests elsewhere that want "the shipped
+keymap" read `keymap_afx.bindings()`, not `_config.Config.KEY_BINDINGS`.

@@ -630,6 +630,10 @@ class ConfigManager:
         self.user_extensions_dir = self.config_dir / 'extensions'
         self.config = None
         self._key_bindings = None
+        #: Whether this process wrote ``config.py`` because there was none — a
+        #: first launch, as against an install carried over from an earlier
+        #: XeFM. Never reset: a reload finds the file this process wrote.
+        self.created_config = False
         
     def ensure_config_dir(self):
         """Ensure the configuration directory exists"""
@@ -748,6 +752,7 @@ class ConfigManager:
         if not self.config_file.exists():
             self.logger.info(f"Configuration file not found at: {self.config_file}")
             if self.create_default_config():
+                self.created_config = True
                 self.logger.info("Created default configuration file")
             else:
                 self.logger.warning("Could not create default configuration file")

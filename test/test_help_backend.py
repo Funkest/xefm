@@ -16,6 +16,7 @@ import types
 import unittest
 
 import xefm.app as app_module
+from xefm import keymap_afx  # noqa: E402
 from xefm import _config
 from xefm.app import UNBOUND_KEYS, XeFMApp
 from xefm.config import KeyBindings
@@ -39,7 +40,7 @@ class HelpMarkdownCase(unittest.TestCase):
     def help_for(self, *, native_menus: bool, desktop: bool) -> str:
         app_module.is_desktop_mode = lambda: desktop
         app = object.__new__(XeFMApp)  # no __init__: no config file, no panel
-        app.keys = KeyBindings(_config.Config.KEY_BINDINGS)
+        app.keys = KeyBindings(keymap_afx.bindings())
         app.menu_bar = menu_bar(takes_activation_key=not native_menus)
         return app._help_markdown()
 

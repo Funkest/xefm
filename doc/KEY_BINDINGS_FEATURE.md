@@ -123,10 +123,11 @@ Add modifiers before the main key, separated by hyphens:
 
 ### Keymap presets
 
-**View → Keymap** (or `KEY_PRESET` in `config.py`) switches the whole layout
-to another one, such as function keys (`F5` copy, `F8` delete) with nothing on
-the bare letters. A preset only replaces keys you have not changed. See
-[Keymap Presets](KEYMAP_PRESETS_FEATURE.md).
+Every key comes from a **preset**, a complete keymap: AFX style (letters) or
+Orthodox (function keys). XeFM asks which one at its first launch, and
+**View → Keymap** (or `KEY_PRESET` in `config.py`) switches it.
+`KEY_BINDINGS` holds only your changes, and each entry replaces that action's
+keys under every preset. See [Keymap Presets](KEYMAP_PRESETS_FEATURE.md).
 
 ### What a terminal can carry
 
@@ -185,10 +186,10 @@ simply does nothing. The ones worth knowing:
 ### Defaults that moved
 
 These changed when the keymap became one common table (and `help` later, to
-make room for the context-menu keys), and an existing
-`~/.xefm/config.py` keeps whatever it already says — XeFM fills in a setting your
-config is missing, but never rewrites the `KEY_BINDINGS` you already have. Edit
-the lines by hand if your config predates the change:
+make room for the context-menu keys). A `config.py` from before then may still
+hold the old keys, and an entry in `KEY_BINDINGS` always wins over the preset.
+XeFM never rewrites the `KEY_BINDINGS` you already have, so edit the lines by
+hand, or delete them to take the preset's keys:
 
 | Action | Was | Now |
 |---|---|---|
@@ -265,9 +266,9 @@ action the same way.
 
 The keys used *inside* the text, image, diff and directory-diff viewers are named
 actions too, prefixed with the viewer they belong to — `text_viewer.page_down`,
-`file_diff.next_block`, `dir_diff.switch_side`. They are not listed in the
-default `KEY_BINDINGS` because they work without an entry; add one only for a key
-you want to change:
+`file_diff.next_block`, `dir_diff.switch_side`. Like every other action,
+they work without an entry in `KEY_BINDINGS`; add one only for a key you want
+to change:
 
 ```python
 KEY_BINDINGS = {

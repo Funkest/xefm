@@ -1,27 +1,32 @@
 # Keymap Presets
 
-By default, XeFM runs commands from single letters: `C` copies, `M` moves,
-`K` deletes. That is fast once you know it. If you want typing a letter to be
-harmless, or you are used to the function-key layout of two-pane file
-managers, switch to a **preset**.
-
-**View → Keymap** picks one:
+XeFM has two complete keymaps, called **presets**. Neither is the default:
+the first time XeFM starts, it asks which one you want.
 
 | Preset | Bare letters | Commands are on |
 |--------|--------------|-----------------|
-| **AFX style** (the default) | run commands | letters (`C`, `M`, `K`, `V`, …) |
+| **AFX style** | run commands | letters (`C`, `M`, `K`, `V`, …) |
 | **Orthodox** | search for a file | function keys (`F3`, `F5`, `F8`, …) |
 
-The change applies at once. The help dialog (`F1`), the menus and the status
-bar show the new keys, and XeFM remembers your choice for later sessions.
+**View → Keymap** switches at any time. The change applies at once: the help
+dialog (`F1`), the menus and the status bar show the new keys, and XeFM
+remembers your choice for later sessions.
+
+## The first launch
+
+On its first start, XeFM shows a **Keymap** dialog with one button per preset.
+**Later** (or `Esc`) uses AFX style for now and asks again next time.
+
+If you used an earlier version of XeFM, there is no question. XeFM keeps AFX
+style, the keymap you have been using, and says so in the log. View → Keymap
+offers the other.
 
 ## AFX style
 
-XeFM's own layout, and the one it starts with. One letter runs one command,
-which is the style of the Japanese single-key filers: the X68000 file managers,
-then AFX (あふ) on Windows, then cfiler. XeFM follows that style rather than
-copying any one of them key for key, so details differ from AFX. Deleting, for
-example, is `K`.
+One letter runs one command, which is the style of the Japanese single-key
+filers: the X68000 file managers, then AFX (あふ) on Windows, then cfiler.
+XeFM follows that style rather than copying any one of them key for key, so
+details differ from AFX. Deleting, for example, is `K`.
 
 ## Orthodox
 
@@ -117,12 +122,30 @@ keep some of them. On macOS, Terminal.app sends `Alt-<key>` only with **Use
 Option as Meta key** turned on, and a laptop keyboard may need `fn` for the
 function keys. If one does nothing, rebind it.
 
-## Your own key bindings come first
+## Your own key bindings come on top
 
-A preset replaces only the keys you have **not** changed. If your
-`config.py` rebinds `copy_files`, that binding stays the same under every
-preset, letters included. To change a key in a preset, rebind it in
-`KEY_BINDINGS` as usual.
+`KEY_BINDINGS` in `config.py` holds **your changes** to the preset. Every
+entry replaces that action's keys, whichever preset is in force. An action
+you don't list keeps the preset's keys. That is why the `KEY_BINDINGS` XeFM
+writes into a new `config.py` holds only commented-out examples.
+
+```python
+KEY_BINDINGS = {
+    'reload_config': ['F12'],   # F12 reloads the config, under every preset
+    'quit': [],                 # nothing quits by key
+}
+```
+
+### A config.py from an earlier XeFM
+
+Before the presets, `config.py` held a copy of the whole AFX-style table.
+Under AFX style that copy changes nothing. Under another preset, every entry
+in it replaces the preset's keys, so `C` still copies instead of searching.
+When you switch presets, the log says how many actions your `config.py`
+replaces, and names the first few.
+
+To use another preset, delete the entries you did not mean to change. If you
+never changed a key, delete them all and leave `KEY_BINDINGS = {}`.
 
 ## Choosing it in config.py
 
@@ -133,7 +156,8 @@ KEY_PRESET = 'orthodox'   # or 'afx'
 `'default'`, the name this preset had first, still works and means `'afx'`.
 
 A `KEY_PRESET` in `config.py` overrides the menu, and the menu says so if you
-try to change it there. Leave it as `None` to let the menu decide.
+try to change it there. It also skips the first-launch question. Leave it as
+`None` to let the dialog and the menu decide.
 
 ## See also
 
