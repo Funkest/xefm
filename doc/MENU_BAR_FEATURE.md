@@ -115,6 +115,7 @@ the mouse for the first, take the whole buffer with the second. See
 | Jump to Path… | `jump_to_path` |
 | Drives… | `drives` |
 | History… | `history` |
+| Flat View | `flat_view` — see [Flat View](FLAT_VIEW_FEATURE.md) |
 | Open List → From Clipboard | `open_list_from_clipboard` *(ships unbound)* — see [File lists](FILE_LIST_IMPORT_FEATURE.md) |
 | Open List → From Command… | `open_list_from_command` *(ships unbound)* |
 | Open List → From File | `open_list_from_file` *(ships unbound)* — also **Open as List** on a file's right-click menu |
@@ -148,6 +149,13 @@ the mouse for the first, take the whole buffer with the second. See
 | Theme ▸ | (submenu of installed themes) |
 | Next Theme | `toggle_color_scheme` *(ships unbound)* |
 | Switch Pane | `switch_pane` |
+| Background Jobs… | `jobs` — see [Background Jobs](BACKGROUND_JOBS_FEATURE.md) |
+| Keymap ▸ | AFX style / Orthodox — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md) |
+| New Tab | `new_tab` — see [Folder Tabs](FOLDER_TABS_FEATURE.md) |
+| Open in New Tab | `open_in_new_tab` |
+| Close Tab | `close_tab` |
+| Next Tab | `next_tab` |
+| Previous Tab | `prev_tab` |
 
 ### Tools Menu
 

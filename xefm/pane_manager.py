@@ -17,35 +17,88 @@ class PaneManager:
         self.config = config
         self.file_list_manager = file_list_manager
         
-        # Dual pane setup with configuration
-        self.left_pane = {
-            'path': left_startup_path,
-            'focused_index': 0,
-            'scroll_offset': 0,
-            'files': [],
-            'selected_files': set(),  # Track selected files for batch operations
-            'sort_mode': sort_keys.canonical(config.DEFAULT_SORT_MODE),
-            'sort_reverse': config.DEFAULT_SORT_REVERSE,
-            'filter_pattern': "",  # Filename filter pattern for this pane
-            'virtual': None,  # When set, a search-results feed (see _feed_search_results)
-        }
-        self.right_pane = {
-            'path': right_startup_path,
-            'focused_index': 0,
-            'scroll_offset': 0,
-            'files': [],
-            'selected_files': set(),  # Track selected files for batch operations
-            'sort_mode': sort_keys.canonical(config.DEFAULT_SORT_MODE),
-            'sort_reverse': config.DEFAULT_SORT_REVERSE,
-            'filter_pattern': "",  # Filename filter pattern for this pane
-            'virtual': None,  # When set, a search-results feed (see _feed_search_results)
-        }
-        
+        # Each side holds a list of tabs, every one a full pane dict; the
+        # side's current tab *is* its pane (``left_pane`` / ``right_pane``), so
+        # everything that reads a pane keeps reading the one on screen (#563).
+        self.tabs = {'left': [self.new_pane(left_startup_path)],
+                     'right': [self.new_pane(right_startup_path)]}
+        self.tab_index = {'left': 0, 'right': 0}
+
         self.active_pane = 'left'  # 'left' or 'right'
         
         # Pane layout - track left pane width ratio (0.1 to 0.9)
         self.left_pane_ratio = config.DEFAULT_LEFT_PANE_RATIO
     
+    def new_pane(self, path, *, like=None):
+        """A fresh pane dict at ``path``, sorted like the pane ``like`` when
+        given (a new tab opened from one), else by the configured default."""
+        return {
+            'path': path,
+            'focused_index': 0,
+            'scroll_offset': 0,
+            'files': [],
+            'selected_files': set(),  # Track selected files for batch operations
+            'sort_mode': (like['sort_mode'] if like is not None
+                          else sort_keys.canonical(self.config.DEFAULT_SORT_MODE)),
+            'sort_reverse': (like['sort_reverse'] if like is not None
+                             else self.config.DEFAULT_SORT_REVERSE),
+            'filter_pattern': "",  # Filename filter pattern for this pane
+            'virtual': None,  # When set, a search-results feed (see _feed_search_results)
+        }
+
+    @property
+    def left_pane(self):
+        return self.tabs['left'][self.tab_index['left']]
+
+    @left_pane.setter
+    def left_pane(self, pane_data):
+        self.tabs['left'][self.tab_index['left']] = pane_data
+
+    @property
+    def right_pane(self):
+        return self.tabs['right'][self.tab_index['right']]
+
+    @right_pane.setter
+    def right_pane(self, pane_data):
+        self.tabs['right'][self.tab_index['right']] = pane_data
+
+    # --- tabs ----------------------------------------------------------------
+
+    def side_of(self, pane_data):
+        """``'left'`` or ``'right'`` — the side whose tabs hold ``pane_data``,
+        shown or not. ``None`` for a dict no tab holds (a closed tab)."""
+        for side, tabs in self.tabs.items():
+            if any(t is pane_data for t in tabs):
+                return side
+        return None
+
+    def is_shown(self, pane_data):
+        """True when ``pane_data`` is a side's current tab — on screen."""
+        return pane_data is self.left_pane or pane_data is self.right_pane
+
+    def open_tab(self, side, pane_data):
+        """Insert ``pane_data`` right after ``side``'s current tab and make it
+        current."""
+        index = self.tab_index[side] + 1
+        self.tabs[side].insert(index, pane_data)
+        self.tab_index[side] = index
+
+    def close_tab(self, side):
+        """Remove ``side``'s current tab and return it, making the one after it
+        current (the one before, when it was last). A side's only tab is not
+        closed: ``None``."""
+        tabs = self.tabs[side]
+        if len(tabs) < 2:
+            return None
+        index = self.tab_index[side]
+        closed = tabs.pop(index)
+        self.tab_index[side] = min(index, len(tabs) - 1)
+        return closed
+
+    def select_tab(self, side, index):
+        """Make tab ``index`` of ``side`` current, wrapping around both ends."""
+        self.tab_index[side] = index % len(self.tabs[side])
+
     def get_current_pane(self):
         """Get the currently active pane"""
         return self.left_pane if self.active_pane == 'left' else self.right_pane
