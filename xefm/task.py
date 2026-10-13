@@ -114,6 +114,9 @@ class Task:
         #: In synchronous (test) mode there is no main-thread pump, so ``ask``
         #: returns the caller's headless default instead of blocking on a dialog.
         self._headless = False
+        #: Running (or queued) without its progress dialog on screen (#567). A
+        #: prompt it raises meanwhile waits until it is brought forward.
+        self.background = False
 
     # --- worker-side API (called on the worker thread) -----------------------
 
@@ -143,6 +146,12 @@ class Task:
     def cancelled(self) -> bool:
         return self._cancel.is_set()
 
+    @property
+    def needs_attention(self) -> bool:
+        """A background task waiting on an answer only the user can give — a
+        conflict prompt it raised while its dialog was off screen."""
+        return self.background and not self._requests.empty()
+
     # --- control (main thread) -----------------------------------------------
 
     def request_cancel(self) -> None:
@@ -157,16 +166,48 @@ class Task:
             return None
 
 
+class _Job:
+    """What the manager keeps for one running task: the dialog it shows when it
+    is in the foreground, and how to finish it."""
+
+    __slots__ = ("task", "panel", "dialog", "finished", "on_done", "z",
+                 "queued_slot", "last_render")
+
+    def __init__(self, task, panel, dialog, on_done, z):
+        self.task = task
+        self.panel = panel
+        self.dialog = dialog
+        self.finished = threading.Event()
+        self.on_done = on_done
+        self.z = z
+        #: True for the job holding the background queue's one slot.
+        self.queued_slot = False
+        self.last_render = 0.0
+
+
 class TaskManager:
     """Central registry + main-thread pump for :class:`Task` s. One per app.
 
-    Holds every live task (so the app — and, later, a task UI — can see what is
-    running), shows each task's :class:`ProgressDialog`, and services its UI bridge
-    on the animation tick. Runs one modal task at a time today; the shape supports
-    background/queued execution later."""
+    Holds every live task, shows each foreground task's :class:`ProgressDialog`,
+    and services its UI bridge on the animation tick.
+
+    A task can run in the **background** (#567): its dialog leaves the screen
+    and the user goes on working. :meth:`detach` sends a running one there;
+    ``submit(..., detached=True)`` starts one there, through a **serial
+    queue** — background jobs compete for the same disk or connection, so one
+    runs at a time and the rest wait their turn. :meth:`bring_forward` puts a
+    job's dialog back, which is also how a background job's pending prompt
+    gets answered: a prompt never opens on its own while the job is out of
+    sight, it waits and the job is flagged (:attr:`Task.needs_attention`)."""
+
+    #: How often a background job repaints, for the status bar's progress.
+    _BACKGROUND_REPAINT_S = 0.25
 
     def __init__(self):
         self.tasks: list[Task] = []
+        self._jobs: dict[int, _Job] = {}
+        #: Background jobs waiting for the slot: ``(task, panel, run, on_done, z)``.
+        self._queue: list[tuple] = []
 
     def active_tasks(self) -> list[Task]:
         return [t for t in self.tasks
@@ -176,9 +217,19 @@ class TaskManager:
         return any(t.status in (TaskStatus.PENDING, TaskStatus.RUNNING)
                    for t in self.tasks)
 
+    def background_tasks(self) -> list[Task]:
+        """Running background jobs first, then the queued ones in order."""
+        running = [t for t in self.tasks
+                   if t.background and t.status is TaskStatus.RUNNING]
+        return running + [entry[0] for entry in self._queue]
+
+    def queued_count(self) -> int:
+        return len(self._queue)
+
     def submit(self, task: Task, panel: Any, *, run: Callable[[Task], dict],
                on_done: Optional[Callable[[dict], None]] = None,
-               z: int = 70, background: bool = True) -> Task:
+               z: int = 70, background: bool = True,
+               detached: bool = False) -> Task:
         """Run ``run(task)``. In background mode: show a :class:`ProgressDialog`,
         spawn the worker, and pump the bridge + repaint each frame, closing the
         dialog and calling ``on_done(result)`` on the main thread when it ends. In
@@ -186,7 +237,11 @@ class TaskManager:
         default, no dialog, ``on_done`` fires immediately. A backend that cannot
         drive animation ticks gets the synchronous treatment too — with no tick
         there would be nothing to pump prompts, service Cancel, or close the
-        dialog."""
+        dialog.
+
+        ``detached`` starts the task in the background instead, with no dialog,
+        through the serial queue: it waits while another background job holds
+        the slot."""
         self.tasks.append(task)
 
         if not background:
@@ -198,10 +253,27 @@ class TaskManager:
                 on_done(result)
             return task
 
-        dialog = ProgressDialog(task)
-        dialog.show(panel, z=z)
+        if detached:
+            task.background = True
+            if self._slot_taken():
+                self._queue.append((task, panel, run, on_done, z))
+                panel.render()
+                return task
+        self._start(task, panel, run, on_done, z, queued_slot=detached)
+        return task
+
+    def _slot_taken(self) -> bool:
+        return any(job.queued_slot or job.task.background
+                   for job in self._jobs.values())
+
+    def _start(self, task: Task, panel: Any, run, on_done, z: int, *,
+               queued_slot: bool) -> None:
+        dialog = ProgressDialog(task, on_background=self.detach)
+        job = _Job(task, panel, dialog, on_done, z)
+        job.queued_slot = queued_slot
+        if not task.background:
+            dialog.show(panel, z=z)
         task.status = TaskStatus.RUNNING
-        finished = threading.Event()
 
         def worker() -> None:
             try:
@@ -209,29 +281,10 @@ class TaskManager:
             except BaseException as exc:  # noqa: BLE001 — recorded, surfaced on tick
                 task.error = exc
             finally:
-                finished.set()
+                job.finished.set()
 
         def tick() -> bool:
-            # Main thread: service at most one pending prompt (sequential), repaint
-            # the live dialog, and on completion tear down + report the result.
-            dialog.pump(panel)
-            if not finished.is_set():
-                panel.render()
-                return True
-            # Teardown runs exactly once (the tick unregisters below), so it must
-            # not be derailed: close first, and keep an on_done failure from
-            # escaping into the backend's tick dispatch.
-            dialog.close()
-            self._finish(task)
-            if on_done is not None:
-                try:
-                    on_done(task.result or _empty_result())
-                except Exception as exc:  # noqa: BLE001 — logged, teardown completes
-                    logger.error(f"Task completion callback failed: {exc}")
-            # One repaint so the closed dialog leaves the screen even when
-            # on_done did not render (or was None / raised).
-            panel.render()
-            return False
+            return self._tick(job)
 
         # Register the tick before the worker exists: if this backend cannot
         # drive frame ticks, nothing would ever pump the prompt bridge, service
@@ -246,10 +299,106 @@ class TaskManager:
             self._finish(task)
             if on_done is not None:
                 on_done(result)
-            return task
+            return
 
+        self._jobs[task.id] = job
         threading.Thread(target=worker, name=f"xefm-task-{task.id}", daemon=True).start()
-        return task
+
+    def _tick(self, job: _Job) -> bool:
+        """Main thread, each frame: service at most one pending prompt (only
+        while the job is in the foreground), repaint, and on completion tear
+        down and report the result."""
+        task, panel, dialog = job.task, job.panel, job.dialog
+        if not task.background:
+            dialog.pump(panel)
+        if not job.finished.is_set():
+            if not task.background:
+                panel.render()
+            else:
+                now = time.monotonic()
+                if now - job.last_render >= self._BACKGROUND_REPAINT_S:
+                    job.last_render = now
+                    panel.render()
+            return True
+        # Teardown runs exactly once (the tick unregisters below), so it must
+        # not be derailed: close first, and keep an on_done failure from
+        # escaping into the backend's tick dispatch.
+        dialog.close()
+        self._jobs.pop(task.id, None)
+        self._finish(task)
+        if job.on_done is not None:
+            try:
+                job.on_done(task.result or _empty_result())
+            except Exception as exc:  # noqa: BLE001 — logged, teardown completes
+                logger.error(f"Task completion callback failed: {exc}")
+        self._start_next()
+        # One repaint so the closed dialog leaves the screen even when
+        # on_done did not render (or was None / raised).
+        panel.render()
+        return False
+
+    def _start_next(self) -> None:
+        """Hand the background slot to the next queued job, if it is free."""
+        if self._queue and not self._slot_taken():
+            task, panel, run, on_done, z = self._queue.pop(0)
+            if task.cancelled():
+                self._finish(task)
+                if on_done is not None:
+                    on_done(dict(_empty_result(), cancelled=True))
+                self._start_next()
+                return
+            self._start(task, panel, run, on_done, z, queued_slot=True)
+
+    def cancel_all(self, timeout: float = 3.0) -> bool:
+        """Cancel every task — the running ones and the queue — and wait up to
+        ``timeout`` seconds for the running workers to unwind, so a half-written
+        file is cleaned up before the process exits. True when all of them
+        did. For quitting: nothing is reported, the app is going away."""
+        for task, *_rest in self._queue:
+            task.request_cancel()
+        self._queue.clear()
+        jobs = list(self._jobs.values())
+        for job in jobs:
+            job.task.request_cancel()
+        deadline = time.monotonic() + timeout
+        for job in jobs:
+            if not job.finished.wait(max(0.0, deadline - time.monotonic())):
+                return False
+        return True
+
+    def detach(self, task: Task) -> None:
+        """Send a running foreground task to the background: its dialog
+        leaves the screen and the task goes on."""
+        job = self._jobs.get(task.id)
+        if job is None or task.background:
+            return
+        job.dialog.close()
+        task.background = True
+        job.panel.render()
+
+    def bring_forward(self, task: Task) -> bool:
+        """Put a background task's dialog back on screen — where its pending
+        prompt is answered and Esc can cancel it. A queued task that has not
+        started is cancelled instead of shown: there is nothing to show yet,
+        and the only thing to do with it is drop it. False when ``task`` is
+        neither."""
+        for i, entry in enumerate(self._queue):
+            if entry[0] is task:
+                self._queue.pop(i)
+                task.request_cancel()
+                self._finish(task)
+                on_done = entry[3]
+                if on_done is not None:
+                    on_done(dict(_empty_result(), cancelled=True))
+                entry[1].render()
+                return True
+        job = self._jobs.get(task.id)
+        if job is None or not task.background:
+            return False
+        task.background = False
+        job.dialog.show(job.panel, z=job.z)
+        job.panel.render()
+        return True
 
     @staticmethod
     def _run_inline(task: Task, run: Callable[[Task], dict]) -> dict:
@@ -319,8 +468,12 @@ class ProgressDialog(Widget):
 
     focusable = True
 
-    def __init__(self, task: Task):
+    def __init__(self, task: Task,
+                 on_background: Optional[Callable[[Task], None]] = None):
         self.task = task
+        #: Sends the task to the background (:meth:`TaskManager.detach`);
+        #: None hides the choice, for a dialog with no manager behind it.
+        self._on_background = on_background
         self._panel: Any = None
         self._bar = ProgressBar()
         self._byte_bar = ProgressBar()
@@ -502,6 +655,10 @@ class ProgressDialog(Widget):
     def handle_event(self, event: Event) -> bool:
         if event.type is EventType.KEY and event.key == "escape":
             self._confirm_cancel()
+        elif (event.type is EventType.KEY and event.key == "b"
+              and not event.modifiers and self._on_background is not None
+              and not self.task.cancelled()):
+            self._on_background(self.task)
         return True  # modal: swallow everything else
 
     def _confirm_cancel(self) -> None:
@@ -517,11 +674,18 @@ class ProgressDialog(Widget):
             self._cancel_box = None
             if label == "Cancel operation":
                 self.task.request_cancel()
+            elif label == "Run in background" and self._on_background is not None:
+                self._on_background(self.task)
             if self._panel is not None:
                 self._panel.render()
 
+        # The operation keeps running while this is asked. Background is the
+        # first choice, not the default: Enter and Esc both keep it running in
+        # front, so a stray key changes nothing.
+        buttons = (("Run in background",) if self._on_background is not None
+                   else ()) + ("Cancel operation", "Keep running")
         self._cancel_box = show_message_box(
-            self._panel, f"Cancel {self.task.title.rstrip('… ')}?",
-            title="Cancel", icon="warning",
-            buttons=("Cancel operation", "Keep running"),
-            default=1, cancel=1, on_result=on_result, z=getattr(self, "_z", 70) + 5)
+            self._panel, f"Stop waiting for {self.task.title.rstrip('… ')}?",
+            title="Running", icon="warning", buttons=buttons,
+            default=len(buttons) - 1, cancel=len(buttons) - 1,
+            on_result=on_result, z=getattr(self, "_z", 70) + 5)

@@ -121,6 +121,14 @@ class _PM:
     def __init__(self, left, right):
         self.left_pane, self.right_pane = left, right
 
+    def side_of(self, pane):
+        if pane is self.left_pane:
+            return "left"
+        return "right" if pane is self.right_pane else None
+
+    def is_shown(self, pane):
+        return pane is self.left_pane or pane is self.right_pane
+
 
 def _app(left, right, files):
     app = xefm_app.XeFMApp.__new__(xefm_app.XeFMApp)

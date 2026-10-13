@@ -668,6 +668,36 @@ _DETAILS: dict[str, str] = {
         "picture, a hex dump of a binary, or a folder's item count and size. "
         "The other pane's own folder comes back when quick view closes. On a "
         "remote location only small files are read."),
+    "jobs": (
+        "Lists the copy, move and delete operations running in the "
+        "background, and the ones queued behind them. Choose a running one "
+        "to bring its progress dialog back — where a question it is waiting "
+        "on is answered, and Esc can cancel it. Choose a queued one to drop "
+        "it. Send an operation to the background with the Background button "
+        "when it asks to start, or with B (or Esc) in its progress dialog."),
+    "find_similar": (
+        "Scans the selection, or the current folder, for files with identical "
+        "content, or for similar images, videos or audio, using similar-files. The scan runs as "
+        "its own process and keeps going after you quit XeFM; the status bar "
+        "and the jobs list show it, and its groups can be looked at while it "
+        "is still running. Each group is a folder of the results tree; select "
+        "files and press Shift-O to work on the real files in the other pane. "
+        "Similar videos need ffmpeg, similar audio needs fpcalc (Chromaprint); "
+        "similar images need nothing more."),
+    "new_tab": (
+        "Opens another tab in the active pane, showing the same place, and "
+        "switches to it. Each pane has its own tabs, and each tab keeps its "
+        "own directory, cursor, selection, sort and filter — a search result "
+        "or an imported list too. The tab strip appears above the path once a "
+        "pane has more than one tab."),
+    "close_tab": (
+        "Closes the active pane's current tab and shows the next one. A "
+        "pane's only tab cannot be closed."),
+    "flat_view": (
+        "Shows every file below the active pane's directory as one flat list, "
+        "named relative to it — sort, filter and copy work across the whole "
+        "tree. With a selection, only the selected directories and files are "
+        "flattened. Press it again, or Backspace, to go back."),
     "open_list_from_clipboard": (
         "Shows the paths on the clipboard, one per line, as the active pane's "
         "listing — the files can be in many directories. Nothing on disk "
@@ -868,6 +898,9 @@ _FILER_ACTIONS = [
        aliases=("drives_dialog",)),
     _a("connect_server", FILER, "Connect to a network server",
        aliases=("connect_to_server",)),
+    # Every file below the directory as one list (#547). Shift-B rather than
+    # Ctrl-B, which is tmux's prefix and would never reach XeFM inside it.
+    _a("flat_view", FILER, "Show every file below this directory as one list"),
     # A list of paths in place of a directory (Go > Open List), "open" as
     # open_item opens an archive: the pane shows something else, and
     # go_parent leaves it. Unbound. Not "paste" -- nothing is written, and a
@@ -881,6 +914,20 @@ _FILER_ACTIONS = [
        default_keys=()),
     # Quick view (#569): the other pane previews the cursor item.
     _a("quick_view", FILER, "Preview the item under the cursor in the other pane"),
+    # Background jobs (#567). Ctrl-G: a plain Ctrl+letter every terminal sends
+    # and nothing else uses.
+    _a("jobs", FILER, "List background jobs"),
+    # Similar-file scans (#571), run by similar-files as their own process.
+    # Unbound: the Tools menu and the palette reach it.
+    _a("find_similar", FILER, "Find identical files, or similar images, videos or audio",
+       default_keys=()),
+    # Folder tabs (#563), per pane. All on keys a terminal delivers: Ctrl-TAB
+    # never arrives there, so next/previous are Ctrl-PAGE_DOWN / Ctrl-PAGE_UP.
+    _a("new_tab", FILER, "Open a new tab in this pane, at the same place"),
+    _a("open_in_new_tab", FILER, "Open the directory under the cursor in a new tab"),
+    _a("close_tab", FILER, "Close this pane's current tab"),
+    _a("next_tab", FILER, "Show this pane's next tab"),
+    _a("prev_tab", FILER, "Show this pane's previous tab"),
     # Panes
     _a("sync_current_to_other", FILER, "Go to the other pane's directory"),
     _a("sync_other_to_current", FILER, "Send this directory to the other pane"),
@@ -907,6 +954,7 @@ _FILER_ACTIONS = [
     _a("toggle_hidden", FILER, "Show or hide hidden files"),
     _a("toggle_color_scheme", FILER, "Cycle to the next color theme"),
     _a("redraw", FILER, "Redraw the screen"),
+    _a("reread", FILER, "Re-read both panes' directories", default_keys=()),
     _a("menu", FILER, "Open the menu bar"),
     # Every action of the file list, searchable and runnable — the long tail
     # the menu bar deliberately leaves out (discussion #550).
@@ -1040,6 +1088,15 @@ _DIR_DIFF_ACTIONS = [
        default_keys=("[",)),
     _a("dir_diff.split_right", DIR_DIFF, "Move the centre split right",
        default_keys=("]",)),
+    # Sync (#560): s opens a plan from the active side and, pressed again,
+    # runs it; Space changes one node's action. Not f: that is isearch, which
+    # every surface inherits from common.
+    _a("dir_diff.sync", DIR_DIFF, "Sync: plan from the active side, or run it",
+       default_keys=("s",)),
+    _a("dir_diff.cycle_sync_action", DIR_DIFF, "Change the focused node's sync action",
+       default_keys=("SPACE",)),
+    _a("dir_diff.toggle_identical", DIR_DIFF,
+       "Show or hide the items that are the same on both sides", default_keys=("d",)),
 ]
 
 _ISEARCH_ACTIONS = [
