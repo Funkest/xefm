@@ -109,7 +109,9 @@ class CursorTestBase(unittest.TestCase):
                                   if f.name in names}
 
     def delete(self):
-        self.app.delete_files()
+        # The permanent delete: these tests are about the cursor, and the
+        # trash path is the same operation with a different last step.
+        self.app.delete_permanently()
         self.app._settle_listings()
 
 

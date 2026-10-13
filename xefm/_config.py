@@ -229,6 +229,13 @@ class Config:
 
     # Behavior settings
     CONFIRM_DELETE = True   # Show confirmation dialog before deleting files/directories
+    CONFIRM_TRASH = True    # Show confirmation dialog before moving files to the Trash / Recycle Bin
+    # Delete key (delete_files): True sends local files to the system's Trash
+    # (Recycle Bin on Windows) where their drive has one, and deletes for good
+    # only where there is none (remote, archives, USB/network drives on
+    # Windows) -- saying so first. False makes it delete permanently, as
+    # delete_permanently always does.
+    DELETE_TO_TRASH = True
     CONFIRM_QUIT = True     # Show confirmation dialog before quitting XeFM
     CONFIRM_COPY = True     # Show confirmation dialog before copying files/directories
     CONFIRM_MOVE = True     # Show confirmation dialog before moving files/directories
@@ -386,7 +393,8 @@ class Config:
         'move_files': {'keys': ['M'], 'selection': 'required'},  # Move selected files to other pane
         'copy_files_to': {'keys': ['Shift-C'], 'selection': 'required'},  # Copy selected files to a typed directory
         'move_files_to': {'keys': ['Shift-M'], 'selection': 'required'},  # Move selected files to a typed directory
-        'delete_files': {'keys': ['K', 'DELETE'], 'selection': 'required'}, # Delete selected files/directories
+        'delete_files': {'keys': ['K', 'DELETE'], 'selection': 'required'}, # Delete selected files/directories (to the Trash where there is one)
+        'delete_permanently': {'keys': ['Shift-K', 'Shift-DELETE'], 'selection': 'required'},  # Delete for good, skipping the Trash
         'rename': ['R'],                  # Rename selected file/directory
         'rename_in_editor': ['Shift-R'],  # Rename the selection by editing a name list in TEXT_EDITOR
         'create_file': ['Shift-E'],            # Create new file (prompts for filename)

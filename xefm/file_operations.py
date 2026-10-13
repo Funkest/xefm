@@ -58,14 +58,17 @@ from xefm.path import Path
 from xefm.progress_manager import OperationType, ProgressManager
 from xefm.str_format import format_size, format_timestamp
 from xefm.task import Cancelled, Task, TaskManager
+from xefm import trash as trash_mod
 
 #: Operation kind -> (verb label, progress-manager op type).
-_VERB = {"copy": "Copy", "move": "Move", "delete": "Delete", "duplicate": "Duplicate"}
+_VERB = {"copy": "Copy", "move": "Move", "delete": "Delete", "duplicate": "Duplicate",
+         "trash": "Trash"}
 _OP_TYPE = {
     "copy": OperationType.COPY,
     "move": OperationType.MOVE,
     "delete": OperationType.DELETE,
     "duplicate": OperationType.COPY,
+    "trash": OperationType.DELETE,
 }
 
 #: Copy in 1 MiB chunks; files at least this large are chunk-copied so the byte
@@ -278,10 +281,22 @@ class FileOperationService:
     def delete(self, panel: Any, targets: list, *,
                on_complete: Optional[Callable[[dict], None]] = None,
                log: Optional[Callable[[str], None]] = None,
-               z: int = 70, background: bool = True) -> None:
+               z: int = 70, background: bool = True,
+               note: Optional[str] = None) -> None:
         """Delete ``targets`` (directories recursively), confirming per
-        ``CONFIRM_DELETE`` (whose confirm button defaults to Cancel)."""
-        self._start(panel, "delete", targets, None, on_complete, log, z, background)
+        ``CONFIRM_DELETE`` (whose confirm button defaults to Cancel). ``note``
+        is a line for the confirmation — why this is not going to the trash."""
+        self._start(panel, "delete", targets, None, on_complete, log, z, background,
+                    note=note)
+
+    def trash(self, panel: Any, targets: list, *,
+              on_complete: Optional[Callable[[dict], None]] = None,
+              log: Optional[Callable[[str], None]] = None,
+              z: int = 70, background: bool = True) -> None:
+        """Send ``targets`` to the system's trash (:mod:`xefm.trash`), each as
+        one move — a directory goes whole — confirming per ``CONFIRM_TRASH``.
+        The caller checks :func:`xefm.trash.available` first."""
+        self._start(panel, "trash", targets, None, on_complete, log, z, background)
 
     def sync(self, panel: Any, copies: list, deletes: list, *,
              on_complete: Optional[Callable[[dict], None]] = None,
@@ -375,7 +390,8 @@ class FileOperationService:
     # --- confirm + submit ----------------------------------------------------
 
     def _start(self, panel: Any, kind: str, targets: list, dest_dir: Optional[Path],
-               on_complete, log, z: int, background: bool) -> None:
+               on_complete, log, z: int, background: bool,
+               note: Optional[str] = None) -> None:
         """Show the initial ``CONFIRM_*`` prompt (main thread), then submit the
         operation as a linear task. The prompt is skipped when its config flag is
         off; conflicts are *not* mentioned here — they are detected and resolved
@@ -399,7 +415,14 @@ class FileOperationService:
             lines = [f"Delete **{len(targets)}** item(s)?", ""]
             lines += _item_list_md(targets)
             lines += ["", "**This cannot be undone.**"]
+            if note:
+                lines += ["", note]
             buttons, icon, default = ("Delete", "Cancel"), "warning", 1
+        elif kind == "trash":
+            # Recoverable, so the confirm button is the default.
+            lines = [f"Move **{len(targets)}** item(s) to the {trash_mod.NAME}?", ""]
+            lines += _item_list_md(targets)
+            buttons, icon, default = (f"Move to {trash_mod.NAME}", "Cancel"), "question", 0
         elif kind == "duplicate":
             # In-place copy: the destination is the source's own directory, so name
             # it as "in <dir>" rather than the copy/move "to <dir>".
@@ -473,7 +496,7 @@ class FileOperationService:
         try:
             # Resolve conflicts first (cheap existence checks; may prompt), so the
             # recursive count only covers what will actually be processed.
-            if kind == "delete":
+            if kind in ("delete", "trash"):
                 plan = [(t, None, False) for t in targets]
             elif kind == "duplicate":
                 # In-place copy always collides with itself — never prompt; pre-plan
@@ -498,7 +521,7 @@ class FileOperationService:
             # Delete never reports bytes, so weighting its bar by them would
             # freeze it; copy/move/duplicate report every byte they touch.
             prog.update_operation_total(
-                total_items, total_bytes=0 if kind == "delete" else total_bytes)
+                total_items, total_bytes=0 if kind in ("delete", "trash") else total_bytes)
 
             errors = result["errors"]
             workers = self._copy_workers(kind, plan, dest_dir)
@@ -545,7 +568,7 @@ class FileOperationService:
         archive cannot be removed, and the OS error would not say why."""
         kept = []
         for target, dest_base, overwrite in plan:
-            doomed = [target] if kind in ("delete", "move") else []
+            doomed = [target] if kind in ("delete", "move", "trash") else []
             if overwrite and dest_base is not None:
                 doomed.append(dest_base)
             try:
@@ -571,7 +594,7 @@ class FileOperationService:
         dirs: dict = {}
         if dest_dir is not None:
             dirs.setdefault(str(dest_dir), dest_dir)
-        if kind in ("move", "delete"):
+        if kind in ("move", "delete", "trash"):
             for target in targets:
                 parent = target.parent
                 dirs.setdefault(str(parent), parent)
@@ -634,7 +657,11 @@ class FileOperationService:
         if dests is None:
             dests = [None] * len(targets)
         for t, dest in zip(targets, dests):
-            if _is_atomic_move(kind, t, dest_dir) and not _merges_into(t, dest):
+            # A trash is one move per target, a directory included, so its
+            # subtree is never walked — counting it would cost as much as the
+            # delete it replaces and report nothing true.
+            if kind == "trash" or (_is_atomic_move(kind, t, dest_dir)
+                                   and not _merges_into(t, dest)):
                 items += 1
                 task.counted = items
                 continue
@@ -669,6 +696,16 @@ class FileOperationService:
         failed. A single bad entry never aborts the rest of the target."""
         if kind == "delete":
             return self._delete_tree(task, target, prog, log, errors)
+        if kind == "trash":
+            prog.update_progress(target.name)
+            try:
+                trash_mod.send(target)
+            except OSError as exc:
+                errors.append((str(target), exc.strerror or str(exc)))
+                return 0
+            if log is not None:
+                log(f"Moved to {trash_mod.NAME}: {target}")
+            return 1
         if (kind == "move" and _is_atomic_move(kind, target, dest_dir)
                 and not _merges_into(target, dest_base)):
             prog.update_progress(target.name)

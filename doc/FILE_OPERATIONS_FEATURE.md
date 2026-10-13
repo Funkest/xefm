@@ -143,6 +143,14 @@ against duplicating a large tree by accident.
   span many directories, so there is no single place to write the copy.
 - Large files show byte-level progress and can be cancelled mid-copy.
 
+## Delete
+
+`K` (or `Delete`) moves the selection, or the item under the cursor, to the
+**Trash**, called the Recycle Bin on Windows. You can restore it from Finder,
+Explorer or your desktop's file manager. `Shift-K` (or `Shift-Delete`) deletes
+for good, without the Trash. Each asks first. See
+[Deleting to the Trash](TRASH_FEATURE.md).
+
 ## Conflict resolution
 
 When a copy or move would land on a file or folder that already exists, XeFM

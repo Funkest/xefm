@@ -20,6 +20,7 @@ from unittest.mock import patch, MagicMock
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
+from xefm import trash  # noqa: E402
 from xefm import app as xefm_app  # noqa: E402
 from xefm.config import config_manager  # noqa: E402
 from xefm.external_programs import command_argv  # noqa: E402
@@ -211,7 +212,7 @@ class ReloadRefreshesKeyLabels(ConfigReloadBase):
         self.assertIn("F2 stop", bar._isearch_hints())
 
     def test_the_menu_says_it_too(self):
-        self.assertEqual(self._menu_shortcut("Delete…"), "K")
+        self.assertEqual(self._menu_shortcut(f"Move to {trash.NAME}…"), "K")
 
         self._write_config("""
             class Config:
@@ -220,7 +221,7 @@ class ReloadRefreshesKeyLabels(ConfigReloadBase):
         """)
         self.app.reload_config()
 
-        self.assertEqual(self._menu_shortcut("Delete…"), "D")
+        self.assertEqual(self._menu_shortcut(f"Move to {trash.NAME}…"), "D")
 
     def test_an_action_left_unbound_loses_its_hint_rather_than_keeping_the_old(self):
         # Unbinding is a rebinding too: the bar drops the segment and the menu
@@ -233,7 +234,7 @@ class ReloadRefreshesKeyLabels(ConfigReloadBase):
         self.app.reload_config()
 
         self.assertNotIn("delete", self.app.status._text())
-        self.assertIsNone(self._menu_shortcut("Delete…"))
+        self.assertIsNone(self._menu_shortcut(f"Move to {trash.NAME}…"))
 
 
 if __name__ == "__main__":
