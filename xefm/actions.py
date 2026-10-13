@@ -1032,6 +1032,15 @@ _DIR_DIFF_ACTIONS = [
        default_keys=("[",)),
     _a("dir_diff.split_right", DIR_DIFF, "Move the centre split right",
        default_keys=("]",)),
+    # Sync (#560): s opens a plan from the active side and, pressed again,
+    # runs it; Space changes one node's action. Not f: that is isearch, which
+    # every surface inherits from common.
+    _a("dir_diff.sync", DIR_DIFF, "Sync: plan from the active side, or run it",
+       default_keys=("s",)),
+    _a("dir_diff.plan_cycle", DIR_DIFF, "Change the focused node's sync action",
+       default_keys=("SPACE",)),
+    _a("dir_diff.differences_only", DIR_DIFF,
+       "Show only the differences, or everything", default_keys=("d",)),
 ]
 
 _ISEARCH_ACTIONS = [
