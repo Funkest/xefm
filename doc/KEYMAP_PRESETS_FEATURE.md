@@ -62,8 +62,8 @@ These commands have no key in this preset:
 - incremental search's own key (typing a letter already starts one)
 - redraw, reset the pane split
 
-They are all in the menus and the command palette (`Ctrl-T`), which also shows
-each command's current key.
+All of them are in the command palette (`Ctrl-T`), and most are in the menus
+too. To put one back on a key, bind it in `KEY_BINDINGS`.
 
 Function keys and modified function keys have terminal sequences, so the
 layout works in a terminal as well as in the desktop app. A terminal may still
