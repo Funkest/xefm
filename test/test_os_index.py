@@ -176,6 +176,17 @@ class InTheApp(unittest.TestCase):
         self.app.dispatch("index_search")
         self.assertIn("searches local folders", self._last_log())
 
+    def test_the_query_dialog_opens_with_the_history(self):
+        """#607: the query history helper was shadowed by the directory history
+        list, so the action raised before its dialog opened."""
+        if os_index.unavailable():
+            self.skipTest("no OS index here")
+        self.app._record_history(self.app._INDEX_STATE, "kind:pdf")
+        self.app.dispatch("index_search")
+        top = self.app.panel._layers[-1].widget
+        labels = [top.to_label(r) for r in getattr(top, "all_items", [])]
+        self.assertIn("kind:pdf", labels)
+
 
 if __name__ == "__main__":
     unittest.main()
