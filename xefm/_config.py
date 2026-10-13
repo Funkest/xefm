@@ -1276,10 +1276,13 @@ class Config:
     #     'edit': ['command'],       # Different command for edit
     # }
     FILE_ASSOCIATIONS = [
-        # PDF files
+        # PDF files. 'view' is None so V shows the document's text in XeFM's
+        # own viewer -- searchable, selectable, and on remote or archived files
+        # too; 'open' still hands it to Preview for how the pages look.
         {
             'pattern': '*.pdf',
-            'open|view': ['open', '-a', 'Preview'],
+            'open': ['open', '-a', 'Preview'],
+            'view': None,
             'edit': None,
         },
         # Image files. 'view' is deliberately None so V opens XeFM's own image
@@ -1306,19 +1309,34 @@ class Config:
             'open': ['open', '-a', 'Music'],
             'edit': None,
         },
-        # Microsoft Word documents
+        # Microsoft Office documents. The current formats (.docx .xlsx .pptx)
+        # are read as text by XeFM's own viewer on V; the old binary ones
+        # (.doc .xls .ppt) cannot be, and V hands them to the application.
         {
-            'pattern': ['*.doc', '*.docx'],
+            'pattern': ['*.docx'],
+            'open|edit': ['open', '-a', 'Microsoft Word'],
+            'view': None,
+        },
+        {
+            'pattern': ['*.doc'],
             'open|view|edit': ['open', '-a', 'Microsoft Word'],
         },
-        # Microsoft Excel spreadsheets
         {
-            'pattern': ['*.xls', '*.xlsx'],
+            'pattern': ['*.xlsx'],
+            'open|edit': ['open', '-a', 'Microsoft Excel'],
+            'view': None,
+        },
+        {
+            'pattern': ['*.xls'],
             'open|view|edit': ['open', '-a', 'Microsoft Excel'],
         },
-        # Microsoft PowerPoint presentations
         {
-            'pattern': ['*.ppt', '*.pptx'],
+            'pattern': ['*.pptx'],
+            'open|edit': ['open', '-a', 'Microsoft PowerPoint'],
+            'view': None,
+        },
+        {
+            'pattern': ['*.ppt'],
             'open|view|edit': ['open', '-a', 'Microsoft PowerPoint'],
         },
         # Note there is deliberately no entry listing text/code extensions.

@@ -85,7 +85,7 @@ from xefm import search_options as search_opts
 from xefm.isearch_bar import ISearchBar
 from xefm import filters
 from xefm import name_key
-from xefm import tree_walk
+from xefm import document_text, tree_walk
 from xefm.log_manager import (LOG_ERROR_SOURCE, LOG_SOURCE, clear_log_sink,
                               getLogger, route_library_logger, set_log_sink)
 from xefm.pane_manager import PaneManager
@@ -3214,7 +3214,8 @@ class XeFMApp:
         # viewer renders them, and a rich renderer likewise claims its type even
         # when binary — so both bypass this guard.
         if handler != "viewer" and rich_renderer_for(entry) is None \
-                and not is_image_file(entry) and looks_binary(entry):
+                and not is_image_file(entry) and not document_text.handles(entry) \
+                and looks_binary(entry):
             self.log_info(self._no_builtin_viewer_message(entry))
             return
         self._ensure_archive_password(entry, lambda: self._open_viewer(entry, pane))
@@ -5062,6 +5063,17 @@ class XeFMApp:
             try:
                 if match is not None and not match(e, attrs):
                     continue
+                if document_text.handles(e):
+                    # A PDF or an Office file is searched through its text,
+                    # the same text the viewer shows (#575).
+                    extracted = document_text.extract(e)
+                    for line_num, line in enumerate(extracted.lines, 1):
+                        if cancel.is_set():
+                            return
+                        if regex.search(line):
+                            yield {"path": e, "line": line_num,
+                                   "text": line.strip()[:max_line]}
+                    continue
                 encoding = self._sniff_text_encoding(e)
                 if encoding is None:
                     continue
@@ -5501,10 +5513,42 @@ class XeFMApp:
                               index=siblings.index(entry),
                               on_close=self._restore_post_effect if has_effect else None,
                               on_navigate=on_navigate)
+        elif document_text.handles(entry):
+            # A PDF or an Office file: read its text first, on a task, since a
+            # document is parsed whole and may be large or remote (#575).
+            self._open_document(entry)
+            return
         else:
             show_text_viewer(self.panel, entry, state_manager=self.state_manager,
                              on_edit=lambda path: self._edit_entries([path]))
         self.panel.render()
+
+    def _open_document(self, entry) -> None:
+        """Extract ``entry``'s text (:mod:`xefm.document_text`) on a task —
+        the progress dialog shows, Esc stops it — then open the text viewer on
+        it: raw mode its plain text, rich mode its structure."""
+        task = Task(f"Reading {entry.name}…", config=self.config, kind="document",
+                    busy_label="Reading…")
+
+        def run(t: Task) -> dict:
+            extracted = document_text.extract(entry)
+            return {"document": extracted, "cancelled": t.cancelled()}
+
+        def on_done(res: dict) -> None:
+            doc = res.get("document")
+            if res.get("cancelled") or doc is None:
+                self.log_info(f"{entry.name}: not opened")
+            else:
+                if doc.problem:
+                    key = keys_label_for_action("open_with_os")
+                    hint = f" — {key} opens it in its application" if key else ""
+                    self.log_info(f"{entry.name}: {doc.problem}{hint}")
+                show_text_viewer(self.panel, entry, state_manager=self.state_manager,
+                                 on_edit=lambda path: self._edit_entries([path]),
+                                 document=doc)
+            self.panel.render()
+
+        self.tasks.submit(task, self.panel, run=run, on_done=on_done)
 
     def _restore_post_effect(self) -> None:
         """Re-apply the active theme's post-effect and repaint — the close hook
