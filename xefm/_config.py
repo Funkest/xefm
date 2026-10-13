@@ -290,6 +290,9 @@ class Config:
         # because a missed Ctrl would land on K, delete. A missed Ctrl here
         # lands on T, which nothing is bound to.
         'command_palette': ['Ctrl-T'],         # Search every action by name and run it
+        # The background jobs list. The status bar's right end shows what is
+        # running; this brings a job forward (its prompt, or Esc to cancel).
+        'jobs': ['Ctrl-G'],                    # List background jobs
         
         # === Navigation ===
         'cursor_up': ['UP'],                   # Move cursor up one item

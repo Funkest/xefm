@@ -662,6 +662,13 @@ _DETAILS: dict[str, str] = {
         "asks the one you pick which shares it offers, and mounts your choice "
         "through the operating system — the pane then goes there like any "
         "other directory. macOS and Windows."),
+    "jobs": (
+        "Lists the copy, move and delete operations running in the "
+        "background, and the ones queued behind them. Choose a running one "
+        "to bring its progress dialog back — where a question it is waiting "
+        "on is answered, and Esc can cancel it. Choose a queued one to drop "
+        "it. Send an operation to the background with the Background button "
+        "when it asks to start, or with B (or Esc) in its progress dialog."),
     "open_list_from_clipboard": (
         "Shows the paths on the clipboard, one per line, as the active pane's "
         "listing — the files can be in many directories. Nothing on disk "
@@ -873,6 +880,9 @@ _FILER_ACTIONS = [
     _a("open_list_from_file", FILER,
        "Open the list file under the cursor as the pane's list",
        default_keys=()),
+    # Background jobs (#567). Ctrl-G: a plain Ctrl+letter every terminal sends
+    # and nothing else uses.
+    _a("jobs", FILER, "List background jobs"),
     # Panes
     _a("sync_current_to_other", FILER, "Go to the other pane's directory"),
     _a("sync_other_to_current", FILER, "Send this directory to the other pane"),
