@@ -640,11 +640,19 @@ _DETAILS: dict[str, str] = {
         "Lists your favorites — those in `FAVORITES` in `config.py` and those "
         "you added — and takes the active pane to the one you pick. A "
         "favorite file opens its directory with the cursor on it. The list's "
-        "remove key (Shift-Delete by default) forgets a favorite you added."),
+        "remove key (Shift-Delete by default) forgets a favorite you added.\n\n"
+        "Tags you have used follow the favorites. Picking one lists the files "
+        "below the pane's directory that carry that tag (Spotlight answers on "
+        "macOS; elsewhere the folder is searched)."),
     "add_favorite": (
-        "Adds a favorite: you choose between the directory the pane is "
-        "showing and the item under the cursor, which may be a file. Where "
-        "there is only one candidate it is added without asking."),
+        "Adds a favorite or tags files. The first rows add a favorite: the "
+        "directory the pane is showing, or the item under the cursor, which "
+        "may be a file. The tag rows act on the selection, or on the item "
+        "under the cursor when nothing is selected: each known tag is a toggle "
+        "(✓ when every item has it), and \"Edit tags…\" edits them as text.\n\n"
+        "Tags are the system's own: Finder tags on macOS, `user.xdg.tags` on "
+        "Linux (as in KDE), object tags on S3, and the remote system's on "
+        "SSH. On Windows XeFM keeps them in an NTFS stream on the file."),
     "context_menu": (
         "Opens the menu a right-click on the item under the cursor would "
         "open, just below it. In an empty pane, opens the directory's menu "
@@ -920,7 +928,7 @@ _FILER_ACTIONS = [
     # Directory navigation
     _a("favorites", FILER, "Go to a favorite directory or file"),
     _a("add_favorite", FILER,
-       "Add this directory or the item under the cursor to favorites"),
+       "Add a favorite, or tag the selection"),
     # The right-click menus from the keyboard, cfiler's pair: the item's, and
     # the directory's.
     _a("context_menu", FILER, "Open the context menu for the item under the cursor"),
