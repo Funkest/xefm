@@ -285,3 +285,57 @@ class AppMouse(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DragOverBadge(unittest.TestCase):
+    """While files are dragged over a pane, it answers what a drop there would
+    do, so the cursor badge matches the drop (#589 hand check)."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.state_dir = tempfile.mkdtemp()
+        self.src = os.path.join(self.tmp, "src")
+        os.mkdir(self.src)
+        self.file = os.path.join(self.src, "a.txt")
+        open(self.file, "w").close()
+        self.dest = os.path.join(self.tmp, "dest")
+        os.mkdir(self.dest)
+        sm = XeFMStateManager(db_path=os.path.join(self.state_dir, "state.db"))
+        self.b = create_backend("memory")
+        self.b.open()
+        self.app = xefm_app.XeFMApp(self.b, self.dest, self.src,
+                                    left_provided=True, right_provided=True,
+                                    state_manager=sm)
+        self.app.file_monitor.stop_monitoring()
+        self.app._settle_listings()
+        self.app.panel.render()
+
+    def tearDown(self):
+        try:
+            self.app.file_monitor.stop_monitoring()
+            self.b.close()
+        except Exception:
+            pass
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        shutil.rmtree(self.state_dir, ignore_errors=True)
+
+    def _ask(self, operation=None):
+        rect = self.app.left_view._abs
+        query = Event(type=EventType.FILE_DRAG_OVER, x=rect[0] + 2, y=rect[1] + 3,
+                      hints={"paths": [self.file], "operation": operation})
+        self.app.on_event(query)
+        return query.hints.get("effect")
+
+    def test_an_unmodified_drag_on_the_same_volume_shows_a_move(self):
+        self.assertEqual(self._ask(), "move")
+
+    def test_the_modifier_s_choice_is_shown(self):
+        self.assertEqual(self._ask("copy"), "copy")
+
+    def test_a_drag_across_volumes_shows_a_copy(self):
+        with patch.object(xefm_app, "_same_volume", return_value=False):
+            self.assertEqual(self._ask(), "copy")
+
+    def test_a_place_that_refuses_shows_none(self):
+        self.app.pane("left")["virtual"] = {"kind": "list", "title": "x", "root": None}
+        self.assertEqual(self._ask(), "none")

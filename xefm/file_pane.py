@@ -272,6 +272,7 @@ class FilePane(Widget):
         on_drop: Callable[..., None] | None = None,
         on_middle: Callable[[int], None] | None = None,
         on_nav: Callable[[str], None] | None = None,
+        on_drop_query: Callable[[int, list, "str | None"], str] | None = None,
     ):
         self.pane = pane_data
         #: XeFM Config; read for SEPARATE_EXTENSIONS / MAX_EXTENSION_LENGTH so the
@@ -316,6 +317,9 @@ class FilePane(Widget):
         #: Called with "back" / "forward" when the mouse's side button is
         #: clicked over this pane.
         self.on_nav = on_nav
+        #: Asked, while files are dragged over a row, what a drop there would
+        #: do ("copy" / "move" / "none"), for the cursor's badge.
+        self.on_drop_query = on_drop_query
         #: Counts presses on one row into single / double clicks.
         self._clicks = MultiClickTracker()
         self._click_count = 1
@@ -1110,6 +1114,12 @@ class FilePane(Widget):
                     y = event.y or 0.0
                 self.on_context(index, rx + (event.x or 0.0), ry + y)
                 return True
+        if event.type is EventType.FILE_DRAG_OVER and self.on_drop_query is not None:
+            paths = event.hints.get("paths") or []
+            if paths:
+                event.hints["effect"] = self.on_drop_query(
+                    self._row_at(event), list(paths), event.hints.get("operation"))
+            return False   # an answer, not a change: nothing to repaint
         if event.type is EventType.FILE_DROP and self.on_drop is not None:
             # Files dropped onto the pane from another app. Map the drop point to a
             # row so a drop *on a directory* can target it; a drop past the last
