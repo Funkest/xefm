@@ -435,6 +435,8 @@ class Config:
         'context_menu_dir': ['?', 'Shift-APPS'],  # Context menu for the current directory
         'jump_to_path': ['Shift-J'],           # Jump to path
         'history': ['H'],                      # Show history for current pane
+        'go_back': ['Alt-LEFT'],               # Back to the directory shown before (also the mouse's back button)
+        'go_forward': ['Alt-RIGHT'],           # Forward again (also the mouse's forward button)
         'drives': ['D'],                # Show drives/volumes dialog
         'connect_server': ['Shift-D'],  # Connect to a network server (macOS/Windows)
         
@@ -738,6 +740,9 @@ class Config:
             KEY_BINDINGS['clipboard_copy'] = ['Command-C', 'Ctrl-C', 'Y']
             KEY_BINDINGS['clipboard_cut'] = ['Command-X', 'Ctrl-X', 'Shift-Y']
             KEY_BINDINGS['clipboard_paste'] = ['Command-V', 'Ctrl-V', 'G']
+            # Finder's and every Mac browser's Back / Forward.
+            KEY_BINDINGS['go_back'] = ['Command-LEFT_BRACKET', 'Alt-LEFT']
+            KEY_BINDINGS['go_forward'] = ['Command-RIGHT_BRACKET', 'Alt-RIGHT']
         elif sys.platform == 'win32':
             KEY_BINDINGS['open_with_os'] = ['Ctrl-ENTER', 'Ctrl-O']
 

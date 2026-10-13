@@ -62,25 +62,25 @@ class FilePaneClick(unittest.TestCase):
 
     def test_a_click_on_a_row_reports_it(self):
         seen = []
-        view = self._widget([_F("one"), _F("two")], on_click=seen.append)
+        view = self._widget([_F("one"), _F("two")], on_click=lambda i, *rest: seen.append(i))
         self.assertTrue(_click(view, 1.0))
         self.assertEqual(seen, [1])
 
     def test_a_click_below_the_rows_reports_no_row(self):
         seen = []
-        view = self._widget([_F("one")], on_click=seen.append)
+        view = self._widget([_F("one")], on_click=lambda i, *rest: seen.append(i))
         self.assertTrue(_click(view, 9.0))
         self.assertEqual(seen, [-1])
 
     def test_a_click_in_an_empty_pane_reports_no_row(self):
         seen = []
-        view = self._widget([], on_click=seen.append)
+        view = self._widget([], on_click=lambda i, *rest: seen.append(i))
         self.assertTrue(_click(view, 0.0))
         self.assertEqual(seen, [-1])
 
     def test_the_scroll_offset_still_counts(self):
         seen = []
-        view = self._widget([_F(str(i)) for i in range(20)], on_click=seen.append)
+        view = self._widget([_F(str(i)) for i in range(20)], on_click=lambda i, *rest: seen.append(i))
         view.offset = 5.0
         _click(view, 2.0)
         self.assertEqual(seen, [7])

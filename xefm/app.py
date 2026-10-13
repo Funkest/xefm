@@ -891,6 +891,64 @@ def _bar_height(ctx) -> SizeRequest:
     return SizeRequest(min=h, preferred=h, max=h)
 
 
+
+def _same_volume(sources: list, dest_dir) -> bool:
+    """Whether every source lives on the volume ``dest_dir`` is on — the test
+    Finder and Explorer use to pick move over copy for an unmodified drop.
+    Anything not local, or not stat-able, counts as another volume (copy)."""
+    if path_schemes.is_uri(str(dest_dir)):
+        return False
+    try:
+        dest_dev = os.stat(str(dest_dir)).st_dev
+    except OSError:
+        return False
+    for src in sources:
+        if path_schemes.is_uri(str(src)):
+            return False
+        try:
+            if os.lstat(str(src)).st_dev != dest_dev:
+                return False
+        except OSError:
+            return False
+    return True
+
+
+def _breadcrumbs(text: str, path, pad_x: float, measure) -> list:
+    """The clickable components of a header ``text`` showing ``path``.
+
+    The text is what the header drew — possibly abbreviated (``/…/b/c``,
+    ``~/x``, ``[a.zip]/d``) — so components are matched to directories from
+    the right: the last name is ``path``, the one before it its parent, and so
+    on up ``Path.parent``, which walks archives and remote locations the same
+    way Backspace does. An ellipsis is not a place; a leading separator is the
+    root."""
+    ancestors, seen, p = [], set(), path
+    while p is not None and str(p) not in seen:
+        ancestors.append(p)
+        seen.add(str(p))
+        try:
+            parent = p.parent
+        except Exception:  # noqa: BLE001 — a backend without parents: stop
+            break
+        if str(parent) == str(p):
+            break
+        p = parent
+    runs = [(m.start(), m.end()) for m in re.finditer(r"[^/\\]+", text)]
+    crumbs = []
+    for k, (a, b) in enumerate(reversed(runs)):
+        if k >= len(ancestors):
+            break
+        if "…" in text[a:b]:
+            continue
+        child = ancestors[k - 1].name if k > 0 else None
+        crumbs.append((pad_x + measure(text[:a]), pad_x + measure(text[:b]),
+                       ancestors[k], child))
+    if text[:1] in ("/", "\\") and len(ancestors) > len(runs):
+        root = ancestors[-1]
+        child = ancestors[-2].name if len(ancestors) > 1 else None
+        crumbs.append((pad_x, pad_x + measure(text[:1]), root, child))
+    return crumbs
+
 class PaneHeader(Widget):
     """The location bar above a pane: its current path, brighter when active."""
 
@@ -901,6 +959,11 @@ class PaneHeader(Widget):
         # path text's left inset.
         self._abs: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
         self._pad_x = 0.0
+        #: The path's clickable components from the last draw:
+        #: ``(x0, x1, directory, child name)`` — a click between x0 and x1 goes
+        #: to ``directory`` with the cursor on ``child`` (#589).
+        self._crumbs: list = []
+        self._path_row: tuple[float, float] | None = None
         #: The tab strip's row and each tab's ``(x0, x1, index)``, captured
         #: each draw so a click can tell which tab it landed on.
         self._tab_row: tuple[float, float] | None = None
@@ -951,6 +1014,9 @@ class PaneHeader(Widget):
             self._tab_row = None
             self._tab_hits = []
         ctx.draw_text(pad_x, path_y, text, Style(fg=fg, attr=TextAttribute.BOLD))
+        self._path_row = (path_y, path_y + 1.0)
+        self._crumbs = ([] if virtual else
+                        _breadcrumbs(text, pane["path"], pad_x, ctx.measure_text))
 
     def _draw_tabs(self, ctx, tabs, pad_x, y, avail, active) -> None:
         """The tab strip: one label per tab, ``1 src  2 docs  3 ⌕ TODO``, the
@@ -986,16 +1052,33 @@ class PaneHeader(Widget):
             x += w + gap
 
     def handle_event(self, event) -> bool:
-        """A click on a tab shows it."""
-        if (event.type is EventType.MOUSE_CLICK and self._tab_row is not None
-                and self._tab_row[0] <= (event.y or 0.0) < self._tab_row[1]):
+        """A click on a tab shows it; a click on a path component goes there —
+        the mouse's Backspace and Jump (#589). Anywhere else on the bar just
+        makes the pane active."""
+        if event.type is not EventType.MOUSE_CLICK or event.button != "left":
+            return False
+        y = event.y or 0.0
+        if self._tab_row is not None and self._tab_row[0] <= y < self._tab_row[1]:
             ex = event.x or 0.0
             for x0, x1, index in self._tab_hits:
                 if x0 <= ex < x1:
                     self.app.select_tab(self.pane_name, index)
                     self.app.panel.render()
                     return True
-        return False
+            return False
+        app = self.app
+        app.pm.active_pane = self.pane_name
+        app._sync_active()
+        row = self._path_row
+        if row is not None and row[0] <= y < row[1]:
+            x = event.x or 0.0
+            for x0, x1, target, child in self._crumbs:
+                if x0 <= x < x1:
+                    pane = app.pane(self.pane_name)
+                    if str(target) != str(pane["path"]):
+                        app._go_to_dir(pane, target, child)
+                    break
+        return True
 
     def measure(self, ctx, axis, available) -> SizeRequest:
         # Reserve a strip of top padding above the path (vector backends); the
@@ -1019,6 +1102,8 @@ class PaneFooter(Widget):
         #: This footer's absolute rect (base units), captured each draw, so the
         #: controller can position the isearch overlay exactly on top of it.
         self.rect: tuple[float, float, float, float] | None = None
+        #: Clickable segments from the last draw: ``(x0, x1, action)``.
+        self._hits: list = []
 
     def draw(self, ctx) -> None:
         self.rect = ctx.screen_rect
@@ -1058,6 +1143,27 @@ class PaneFooter(Widget):
 
         left = elide(text, max(0.0, avail - reserved), measure=ctx.measure_text)
         ctx.draw_text(pad_x, 0, left, style)
+        # The sort and the filter read as settings, so a click opens them (#589)
+        # — where they are still on screen after eliding.
+        self._hits = []
+        for part, action in ((sort, "sort"), (filt.strip(" |"), "filter")):
+            start = text.find(part) if part else -1
+            if start < 0 or start + len(part) > len(left):
+                continue
+            x0 = pad_x + ctx.measure_text(text[:start])
+            self._hits.append((x0, x0 + ctx.measure_text(part), action))
+
+    def handle_event(self, event) -> bool:
+        if event.type is not EventType.MOUSE_CLICK or event.button != "left":
+            return False
+        self.app.pm.active_pane = self.pane_name
+        self.app._sync_active()
+        x = event.x or 0.0
+        for x0, x1, action in self._hits:
+            if x0 <= x < x1:
+                self.app._run_action(_ctx.FILER, action)
+                break
+        return True
 
 
 class StatusBar(Widget):
@@ -1098,10 +1204,15 @@ class StatusBar(Widget):
         ("isearch.cancel", None, "cancel"),
     )
 
+    _HINT_GAP = "   "
+
     def __init__(self, app: "XeFMApp"):
         self.app = app
         self._hints_cache: str | None = None
         self._isearch_cache: str | None = None
+        self._hint_parts: list = []
+        #: Clickable hints from the last draw: ``(x0, x1, action)`` (#589).
+        self._hits: list = []
 
     def invalidate(self) -> None:
         """Drop both cached lines, so the next draw rebuilds them from the
@@ -1120,8 +1231,9 @@ class StatusBar(Widget):
                 keys, _ = self.app.keys.get_keys_for_action(action)
                 if keys:
                     key = self.app.keys.format_key_for_display(keys[0])
-                    parts.append(f"{key} {label}")
-            self._hints_cache = "   ".join(parts)
+                    parts.append((f"{key} {label}", action))
+            self._hint_parts = parts
+            self._hints_cache = self._HINT_GAP.join(p for p, _ in parts)
         return self._hints_cache
 
     def _isearch_key(self, action: str) -> str:
@@ -1208,8 +1320,32 @@ class StatusBar(Widget):
             ctx.draw_text(x + avail - jw, 0, jobs,
                           Style(fg=ctx.theme.accent, attr=TextAttribute.BOLD))
             avail = max(0.0, avail - jw - 2.0)
-        text = elide(self._text(), avail, where="end", measure=ctx.measure_text)
+        full = self._text()
+        text = elide(full, avail, where="end", measure=ctx.measure_text)
         ctx.draw_text(x, 0, text, Style(fg=ctx.theme.muted_text))
+        # Each hint runs its action when clicked (#589): the bar is generated
+        # from the live keymap, so the targets follow the user's bindings.
+        self._hits = []
+        if full == self._hints_cache:
+            start, gap = x, ctx.measure_text(self._HINT_GAP)
+            for part, action in self._hint_parts:
+                x1 = x + ctx.measure_text(part)
+                if x1 > start + avail:
+                    break
+                self._hits.append((x, x1, action))
+                x = x1 + gap
+
+    def handle_event(self, event) -> bool:
+        if event.type is not EventType.MOUSE_CLICK or event.button != "left":
+            return False
+        if self.app.panel.has_layers:
+            return False
+        x = event.x or 0.0
+        for x0, x1, action in self._hits:
+            if x0 <= x < x1:
+                self.app._run_action(_ctx.FILER, action)
+                return True
+        return False
 
     def measure(self, ctx, axis, available) -> SizeRequest:
         # Reserve a strip of bottom padding below the hints (vector backends);
@@ -1641,18 +1777,22 @@ class XeFMApp:
         self.left_view = FilePane(
             self.pm.left_pane,
             config=self.config,
-            on_click=lambda i: self._on_click("left", i),
+            on_click=lambda i, mods=frozenset(), clicks=1: self._on_click("left", i, mods, clicks),
             on_context=lambda i, x, y: self._show_context_menu("left", i, x, y),
             on_drag=lambda i, ev: self._start_drag("left", i, ev),
-            on_drop=lambda i, paths: self._on_drop("left", i, paths),
+            on_drop=lambda i, paths, op=None: self._on_drop("left", i, paths, op),
+            on_middle=lambda i: self._on_middle_click("left", i),
+            on_nav=lambda step: self._on_nav_button("left", step),
         )
         self.right_view = FilePane(
             self.pm.right_pane,
             config=self.config,
-            on_click=lambda i: self._on_click("right", i),
+            on_click=lambda i, mods=frozenset(), clicks=1: self._on_click("right", i, mods, clicks),
             on_context=lambda i, x, y: self._show_context_menu("right", i, x, y),
             on_drag=lambda i, ev: self._start_drag("right", i, ev),
-            on_drop=lambda i, paths: self._on_drop("right", i, paths),
+            on_drop=lambda i, paths, op=None: self._on_drop("right", i, paths, op),
+            on_middle=lambda i: self._on_middle_click("right", i),
+            on_nav=lambda step: self._on_nav_button("right", step),
         )
         # Tag markers (#585): each pane reads the tags of the rows it draws on a
         # worker, which flags a repaint through the pump when they land.
@@ -2329,6 +2469,16 @@ class XeFMApp:
         # missing the first change after it loaded.
         old_path = pane.get("_hook_path", new_path)
         pane["_hook_path"] = new_path
+        if str(old_path) != str(new_path):
+            # The back / forward history (#589): a step through it moves the
+            # entry itself; any other change starts a new branch.
+            if pane.pop("_history_step", False):
+                pass
+            elif old_path is not None:
+                back = pane.setdefault("_back", [])
+                back.append(old_path)
+                del back[:-self._BACK_MAX]
+                pane["_forward"] = []
         if str(old_path) == str(new_path) or not _hooks.get("directory_changed"):
             return
         _hooks.fire("directory_changed", self._user_ctx,
@@ -2713,18 +2863,115 @@ class XeFMApp:
         info = (pane.get("file_info") or {}).get(str(entry)) if entry else None
         view.follow(entry, info)
 
-    def _on_click(self, pane_name: str, index: int) -> None:
+    def _on_click(self, pane_name: str, index: int,
+                  modifiers: frozenset = frozenset(), clicks: int = 1) -> None:
         """A FilePane was left-clicked: make it active and move the cursor.
 
         ``index`` is ``-1`` when the click landed past the last row — the empty
         space below a short listing, or anywhere in a pane showing an empty
         directory. The pane still becomes the active one, which is what the
         click was asking for; the cursor stays where it is, there being no row
-        to put it on (issue #371)."""
+        to put it on (issue #371).
+
+        On a row, the mouse maps onto XeFM's cursor-and-marks model (#589):
+
+        - a plain click moves the cursor and leaves the marks alone — marks are
+          deliberate, often built up over a while, and a stray click must not
+          wipe them;
+        - Cmd-click (Ctrl-click off macOS; on the Mac, Control-click is the
+          secondary click) toggles that row's mark;
+        - Shift-click marks every row from the anchor — the last plain or
+          Cmd/Ctrl-clicked row, else the cursor — to this one, adding to the
+          marks as every other way of marking does;
+        - a plain double-click opens what the row holds, as Enter does."""
         self.pm.active_pane = pane_name
         self._sync_active()
-        if index >= 0:
-            self.active_pane()["focused_index"] = index
+        if index < 0:
+            return
+        pane = self.active_pane()
+        files = pane["files"]
+        toggle = bool({"cmd", "ctrl"} & set(modifiers))
+        if "shift" in modifiers:
+            anchor = pane.get("_click_anchor")
+            if not isinstance(anchor, int) or not 0 <= anchor < len(files):
+                anchor = pane.get("focused_index", index)
+            lo, hi = sorted((anchor, index))
+            for entry in files[lo:hi + 1]:
+                if entry.name != "..":
+                    pane["selected_files"].add(str(entry))
+            pane["focused_index"] = index
+            return
+        pane["focused_index"] = index
+        pane["_click_anchor"] = index
+        if toggle:
+            entry = files[index]
+            if entry.name != "..":
+                key = str(entry)
+                if key in pane["selected_files"]:
+                    pane["selected_files"].discard(key)
+                else:
+                    pane["selected_files"].add(key)
+            return
+        if clicks == 2:
+            self._open(pane)
+
+    def _on_middle_click(self, pane_name: str, index: int) -> None:
+        """Middle-click on a directory row opens it in the other pane — the
+        two-pane reading of "open in a new tab"."""
+        pane = self.pane(pane_name)
+        files = pane["files"]
+        if not 0 <= index < len(files):
+            return
+        entry = files[index]
+        info = pane.get("file_info", {}).get(str(entry), {})
+        if not info.get("is_dir") or entry.name == "..":
+            return
+        other_name = "right" if pane_name == "left" else "left"
+        other = self.pane(other_name)
+        self.pm.active_pane = other_name
+        self._sync_active()
+        self._go_to_dir(other, entry, None)
+        self.panel.render()
+
+    def _on_nav_button(self, pane_name: str, step: str) -> None:
+        """The mouse's back / forward buttons, over a pane: step that pane
+        through the directories it has shown."""
+        self.pm.active_pane = pane_name
+        self._sync_active()
+        if step == "back":
+            self.go_back()
+        else:
+            self.go_forward()
+
+    # --- back / forward (#589) ---------------------------------------------
+
+    #: How many directories each pane remembers to step back through.
+    _BACK_MAX = 100
+
+    def go_back(self) -> None:
+        """Step the active pane back to the directory it showed before, the
+        way a browser's Back does. Distinct from Backspace (the parent) and
+        from H (any recent directory)."""
+        self._step_history("_back", "_forward", "back")
+
+    def go_forward(self) -> None:
+        """Undo a :meth:`go_back`."""
+        self._step_history("_forward", "_back", "forward")
+
+    def _step_history(self, source: str, other: str, word: str) -> None:
+        pane = self.active_pane()
+        stack = pane.get(source) or []
+        if not stack:
+            self.log_info(f"Nothing to go {word} to")
+            return
+        target = stack.pop()
+        here = pane.get("path")
+        pane.setdefault(other, []).append(here)
+        pane["_history_step"] = True
+        # Land on the directory we came from when stepping back to its parent.
+        focus = here.name if here is not None and str(here.parent) == str(target) else None
+        self._go_to_dir(pane, target, focus)
+        self.panel.render()
 
     @staticmethod
     def _cursor_anchor(pane: dict):
@@ -3198,6 +3445,8 @@ class XeFMApp:
                 "index_search": (self.index_search, False),
                 "find_in_files": (self.show_content_search, False),
                 "history": (self.show_history, False),
+                "go_back": (self.go_back, False),
+                "go_forward": (self.go_forward, False),
                 "programs": (self.show_programs, False),
                 "favorites": (self.show_favorites, False),
                 "add_favorite": (self.add_favorite, False),
@@ -4025,6 +4274,8 @@ class XeFMApp:
                      # asks properly, and says so if the answer is no.
                      enabled=lambda: platform.system() in ("Darwin", "Windows")),
             MenuItem("History…", on_select=self.show_history, shortcut=sc("history")),
+            MenuItem("Back", on_select=self.go_back, shortcut=sc("go_back")),
+            MenuItem("Forward", on_select=self.go_forward, shortcut=sc("go_forward")),
             SEPARATOR,
             MenuItem("Flat View", on_select=lambda: self._menu("flat_view"),
                      checked=lambda: (self.active_pane().get("virtual") or {})
@@ -9774,6 +10025,8 @@ class XeFMApp:
             ("jump_to_path", "Jump to a typed path"),
             ("drives", "Open the drives / locations picker"),
             ("history", "Go to a recently-visited directory"),
+            ("go_back", "Back to the directory shown before"),
+            ("go_forward", "Forward again after going back"),
             ("flat_view", "Show every file below this directory as one list"),
             ("open_list_from_clipboard",
              "Open the paths on the clipboard as a list (Go menu)"),
@@ -10357,7 +10610,7 @@ class XeFMApp:
         self._drag_source_pane = pane_name
         self._drag_cancelled_in_place = False
         self.panel.begin_file_drag(
-            paths, event=event, operations=("copy",),
+            paths, event=event, operations=("copy", "move"),
             on_complete=lambda op: self._on_drag_complete(paths, op),
         )
 
@@ -10377,10 +10630,23 @@ class XeFMApp:
         if operation and operation != "none":
             n = len(paths)
             self.log_info(f"Dragged {n} item{'' if n == 1 else 's'} out ({operation})")
+            if operation == "move":
+                # The receiver moved them (Finder does the move itself), so the
+                # source listing is stale.
+                self._relist(self.pm.left_pane)
+                self._relist(self.pm.right_pane)
 
-    def _on_drop(self, pane_name: str, index: int, paths: list) -> None:
-        """Files were dropped onto a pane from another app (Finder, an editor):
-        copy them into the drop target. The target is the directory *row* under
+    def _on_drop(self, pane_name: str, index: int, paths: list,
+                 operation: str | None = None) -> None:
+        """Files were dropped onto a pane — from another app (Finder, an
+        editor) or from the other pane: copy or move them into the drop target.
+
+        ``operation`` is what the platform's drag modifiers asked for
+        (:mod:`puikit` reports it: Command/Shift moves, Option/Ctrl copies).
+        With none held, the platform default applies: a move when the files
+        are on the same volume as the target, a copy otherwise — Finder's and
+        Explorer's rule (#589). A link request is refused; XeFM does not make
+        aliases. The target is the directory *row* under
         the drop when it is a folder (like Finder), otherwise the pane's own
         directory. Refuses read-only destinations (a browsed archive) and a
         search-results (virtual) pane, and skips any source already sitting in the
@@ -10424,15 +10690,23 @@ class XeFMApp:
                 return
             self.log_info("Nothing to copy (already in this folder)")
             return
+        if operation == "link":
+            self.log_info("Dropping as a link is not supported; drop without "
+                          "the link keys to copy or move")
+            return
+        if operation is None:
+            operation = "move" if _same_volume(targets, dest_dir) else "copy"
+        verb = "Move" if operation == "move" else "Copy"
 
         def on_complete(result: dict) -> None:
-            self._relist(pane)
-            self.log_info(format_op_summary("Copy", result))
-            self._report_op_failures("Copy", result)
+            self._relist(self.pm.left_pane)
+            self._relist(self.pm.right_pane)
+            self.log_info(format_op_summary(verb, result))
+            self._report_op_failures(verb, result)
             self.panel.render()
 
-        self._fileops.copy(self.panel, targets, dest_dir,
-                           on_complete=on_complete, log=self.log_info)
+        run = self._fileops.move if operation == "move" else self._fileops.copy
+        run(self.panel, targets, dest_dir, on_complete=on_complete, log=self.log_info)
         self.panel.render()
 
     # --- run -----------------------------------------------------------------

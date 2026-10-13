@@ -27,6 +27,10 @@ from __future__ import annotations
 
 from typing import Callable
 
+try:
+    from puikit.widgets import MultiClickTracker
+except ImportError:  # PuiKit before the release that exported it
+    from puikit.widgets._input import MultiClickTracker
 from puikit.backend import Style, TextAttribute, TRANSPARENT
 from puikit.color import (LC_BODY, LC_LARGE, LC_MIN_NONTEXT, ensure_text_headroom,
                           legible_ink, oklab_to_rgb, rgb_to_oklab)
@@ -265,7 +269,9 @@ class FilePane(Widget):
         on_click: Callable[[int], None] | None = None,
         on_context: Callable[[int, float, float], None] | None = None,
         on_drag: Callable[[int, Event], None] | None = None,
-        on_drop: Callable[[int, list], None] | None = None,
+        on_drop: Callable[..., None] | None = None,
+        on_middle: Callable[[int], None] | None = None,
+        on_nav: Callable[[str], None] | None = None,
     ):
         self.pane = pane_data
         #: XeFM Config; read for SEPARATE_EXTENSIONS / MAX_EXTENSION_LENGTH so the
@@ -283,8 +289,10 @@ class FilePane(Widget):
         #: here as an aid only: the status bar is what says what is carried.
         self.clipboard_marks: frozenset = frozenset()
         self.clipboard_cut = False
-        #: Called with the clicked row index — the controller makes this pane
-        #: active and moves the cursor there. ``-1`` for a click that landed
+        #: Called with ``(row index, modifiers, clicks)`` — the controller makes
+        #: this pane active and moves the cursor there, and reads the modifiers
+        #: (Cmd/Ctrl toggles a mark, Shift marks a range) and the click count (a
+        #: plain double-click opens, #589). ``-1`` for a click that landed
         #: past the last row (the empty space below the listing, or an empty
         #: directory): the pane still becomes active, and there is no row to
         #: move to (#371).
@@ -303,6 +311,20 @@ class FilePane(Widget):
         #: pane's own directory — the same "no row here" answer a click gets);
         #: a directory row lets the controller target it.
         self.on_drop = on_drop
+        #: Called with the row index on a middle-click.
+        self.on_middle = on_middle
+        #: Called with "back" / "forward" when the mouse's side button is
+        #: clicked over this pane.
+        self.on_nav = on_nav
+        #: Counts presses on one row into single / double clicks.
+        self._clicks = MultiClickTracker()
+        self._click_count = 1
+        #: The scrollbar's ``(x, top, height, row count)`` from the last draw,
+        #: or None when there is none; and, while its thumb is held, how far
+        #: below the thumb's top the pointer grabbed it.
+        self._bar: tuple[float, float, float, int] | None = None
+        self._bar_grab: float | None = None
+        self._press_in_bar = False
         #: Left-drag gesture state: the row a press landed on (``-1`` = none / not
         #: a file row), the press position (base units), and whether a drag session
         #: has already been kicked off, so the drag fires exactly once per gesture.
@@ -683,12 +705,14 @@ class FilePane(Widget):
                                measure, measure_mono)
             row += 1
 
+        self._bar = None
         if show_bar:
             content_h = float(count)
             ratio = view_h / content_h
             denom = content_h - view_h
             pos = self.offset / denom if denom > 0 else 0.0
             ctx.draw_scrollbar(ctx.size_units[0] - 1, my, view_h, max(0.0, min(1.0, pos)), ratio)
+            self._bar = (float(ctx.size_units[0] - 1), my, view_h, count)
 
         # The focused pane's corner brackets, drawn last so they sit over the rows
         # and the scrollbar rather than under a row fill. Spans the pane's whole
@@ -966,6 +990,44 @@ class FilePane(Widget):
         index = int(self.offset + max(0.0, (event.y or 0.0) - self._margin_y))
         return index if 0 <= index < len(self.pane["files"]) else -1
 
+    # --- the scrollbar (#589) -------------------------------------------------
+
+    def _in_bar(self, event: Event) -> bool:
+        if self._bar is None:
+            return False
+        x, top, h, _count = self._bar
+        y = event.y or 0.0
+        return (event.x or 0.0) >= x and top <= y < top + h
+
+    def _thumb(self) -> tuple[float, float]:
+        """The thumb's ``(top, height)``, as :meth:`draw` drew it."""
+        _x, top, h, count = self._bar
+        th = min(h, max(1.0, h * h / count))
+        span = count - h
+        pos = self.offset / span if span > 0 else 0.0
+        return top + max(0.0, min(1.0, pos)) * (h - th), th
+
+    def _bar_press(self, event: Event) -> None:
+        """A press on the scrollbar: grab the thumb, or page toward the press
+        when it lands on the track, as every scrollbar does."""
+        _x, _top, h, _count = self._bar
+        y = event.y or 0.0
+        t0, th = self._thumb()
+        if t0 <= y < t0 + th:
+            self._bar_grab = y - t0
+        else:
+            self._bar_grab = None
+            self.scroll_by(h if y >= t0 + th else -h)
+
+    def _bar_drag(self, event: Event) -> None:
+        _x, top, h, count = self._bar
+        _t0, th = self._thumb()
+        travel = h - th
+        if travel <= 0:
+            return
+        pos = ((event.y or 0.0) - self._bar_grab - top) / travel
+        self.offset = max(0.0, min(1.0, pos)) * max(0.0, count - h)
+
     def handle_event(self, event: Event) -> bool:
         if event.type is EventType.MOUSE_SCROLL:
             # A precise (trackpad) scroll carries a sub-unit delta; a plain wheel
@@ -976,14 +1038,27 @@ class FilePane(Widget):
             self.scroll_by(-amount)
             return True
         if event.type is EventType.MOUSE_DOWN and event.button == "left":
+            if self._in_bar(event):
+                # The scrollbar takes the gesture whole: no row is clicked or
+                # dragged out by a press that landed on it.
+                self._press_in_bar = True
+                self._press_index = -1
+                self._bar_press(event)
+                return True
+            self._press_in_bar = False
             # Arm a possible drag: remember the row and press point. The click is
             # still synthesized by the Panel on release (so plain clicks keep
             # selecting); a drag only starts if the pointer travels far enough.
             self._press_index = self._row_at(event)
+            self._click_count = self._clicks.press(self._press_index)
             self._press_xy = (event.x or 0.0, event.y or 0.0)
             self._dragging = False
             return False  # don't consume: let the press→click gesture run
         if event.type is EventType.MOUSE_DRAG and event.button == "left":
+            if self._press_in_bar:
+                if self._bar_grab is not None and self._bar is not None:
+                    self._bar_drag(event)
+                return True
             if (not self._dragging and self._press_index >= 0 and self.on_drag is not None):
                 dx = abs((event.x or 0.0) - self._press_xy[0])
                 dy = abs((event.y or 0.0) - self._press_xy[1])
@@ -992,20 +1067,33 @@ class FilePane(Widget):
                     # once; the native session then captures the mouse, so no
                     # further MOUSE_DRAGs arrive until the next press.
                     self._dragging = True
+                    self._clicks.note_drag()
                     self.on_drag(self._press_index, event)
                     return True
             return False
         if event.type is EventType.MOUSE_UP and event.button == "left":
             self._press_index = -1
             self._dragging = False
+            self._bar_grab = None
             return False
         if event.type is EventType.MOUSE_CLICK and event.button == "left":
             # Reported even with no row under the pointer (-1): clicking the
             # empty space below a short listing is still a click on *this* pane,
             # and it is how a pane showing an empty directory can be reached at
             # all with the mouse (#371).
+            if self._press_in_bar:
+                self._press_in_bar = False
+                return True
             if self.on_click is not None:
-                self.on_click(self._row_at(event))
+                self.on_click(self._row_at(event), event.modifiers, self._click_count)
+                return True
+        if event.type is EventType.MOUSE_CLICK and event.button in ("back", "forward"):
+            if self.on_nav is not None:
+                self.on_nav(event.button)
+                return True
+        if event.type is EventType.MOUSE_CLICK and event.button == "middle":
+            if self.on_middle is not None:
+                self.on_middle(self._row_at(event))
                 return True
         if event.type is EventType.MOUSE_CLICK and event.button == "right":
             # -1 (no row under the pointer) is reported too: it is a click on
@@ -1029,6 +1117,6 @@ class FilePane(Widget):
             index = self._row_at(event)
             paths = event.hints.get("paths") or []
             if paths:
-                self.on_drop(index, list(paths))
+                self.on_drop(index, list(paths), event.hints.get("operation"))
                 return True
         return False
