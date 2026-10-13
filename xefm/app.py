@@ -2733,6 +2733,7 @@ class XeFMApp:
                 "command_palette": (self.show_command_palette, False),
                 "menu": (self.menu_bar.open_menu, None),
                 "redraw": (lambda: None, True),
+                "reread": (self.reread, False),
                 # --- cursor ---
                 "cursor_up": (self._act_cursor_up, True),
                 "cursor_down": (self._act_cursor_down, True),
@@ -3851,6 +3852,15 @@ class XeFMApp:
         # character.
         self.panel.dispatch_event(event)
         return True
+
+    def reread(self) -> None:
+        """Read both panes' directories again — Total Commander's F2. File
+        monitoring usually makes it unnecessary; it is for a location nothing
+        watches (a network share, a remote) and for a listing in doubt."""
+        self._relist(self.pm.left_pane)
+        self._relist(self.pm.right_pane)
+        self.log_info("Re-read both panes")
+        self.panel.render()
 
     def reload_config(self) -> None:
         """Re-read ``~/.xefm/config.py`` and apply what can change at runtime.

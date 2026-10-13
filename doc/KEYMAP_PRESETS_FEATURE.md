@@ -44,49 +44,72 @@ anywhere in the name, and romaji finds Japanese names. When you open the
 search with the I-Search key, it keeps its own keys under every preset: it
 lets you mark matches as you go, and stays open until Enter or Esc.
 
+The keys follow Total Commander's defaults, wherever XeFM has the same
+command.
+
 | Key | Action |
 |-----|--------|
 | `F1` | Help |
-| `F2` | External programs |
+| `F2` / `Ctrl-R` | Re-read both panes |
 | `F3` | View |
 | `F4` | Edit |
-| `F5` | Copy to the other pane |
-| `Shift-F5` | Copy to a typed directory |
-| `F6` | Move to the other pane |
-| `Shift-F6` | Rename |
 | `Shift-F4` | New file |
+| `F5` | Copy to the other pane |
+| `Shift-F5` | Duplicate in place |
+| `F6` | Move to the other pane |
+| `Shift-F6` / `Ctrl-M` | Rename (batch rename for several) |
 | `F7` | New folder |
-| `F8` / `Del` | Delete |
-| `F9` / `Alt` | Menu |
-| `F10` | Quit |
-| `Alt-F1` | Drives |
-| `Alt-F5` / `Alt-F9` | Create archive / extract |
+| `F8` / `Del` | Delete (to the Trash where there is one) |
+| `Shift-F8` / `Shift-Del` | Delete for good |
+| `F9` / `F10` / `Alt` | Menu |
+| `Alt-F4` | Quit |
+| `Shift-F10` | Context menu |
+| `Alt-Enter` | Details (properties) |
+| `Alt-F1` / `Alt-F2` | Drives |
+| `Alt-F5` | Create archive |
+| `Alt-F6` / `Alt-F9` | Extract |
 | `Alt-F7` | Search files |
-| `Alt-Shift-F7` | Search file contents |
-| `Alt-↓` | History |
-| `Ctrl-D` | Favorites |
+| `Shift-F2` | Compare with the other pane and select the differences |
+| `Ctrl-F3` … `Ctrl-F6` | Sort by name / extension / date / size |
+| `Enter` / `Ctrl-PgDn` | Open |
+| `Backspace` / `Ctrl-PgUp` | Parent directory |
+| `Ctrl-\` | Root |
+| `Alt-←` / `Alt-→` / `Alt-↓` | Back / forward / history |
+| `Ctrl-D` | Favorites (directory hotlist) |
+| `Ctrl-F` / `Ctrl-N` | Connect to a server |
+| `Ctrl-S` / `Ctrl-F10` | Filter / show all files |
+| `Ctrl-B` | Flat view |
+| `Ctrl-Q` | Quick view |
+| `Ctrl-T` / `Ctrl-↑` / `Ctrl-W` | New tab / open folder in a new tab / close tab |
+| `Ctrl-Tab` / `Ctrl-Shift-Tab` | Next / previous tab |
+| `Ctrl-C` / `Ctrl-X` / `Ctrl-V` | Copy / cut / paste files |
+| `Ctrl-P` | Copy the path |
 | `Insert` / `Space` | Mark and move down |
 | `+` / `-` | Select / unselect by pattern |
-| `Ctrl-A` | Select all |
+| `*` | Invert the file selection |
+| `Ctrl-A` / `Ctrl--` | Select all / unselect all |
+| `Alt-+` | Select files with the same extension |
 | `Home` / `End` | First / last item |
-| `Ctrl-F3` … `Ctrl-F6` | Sort by name / extension / date / size |
-| `Shift-F2` | Compare directories |
+| `Ctrl-Shift-P` | Command palette |
+
+A few of these keys belong to features that may not be in your version of
+XeFM yet: tabs, quick view, flat view, back and forward, and the file
+clipboard. A key whose command doesn't exist does nothing.
 
 `F5`, `F6` and `F8` act on the marked items, or on the item under the cursor
 when nothing is marked.
 
-These commands have no key in this preset:
+These commands have no key in this preset, because Total Commander has no key
+for them:
 
-- the sort dialog, file details, compare and select
-- go to / send to the other pane's directory
-- jump to path, connect to server, add to favorites
-- move to a typed directory, the subshell
-- toggle-select all files / all items, unselect all
+- the sort dialog, compare directories in the diff viewer
+- go to / send to the other pane's directory, jump to path, add to favorites
+- copy / move to a typed directory, the subshell, external programs
+- copy names, reveal in Finder / Explorer, the OS index search
 - incremental search's own key (typing a letter already starts one)
-- redraw, reset the pane split
 
-All of them are in the command palette (`Ctrl-T`), and most are in the menus
-too. To put one back on a key, bind it in `KEY_BINDINGS`.
+All of them are in the command palette (`Ctrl-Shift-P`), and most are in the
+menus too. To put one back on a key, bind it in `KEY_BINDINGS`.
 
 Function keys and modified function keys have terminal sequences, so the
 layout works in a terminal as well as in the desktop app. A terminal may still

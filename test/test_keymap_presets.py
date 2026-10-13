@@ -65,8 +65,36 @@ class Apply(unittest.TestCase):
                 keys = value["keys"] if isinstance(value, dict) else value
                 self.assertFalse([k for k in keys if keymap_presets.is_typing_key(k)],
                                  action)
-        # A key that is not a letter stays: ';' is still the filter.
-        self.assertEqual(_keys(config, "filter"), [";"])
+        # A key that is not a letter stays where the preset says nothing:
+        # '.' still shows hidden files.
+        self.assertEqual(_keys(config, "toggle_hidden"), TEMPLATE["toggle_hidden"])
+
+    def test_orthodox_follows_total_commander(self):
+        config = _config_with()
+        keymap_presets.apply(config, keymap_presets.ORTHODOX, TEMPLATE)
+        expected = {
+            "help": ["F1"], "reread": ["F2", "Ctrl-R"], "view_file": ["F3"],
+            "edit_file": ["F4"], "copy_files": ["F5"], "move_files": ["F6"],
+            "create_directory": ["F7"], "delete_files": ["F8", "DELETE"],
+            "quit": ["Alt-F4"], "rename": ["Shift-F6", "Ctrl-M"],
+            "duplicate_files": ["Shift-F5"], "compare_selection": ["Shift-F2"],
+            "find_files": ["Alt-F7"], "create_archive": ["Alt-F5"],
+            "history": ["Alt-DOWN"], "favorites": ["Ctrl-D"],
+            "filter": ["Ctrl-S"], "go_parent": ["BACKSPACE", "Ctrl-PAGE_UP"],
+            "select_all": ["Ctrl-A"], "quick_sort_date": ["Ctrl-F5"],
+        }
+        for action, keys in expected.items():
+            self.assertEqual(_keys(config, action), keys, action)
+
+    def test_actions_this_xefm_lacks_are_skipped(self):
+        """The table names actions of features not merged yet (tabs, quick
+        view…); where the running XeFM lacks one, its keys stay free."""
+        from xefm.actions import FILER, registry
+        config = _config_with()
+        keymap_presets.apply(config, keymap_presets.ORTHODOX, TEMPLATE)
+        for action in keymap_presets._ORTHODOX.bindings:
+            if registry.resolve(FILER, action) is None:
+                self.assertNotIn(action, config.KEY_BINDINGS, action)
 
     def test_a_viewer_keeps_its_letters(self):
         config = _config_with()

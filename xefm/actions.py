@@ -899,6 +899,7 @@ _FILER_ACTIONS = [
     _a("toggle_hidden", FILER, "Show or hide hidden files"),
     _a("toggle_color_scheme", FILER, "Cycle to the next color theme"),
     _a("redraw", FILER, "Redraw the screen"),
+    _a("reread", FILER, "Re-read both panes' directories", default_keys=()),
     _a("menu", FILER, "Open the menu bar"),
     # Every action of the file list, searchable and runnable — the long tail
     # the menu bar deliberately leaves out (discussion #550).

@@ -70,43 +70,86 @@ _ORTHODOX = Preset(
                  "delete; typing a letter searches."),
     free_letters=True,
     type_ahead=True,
+    # Total Commander's default keys wherever XeFM has the action (its
+    # keyboard map: Configuration > Keyboard, KEYBOARD.TXT). Where TC's key
+    # does something XeFM has no action for, the key is simply not bound;
+    # where XeFM has an action TC has no key for, the action keeps no key
+    # here and is reached from the menus and the command palette. Actions
+    # from features not merged yet are listed too: ``apply`` skips any the
+    # running XeFM does not have.
     bindings={
         # Application
         "help": ["F1"],
-        "menu": ["F9", "ALT"],
-        "quit": ["F10"],
-        "redraw": [],                         # F5 is copy here
-        "programs": ["F2"],
+        "reread": ["F2", "Ctrl-R"],
+        "menu": ["F9", "F10", "ALT"],
+        "quit": ["Alt-F4"],
+        "redraw": [],
+        "programs": [],
+        "context_menu": ["Shift-F10", "APPS"],
+        "command_palette": ["Ctrl-Shift-P"],   # TC has none; Ctrl-T is tabs
         # Files
         "view_file": ["F3"],
         "edit_file": ["F4"],
-        "copy_files": ["F5"],
-        "move_files": ["F6"],
-        "copy_files_to": ["Shift-F5"],
-        "rename": ["Shift-F6"],
         "create_file": ["Shift-F4"],
+        "copy_files": ["F5"],
+        "duplicate_files": ["Shift-F5"],        # TC: copy with rename, same dir
+        "move_files": ["F6"],
+        "rename": ["Shift-F6", "Ctrl-M"],       # Ctrl-M: multi-rename
         "create_directory": ["F7"],
         "delete_files": ["F8", "DELETE"],
+        "delete_permanently": ["Shift-F8", "Shift-DELETE"],
+        "copy_files_to": [],
+        "move_files_to": [],
+        "file_details": ["Alt-ENTER"],          # TC: properties
         "create_archive": ["Alt-F5"],
-        "extract_archive": ["Alt-F9"],
-        # Search
+        "extract_archive": ["Alt-F9", "Alt-F6"],
+        "clipboard_copy": ["Ctrl-C"],
+        "clipboard_cut": ["Ctrl-X"],
+        "clipboard_paste": ["Ctrl-V"],
+        "copy_names": [],
+        "copy_paths": ["Ctrl-P"],
+        # Search and filter
         "find_files": ["Alt-F7"],
-        "find_in_files": ["Alt-Shift-F7"],
+        "find_in_files": [],
+        "filter": ["Ctrl-S"],                   # TC: quick filter
+        "clear_filter": ["Ctrl-F10"],           # TC: show all files
+        "isearch": [],                          # typing a letter searches
+        "index_search": [],
         # Places
-        "drives": ["Alt-F1"],
+        "open_item": ["ENTER", "Ctrl-PAGE_DOWN"],
+        "go_parent": ["BACKSPACE", "Ctrl-PAGE_UP"],
+        "go_root": ["Ctrl-BACKSLASH"],
+        "drives": ["Alt-F1", "Alt-F2"],          # TC: left / right drive
         "history": ["Alt-DOWN"],
-        "favorites": ["Ctrl-D"],
+        "go_back": ["Alt-LEFT"],
+        "go_forward": ["Alt-RIGHT"],
+        "favorites": ["Ctrl-D"],                # TC: directory hotlist
+        "connect_server": ["Ctrl-F", "Ctrl-N"],  # TC: FTP connect / new URL
+        "compare_selection": ["Shift-F2"],      # TC: compare file lists
+        "diff_directories": [],
+        "flat_view": ["Ctrl-B"],                # TC: branch view
+        "quick_view": ["Ctrl-Q"],
+        # Tabs
+        "new_tab": ["Ctrl-T"],
+        "open_in_new_tab": ["Ctrl-UP"],
+        "close_tab": ["Ctrl-W"],
+        "next_tab": ["Ctrl-TAB"],
+        "prev_tab": ["Ctrl-Shift-TAB"],
         # Selection and cursor
         "toggle_select_down": ["INSERT", "SPACE"],
-        "select_by_pattern": ["+"],
-        "unselect_by_pattern": ["-"],
+        "select_by_pattern": ["+"],             # TC: Num +
+        "unselect_by_pattern": ["-"],           # TC: Num -
+        "toggle_select_files": ["*"],           # TC: Num * (invert)
         "select_all": ["Ctrl-A"],
-        "unselect_all": [],
+        "unselect_all": ["Ctrl-MINUS"],         # TC: Ctrl-Num -
+        "select_same_extension": ["Alt-+"],     # TC: Alt-Num +
         "cursor_top": ["HOME", "Ctrl-HOME"],
         "cursor_bottom": ["END", "Ctrl-END"],
-        # '+' and '-' select, so what sat on them moves.
-        "diff_directories": ["Shift-F2"],
-        "reset_pane_boundary": [],
+        "cursor_next_selected": [],             # Ctrl-Up opens a tab here
+        "cursor_prev_selected": [],
+        "reveal_in_os": [],                     # Ctrl-R rereads here
+        "reset_pane_boundary": [],              # '-' unselects here
+        "reset_log_height": [],                 # '_' starts names (__init__.py)
         # Sorting
         "quick_sort_name": ["Ctrl-F3"],
         "quick_sort_ext": ["Ctrl-F4"],
@@ -199,7 +242,12 @@ def apply(config, name: Optional[str], template: Optional[dict] = None) -> None:
                                  else kept)
     # A preset's keys are a plain list, dropping any selection gate: an
     # orthodox F5 copies the cursor item when nothing is marked.
+    from xefm.actions import FILER, registry
     for action, keys in preset.bindings.items():
+        # A preset may name actions of features this XeFM does not have yet;
+        # binding them would only claim their keys for nothing.
+        if registry.resolve(FILER, action) is None:
+            continue
         if untouched(action):
             table[action] = list(keys)
     config.KEY_BINDINGS = table

@@ -57,6 +57,37 @@ unbound).
 
 ## Choosing
 
+### The Orthodox table
+
+`_ORTHODOX.bindings` follows Total Commander's default keys wherever XeFM has
+the matching action. The user asked for it to match TC as closely as possible.
+The reference was TC's keyboard map, from KEYBOARD.TXT as reproduced by
+softpanorama and the DefKey / devcrea lists, which agree on the keys used here.
+
+- A TC key with no XeFM action stays unbound. Examples: Alt-F8 command-line
+  history, Ctrl-L occupied space, Ctrl-U swap panels.
+- An XeFM action with no TC key is unbound under this preset (`[]`) when it
+  would otherwise hold a key TC uses. Examples: `reveal_in_os` (Ctrl-R),
+  `cursor_prev_selected` (Ctrl-Up), `redraw` (F5), `reset_pane_boundary` (`-`),
+  `index_search` (Ctrl-F). `reset_log_height` (`_`) is unbound too, so
+  type-ahead can reach `__init__.py`.
+- Some actions are close but not exact, and are mapped anyway:
+  - `duplicate_files` for Shift-F5 (TC prompts for the name; XeFM picks one);
+  - `compare_selection` for Shift-F2 (TC marks the differences in both panels);
+  - `drives` for Alt-F1 / Alt-F2 (TC's are per panel; XeFM's acts on the active
+    one);
+  - `connect_server` for Ctrl-F / Ctrl-N (TC's FTP connect / new URL);
+  - `filter` for Ctrl-S (TC's quick filter);
+  - `file_details` for Alt-Enter (properties).
+- `reread` is new: it relists both panes, for TC's F2 / Ctrl-R. It has no key in
+  AFX style.
+- `command_palette` moves to Ctrl-Shift-P, because Ctrl-T is a new tab.
+
+The table also names actions from PRs not merged yet: tabs, quick view, flat
+view, back/forward, the file clipboard, `delete_permanently`. `apply` skips an
+action the registry does not resolve, so the preset is right on a build with or
+without them, and a missing action never holds a key for nothing.
+
 `resolve(config, chosen)`: `KEY_PRESET` from the config when set, else the
 View menu's choice (state key `keymap.preset`), else `afx`, with old names
 mapped through `canonical`. An unknown name falls back to `afx` and is
