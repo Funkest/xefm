@@ -26,18 +26,18 @@ next time XeFM starts it tells you what finished while it was closed.
 The status bar's right end shows how it is going:
 
 ```
-⟳ Similar videos extract 42% (Ctrl-G)
+⠋ Similar videos extract 42%
 ```
 
 and says when it is done:
 
 ```
-✓ Similar videos: 12 groups (Ctrl-G)
+✓ Similar videos: 12 groups
 ```
 
 ## Looking at the results
 
-Open **View → Background Jobs…** (`Ctrl-G`) and choose the scan. The pane
+Click that, or open **View → Background Jobs…** (`Ctrl-G`), and choose the scan. The pane
 goes into its results, a [tree file](TREE_FILES_FEATURE.md) with one folder
 per group. In each group, the file the others were compared with comes
 first.

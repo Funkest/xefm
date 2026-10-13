@@ -7,29 +7,48 @@ XeFM: browse, view files, even start another operation.
 
 - **When it asks to start.** The Copy, Move and Delete confirmations have a
   **Background** button. The operation starts with no progress dialog.
-- **While it runs.** In the progress dialog, press **B**. Or press **Esc** and
-  choose **Run in background**. The operation keeps going while you decide,
-  and **Enter** or **Esc** again leaves it running in front.
+- **While it runs.** Press the progress dialog's **Run in background**
+  button. Its other button, **Cancel**, asks before it stops anything.
 
 ## Seeing what is running
 
 The right end of the status bar shows the job:
 
 ```
-⟳ Copy 42% +1 queued (Ctrl-G)
+⠋ Copy 42% +1
 ```
 
-**View → Background Jobs…** (`Ctrl-G`) lists every job:
+The spinner in front turns while the job runs. `+1` is how many more jobs
+wait behind it.
 
-- **Choose a running job** to bring its progress dialog back. From there you
-  can watch it, press **Esc** to cancel it, or press **B** to send it back.
-- **Choose a queued job** to remove it from the queue before it starts.
+**Click it**, or choose **View → Background Jobs…** (`Ctrl-G`), to list every
+job: what it does, from where to where, and how far it is. The list keeps up
+while it is open, and closes by itself once the last job has finished.
+
+```
+Copy 12 items  ~/photos → s3://bucket/backup — 42% (1.2G / 2.9G)
+Move report.pdf  ~/Downloads → ~/Documents — paused, queued (Enter runs it now)
+Copy notes.txt  ~/work → ~/backup — queued (Enter removes it)
+```
+
+- **Choose the running job** to bring its progress dialog back. From there
+  you can watch it, cancel it, or send it back.
+- **Choose a paused job** to run it now, in front, with its progress dialog.
+- **Choose a queued job** that has not started to remove it from the queue.
 
 ## One at a time
 
 Background jobs run **one after another**, in the order you sent them,
-because they usually compete for the same disk or the same server. A job you
-start in the foreground does not wait for the queue.
+because they usually compete for the same disk or the same server. Only one
+of them is ever running.
+
+If you send an operation to the background while another job is running
+there, it **pauses and waits its turn**. It pauses once the files it is
+working on are done, never in the middle of a file: a transfer to a server
+held open that long could time out. When its turn comes, it carries on where
+it stopped.
+
+An operation you watch in front never waits for the queue.
 
 ## When a job needs an answer
 
@@ -38,12 +57,12 @@ the destination, it stops and waits. No dialog pops up in the middle of your
 work. The status bar shows instead:
 
 ```
-⚠ Copy needs you (Ctrl-G)
+⚠ Copy
 ```
 
-Open the jobs list and choose the job. Its progress dialog comes back with the
-question, and once you answer, it carries on. Send it back with **B** if you
-like.
+Click it to open the jobs list, and choose the job. Its progress dialog comes back with the
+question, and once you answer, it carries on. Send it back with **Run in
+background** if you like.
 
 ## When a job finishes
 

@@ -63,6 +63,27 @@ from xefm import trash as trash_mod
 #: Operation kind -> (verb label, progress-manager op type).
 _VERB = {"copy": "Copy", "move": "Move", "delete": "Delete", "duplicate": "Duplicate",
          "trash": "Trash"}
+def _home_short(path) -> str:
+    """``path`` as the jobs list shows it: under the home directory as ``~``."""
+    text = str(path)
+    home = os.path.expanduser("~")
+    if text == home or text.startswith(home + os.sep):
+        return "~" + text[len(home):]
+    return text
+
+
+def describe_operation(kind: str, targets: list, dest_dir: Optional[Path]) -> str:
+    """What an operation works on, in one line for the jobs list (#599):
+    ``report.pdf  ~/Downloads → ~/Documents``, ``12 items in ~/tmp``."""
+    if not targets:
+        return ""
+    what = targets[0].name if len(targets) == 1 else f"{len(targets)} items"
+    source = _home_short(targets[0].parent)
+    if dest_dir is not None and kind in ("copy", "move"):
+        return f"{what}  {source} → {_home_short(dest_dir)}"
+    return f"{what} in {source}"
+
+
 _OP_TYPE = {
     "copy": OperationType.COPY,
     "move": OperationType.MOVE,
@@ -318,6 +339,8 @@ class FileOperationService:
                 log("Nothing to sync")
             return
         task = Task("Sync…", config=self.config, kind="sync")
+        task.detail = (f"{len(copies)} cop{'y' if len(copies) == 1 else 'ies'}, "
+                       f"{len(deletes)} deletion{'' if len(deletes) == 1 else 's'}")
         task.progress.start_operation(OperationType.COPY, 0, description="")
         sources = [src for src, _dest, _ow in copies]
         unpins = _pin_source_archives(sources, "used by a running sync")
@@ -461,6 +484,7 @@ class FileOperationService:
                 on_complete, log, z: int, background: bool, *,
                 detached: bool = False) -> None:
         task = Task(f"{_VERB[kind]}…", config=self.config, kind=kind)
+        task.detail = describe_operation(kind, targets, dest_dir)
         task.progress.start_operation(_OP_TYPE[kind], 0, description="")
         # The archives this task reads out of are its own from the moment it is
         # submitted, so they stay open between its reads, and deleting one
@@ -975,7 +999,9 @@ class FileOperationService:
         unchanged by ``Path.copy_to``. ``slot`` is the file's progress slot, so
         parallel transfers each drive their own row."""
         def report(bytes_copied: int, bytes_total: int) -> None:
-            task.checkpoint()
+            # Never a pause here: a remote stream held for as long as another
+            # background job runs can time out (#599).
+            task.checkpoint(pausable=False)
             prog.file_bytes(slot, bytes_copied, bytes_total)
         return report
 
@@ -1009,7 +1035,9 @@ class FileOperationService:
                 closed = False
                 try:
                     while True:
-                        task.checkpoint()
+                        # Between files only: the destination may stream to a
+                        # remote on close, and a suspended task pauses whole.
+                        task.checkpoint(pausable=False)
                         chunk = fi.read(_CHUNK)
                         if not chunk:
                             break

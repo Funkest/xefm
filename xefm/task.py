@@ -10,10 +10,8 @@ shape instead of a callback state machine:
   reads top-to-bottom (prepare → ask about each conflict → execute) rather than
   being split across states.
 - a :class:`TaskManager` (one per app) knows which tasks exist, shows each running
-  task's :class:`ProgressDialog`, and pumps the bridge on the animation tick. It is
-  deliberately more than this change needs: it is the seam for future *background*
-  (non-modal) execution, a task queue, and a common task-management UI. For now it
-  runs one modal task at a time.
+  task's :class:`ProgressDialog`, and pumps the bridge on the animation tick. It also
+  runs tasks in the background, one at a time through a queue (#567, #599).
 
 Threading contract: the worker only touches its own ``Task`` (progress, cancel
 flag, request queue). Everything that draws or reads the panel happens on the main
@@ -23,6 +21,7 @@ thread inside :meth:`TaskManager._tick`. The worker never calls ``panel.*``.
 from __future__ import annotations
 
 import itertools
+import math
 import queue
 import threading
 import time
@@ -31,7 +30,7 @@ from typing import Any, Callable, Optional
 
 from puikit.backend import DEFAULT_STYLE, Style, TextAttribute
 from puikit.event import Event, EventType
-from puikit.widgets import BusyIndicator, ProgressBar, show_message_box
+from puikit.widgets import BusyIndicator, Button, ProgressBar, show_message_box
 from puikit.widgets.base import Widget
 
 from xefm.dialog_geometry import OPEN_MS_VIEWER, animate_open
@@ -47,6 +46,10 @@ _TRANSFER_ROWS = 4
 #: A transfer row prints its byte counts only for files at least this large;
 #: below it the copy is one shot and the numbers would just flicker.
 _BYTE_TEXT_MIN = 1024 * 1024
+#: Space between the progress dialog's buttons, and under them on a vector
+#: backend (a grid backend keeps a whole row) — the message box's spacing.
+_BUTTON_GAP = 1.0
+_GUI_BUTTON_FOOT = 0.65
 
 
 class TaskStatus(Enum):
@@ -117,6 +120,16 @@ class Task:
         #: Running (or queued) without its progress dialog on screen (#567). A
         #: prompt it raises meanwhile waits until it is brought forward.
         self.background = False
+        #: What the task works on, for the jobs list (#599): "12 items
+        #: ~/photos → s3://bucket/". Empty when the title says it all.
+        self.detail = ""
+        #: Clear while the task is suspended (#599): the worker waits at its
+        #: next pausable :meth:`checkpoint`. Set by default — a task runs.
+        self._running = threading.Event()
+        self._running.set()
+        #: True while the worker is actually waiting there, as against asked
+        #: to and still finishing the files it had in flight.
+        self.paused = False
 
     # --- worker-side API (called on the worker thread) -----------------------
 
@@ -137,9 +150,25 @@ class Task:
                 raise Cancelled()
         return req.answer
 
-    def checkpoint(self) -> None:
+    def checkpoint(self, pausable: bool = True) -> None:
         """Raise :class:`Cancelled` if cancellation was requested. Call between
-        units of work (e.g. per file / per chunk)."""
+        units of work (e.g. per file / per chunk).
+
+        A **pausable** checkpoint also waits here while the task is suspended
+        (:meth:`suspend`), until it is resumed or cancelled. Inside a transfer
+        pass ``pausable=False``: a remote stream left stalled for as long as
+        another job takes can time out, so a task pauses only between files."""
+        if self._cancel.is_set():
+            raise Cancelled()
+        if not pausable or self._running.is_set():
+            return
+        self.paused = True
+        try:
+            while not self._running.wait(self._WAIT_TICK):
+                if self._cancel.is_set():
+                    raise Cancelled()
+        finally:
+            self.paused = False
         if self._cancel.is_set():
             raise Cancelled()
 
@@ -156,8 +185,21 @@ class Task:
 
     def request_cancel(self) -> None:
         """Ask the worker to stop. Sets the cooperative flag; a blocked
-        :meth:`ask` wakes within :attr:`_WAIT_TICK` and unwinds."""
+        :meth:`ask` — or a suspended :meth:`checkpoint` — wakes within
+        :attr:`_WAIT_TICK` and unwinds."""
         self._cancel.set()
+
+    def suspend(self) -> None:
+        """Hold the worker at its next pausable checkpoint. The files it has
+        in flight finish first."""
+        self._running.clear()
+
+    def resume(self) -> None:
+        self._running.set()
+
+    @property
+    def suspended(self) -> bool:
+        return not self._running.is_set()
 
     def _next_request(self) -> Optional[_UiRequest]:
         try:
@@ -171,7 +213,7 @@ class _Job:
     is in the foreground, and how to finish it."""
 
     __slots__ = ("task", "panel", "dialog", "finished", "on_done", "z",
-                 "queued_slot", "last_render")
+                 "last_render")
 
     def __init__(self, task, panel, dialog, on_done, z):
         self.task = task
@@ -180,9 +222,22 @@ class _Job:
         self.finished = threading.Event()
         self.on_done = on_done
         self.z = z
-        #: True for the job holding the background queue's one slot.
-        self.queued_slot = False
         self.last_render = 0.0
+
+
+class _Waiting:
+    """One entry of the background queue: a task not started yet (with what
+    starting it takes), or a started one suspended until its turn (``job``)."""
+
+    __slots__ = ("task", "panel", "run", "on_done", "z", "job")
+
+    def __init__(self, task, panel, *, run=None, on_done=None, z=70, job=None):
+        self.task = task
+        self.panel = panel
+        self.run = run
+        self.on_done = on_done
+        self.z = z
+        self.job = job
 
 
 class TaskManager:
@@ -192,13 +247,20 @@ class TaskManager:
     and services its UI bridge on the animation tick.
 
     A task can run in the **background** (#567): its dialog leaves the screen
-    and the user goes on working. :meth:`detach` sends a running one there;
-    ``submit(..., detached=True)`` starts one there, through a **serial
-    queue** — background jobs compete for the same disk or connection, so one
-    runs at a time and the rest wait their turn. :meth:`bring_forward` puts a
-    job's dialog back, which is also how a background job's pending prompt
-    gets answered: a prompt never opens on its own while the job is out of
-    sight, it waits and the job is flagged (:attr:`Task.needs_attention`)."""
+    and the user goes on working. Background jobs go through a **serial
+    queue** — they compete for the same disk or connection — and only one of
+    them runs at a time: the one holding the **slot** (#599). ``submit(...,
+    detached=True)`` queues a task before it starts. :meth:`detach` sends a
+    running one back: it is **suspended first** (it stops at its next file
+    boundary) and then queued, and the queue resumes it when the slot frees.
+    A foreground task never waits for the queue.
+
+    :meth:`bring_forward` puts a job's dialog back, which is also how a
+    background job's pending prompt gets answered: a prompt never opens on its
+    own while the job is out of sight, it waits and the job is flagged
+    (:attr:`Task.needs_attention`). The slot's job keeps the slot while it is
+    in front; a queued one brought forward leaves the queue and runs in front
+    at once."""
 
     #: How often a background job repaints, for the status bar's progress.
     _BACKGROUND_REPAINT_S = 0.25
@@ -206,8 +268,10 @@ class TaskManager:
     def __init__(self):
         self.tasks: list[Task] = []
         self._jobs: dict[int, _Job] = {}
-        #: Background jobs waiting for the slot: ``(task, panel, run, on_done, z)``.
-        self._queue: list[tuple] = []
+        #: Background jobs waiting for the slot, in order.
+        self._queue: list[_Waiting] = []
+        #: The one background job allowed to run.
+        self._slot: Optional[_Job] = None
 
     def active_tasks(self) -> list[Task]:
         return [t for t in self.tasks
@@ -218,13 +282,19 @@ class TaskManager:
                    for t in self.tasks)
 
     def background_tasks(self) -> list[Task]:
-        """Running background jobs first, then the queued ones in order."""
-        running = [t for t in self.tasks
-                   if t.background and t.status is TaskStatus.RUNNING]
-        return running + [entry[0] for entry in self._queue]
+        """The slot's job first (in front or not), then the queue in order."""
+        running = [self._slot.task] if self._slot is not None else []
+        return running + [entry.task for entry in self._queue]
+
+    def running_task(self) -> Optional[Task]:
+        """The background job holding the slot, or None."""
+        return self._slot.task if self._slot is not None else None
 
     def queued_count(self) -> int:
         return len(self._queue)
+
+    def is_queued(self, task: Task) -> bool:
+        return any(entry.task is task for entry in self._queue)
 
     def submit(self, task: Task, panel: Any, *, run: Callable[[Task], dict],
                on_done: Optional[Callable[[dict], None]] = None,
@@ -255,22 +325,16 @@ class TaskManager:
 
         if detached:
             task.background = True
-            if self._slot_taken():
-                self._queue.append((task, panel, run, on_done, z))
-                panel.render()
-                return task
-        self._start(task, panel, run, on_done, z, queued_slot=detached)
+            self._queue.append(_Waiting(task, panel, run=run, on_done=on_done, z=z))
+            self._start_next()
+            panel.render()
+            return task
+        self._start(task, panel, run, on_done, z)
         return task
 
-    def _slot_taken(self) -> bool:
-        return any(job.queued_slot or job.task.background
-                   for job in self._jobs.values())
-
-    def _start(self, task: Task, panel: Any, run, on_done, z: int, *,
-               queued_slot: bool) -> None:
+    def _start(self, task: Task, panel: Any, run, on_done, z: int) -> Optional[_Job]:
         dialog = ProgressDialog(task, on_background=self.detach)
         job = _Job(task, panel, dialog, on_done, z)
-        job.queued_slot = queued_slot
         if not task.background:
             dialog.show(panel, z=z)
         task.status = TaskStatus.RUNNING
@@ -299,10 +363,11 @@ class TaskManager:
             self._finish(task)
             if on_done is not None:
                 on_done(result)
-            return
+            return None
 
         self._jobs[task.id] = job
         threading.Thread(target=worker, name=f"xefm-task-{task.id}", daemon=True).start()
+        return job
 
     def _tick(self, job: _Job) -> bool:
         """Main thread, each frame: service at most one pending prompt (only
@@ -325,6 +390,10 @@ class TaskManager:
         # escaping into the backend's tick dispatch.
         dialog.close()
         self._jobs.pop(task.id, None)
+        # A suspended job can still end — cancelled while it waited.
+        self._queue = [e for e in self._queue if e.task is not task]
+        if self._slot is job:
+            self._slot = None
         self._finish(task)
         if job.on_done is not None:
             try:
@@ -338,24 +407,30 @@ class TaskManager:
         return False
 
     def _start_next(self) -> None:
-        """Hand the background slot to the next queued job, if it is free."""
-        if self._queue and not self._slot_taken():
-            task, panel, run, on_done, z = self._queue.pop(0)
+        """Hand the slot to the next queued job, if it is free: resume a
+        suspended one, or start one that has not run yet."""
+        while self._slot is None and self._queue:
+            entry = self._queue.pop(0)
+            task = entry.task
+            if entry.job is not None:
+                self._slot = entry.job
+                task.resume()
+                return
             if task.cancelled():
                 self._finish(task)
-                if on_done is not None:
-                    on_done(dict(_empty_result(), cancelled=True))
-                self._start_next()
-                return
-            self._start(task, panel, run, on_done, z, queued_slot=True)
+                if entry.on_done is not None:
+                    entry.on_done(dict(_empty_result(), cancelled=True))
+                continue
+            self._slot = self._start(task, entry.panel, entry.run, entry.on_done,
+                                     entry.z)
 
     def cancel_all(self, timeout: float = 3.0) -> bool:
         """Cancel every task — the running ones and the queue — and wait up to
         ``timeout`` seconds for the running workers to unwind, so a half-written
         file is cleaned up before the process exits. True when all of them
         did. For quitting: nothing is reported, the app is going away."""
-        for task, *_rest in self._queue:
-            task.request_cancel()
+        for entry in self._queue:
+            entry.task.request_cancel()
         self._queue.clear()
         jobs = list(self._jobs.values())
         for job in jobs:
@@ -367,31 +442,44 @@ class TaskManager:
         return True
 
     def detach(self, task: Task) -> None:
-        """Send a running foreground task to the background: its dialog
-        leaves the screen and the task goes on."""
+        """Send a running foreground task to the background: its dialog leaves
+        the screen, and unless it already holds the slot it is suspended and
+        queued — it runs again when its turn comes, which is at once when the
+        slot is free."""
         job = self._jobs.get(task.id)
         if job is None or task.background:
             return
         job.dialog.close()
         task.background = True
+        if self._slot is not job:
+            task.suspend()
+            self._queue.append(_Waiting(task, job.panel, job=job))
+            self._start_next()
         job.panel.render()
 
     def bring_forward(self, task: Task) -> bool:
         """Put a background task's dialog back on screen — where its pending
         prompt is answered and Esc can cancel it. A queued task that has not
         started is cancelled instead of shown: there is nothing to show yet,
-        and the only thing to do with it is drop it. False when ``task`` is
-        neither."""
+        and the only thing to do with it is drop it. A suspended one leaves the
+        queue and runs in front, as a foreground task. False when ``task`` is
+        none of these."""
         for i, entry in enumerate(self._queue):
-            if entry[0] is task:
-                self._queue.pop(i)
-                task.request_cancel()
-                self._finish(task)
-                on_done = entry[3]
-                if on_done is not None:
-                    on_done(dict(_empty_result(), cancelled=True))
-                entry[1].render()
+            if entry.task is not task:
+                continue
+            self._queue.pop(i)
+            if entry.job is not None:
+                task.background = False
+                task.resume()
+                entry.job.dialog.show(entry.job.panel, z=entry.job.z)
+                entry.job.panel.render()
                 return True
+            task.request_cancel()
+            self._finish(task)
+            if entry.on_done is not None:
+                entry.on_done(dict(_empty_result(), cancelled=True))
+            entry.panel.render()
+            return True
         job = self._jobs.get(task.id)
         if job is None or not task.background:
             return False
@@ -463,8 +551,11 @@ class ProgressDialog(Widget):
     - **Cancelling** (derived from the cancel flag): a "Cancelling…" line until the
       worker unwinds.
 
-    ``Esc`` opens a confirm box; confirming requests cancellation on the task. The
-    dialog only *reads* progress state during ``draw`` — the worker mutates it."""
+    Along the bottom, **Run in background** (when a manager can take it there)
+    and **Cancel** (#599). Cancel, and ``Esc``, open a confirm box; confirming
+    requests cancellation on the task. Tab and the arrows move between the
+    buttons, Enter or Space presses one. The dialog only *reads* progress
+    state during ``draw`` — the worker mutates it."""
 
     focusable = True
 
@@ -486,6 +577,15 @@ class ProgressDialog(Widget):
         #: The open cancel-confirm box itself, so close() can dismiss it along
         #: with the dialog — its question is moot once the task has ended.
         self._cancel_box: Any = None
+        self._buttons = []
+        if on_background is not None:
+            self._buttons.append(Button("Run in background", variant="secondary",
+                                        on_click=self._send_to_background))
+        self._buttons.append(Button("Cancel", variant="secondary",
+                                    on_click=self._confirm_cancel))
+        self._focused = 0
+        #: Each button's (x0, x1, y0, y1), captured in draw for click routing.
+        self._button_rects: list = []
 
     # --- lifecycle -----------------------------------------------------------
 
@@ -501,7 +601,8 @@ class ProgressDialog(Widget):
         # one would jitter for its whole run. The height stays *even*: an odd box
         # centers onto a half cell, and the rounding then walks the foot-anchored
         # rows onto the bottom border.
-        h = 10.0
+        # Two more rows for the buttons along the bottom.
+        h = 12.0
         panel.push_layer(self, z=z, hints={"shadow": True, "w": w, "h": h})
         animate_open(panel, self, OPEN_MS_VIEWER)
 
@@ -548,8 +649,13 @@ class ProgressDialog(Widget):
         box_style = (Style(bg=theme.popup_bg, fg=theme.popup_border)
                      if theme is not None else DEFAULT_STYLE)
         surface_bg = theme.popup_bg if theme is not None else None
-        box_w, box_h = ctx.size_units
-        ctx.draw_box(0, 0, box_w, box_h, box_style, hints={"fill": True})
+        box_w, full_h = ctx.size_units
+        ctx.draw_box(0, 0, box_w, full_h, box_style, hints={"fill": True})
+        # The buttons take the foot; everything above lays out in what is left,
+        # as if the box ended where the button row begins — a whole number of
+        # units, so the foot-anchored rows keep their whole-row spacing on a
+        # vector backend too (a fractional foot rounded two of them together).
+        box_h = float(math.floor(self._draw_buttons(ctx, box_w, full_h)))
         text_style = Style(bg=surface_bg)
         ctx.draw_text(2, 0.5, self.task.title, Style(bg=surface_bg, attr=TextAttribute.BOLD))
         # The popup surface, handed to the child widgets (bars, spinner)
@@ -602,6 +708,27 @@ class ProgressDialog(Widget):
                 f"{format_size(bc, compact=True)} / {format_size(bt, compact=True)}",
                 text_style)
 
+    def _draw_buttons(self, ctx, box_w: float, box_h: float) -> float:
+        """The button row, centered along the foot, drawn as real Buttons (the
+        message box's look: flat fill, focus ring on the focused one). Returns
+        where the row begins, which is where the content above must end."""
+        lc = ctx.layout_context()
+        bh = self._buttons[0].measure(lc, "y", 0.0).preferred
+        widths = [b.measure(lc, "x", bh).preferred for b in self._buttons]
+        total = sum(widths) + _BUTTON_GAP * (len(widths) - 1)
+        bx = max(2.0, (box_w - total) / 2.0)
+        by = max(0.0, box_h - bh - (_GUI_BUTTON_FOOT if ctx.vector_shapes else 1.0))
+        if lc.snap:
+            # A half-unit origin would round the focus brackets and the label
+            # apart on a grid (the message box's reason, too).
+            bx, by = round(bx), round(by)
+        self._button_rects = []
+        for i, (button, w) in enumerate(zip(self._buttons, widths)):
+            ctx.draw_child(button, bx, by, w, bh, hints={"focused": i == self._focused})
+            self._button_rects.append((bx, bx + w, by, by + bh))
+            bx += w + _BUTTON_GAP
+        return by
+
     def _draw_transfers(self, ctx, op, transfers, box_h, width, text_style,
                         child_hints) -> None:
         """The copy engine's layout: the primary bar (items and, when measured,
@@ -653,13 +780,28 @@ class ProgressDialog(Widget):
     # --- events --------------------------------------------------------------
 
     def handle_event(self, event: Event) -> bool:
-        if event.type is EventType.KEY and event.key == "escape":
-            self._confirm_cancel()
-        elif (event.type is EventType.KEY and event.key == "b"
-              and not event.modifiers and self._on_background is not None
-              and not self.task.cancelled()):
-            self._on_background(self.task)
+        if event.type is EventType.KEY:
+            n = len(self._buttons)
+            if event.key == "escape":
+                self._confirm_cancel()
+            elif event.key in ("left", "up"):
+                self._focused = (self._focused - 1) % n
+            elif event.key in ("right", "down", "tab"):
+                self._focused = (self._focused + 1) % n
+            elif event.key in ("enter", "space") or event.char == " ":
+                self._buttons[self._focused].handle_event(event)
+        elif event.type is EventType.MOUSE_CLICK and event.x is not None:
+            ey = event.y or 0
+            for i, (x0, x1, y0, y1) in enumerate(self._button_rects):
+                if x0 <= event.x < x1 and y0 <= ey < y1:
+                    self._focused = i
+                    self._buttons[i].handle_event(event)
+                    break
         return True  # modal: swallow everything else
+
+    def _send_to_background(self) -> None:
+        if self._on_background is not None and not self.task.cancelled():
+            self._on_background(self.task)
 
     def _confirm_cancel(self) -> None:
         """Esc: pop a confirm box (above this dialog); on Yes, request cancel. The
@@ -674,16 +816,13 @@ class ProgressDialog(Widget):
             self._cancel_box = None
             if label == "Cancel operation":
                 self.task.request_cancel()
-            elif label == "Run in background" and self._on_background is not None:
-                self._on_background(self.task)
             if self._panel is not None:
                 self._panel.render()
 
-        # The operation keeps running while this is asked. Background is the
-        # first choice, not the default: Enter and Esc both keep it running in
-        # front, so a stray key changes nothing.
-        buttons = (("Run in background",) if self._on_background is not None
-                   else ()) + ("Cancel operation", "Keep running")
+        # The operation keeps running while this is asked. Enter and Esc both
+        # keep it running, so a stray key changes nothing; sending it to the
+        # background is the dialog's own button.
+        buttons = ("Cancel operation", "Keep running")
         self._cancel_box = show_message_box(
             self._panel, f"Stop waiting for {self.task.title.rstrip('… ')}?",
             title="Running", icon="warning", buttons=buttons,

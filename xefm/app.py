@@ -49,7 +49,8 @@ from puikit.backends import create_backend
 from puikit.menu import Menu, MenuItem, SEPARATOR
 from puikit.text import elide
 from puikit.layout import SizeRequest
-from puikit.widgets import LayoutView, LogView, MenuBar, Splitter, show_message_box
+from puikit.widgets import (BusyIndicator, LayoutView, LogView, MenuBar, Splitter,
+                            show_message_box)
 from puikit.widgets.base import Widget
 
 from xefm import __version__ as _VERSION
@@ -1232,6 +1233,9 @@ class StatusBar(Widget):
         self._hint_parts: list = []
         #: Clickable hints from the last draw: ``(x0, x1, action)`` (#589).
         self._hits: list = []
+        #: The spinner in front of a running job (#599 hand check): PuiKit's
+        #: own, so it turns on its own and is one cell wide everywhere.
+        self._busy = BusyIndicator()
 
     def invalidate(self) -> None:
         """Drop both cached lines, so the next draw rebuilds them from the
@@ -1336,13 +1340,12 @@ class StatusBar(Widget):
             avail = max(0.0, avail - used)
         # Background jobs (#567) take the right end, ahead of the hints: the
         # hints are always the same, a job's progress is news.
-        jobs = self.app._jobs_text()
-        if jobs:
-            jobs = elide(jobs, avail, where="end", measure=ctx.measure_text)
-            jw = ctx.measure_text(jobs)
-            ctx.draw_text(x + avail - jw, 0, jobs,
-                          Style(fg=ctx.theme.accent, attr=TextAttribute.BOLD))
+        parts = self.app._jobs_parts()
+        if parts:
+            jw = self._draw_jobs(ctx, parts, x, avail)
             avail = max(0.0, avail - jw - 2.0)
+        else:
+            self._jobs_hit = None
         full = self._text()
         text = elide(full, avail, where="end", measure=ctx.measure_text)
         ctx.draw_text(x, 0, text, Style(fg=ctx.theme.muted_text))
@@ -1358,6 +1361,44 @@ class StatusBar(Widget):
                 self._hits.append((x, x1, action))
                 x = x1 + gap
 
+    #: The glyph in front of a job part that is not running; a running one
+    #: gets the spinner instead.
+    _JOB_MARKS = {"attention": "⚠", "done": "✓", "failed": "⚠"}
+    _JOB_GAP = "  "
+
+    def _draw_jobs(self, ctx, parts, x: float, avail: float) -> float:
+        """Draw the job segment flush right in what is left of the bar and
+        return its width: each part's mark — the spinner for a running one —
+        then its text. The text gives way, elided at its end, before the
+        marks do. A click anywhere on it opens the jobs list."""
+        style = Style(fg=ctx.theme.accent, attr=TextAttribute.BOLD)
+        mark_w = ctx.measure_text("⠋")
+        gap_w = ctx.measure_text(self._JOB_GAP, style)
+        fixed = len(parts) * (mark_w + 1.0) + gap_w * (len(parts) - 1)
+        text = self._JOB_GAP.join(t for _kind, t in parts)
+        room = max(0.0, avail - fixed)
+        if ctx.measure_text(text, style) > room:
+            # Elide the joined texts as one run, then hand each part its share.
+            text = elide(text, room, where="end", measure=ctx.measure_text)
+        texts = text.split(self._JOB_GAP)
+        texts += [""] * (len(parts) - len(texts))
+        width = fixed + sum(ctx.measure_text(t, style) for t in texts)
+        jx = x + avail - width
+        cx = jx
+        for i, ((kind, _t), shown) in enumerate(zip(parts, texts)):
+            if i:
+                cx += gap_w
+            if kind == "busy":
+                ctx.draw_child(self._busy, cx, 0, mark_w, 1.0)
+            else:
+                ctx.draw_text(cx, 0, self._JOB_MARKS.get(kind, "•"), style)
+            cx += mark_w + 1.0
+            ctx.draw_text(cx, 0, shown, style)
+            cx += ctx.measure_text(shown, style)
+        # A click on it opens the jobs list (#599 hand check).
+        self._jobs_hit = (jx, jx + width)
+        return width
+
     def handle_event(self, event) -> bool:
         if event.type is not EventType.MOUSE_CLICK or event.button != "left":
             return False
@@ -1367,6 +1408,10 @@ class StatusBar(Widget):
         clip = getattr(self, "_clip_hit", None)
         if clip is not None and clip[0] <= x < clip[1]:
             self.app.clipboard_show()
+            return True
+        jobs = getattr(self, "_jobs_hit", None)
+        if jobs is not None and jobs[0] <= x < jobs[1]:
+            self.app.show_jobs()
             return True
         for x0, x1, action in self._hits:
             if x0 <= x < x1:
@@ -5524,32 +5569,34 @@ class XeFMApp:
 
     # --- background jobs (#567) ----------------------------------------------
 
-    def _jobs_text(self) -> str:
-        """The status bar's job segment: the running job and its progress, how
-        many wait behind it, and "needs you" when one is waiting on a prompt;
-        then similar-file scans (#571) — running ones with their progress, and
-        finished ones not looked at yet. Empty when there is nothing."""
-        key = self._keys_label("jobs")
-        hint = f" ({key})" if key else ""
+    def _jobs_parts(self) -> list:
+        """The status bar's job segment, kept short (#599 hand check), as
+        ``(kind, text)`` parts: ``busy`` for the running job — its progress
+        and how many wait behind it, ``Copy 42% +2`` — or ``attention`` when
+        one waits on a prompt; then the similar-file scans (#571), running
+        (``busy``) or finished and not looked at yet (``done`` / ``failed``).
+        The bar draws the spinner or a mark in front of each. No key hint: a
+        click on it opens the list."""
         parts = []
         jobs = self.tasks.background_tasks()
         waiting = next((t for t in jobs if t.needs_attention), None)
-        if waiting is not None:
-            return f"⚠ {waiting.title.rstrip('… ')} needs you{hint}"
-        running = next((t for t in jobs if t.status is TaskStatus.RUNNING), None)
-        if running is not None:
-            pct = int(running.progress.get_progress_percentage())
-            parts.append(f"⟳ {running.title.rstrip('… ')} {pct}%")
+        running = self.tasks.running_task()
         queued = self.tasks.queued_count()
-        if queued:
-            parts.append(f"+{queued} queued")
+        more = f" +{queued}" if queued else ""
+        if waiting is not None:
+            parts.append(("attention", f"{waiting.title.rstrip('… ')}{more}"))
+        elif running is not None:
+            pct = int(running.progress.get_progress_percentage())
+            parts.append(("busy", f"{running.title.rstrip('… ')} {pct}%{more}"))
+        elif queued:
+            parts.append(("busy", f"+{queued}"))
         for job, state, text in self._scan_rows:
             if state in (similar_scan.RUNNING, similar_scan.STARTING):
-                parts.append(f"⟳ {job.label} {text}")
+                parts.append(("busy", f"{job.label} {text}"))
             elif not job.seen:
-                mark = "✓" if state == similar_scan.DONE else "⚠"
-                parts.append(f"{mark} {job.label}: {text}")
-        return " ".join(parts) + hint if parts else ""
+                kind = "done" if state == similar_scan.DONE else "failed"
+                parts.append((kind, f"{job.label}: {text}"))
+        return parts
 
     # --- similar-file scans (#571) -------------------------------------------
 
@@ -5723,11 +5770,22 @@ class XeFMApp:
             return
 
         def label(task) -> str:
+            """What the job does, where, and how far it is (#599): "Copy 12
+            items  ~/photos → s3://bucket/ — 42% (1.2 GB / 2.9 GB)"."""
             name = task.title.rstrip("… ")
-            if task.status is not TaskStatus.RUNNING:
+            if task.detail:
+                name = f"{name} {task.detail}"
+            if self.tasks.is_queued(task):
+                if task.status is TaskStatus.RUNNING:
+                    return f"{name} — paused, queued (Enter runs it now)"
                 return f"{name} — queued (Enter removes it)"
-            pct = int(task.progress.get_progress_percentage())
-            state = "needs you" if task.needs_attention else f"{pct}%"
+            if task.needs_attention:
+                return f"{name} — needs you"
+            state = f"{int(task.progress.get_progress_percentage())}%"
+            op = task.progress.get_current_operation() or {}
+            if op.get("total_bytes"):
+                state += (f" ({format_size(op.get('processed_bytes', 0), compact=True)}"
+                          f" / {format_size(op['total_bytes'], compact=True)})")
             return f"{name} — {state}"
 
         def scan_label(job, state, text) -> str:
@@ -5739,17 +5797,25 @@ class XeFMApp:
             if value is not None:
                 kind, item = value
                 if kind == "task":
-                    queued = item.status is not TaskStatus.RUNNING
+                    dropped = (self.tasks.is_queued(item)
+                               and item.status is not TaskStatus.RUNNING)
                     self.tasks.bring_forward(item)
-                    if queued:
+                    if dropped:
                         self.log_info(f"Removed from the queue: {item.title.rstrip('… ')}")
                 else:
                     self._open_scan(item)
             self.panel.render()
 
-        rows = [(("task", t), label(t)) for t in jobs]
-        rows += [(("scan", j), scan_label(j, st, tx)) for j, st, tx in self._scan_rows]
-        show_choice_dialog(self.panel, "Background Jobs", rows, on_result=chosen)
+        def rows() -> list:
+            """The list as it stands now: the dialog asks again a few times a
+            second, so the progress moves while it is open (#599)."""
+            items = [(("task", t), label(t)) for t in self.tasks.background_tasks()]
+            items += [(("scan", j), scan_label(j, st, tx))
+                      for j, st, tx in self._scan_rows]
+            return items
+
+        show_choice_dialog(self.panel, "Background Jobs", rows(), on_result=chosen,
+                           refresh=rows)
         self.panel.render()
 
     def show_favorites(self) -> None:

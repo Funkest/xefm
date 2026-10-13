@@ -263,10 +263,10 @@ video/trip.mov                    310.5M / 1.4G
 
 While an operation's progress dialog is open, the rest of XeFM waits for it.
 To keep working instead, send the operation to the
-[background](BACKGROUND_JOBS_FEATURE.md): press **B**, or choose **Run in
-background** after **ESC**.
+[background](BACKGROUND_JOBS_FEATURE.md) with the dialog's **Run in
+background** button.
 
-Press **ESC**, then **Cancel operation**, to cancel. **ESC** asks first, and
+Press **Cancel** (or **ESC**), then **Cancel operation**, to cancel. It asks first, and
 Enter or **ESC** again keeps the operation running. Cancellation is checked between
 files and, for large files, at each chunk — so it may take a moment to stop at
 the next checkpoint. Partial files are removed cleanly, leaving nothing

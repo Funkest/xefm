@@ -14,8 +14,13 @@ prefix match winning over a substring match. The buffer shows in the hint band
 along the bottom while it is live, Backspace trims it, and a second of quiet
 resets it, so a mistyped jump costs a beat, not an Esc.
 
-Users: the text viewer's encoding picker, and Add to Favorites' "this
-directory or the cursor item" choice. The Sort dialog predates this widget and
+With ``refresh``, the rows are live (#599): the dialog asks for them again on
+every draw and repaints itself a few times a second, keeping the selection on
+the same value, and closes once there are none left. The background jobs list
+uses it for its progress.
+
+Users: the text viewer's encoding picker, Add to Favorites' "this
+directory or the cursor item" choice, and the background jobs list. The Sort dialog predates this widget and
 keeps its own two-axis layout (key rows × an order segment) — this one is for
 flat pick-one lists.
 """
@@ -43,6 +48,9 @@ _TYPEAHEAD_TIMEOUT_S = 1.0
 _GRID_ROW_PITCH = 1.0
 _GUI_ROW_PITCH = 1.3
 
+#: How often a dialog with live rows repaints.
+_REFRESH_S = 0.5
+
 
 class ChoiceDialog(Widget):
     """Modal pick-one list. Construct via :func:`show_choice_dialog`, which
@@ -55,10 +63,16 @@ class ChoiceDialog(Widget):
 
     def __init__(self, title: str, rows: list[tuple[Any, str]], *,
                  current: Any = None,
-                 on_result: Callable[[Optional[Any]], None] | None = None):
+                 on_result: Callable[[Optional[Any]], None] | None = None,
+                 refresh: Callable[[], list[tuple[Any, str]]] | None = None):
         self.title = title
         self.on_result = on_result
         self._rows = list(rows)
+        #: Returns the rows as they are now, for a live list; None for a
+        #: fixed one.
+        self._refresh = refresh
+        self._closed = False
+        self._last_refresh = 0.0
         self._index = next((i for i, (v, _l) in enumerate(self._rows) if v == current), 0)
         self._panel: Any = None
         # Type-ahead state: the live buffer and the last keystroke's time.
@@ -111,8 +125,37 @@ class ChoiceDialog(Widget):
         h = float(min(sh - 2.0, self._box_height(self._TITLE_ROWS, pitch)))
         panel.push_layer(self, z=z, hints={"shadow": True, "w": w, "h": h})
         animate_open(panel, self)
+        if self._refresh is not None:
+            panel.request_animation_ticks(self._tick)
+
+    def _tick(self) -> bool:
+        """Repaint a live list every :data:`_REFRESH_S`, and close it once its
+        rows are gone. Unregisters when the dialog has closed."""
+        if self._closed:
+            return False
+        now = time.monotonic()
+        if now - self._last_refresh < _REFRESH_S:
+            return True
+        self._last_refresh = now
+        if not self._refresh():
+            self._finish(None)
+            return False
+        self._render()
+        return True
+
+    def _take_rows(self) -> None:
+        """Replace the rows with the live ones, the selection staying on the
+        same value (or on the same place, when that row went)."""
+        rows = self._refresh()
+        if not rows:
+            return
+        value = self._rows[self._index][0] if self._rows else None
+        self._rows = list(rows)
+        self._index = next((i for i, (v, _l) in enumerate(self._rows) if v == value),
+                           min(self._index, len(self._rows) - 1))
 
     def _finish(self, result: Optional[Any]) -> None:
+        self._closed = True
         panel = self._panel
         if panel is not None and panel.has_layers and panel._layers[-1].widget is self:
             panel.pop_layer()
@@ -164,6 +207,8 @@ class ChoiceDialog(Widget):
     def draw(self, ctx) -> None:
         self._panel = ctx.panel
         self._size = ctx.size_units
+        if self._refresh is not None:
+            self._take_rows()
         theme = ctx.theme or DEFAULT_THEME
         surface_bg = theme.popup_bg
         box_w, box_h = ctx.size_units
@@ -250,11 +295,15 @@ class ChoiceDialog(Widget):
 def show_choice_dialog(panel: Any, title: str, rows: list[tuple[Any, str]], *,
                        current: Any = None,
                        on_result: Callable[[Optional[Any]], None] | None = None,
-                       z: int = 90) -> ChoiceDialog:
+                       z: int = 90,
+                       refresh: Callable[[], list[tuple[Any, str]]] | None = None
+                       ) -> ChoiceDialog:
     """Push a modal :class:`ChoiceDialog` over ``panel`` and return it.
     ``rows`` are ``(value, label)`` pairs; ``current`` seeds the selection on
     the row with that value (first row otherwise). The chosen row's value is
-    reported through ``on_result`` — ``None`` on cancel."""
-    dialog = ChoiceDialog(title, rows, current=current, on_result=on_result)
+    reported through ``on_result`` — ``None`` on cancel. ``refresh`` makes the
+    rows live: it returns them as they are now."""
+    dialog = ChoiceDialog(title, rows, current=current, on_result=on_result,
+                          refresh=refresh)
     dialog.show(panel, z=z)
     return dialog
