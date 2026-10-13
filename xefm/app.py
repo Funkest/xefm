@@ -85,7 +85,7 @@ from xefm import search_options as search_opts
 from xefm.isearch_bar import ISearchBar
 from xefm import filters
 from xefm import name_key
-from xefm import tree_walk
+from xefm import keymap_presets, tree_walk
 from xefm.log_manager import (LOG_ERROR_SOURCE, LOG_SOURCE, clear_log_sink,
                               getLogger, route_library_logger, set_log_sink)
 from xefm.pane_manager import PaneManager
@@ -1345,6 +1345,9 @@ class XeFMApp:
         # positions, recent dirs). Injectable so tests can supply a temp-db
         # manager instead of touching ~/.xefm/state.db.
         self.state_manager = state_manager if state_manager is not None else get_state_manager()
+        # The keymap preset (View > Keymap, or KEY_PRESET in config.py) is
+        # written into KEY_BINDINGS itself, so every surface reads one table.
+        self._apply_keymap_preset()
         self._left_provided = left_provided
         self._right_provided = right_provided
         self.flm = FileListManager(self.config)
@@ -3484,6 +3487,11 @@ class XeFMApp:
                      shortcut=sc("toggle_color_scheme")),
             SEPARATOR,
             MenuItem("Switch Pane", on_select=lambda: self._menu("switch_pane"), shortcut=sc("switch_pane")),
+            SEPARATOR,
+            MenuItem("Keymap", submenu=Menu(*[
+                MenuItem(label, on_select=lambda n=name: self.set_keymap_preset(n),
+                         checked=lambda n=name: self._keymap_preset == n)
+                for name, label in keymap_presets.LABELS.items()])),
             title="View",
         )
         help_menu = Menu(
@@ -3777,6 +3785,54 @@ class XeFMApp:
         else:
             self.reload_config()
 
+    #: State key for the keymap preset chosen from View > Keymap.
+    _KEYMAP_STATE = "keymap.preset"
+
+    def _apply_keymap_preset(self) -> None:
+        """Lay the preset in force over ``config.KEY_BINDINGS`` and rebuild
+        every keymap built from it: the app's, and the shared one the help
+        dialog and the menus resolve through."""
+        chosen = self.state_manager.get_state(self._KEYMAP_STATE, None)
+        self._keymap_preset = keymap_presets.resolve(self.config, chosen)
+        keymap_presets.apply(self.config, self._keymap_preset)
+        self.keys = KeyBindings(self.config.KEY_BINDINGS)
+        config_manager._key_bindings = None
+
+    def set_keymap_preset(self, name: str) -> None:
+        """Switch to keymap preset ``name`` now and for later sessions. Help,
+        the menus and the status bar relabel at once. ``KEY_PRESET`` in
+        ``config.py`` wins over this, and is said to."""
+        configured = getattr(self.config, "KEY_PRESET", None)
+        if configured and configured != name:
+            self.log_info(f"KEY_PRESET = {configured!r} in config.py decides "
+                          f"the keymap — change it there")
+            return
+        self.state_manager.set_state(self._KEYMAP_STATE, name)
+        self._apply_keymap_preset()
+        self.status.invalidate()
+        self.menu_bar.set_menu(self._build_menu())
+        hint = (" — typing a letter searches; F1 lists every key"
+                if keymap_presets.type_ahead(self.config) else "")
+        self.log_info(f"Keymap: {keymap_presets.LABELS[self._keymap_preset]}{hint}")
+        self.panel.render()
+
+    def _type_ahead(self, event) -> bool:
+        """Under a preset that frees the letters, an unbound typed key starts
+        incremental search with that character. True when it did."""
+        if not keymap_presets.type_ahead(self.config):
+            return False
+        char = getattr(event, "char", None)
+        if (not char or len(char) != 1 or not char.isprintable() or char == " "
+                or set(event.modifiers or ()) & {"ctrl", "alt", "cmd"}):
+            return False
+        self.enter_isearch()
+        if not self._isearch_active:
+            return False
+        # The bar is the top layer now; the key that opened it is its first
+        # character.
+        self.panel.dispatch_event(event)
+        return True
+
     def reload_config(self) -> None:
         """Re-read ``~/.xefm/config.py`` and apply what can change at runtime.
 
@@ -3794,8 +3850,9 @@ class XeFMApp:
             self.log_info(f"Config warning: {err}")
 
         self.config = new_config
-        # Rebuild the keymap from the (possibly rebound) KEY_BINDINGS.
-        self.keys = KeyBindings(new_config.KEY_BINDINGS)
+        # Rebuild the keymap from the (possibly rebound) KEY_BINDINGS, with
+        # the keymap preset laid over it again.
+        self._apply_keymap_preset()
         # The two surfaces that quote a key name instead of reading one on
         # demand: the status bar caches its hint line, and the menu holds the
         # shortcut strings resolved when it was built. Both were left naming the
@@ -8352,6 +8409,8 @@ class XeFMApp:
             if self.dispatch(action):
                 self.panel.render()
             elif action is None and self._menu_mnemonic(event):
+                self.panel.render()
+            elif action is None and self._type_ahead(event):
                 self.panel.render()
             return
         if event.type in self._MOUSE:

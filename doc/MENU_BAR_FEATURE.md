@@ -148,6 +148,7 @@ the mouse for the first, take the whole buffer with the second. See
 | Theme ▸ | (submenu of installed themes) |
 | Next Theme | `toggle_color_scheme` *(ships unbound)* |
 | Switch Pane | `switch_pane` |
+| Keymap ▸ | Default / Orthodox — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md) |
 
 ### Tools Menu
 
