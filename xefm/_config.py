@@ -333,6 +333,14 @@ class Config:
         'unselect_all': ['END'],               # Unselect all items (End key)
         'toggle_select_files': ['A'],             # Toggle selection of all files in current pane
         'toggle_select_items': ['Shift-A'],       # Toggle selection of all items (files + dirs)
+        # Select / unselect by pattern sit beside the filter's ';' and ':' --
+        # the same pattern language, one key over. Both are glyphs, so a
+        # terminal delivers them like any printable (cfiler's keys, too).
+        # Total Commander's Num+ / Num- cannot be told from '+' / '-' here, and
+        # those two already compare directories and reset the pane split.
+        'select_by_pattern': ["'"],            # Select the files matching a pattern (prompts)
+        'unselect_by_pattern': ['"'],          # Unselect the files matching a pattern (prompts)
+        'select_same_extension': [],           # Select every file with the cursor file's extension (Select menu)
         'cursor_next_selected': ['Ctrl-DOWN'], # Move cursor to the next selected item
         'cursor_prev_selected': ['Ctrl-UP'],   # Move cursor to the previous selected item
         

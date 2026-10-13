@@ -273,8 +273,12 @@ it is the one list of keys that is always right for your config.
    the last one, and everything between them is selected
 3. `toggle_select_files` selects/deselects all files
 4. `toggle_select_items` selects/deselects all items (files + directories)
-5. `cursor_next_selected` / `cursor_prev_selected` jump between what you selected
-6. Perform operations on the selection
+5. `select_by_pattern` / `unselect_by_pattern` select or unselect the files
+   matching a pattern (`*.jpg *.png`), and `select_same_extension` selects
+   every file with the cursor file's extension — see
+   [Select by Pattern](SELECT_BY_PATTERN_FEATURE.md)
+6. `cursor_next_selected` / `cursor_prev_selected` jump between what you selected
+7. Perform operations on the selection
 
 `select_range` takes its anchor from the nearest selected item above the cursor,
 or — when nothing above is selected — the nearest one below, so it reads the same

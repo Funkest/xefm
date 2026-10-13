@@ -2731,6 +2731,9 @@ class XeFMApp:
                 "toggle_select_items": (self._act_select_all_items, True),
                 "select_all": (self._act_select_all, True),
                 "unselect_all": (self._act_unselect_all, True),
+                "select_by_pattern": (lambda: self.select_by_pattern(True), False),
+                "unselect_by_pattern": (lambda: self.select_by_pattern(False), False),
+                "select_same_extension": (self._act_select_same_extension, True),
                 # --- navigation ---
                 "switch_pane": (self._act_switch_pane, True),
                 "open_item": (lambda: self._open(self.active_pane()), True),
@@ -2940,6 +2943,9 @@ class XeFMApp:
 
     def _act_unselect_all(self) -> None:
         self.active_pane()["selected_files"].clear()
+
+    def _act_select_same_extension(self) -> None:
+        self._log_result(self.flm.select_same_extension(self.active_pane()))
 
     def _act_switch_pane(self) -> None:
         self.pm.active_pane = "right" if self.pm.active_pane == "left" else "left"
@@ -3445,6 +3451,14 @@ class XeFMApp:
             MenuItem("Clear Selection", on_select=lambda: self._menu("unselect_all"),
                      enabled=lambda: bool(self.active_pane()["selected_files"]),
                      shortcut=sc("unselect_all")),
+            MenuItem("Select by Pattern…", on_select=lambda: self._menu("select_by_pattern"),
+                     enabled=has_files, shortcut=sc("select_by_pattern")),
+            MenuItem("Unselect by Pattern…", on_select=lambda: self._menu("unselect_by_pattern"),
+                     enabled=lambda: bool(self.active_pane()["selected_files"]),
+                     shortcut=sc("unselect_by_pattern")),
+            MenuItem("Select Same Extension",
+                     on_select=lambda: self._menu("select_same_extension"),
+                     enabled=has_files, shortcut=sc("select_same_extension")),
             MenuItem("Compare and Select…", on_select=self.compare_selection,
                      enabled=has_files, shortcut=sc("compare_selection")),
             SEPARATOR,
@@ -7307,6 +7321,37 @@ class XeFMApp:
         self._isearch_close()
         self.panel.render()
 
+    def select_by_pattern(self, select: bool = True) -> None:
+        """Select (or, with ``select`` false, unselect) the active pane's files
+        matching a typed pattern (issue #544).
+
+        The pattern language is the ';' filter's, so the prompt is the Filter
+        picker's too, less its "clear filter" row: the filters a config defines,
+        then the shared pattern history. A pattern applied here is recorded in
+        that same history — what you typed to filter a pane is what you will
+        want to select by, and the other way round. Matching goes through
+        :meth:`FileListManager.select_by_pattern`, i.e. through the filter's own
+        comparison."""
+        pane = self.active_pane()
+
+        def apply(pattern: str) -> None:
+            pattern = pattern.strip()
+            if pattern:
+                self._record_filter_pattern(pattern)
+                self._log_result(self.flm.select_by_pattern(pane, pattern, select))
+            self.panel.render()
+
+        show_history_input(
+            self.panel, [*filters.rows(), *self._filter_history()],
+            title="Select by Pattern" if select else "Unselect by Pattern",
+            prompt="Pattern:", heading="Filters and history",
+            accept_label="select" if select else "unselect",
+            to_label=lambda v: v.label if isinstance(v, filters.Row) else v,
+            to_text=lambda v: v.name if isinstance(v, filters.Row) else v,
+            on_accept=apply, on_remove=self._forget_filter_pattern,
+            on_cancel=self.panel.render, region=self._active_pane_region())
+        self.panel.render()
+
     def _record_filter_pattern(self, pattern: str) -> None:
         """Add ``pattern`` to the most-recent-first filter history (persisted via
         the state manager, capped), so the ';' Filter prompt can recall it. Silent
@@ -7627,6 +7672,9 @@ class XeFMApp:
             ("toggle_select_items", "Toggle all items"),
             ("select_all", "Select every item"),
             ("unselect_all", "Clear selection"),
+            ("select_by_pattern", "Select the files matching a pattern"),
+            ("unselect_by_pattern", "Unselect the files matching a pattern"),
+            ("select_same_extension", "Select every file with the cursor file's extension (Select menu)"),
             ("cursor_next_selected", "Move cursor to the next selected item"),
             ("cursor_prev_selected", "Move cursor to the previous selected item"),
             ("compare_selection", "Compare & select vs. other pane"),
