@@ -18,6 +18,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
@@ -176,9 +177,16 @@ class LogClipboardActions(unittest.TestCase):
     def test_the_menu_hint_survives_a_config_that_predates_the_action(self):
         """_menu_shortcut resolves in the filer context, so the hint comes from
         the registry default when KEY_BINDINGS never names the action — the flat
-        lookup it used to do showed nothing at all."""
-        edit = _find_item(self.app._build_menu(), "Edit")
-        item = _find_item(edit.submenu, "Copy Log Selection")
+        lookup it used to do showed nothing at all.
+
+        Checked on Copy Full Path(s): the log copy itself ships unbound since
+        the file clipboard took its key (#577). The app loads the developer's
+        own config, which may name the action, so the test takes it out to be
+        the config it is about."""
+        bindings = dict(self.app.config.KEY_BINDINGS)
+        bindings.pop("copy_paths", None)
+        with patch.object(self.app, "keys", KeyBindings(bindings)):
+            item = _find_item(self.app._build_menu(), "Copy Full Path(s)")
         self.assertIsNotNone(item.shortcut)
 
     def test_copy_log_selection_item_is_disabled_without_a_selection(self):

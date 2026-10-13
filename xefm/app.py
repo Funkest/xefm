@@ -1151,8 +1151,11 @@ class PaneFooter(Widget):
             start = text.find(part) if part else -1
             if start < 0 or start + len(part) > len(left):
                 continue
-            x0 = pad_x + ctx.measure_text(text[:start])
-            self._hits.append((x0, x0 + ctx.measure_text(part), action))
+            # Measured in the style the line is drawn in: bold on the active
+            # pane, and a proportional bold is wider — measured plain, the
+            # targets drifted left of the words on the desktop.
+            x0 = pad_x + ctx.measure_text(text[:start], style)
+            self._hits.append((x0, x0 + ctx.measure_text(part, style), action))
 
     def handle_event(self, event) -> bool:
         if event.type is not EventType.MOUSE_CLICK or event.button != "left":
@@ -1783,6 +1786,7 @@ class XeFMApp:
             on_drag=lambda i, ev: self._start_drag("left", i, ev),
             on_drop=lambda i, paths, op=None: self._on_drop("left", i, paths, op),
             on_middle=lambda i: self._on_middle_click("left", i),
+            on_drop_query=lambda i, paths, op: self._drop_effect("left", i, paths, op),
             on_nav=lambda step: self._on_nav_button("left", step),
         )
         self.right_view = FilePane(
@@ -1793,6 +1797,7 @@ class XeFMApp:
             on_drag=lambda i, ev: self._start_drag("right", i, ev),
             on_drop=lambda i, paths, op=None: self._on_drop("right", i, paths, op),
             on_middle=lambda i: self._on_middle_click("right", i),
+            on_drop_query=lambda i, paths, op: self._drop_effect("right", i, paths, op),
             on_nav=lambda step: self._on_nav_button("right", step),
         )
         # Tag markers (#585): each pane reads the tags of the rows it draws on a
@@ -10685,49 +10690,18 @@ class XeFMApp:
         destination so a drop back onto its own folder is a no-op, not a conflict
         prompt. Reuses the shared copy engine (confirm + conflict resolution +
         threaded progress)."""
-        pane = self.pane(pane_name)
-        if pane.get("virtual"):
-            self.log_info("Cannot drop here: this pane is a search-results view")
+        plan = self._drop_plan(pane_name, index, paths, operation)
+        if plan["kind"] == "in_place":
+            # Released back onto the pane the drag started from, over its own
+            # directory: the files are already here, so cancel the drag
+            # silently rather than reporting a no-op copy (#230). Flag it so
+            # _on_drag_complete also drops its "Dragged … out" log.
+            self._drag_cancelled_in_place = True
             return
-        if self._is_archive(pane["path"]):
-            self.log_info("Cannot drop here: this is a read-only archive")
+        if plan["kind"] == "refuse":
+            self.log_info(plan["message"])
             return
-        dest_dir = pane["path"]
-        files = pane["files"]
-        if 0 <= index < len(files):
-            entry = files[index]
-            info = pane.get("file_info", {}).get(str(entry), {})
-            is_dir = info.get("is_dir")
-            if is_dir is None:
-                try:
-                    is_dir = entry.is_dir()
-                except Exception:
-                    is_dir = False
-            if is_dir:
-                dest_dir = entry  # drop onto a folder row targets that folder
-        targets = []
-        for p in paths:
-            src = Path(p)
-            if str(src.parent) != str(dest_dir):
-                targets.append(src)
-        if not targets:
-            if pane_name == self._drag_source_pane:
-                # Released back onto the pane the drag started from, over its own
-                # directory: the files are already here, so cancel the drag
-                # silently rather than reporting a no-op copy (#230). A drop onto a
-                # sub-directory row of the same pane still resolves to real targets
-                # above and copies, so only the released-in-place gesture cancels.
-                # Flag it so _on_drag_complete also drops its "Dragged … out" log.
-                self._drag_cancelled_in_place = True
-                return
-            self.log_info("Nothing to copy (already in this folder)")
-            return
-        if operation == "link":
-            self.log_info("Dropping as a link is not supported; drop without "
-                          "the link keys to copy or move")
-            return
-        if operation is None:
-            operation = "move" if _same_volume(targets, dest_dir) else "copy"
+        targets, dest_dir, operation = plan["targets"], plan["dest"], plan["operation"]
         verb = "Move" if operation == "move" else "Copy"
 
         def on_complete(result: dict) -> None:
@@ -10743,12 +10717,75 @@ class XeFMApp:
 
     # --- run -----------------------------------------------------------------
 
+    def _drop_plan(self, pane_name: str, index: int, paths: list,
+                   operation: str | None) -> dict:
+        """What dropping ``paths`` at row ``index`` of a pane does — shared by
+        the drop itself and the hover query that sets the cursor's badge, so
+        the badge cannot promise one thing and the drop do another.
+
+        ``{"kind": "do", "operation", "targets", "dest"}``, or
+        ``{"kind": "refuse", "message"}``, or ``{"kind": "in_place"}`` for a
+        drag released over the folder it came from."""
+        pane = self.pane(pane_name)
+        if pane.get("virtual"):
+            return {"kind": "refuse",
+                    "message": "Cannot drop here: this pane is a search-results view"}
+        if self._is_archive(pane["path"]):
+            return {"kind": "refuse",
+                    "message": "Cannot drop here: this is a read-only archive"}
+        dest_dir = pane["path"]
+        files = pane["files"]
+        if 0 <= index < len(files):
+            entry = files[index]
+            info = pane.get("file_info", {}).get(str(entry), {})
+            is_dir = info.get("is_dir")
+            if is_dir is None:
+                try:
+                    is_dir = entry.is_dir()
+                except Exception:
+                    is_dir = False
+            if is_dir:
+                dest_dir = entry  # drop onto a folder row targets that folder
+        targets = [Path(p) for p in paths if str(Path(p).parent) != str(dest_dir)]
+        if not targets:
+            if pane_name == self._drag_source_pane:
+                return {"kind": "in_place"}
+            return {"kind": "refuse",
+                    "message": "Nothing to copy (already in this folder)"}
+        if operation == "link":
+            return {"kind": "refuse",
+                    "message": "Dropping as a link is not supported; drop "
+                               "without the link keys to copy or move"}
+        if operation is None:
+            operation = "move" if self._same_volume_cached(targets, dest_dir) else "copy"
+        return {"kind": "do", "operation": operation, "targets": targets,
+                "dest": dest_dir}
+
+    def _same_volume_cached(self, targets: list, dest_dir) -> bool:
+        """:func:`_same_volume`, remembered for the last question: the hover
+        query asks it on every pointer move of a drag, with the same files."""
+        key = (tuple(str(t) for t in targets), str(dest_dir))
+        cached = getattr(self, "_same_volume_memo", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        answer = _same_volume(targets, dest_dir)
+        self._same_volume_memo = (key, answer)
+        return answer
+
+    def _drop_effect(self, pane_name: str, index: int, paths: list,
+                     operation: str | None) -> str:
+        """The hover answer for the cursor's badge: what :meth:`_on_drop` would
+        do here — "move", "copy", or "none" where it would refuse."""
+        plan = self._drop_plan(pane_name, index, paths, operation)
+        return plan["operation"] if plan["kind"] == "do" else "none"
+
     #: Positioned events routed to the widget under the pointer (the FilePanes own
     #: click + wheel/trackpad scroll and accept an OS FILE_DROP); keyboard uses
     #: XeFM's global keymap.
     _MOUSE = frozenset({
         EventType.MOUSE_DOWN, EventType.MOUSE_UP, EventType.MOUSE_CLICK,
         EventType.MOUSE_DRAG, EventType.MOUSE_SCROLL, EventType.FILE_DROP,
+        EventType.FILE_DRAG_OVER,
     })
 
     def _menu_mnemonic(self, event) -> bool:

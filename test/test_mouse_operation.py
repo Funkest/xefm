@@ -285,3 +285,109 @@ class AppMouse(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DragOverBadge(unittest.TestCase):
+    """While files are dragged over a pane, it answers what a drop there would
+    do, so the cursor badge matches the drop (#589 hand check)."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.state_dir = tempfile.mkdtemp()
+        self.src = os.path.join(self.tmp, "src")
+        os.mkdir(self.src)
+        self.file = os.path.join(self.src, "a.txt")
+        open(self.file, "w").close()
+        self.dest = os.path.join(self.tmp, "dest")
+        os.mkdir(self.dest)
+        sm = XeFMStateManager(db_path=os.path.join(self.state_dir, "state.db"))
+        self.b = create_backend("memory")
+        self.b.open()
+        self.app = xefm_app.XeFMApp(self.b, self.dest, self.src,
+                                    left_provided=True, right_provided=True,
+                                    state_manager=sm)
+        self.app.file_monitor.stop_monitoring()
+        self.app._settle_listings()
+        self.app.panel.render()
+
+    def tearDown(self):
+        try:
+            self.app.file_monitor.stop_monitoring()
+            self.b.close()
+        except Exception:
+            pass
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        shutil.rmtree(self.state_dir, ignore_errors=True)
+
+    def _ask(self, operation=None):
+        rect = self.app.left_view._abs
+        query = Event(type=EventType.FILE_DRAG_OVER, x=rect[0] + 2, y=rect[1] + 3,
+                      hints={"paths": [self.file], "operation": operation})
+        self.app.on_event(query)
+        return query.hints.get("effect")
+
+    def test_an_unmodified_drag_on_the_same_volume_shows_a_move(self):
+        self.assertEqual(self._ask(), "move")
+
+    def test_the_modifier_s_choice_is_shown(self):
+        self.assertEqual(self._ask("copy"), "copy")
+
+    def test_a_drag_across_volumes_shows_a_copy(self):
+        with patch.object(xefm_app, "_same_volume", return_value=False):
+            self.assertEqual(self._ask(), "copy")
+
+    def test_a_place_that_refuses_shows_none(self):
+        self.app.pane("left")["virtual"] = {"kind": "list", "title": "x", "root": None}
+        self.assertEqual(self._ask(), "none")
+
+
+class FooterClickAfterRowClick(unittest.TestCase):
+    """The footer sits on the log splitter's grab band. A click on its sort
+    label opens the sort menu even after a file row was clicked (#589 hand
+    check), and dragging it resizes the log without opening anything."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.state_dir = tempfile.mkdtemp()
+        for n in ("a", "b", "c"):
+            open(os.path.join(self.tmp, n), "w").close()
+        sm = XeFMStateManager(db_path=os.path.join(self.state_dir, "state.db"))
+        self.b = create_backend("memory")
+        self.b.open()
+        self.app = xefm_app.XeFMApp(self.b, self.tmp, self.tmp,
+                                    left_provided=True, right_provided=True,
+                                    state_manager=sm)
+        self.app.file_monitor.stop_monitoring()
+        self.app._settle_listings()
+        self.app.disk_free_total = lambda pane: None
+        self.app.panel.render()
+
+    def tearDown(self):
+        try:
+            self.app.file_monitor.stop_monitoring()
+            self.b.close()
+        except Exception:
+            pass
+        shutil.rmtree(self.tmp, ignore_errors=True)
+        shutil.rmtree(self.state_dir, ignore_errors=True)
+
+    def _press(self, x, y, drag_to=None):
+        self.app.on_event(Event(type=EventType.MOUSE_DOWN, x=x, y=y, button="left"))
+        if drag_to is not None:
+            self.app.on_event(Event(type=EventType.MOUSE_DRAG, x=x, y=drag_to, button="left"))
+        self.app.on_event(Event(type=EventType.MOUSE_UP, x=x,
+                                y=y if drag_to is None else drag_to, button="left"))
+
+    def test_sort_label_click_after_a_row_click(self):
+        footer = self.app._footers["left"]
+        x0, x1, _ = next(h for h in footer._hits if h[2] == "sort")
+        fx, fy, _w, _h = footer.rect
+        ran = []
+        with patch.object(self.app, "_run_action", lambda c, n, **k: ran.append(n)):
+            self._press(5, 3)                          # a file row first
+            self._press(fx + (x0 + x1) / 2, fy + 0.2)  # then the sort label
+            self.assertEqual(ran, ["sort"])
+            before = self.app.content_splitter.fraction
+            self._press(fx + (x0 + x1) / 2, fy + 0.2, drag_to=fy - 4)
+        self.assertEqual(ran, ["sort"], "a resize is not a click")
+        self.assertNotEqual(self.app.content_splitter.fraction, before)
