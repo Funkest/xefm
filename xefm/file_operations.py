@@ -282,6 +282,95 @@ class FileOperationService:
         ``CONFIRM_DELETE`` (whose confirm button defaults to Cancel)."""
         self._start(panel, "delete", targets, None, on_complete, log, z, background)
 
+    def sync(self, panel: Any, copies: list, deletes: list, *,
+             on_complete: Optional[Callable[[dict], None]] = None,
+             log: Optional[Callable[[str], None]] = None,
+             z: int = 70, background: bool = True) -> None:
+        """Run a directory sync plan (:mod:`xefm.dir_sync`) as one task: every
+        ``(source, destination, overwrite)`` in ``copies``, then every path in
+        ``deletes``.
+
+        Unlike :meth:`copy`, each copy names its own destination — a plan
+        writes into many directories at once — and nothing is confirmed or
+        asked: the caller showed the whole plan and the user agreed to it, so
+        an existing destination is overwritten exactly when the plan says.
+        Copies come first, so a Mirror that is cancelled part-way has added
+        before it has removed. The result has the usual ``done`` / ``failed``
+        / ``errors`` / ``items`` counts, over copies and deletions together."""
+        if not copies and not deletes:
+            if log is not None:
+                log("Nothing to sync")
+            return
+        task = Task("Sync…", config=self.config, kind="sync")
+        task.progress.start_operation(OperationType.COPY, 0, description="")
+        sources = [src for src, _dest, _ow in copies]
+        unpins = _pin_source_archives(sources, "used by a running sync")
+
+        def run(task: Task) -> dict:
+            try:
+                return self._run_sync(task, copies, deletes, log)
+            finally:
+                for unpin in unpins:
+                    unpin()
+
+        self.tasks.submit(task, panel, run=run, on_done=on_complete, z=z,
+                          background=background)
+
+    def _run_sync(self, task: Task, copies: list, deletes: list, log) -> dict:
+        """The task body of :meth:`sync`, on the task thread."""
+        result = {"done": 0, "skipped": 0, "failed": 0, "cancelled": False,
+                  "items": 0, "errors": []}
+        prog = task.progress
+        mutated: dict = {}
+        if self.monitor:
+            for path in [dest for _src, dest, _ow in copies] + list(deletes):
+                parent = path.parent
+                mutated.setdefault(str(parent), parent)
+        for d in mutated.values():
+            self.monitor.suppress_path(d)
+        errors = result["errors"]
+        try:
+            steps = self._release_archives(
+                "copy", [(src, dest, ow) for src, dest, ow in copies], result, log)
+            steps = [("copy", src, dest, ow) for src, dest, ow in steps]
+            doomed = self._release_archives(
+                "delete", [(p, None, False) for p in deletes], result, log)
+            steps += [("delete", p, None, False) for p, _d, _o in doomed]
+
+            copy_items, copy_bytes = self._count(
+                task, "copy", None, [s[1] for s in steps if s[0] == "copy"])
+            del_items, _ = self._count(
+                task, "delete", None, [s[1] for s in steps if s[0] == "delete"])
+            prog.update_operation_total(copy_items + del_items,
+                                        total_bytes=copy_bytes)
+            for kind, target, dest, overwrite in steps:
+                task.checkpoint()
+                before = len(errors)
+                try:
+                    ok = self._execute_one(
+                        task, kind, target, dest, overwrite,
+                        dest.parent if dest is not None else None,
+                        prog, log, errors)
+                except Cancelled:
+                    raise
+                except Exception as exc:  # noqa: BLE001 — record + go on
+                    errors.append((str(target), str(exc)))
+                    if log is not None:
+                        log(f"Sync failed for {target.name}: {exc}")
+                    ok = 0
+                result["items"] += ok
+                if ok > 0 or len(errors) == before:
+                    result["done"] += 1
+                else:
+                    result["failed"] += 1
+        except Cancelled:
+            result["cancelled"] = True
+        finally:
+            for d in mutated.values():
+                self.monitor.release_path(d)
+            prog.finish_operation()
+        return result
+
     # --- confirm + submit ----------------------------------------------------
 
     def _start(self, panel: Any, kind: str, targets: list, dest_dir: Optional[Path],
@@ -296,8 +385,9 @@ class FileOperationService:
             return
         verb = _VERB[kind]
 
-        def go() -> None:
-            self._submit(panel, kind, targets, dest_dir, on_complete, log, z, background)
+        def go(detached: bool = False) -> None:
+            self._submit(panel, kind, targets, dest_dir, on_complete, log, z,
+                         background, detached=detached)
 
         confirm = getattr(self.config, f"CONFIRM_{verb.upper()}", True)
         if not confirm:
@@ -319,21 +409,33 @@ class FileOperationService:
             lines = [f"{verb} **{len(targets)}** item(s) to {_code(str(dest_dir))}?", ""]
             lines += _item_list_md(targets)
             buttons, icon, default = (verb, "Cancel"), "info", 0
+        # "Background" starts the operation with no progress dialog, queued
+        # behind any other background job (#567). Offered only where there is
+        # a pump to run it on — tests run synchronously.
+        if background and kind != "duplicate":
+            buttons = (buttons[0], "Background", buttons[1])
+            default = 2 if default == 1 else 0
         message = "\n".join(lines)
         ok_label = buttons[0]
 
         def on_result(label: str) -> None:
             if label == ok_label:
                 go()
+            elif label == "Background":
+                go(detached=True)
+                if log is not None:
+                    log(f"{verb} {len(targets)} item(s) in the background")
             else:
                 panel.render()
 
         show_message_box(panel, message, title=verb, icon=icon, buttons=buttons,
-                         default=default, cancel=1, on_result=on_result, z=z, markdown=True)
+                         default=default, cancel=len(buttons) - 1,
+                         on_result=on_result, z=z, markdown=True)
         panel.render()
 
     def _submit(self, panel: Any, kind: str, targets: list, dest_dir: Optional[Path],
-                on_complete, log, z: int, background: bool) -> None:
+                on_complete, log, z: int, background: bool, *,
+                detached: bool = False) -> None:
         task = Task(f"{_VERB[kind]}…", config=self.config, kind=kind)
         task.progress.start_operation(_OP_TYPE[kind], 0, description="")
         # The archives this task reads out of are its own from the moment it is
@@ -349,7 +451,7 @@ class FileOperationService:
                     unpin()
 
         self.tasks.submit(task, panel, run=run, on_done=on_complete, z=z,
-                          background=background)
+                          background=background, detached=detached)
 
     # --- the linear worker (runs on the task thread) -------------------------
 

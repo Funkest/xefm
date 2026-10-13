@@ -129,14 +129,12 @@ class LogClipboardActions(unittest.TestCase):
     # --- bindings ------------------------------------------------------------
 
     def test_the_copy_chord_resolves_to_the_action(self):
+        """Ctrl-C (Cmd-C in the macOS app) is the file clipboard's copy now
+        (#577); its handler copies the log's selection when there is one."""
         keys = KeyBindings(_config.Config.KEY_BINDINGS)
         self.assertEqual(
             keys.find_action_for_event(_key("c", ("ctrl",)), False, FILER),
-            "copy_log_selection")
-        if sys.platform != "win32":
-            self.assertEqual(
-                keys.find_action_for_event(_key("c", ("cmd",)), False, FILER),
-                "copy_log_selection")
+            "clipboard_copy")
 
     def test_a_config_predating_the_action_still_gets_the_chord(self):
         """Nobody's ~/.xefm/config.py mentions these names — _copy_missing_fields
@@ -145,7 +143,14 @@ class LogClipboardActions(unittest.TestCase):
         keys = KeyBindings({})
         self.assertEqual(
             keys.find_action_for_event(_key("c", ("ctrl",)), False, FILER),
-            "copy_log_selection")
+            "clipboard_copy")
+
+    def test_the_copy_chord_copies_the_log_selection_when_there_is_one(self):
+        self._log("alpha line")
+        self.app.log._select_all()
+        self.app.dispatch("clipboard_copy")
+        self.assertIn("alpha line", self.b.get_clipboard())
+        self.assertEqual(self.app.clipboard.status(), "")
 
     def test_copy_log_all_ships_unbound(self):
         keys = KeyBindings(_config.Config.KEY_BINDINGS)

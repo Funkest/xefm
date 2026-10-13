@@ -42,6 +42,14 @@ class FakeEntry:
     def absolute(self):
         return self._abspath
 
+    @property
+    def suffix(self):
+        return os.path.splitext(self.name)[1]
+
+    def target(self):
+        # An ordinary entry is the place itself, not a reference (#573).
+        return None
+
     def __str__(self):
         return self._path_str
 
