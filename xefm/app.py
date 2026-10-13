@@ -1039,7 +1039,12 @@ class PaneHeader(Widget):
         current = self.app.pm.tab_index[self.pane_name]
         gap = 1.0
         labels = [f"{i + 1} {_tab_label(t)}" for i, t in enumerate(tabs)]
-        widths = [ctx.measure_text(lab) + 1.0 for lab in labels]
+        # The label's inset on each side of its chip: half a unit where the
+        # backend draws sub-cell, a whole cell on a grid — where a half would
+        # floor to nothing on the left and leave the whole padding on the right
+        # (#563 hand check).
+        inset = 0.5 if ctx.vector_shapes else 1.0
+        widths = [ctx.measure_text(lab) + 2 * inset for lab in labels]
         share = (avail - gap * (len(tabs) - 1)) / len(tabs)
         if sum(widths) + gap * (len(tabs) - 1) > avail:
             widths = [min(w, max(share, 2.0)) for w in widths]
@@ -1050,7 +1055,7 @@ class PaneHeader(Widget):
             if x >= pad_x + avail:
                 break
             w = min(w, pad_x + avail - x)
-            shown = elide(label, max(0.0, w - 1.0), where="end",
+            shown = elide(label, max(0.0, w - 2 * inset), where="end",
                           measure=ctx.measure_text)
             chip = current_bg if i == current else idle_bg
             ctx.fill_rect(x, y, w, 1.0, Style(bg=chip))
@@ -1058,7 +1063,7 @@ class PaneHeader(Widget):
                 style = Style(fg=current_fg, bg=chip, attr=TextAttribute.BOLD)
             else:
                 style = Style(fg=idle_fg, bg=chip)
-            ctx.draw_text(x + 0.5, y, shown, style, ink=False)
+            ctx.draw_text(x + inset, y, shown, style, ink=False)
             self._tab_hits.append((x, x + w, i))
             x += w + gap
 
