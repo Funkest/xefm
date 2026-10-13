@@ -57,6 +57,13 @@ If background jobs are still running or queued, **Quit** says so and starts on
 where they are. XeFM waits a few seconds for the file in progress to be
 cleaned up before it exits.
 
+## Similar-file scans
+
+[Find Similar Files](FIND_SIMILAR_FILES_FEATURE.md) scans appear in the same
+status bar segment and jobs list. They are not background jobs in the sense
+above: each runs as a program of its own, keeps running after you quit XeFM,
+and doesn't count against the one-at-a-time queue.
+
 ## See also
 
 - [File Operations](FILE_OPERATIONS_FEATURE.md): copying, moving, conflicts

@@ -669,6 +669,13 @@ _DETAILS: dict[str, str] = {
         "on is answered, and Esc can cancel it. Choose a queued one to drop "
         "it. Send an operation to the background with the Background button "
         "when it asks to start, or with B (or Esc) in its progress dialog."),
+    "find_similar": (
+        "Scans the selection, or the current folder, for files with identical "
+        "content or for similar videos, using similar-files. The scan runs as "
+        "its own process and keeps going after you quit XeFM; the status bar "
+        "and the jobs list show it. When it finishes, open it from the jobs "
+        "list: each group is a playlist, and Enter shows its files in the "
+        "pane. Similar videos need ffmpeg."),
     "open_list_from_clipboard": (
         "Shows the paths on the clipboard, one per line, as the active pane's "
         "listing — the files can be in many directories. Nothing on disk "
@@ -883,6 +890,10 @@ _FILER_ACTIONS = [
     # Background jobs (#567). Ctrl-G: a plain Ctrl+letter every terminal sends
     # and nothing else uses.
     _a("jobs", FILER, "List background jobs"),
+    # Similar-file scans (#571), run by similar-files as their own process.
+    # Unbound: the Tools menu and the palette reach it.
+    _a("find_similar", FILER, "Find identical files or similar videos",
+       default_keys=()),
     # Panes
     _a("sync_current_to_other", FILER, "Go to the other pane's directory"),
     _a("sync_other_to_current", FILER, "Send this directory to the other pane"),
