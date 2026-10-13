@@ -87,7 +87,7 @@ from xefm import search_options as search_opts
 from xefm.isearch_bar import ISearchBar
 from xefm import filters
 from xefm import name_key
-from xefm import keymap_presets, tree_walk, xefml
+from xefm import keymap_presets, similar_scan, tree_walk, xefml
 from xefm.log_manager import (LOG_ERROR_SOURCE, LOG_SOURCE, clear_log_sink,
                               getLogger, route_library_logger, set_log_sink)
 from xefm.pane_manager import PaneManager
@@ -1683,6 +1683,20 @@ class XeFMApp:
         )
         # (the theme + picker list were resolved above, before the menu / widgets)
         self.log_info(f"XeFM — {self.pm.left_pane['path']}")
+        # Scans run on without XeFM (#571): say what finished while it was
+        # closed, and keep watching what is still running.
+        self._refresh_scans()
+        unseen = [j for j, st, _t in self._scan_rows
+                  if st in similar_scan.FINISHED and not j.seen]
+        running = [j for j, st, _t in self._scan_rows if st not in similar_scan.FINISHED]
+        if unseen or running:
+            parts = []
+            if unseen:
+                parts.append(f"{len(unseen)} finished while XeFM was closed")
+            if running:
+                parts.append(f"{len(running)} still running")
+            self.log_info(f"Similar-file scans: {', '.join(parts)} — "
+                          f"{self._keys_label('jobs')} shows them")
 
         # Filesystem monitoring: observer threads post pane names to
         # ``reload_queue``; the main thread drains it via an animation tick (and
@@ -2012,8 +2026,9 @@ class XeFMApp:
         listed = self._process_result_queue()
         loading = self._pump_loading_indicator()
         captured = self._drain_captured_output()
+        scans = self._pump_scans()
         trees = self._pump_xefml()
-        return listed or loading or captured or trees
+        return listed or loading or captured or scans or trees
 
     #: Log-pane styles for captured streams. stdout leaves its color unset so it
     #: resolves to ``theme.text`` at draw time (tracking the theme like
@@ -2905,6 +2920,7 @@ class XeFMApp:
                 "help": (self.show_help, False),
                 "command_palette": (self.show_command_palette, False),
                 "jobs": (self.show_jobs, False),
+                "find_similar": (self.find_similar, False),
                 "menu": (self.menu_bar.open_menu, None),
                 "redraw": (lambda: None, True),
                 "reread": (self.reread, False),
@@ -3810,6 +3826,8 @@ class XeFMApp:
             MenuItem("Command Palette…", on_select=self.show_command_palette,
                      shortcut=sc("command_palette")),
             SEPARATOR,
+            MenuItem("Find Similar Files…", on_select=self.find_similar,
+                     shortcut=sc("find_similar")),
             MenuItem("External Programs…", on_select=self.show_programs, shortcut=sc("programs")),
             MenuItem("Subshell Here", on_select=self.subshell, shortcut=sc("subshell")),
             SEPARATOR,
@@ -4767,32 +4785,199 @@ class XeFMApp:
 
     def _jobs_text(self) -> str:
         """The status bar's job segment: the running job and its progress, how
-        many wait behind it, and "needs you" when one is waiting on a prompt.
-        Empty with no background jobs."""
-        jobs = self.tasks.background_tasks()
-        if not jobs:
-            return ""
+        many wait behind it, and "needs you" when one is waiting on a prompt;
+        then similar-file scans (#571) — running ones with their progress, and
+        finished ones not looked at yet. Empty when there is nothing."""
         key = self._keys_label("jobs")
         hint = f" ({key})" if key else ""
+        parts = []
+        jobs = self.tasks.background_tasks()
         waiting = next((t for t in jobs if t.needs_attention), None)
         if waiting is not None:
             return f"⚠ {waiting.title.rstrip('… ')} needs you{hint}"
         running = next((t for t in jobs if t.status is TaskStatus.RUNNING), None)
-        parts = []
         if running is not None:
             pct = int(running.progress.get_progress_percentage())
             parts.append(f"⟳ {running.title.rstrip('… ')} {pct}%")
         queued = self.tasks.queued_count()
         if queued:
             parts.append(f"+{queued} queued")
-        return " ".join(parts) + hint
+        for job, state, text in self._scan_rows:
+            if state in (similar_scan.RUNNING, similar_scan.STARTING):
+                parts.append(f"⟳ {job.label} {text}")
+            elif not job.seen:
+                mark = "✓" if state == similar_scan.DONE else "⚠"
+                parts.append(f"{mark} {job.label}: {text}")
+        return " ".join(parts) + hint if parts else ""
+
+    # --- similar-file scans (#571) -------------------------------------------
+
+    #: The scans shown in the status bar and the jobs list: ``(job, state,
+    #: text)``, refreshed by :meth:`_refresh_scans` (and its poller) rather than
+    #: read from disk on every frame.
+    _scan_rows: list = []
+    _scans_base = None
+    _scan_poller = None
+
+    def _refresh_scans(self) -> bool:
+        """Re-read the scan folders; True when what the bar would say changed.
+        Starts the poller while a scan runs."""
+        rows = []
+        try:
+            for job in similar_scan.jobs(self._scans_base):
+                state = job.state()
+                if state in similar_scan.FINISHED and job.seen and len(rows) >= 5:
+                    continue
+                rows.append((job, state, job.summary()))
+        except Exception as e:  # noqa: BLE001 — a scan folder never breaks the bar
+            getLogger("Main").error(f"Could not read the scan folders: {e}")
+        changed = [(j.id, st, t) for j, st, t in rows] != \
+            [(j.id, st, t) for j, st, t in self._scan_rows]
+        self._scan_rows = rows
+        if any(st in (similar_scan.RUNNING, similar_scan.STARTING) for _j, st, _t in rows):
+            self._ensure_scan_poller()
+        return changed
+
+    def _ensure_scan_poller(self) -> None:
+        """A daemon thread that re-reads the scans every two seconds while one
+        runs, and wakes the UI only when something changed. It ends with the
+        last running scan."""
+        poller = self._scan_poller
+        if poller is not None and poller.is_alive():
+            return
+
+        def poll() -> None:
+            while True:
+                time.sleep(2.0)
+                self._scans_dirty = True
+                self._wake_pump()
+                if not any(st in (similar_scan.RUNNING, similar_scan.STARTING)
+                           for _j, st, _t in self._scan_rows):
+                    return
+
+        self._scan_poller = threading.Thread(target=poll, name="xefm-scan-poll",
+                                             daemon=True)
+        self._scan_poller.start()
+
+    def _pump_scans(self) -> bool:
+        """On the UI thread, from the pump: refresh the scans when the poller
+        asked, and say whether the bar needs a frame. A scan that has just
+        finished is announced in the log."""
+        if not getattr(self, "_scans_dirty", False):
+            return False
+        self._scans_dirty = False
+        before = {j.id: st for j, st, _t in self._scan_rows}
+        changed = self._refresh_scans()
+        for job, state, text in self._scan_rows:
+            if before.get(job.id) in (similar_scan.RUNNING, similar_scan.STARTING) \
+                    and state in similar_scan.FINISHED:
+                self.log_info(f"{job.label} scan: {text} — "
+                              f"{self._keys_label('jobs')} to open it")
+        return changed
+
+    def find_similar(self) -> None:
+        """Start a similar-files scan of the selection — or of the directory —
+        that keeps running after XeFM closes (#571). Its groups land as one
+        playlist per group, opened from the jobs list."""
+        pane = self.active_pane()
+        if pane.get("virtual"):
+            self.log_info("Find Similar Files scans a directory; this pane shows a list")
+            return
+        selected = [f for f in pane["files"] if str(f) in pane["selected_files"]]
+        roots = selected or [pane["path"]]
+        remote = [r for r in roots if path_schemes.is_uri(str(r))]
+        if remote:
+            self.log_info("Find Similar Files scans local folders (a mounted share "
+                          f"counts); this is {roots[0]}")
+            return
+        rows = []
+        for method, label in similar_scan.METHODS:
+            why = similar_scan.unavailable(method)
+            rows.append((method, label if why is None else f"{label} — {why}"))
+        what = f"{len(roots)} selected item(s)" if selected else str(pane["path"])
+
+        def chosen(method) -> None:
+            self.panel.render()
+            if method is None:
+                return
+            why = similar_scan.unavailable(method)
+            if why is not None:
+                self.log_info(f"{similar_scan.LABELS[method]}: {why}")
+                return
+            try:
+                job = similar_scan.start([str(r) for r in roots], method,
+                                         base=self._scans_base)
+            except OSError as e:
+                self.log_info(f"Could not start the scan: {e}")
+                return
+            self._refresh_scans()
+            self.log_info(f"{job.label} scan of {what} started — it keeps running "
+                          f"if you quit XeFM; {self._keys_label('jobs')} shows it")
+            self.panel.render()
+
+        show_choice_dialog(self.panel, "Find Similar Files", rows, on_result=chosen)
+        self.panel.render()
+
+    def _open_scan(self, job) -> None:
+        """A scan chosen in the jobs list: a running one offers to stop; a
+        finished one takes the pane to its groups — Enter opens a group as a
+        list — or, when it did not finish, to its log."""
+        state = job.state()
+        if state in (similar_scan.RUNNING, similar_scan.STARTING):
+            rows = []
+            if job.result_path.exists():
+                # The tree is rewritten with provisional groups as the scan
+                # goes (#573): they can be looked at already.
+                rows.append(("look", "Look at the groups so far (they may change)"))
+            rows += [("stop", "Stop the scan"), ("log", "Show its log")]
+
+            def act(choice) -> None:
+                if choice == "look":
+                    self._open_scan_result(job)
+                elif choice == "stop":
+                    job.stop()
+                    self.log_info(f"{job.label} scan: stopping — the groups found "
+                                  f"so far will be kept")
+                elif choice == "log":
+                    self._show_scan_log(job)
+                self.panel.render()
+
+            show_choice_dialog(self.panel, f"{job.label} — {job.progress_text()}",
+                               rows, on_result=act)
+            return
+        job.mark_seen()
+        self._refresh_scans()
+        if state in (similar_scan.DONE, similar_scan.CANCELLED) and job.result_path.exists():
+            self._open_scan_result(job)
+            self.log_info(f"{job.label}: {job.summary()} — Enter opens a group")
+        elif state in (similar_scan.DONE, similar_scan.CANCELLED):
+            self.log_info(f"{job.label}: nothing found")
+        else:
+            self._show_scan_log(job)
+
+    def _open_scan_result(self, job) -> None:
+        """Take the active pane into a scan's tree file: its groups are
+        folders, ``Shift-O`` reaches the real files (#573)."""
+        pane = self.active_pane()
+        self._remember_cursor(pane)
+        self._exit_virtual(pane)
+        pane["path"] = Path(xefml.uri_for(job.result_path))
+        self._refresh(pane)
+
+    def _show_scan_log(self, job) -> None:
+        if job.log_path.exists():
+            show_text_viewer(self.panel, Path(str(job.log_path)))
+        else:
+            self.log_info(f"{job.label}: no log")
 
     def show_jobs(self) -> None:
-        """List the background jobs. Choosing a running one brings it forward
-        — its progress dialog, where a waiting prompt is answered and Esc can
-        cancel it; choosing a queued one drops it from the queue."""
+        """List the background jobs and the similar-file scans. Choosing a
+        running job brings it forward — its progress dialog, where a waiting
+        prompt is answered and Esc can cancel it; a queued one is dropped from
+        the queue. A scan opens its groups, or offers to stop it."""
+        self._refresh_scans()
         jobs = self.tasks.background_tasks()
-        if not jobs:
+        if not jobs and not self._scan_rows:
             self.log_info("No background jobs")
             return
 
@@ -4804,16 +4989,26 @@ class XeFMApp:
             state = "needs you" if task.needs_attention else f"{pct}%"
             return f"{name} — {state}"
 
-        def chosen(task) -> None:
-            if task is not None:
-                queued = task.status is not TaskStatus.RUNNING
-                self.tasks.bring_forward(task)
-                if queued:
-                    self.log_info(f"Removed from the queue: {task.title.rstrip('… ')}")
+        def scan_label(job, state, text) -> str:
+            when = job.id[:13].replace("-", " ")
+            new = "" if job.seen or state not in similar_scan.FINISHED else " · new"
+            return f"{job.label} — {text}{new}  ({when[:4]}-{when[4:6]}-{when[6:8]} {when[9:11]}:{when[11:13]})"
+
+        def chosen(value) -> None:
+            if value is not None:
+                kind, item = value
+                if kind == "task":
+                    queued = item.status is not TaskStatus.RUNNING
+                    self.tasks.bring_forward(item)
+                    if queued:
+                        self.log_info(f"Removed from the queue: {item.title.rstrip('… ')}")
+                else:
+                    self._open_scan(item)
             self.panel.render()
 
-        show_choice_dialog(self.panel, "Background Jobs",
-                           [(t, label(t)) for t in jobs], on_result=chosen)
+        rows = [(("task", t), label(t)) for t in jobs]
+        rows += [(("scan", j), scan_label(j, st, tx)) for j, st, tx in self._scan_rows]
+        show_choice_dialog(self.panel, "Background Jobs", rows, on_result=chosen)
         self.panel.render()
 
     def show_favorites(self) -> None:
@@ -8467,6 +8662,7 @@ class XeFMApp:
             ("go_root", "Go to the root of the current drive or location"),
             ("switch_pane", "Switch active pane"),
             ("jobs", "List background jobs; bring one forward or drop it from the queue"),
+            ("find_similar", "Find identical files, or similar images, videos or audio (Tools menu)"),
             ("new_tab", "Open a new tab in this pane, at the same place"),
             ("open_in_new_tab", "Open the directory under the cursor in a new tab"),
             ("close_tab", "Close this pane's current tab"),

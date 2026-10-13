@@ -669,6 +669,15 @@ _DETAILS: dict[str, str] = {
         "on is answered, and Esc can cancel it. Choose a queued one to drop "
         "it. Send an operation to the background with the Background button "
         "when it asks to start, or with B (or Esc) in its progress dialog."),
+    "find_similar": (
+        "Scans the selection, or the current folder, for files with identical "
+        "content, or for similar images, videos or audio, using similar-files. The scan runs as "
+        "its own process and keeps going after you quit XeFM; the status bar "
+        "and the jobs list show it, and its groups can be looked at while it "
+        "is still running. Each group is a folder of the results tree; select "
+        "files and press Shift-O to work on the real files in the other pane. "
+        "Similar videos need ffmpeg, similar audio needs fpcalc (Chromaprint); "
+        "similar images need nothing more."),
     "new_tab": (
         "Opens another tab in the active pane, showing the same place, and "
         "switches to it. Each pane has its own tabs, and each tab keeps its "
@@ -900,6 +909,10 @@ _FILER_ACTIONS = [
     # Background jobs (#567). Ctrl-G: a plain Ctrl+letter every terminal sends
     # and nothing else uses.
     _a("jobs", FILER, "List background jobs"),
+    # Similar-file scans (#571), run by similar-files as their own process.
+    # Unbound: the Tools menu and the palette reach it.
+    _a("find_similar", FILER, "Find identical files, or similar images, videos or audio",
+       default_keys=()),
     # Folder tabs (#563), per pane. All on keys a terminal delivers: Ctrl-TAB
     # never arrives there, so next/previous are Ctrl-PAGE_DOWN / Ctrl-PAGE_UP.
     _a("new_tab", FILER, "Open a new tab in this pane, at the same place"),
