@@ -71,6 +71,22 @@ MANIFEST = "xefm-extension.toml"
 #: The AI-agent skill for writing extensions, shipped inside the package so
 #: every install channel has it (``xefm ext skill``).
 SKILL_DIR = Path(__file__).parent / "skills" / "xefm-extension-authoring"
+#: The release asset's name. Unversioned on purpose, so
+#: ``…/releases/latest/download/<this>`` is a URL that never changes.
+SKILL_ZIP_NAME = "xefm-extension-authoring.zip"
+
+
+def write_skill_zip(path: Path) -> Path:
+    """Zip the authoring skill as one top-level folder,
+    ``xefm-extension-authoring/SKILL.md``, so unzipping it into any agent's
+    skills directory gives the layout every Agent Skills client expects."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        for file in sorted(SKILL_DIR.rglob("*")):
+            if file.is_file() and "__pycache__" not in file.parts:
+                archive.write(file, f"{SKILL_DIR.name}/{file.relative_to(SKILL_DIR).as_posix()}")
+    return path
 INSTALLED_SET = "extensions.toml"
 
 #: Where packages may say they run. ``desktop`` is the native GUI, ``tui`` the

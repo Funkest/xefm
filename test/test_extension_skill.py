@@ -23,6 +23,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+import unittest.mock
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -207,6 +208,49 @@ class SkillMatchesTheChecker(_Tmp):
             code = extension_cli.main(["skill", "--install", str(self.tmp)])
         self.assertEqual(code, 0)
         self.assertTrue((self.tmp / "xefm-extension-authoring" / "SKILL.md").is_file())
+
+
+
+class Distribution(_Tmp):
+    """The skill reaches agents as a release zip any Agent Skills client can
+    unpack, and through a doc an agent can follow by itself."""
+
+    REPO = Path(__file__).resolve().parent.parent
+
+    def test_the_zip_holds_one_skill_folder(self):
+        import zipfile
+        path = ext.write_skill_zip(self.tmp / ext.SKILL_ZIP_NAME)
+        with zipfile.ZipFile(path) as archive:
+            names = archive.namelist()
+            self.assertIn("xefm-extension-authoring/SKILL.md", names)
+            self.assertTrue(all(n.startswith("xefm-extension-authoring/") for n in names))
+            text = archive.read("xefm-extension-authoring/SKILL.md").decode()
+        self.assertIn("name: xefm-extension-authoring", text.split("---")[1])
+
+    def test_cli_zip_and_install(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(extension_cli.main(
+                ["skill", "--zip", str(self.tmp / "s.zip")]), 0)
+        self.assertTrue((self.tmp / "s.zip").is_file())
+        with self.assertRaises(SystemExit):   # no client's directory is assumed
+            with redirect_stdout(io.StringIO()), \
+                    unittest.mock.patch("sys.stderr", io.StringIO()):
+                extension_cli.main(["skill", "--install"])
+
+    def test_the_names_agree(self):
+        """One asset name, spelled the same in the code, the Makefile, and the
+        URLs the install doc gives an agent."""
+        makefile = (self.REPO / "Makefile").read_text(encoding="utf-8")
+        self.assertIn(f"SKILL_ZIP := dist/{ext.SKILL_ZIP_NAME}", makefile)
+        doc = (self.REPO / "doc" / "EXTENSION_AUTHORING_SKILL_FEATURE.md").read_text(
+            encoding="utf-8")
+        urls = re.findall(r"https://github\.com/crftwr/xefm/releases/\S+?\.zip", doc)
+        self.assertEqual(len(urls), 2)
+        for url in urls:
+            self.assertTrue(url.endswith("/" + ext.SKILL_ZIP_NAME), url)
+        self.assertIn("name: xefm-extension-authoring", doc)
+        self.assertIn(ext.SKILL_DIR.name + "/SKILL.md", doc)
 
 
 if __name__ == "__main__":

@@ -72,8 +72,23 @@ satisfy every extension requirement. Three pieces make that hold.
 - **The skill:** `xefm/skills/xefm-extension-authoring/SKILL.md`. It ships as
   package data (`pyproject.toml`, `MANIFEST.in`). The macOS and Windows bundle
   scripts copy the whole `xefm/` tree, so the skill reaches every channel.
-  `xefm ext skill [--install DIR]` prints its path or copies it into
-  `~/.claude/skills/`.
+
+  **Distribution is client-neutral.** `release-github` attaches
+  `xefm-extension-authoring.zip` to every GitHub Release (`make skill-zip` /
+  `release-skill`). The asset name is unversioned, so
+  `releases/latest/download/...` is a stable URL. `write_skill_zip` puts the
+  skill under one top-level folder, so unzipping it into any skills directory
+  gives the right layout.
+
+  `doc/EXTENSION_AUTHORING_SKILL_FEATURE.md` (published on GitHub Pages) has a
+  section written as instructions to an agent: pick the version, download,
+  verify, choose the directory (its own, preferring `~/.agents/skills/`; ask
+  if unsure), replace, report. A user can hand the agent that URL and have it
+  install the skill.
+
+  `xefm ext skill` prints the path, `--install DIR` copies the skill (`DIR`
+  is required: no client's directory is assumed), and `--zip FILE` writes the
+  same zip offline.
 - **The scaffold:** `scaffold(id, parent)`, behind `xefm ext new`, writes a
   package with zero findings. It has a manifest, a thin `actions.py` over a
   plain `logic.py`, `settings.py`, `tests/`, and a `pytest.ini` with
