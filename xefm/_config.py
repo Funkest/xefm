@@ -258,6 +258,11 @@ class Config:
     # rebind below keeps your keys under every preset. Setting this wins over
     # the View > Keymap menu. See doc/KEYMAP_PRESETS_FEATURE.md.
     KEY_PRESET = None
+    # How the Orthodox preset's quick search (typing a letter) matches a name:
+    #   'start'     -- the name begins with what you typed (the classic
+    #                  quick search); later words, after a space, match anywhere
+    #   'anywhere'  -- anywhere in the name, as the I-Search key does
+    QUICK_SEARCH_MATCH = 'start'
 
     # Key bindings - customize your shortcuts
     # Each action can have multiple keys assigned to it

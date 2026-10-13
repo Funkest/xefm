@@ -15,6 +15,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
@@ -184,6 +185,81 @@ class InTheApp(unittest.TestCase):
         self.assertEqual(self.app._isearch_bar.pattern, "r")
         pane = self.app.active_pane()
         self.assertEqual(pane["files"][pane["focused_index"]].name, "report.txt")
+
+    # --- quick search: the classic behaviour (Total Commander's) ------------
+
+    def _focused(self):
+        pane = self.app.active_pane()
+        return pane["files"][pane["focused_index"]].name
+
+    def _quick(self, text):
+        self.app.set_keymap_preset("orthodox")
+        for ch in text:
+            self.app.on_event(_key(ch, ch))
+
+    def test_quick_search_matches_the_start_of_the_name(self):
+        # "a" is in alpha and beta; only alpha *starts* with it.
+        self._quick("a")
+        self.assertEqual(self.app._isearch_bar.prompt, "Quick search:")
+        self.assertEqual(self.app._isearch_matches,
+                         [i for i, f in enumerate(self.app.active_pane()["files"])
+                          if f.name == "alpha.txt"])
+
+    def test_quick_search_anywhere_when_configured(self):
+        self.app.config.QUICK_SEARCH_MATCH = "anywhere"
+        try:
+            self._quick("a")
+            names = {self.app.active_pane()["files"][i].name
+                     for i in self.app._isearch_matches}
+            self.assertEqual(names, {"alpha.txt", "beta.txt"})
+        finally:
+            self.app.config.QUICK_SEARCH_MATCH = "start"
+
+    def test_esc_closes_and_keeps_the_cursor_on_the_match(self):
+        self._quick("r")
+        self.app.on_event(_key("escape"))
+        self.assertFalse(self.app._isearch_active)
+        self.assertEqual(self._focused(), "report.txt")
+
+    def test_another_key_closes_the_search_and_acts(self):
+        self._quick("r")
+        ran = []
+        with patch.object(self.app, "dispatch",
+                          lambda action: ran.append(action) or True):
+            self.app.on_event(_key("f5"))
+        self.assertFalse(self.app._isearch_active)
+        self.assertEqual(ran, ["copy_files"])
+        self.assertEqual(self._focused(), "report.txt")
+
+    def test_enter_opens_the_match(self):
+        os.mkdir(os.path.join(self.tmp, "reports"))
+        self.app._relist(self.app.active_pane())
+        self.app._settle_listings()
+        self._quick("reports")
+        self.app.on_event(_key("enter"))
+        self.app._settle_listings()
+        self.assertFalse(self.app._isearch_active)
+        self.assertEqual(str(self.app.active_pane()["path"]),
+                         os.path.join(self.tmp, "reports"))
+
+    def test_backspace_still_edits(self):
+        self._quick("re")
+        self.app.on_event(_key("backspace"))
+        self.assertTrue(self.app._isearch_active)
+        self.assertEqual(self.app._isearch_bar.pattern, "r")
+
+    def test_the_status_bar_says_other_keys_act(self):
+        self._quick("r")
+        self.assertIn("other keys act on the file", self.app.status._text())
+
+    def test_the_isearch_key_keeps_its_own_behaviour(self):
+        self.app.set_keymap_preset("orthodox")
+        self.app.enter_isearch()
+        self.assertEqual(self.app._isearch_bar.prompt, "I-Search:")
+        self.app.on_event(_key("a", "a"))
+        names = {self.app.active_pane()["files"][i].name
+                 for i in self.app._isearch_matches}
+        self.assertEqual(names, {"alpha.txt", "beta.txt"}, "contains, as before")
 
     def test_the_default_keymap_has_no_type_ahead(self):
         self.app.on_event(_key("z", "z"))

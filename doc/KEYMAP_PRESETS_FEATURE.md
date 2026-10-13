@@ -25,9 +25,30 @@ example, is `K`.
 
 ## Orthodox
 
-The layout shared by the classic two-pane file managers. Typing a letter or
-digit starts [incremental search](XEFM_USER_GUIDE.md) with that character, so
-`r` `e` `p` jumps to `report.txt`. No letter runs a command.
+The layout shared by the classic two-pane file managers. No letter runs a
+command. Typing a letter or digit opens **quick search** with that character,
+as in those file managers:
+
+- The search box replaces the pane's footer, and shows what you typed and how
+  many files match.
+- Matching works like this:
+  - The name must **start with** what you typed, so `r` `e` `p` jumps to
+    `report.txt`.
+  - Words after a space can match anywhere in the name, so `rep 24` finds
+    `report-2024.pdf`.
+  - A letter that would match nothing is not added.
+- `↑` / `↓` jump to the previous / next match. `Backspace` removes a letter.
+- `Esc` closes the search and leaves the cursor on the match.
+- **Any other key closes the search and does its usual job.** `Enter` opens
+  the match, `F5` copies it, `F3` views it, and so on, with no extra key press
+  to leave the search first.
+- There is no timeout. The search stays open until you press a key that
+  closes it.
+
+To match anywhere in the name instead of from its start, set
+`QUICK_SEARCH_MATCH = 'anywhere'` in `config.py`. The I-Search key keeps its
+own behavior under every preset. It matches anywhere, lets you mark matches as
+you go, and stays open until Enter or Esc.
 
 | Key | Action |
 |-----|--------|

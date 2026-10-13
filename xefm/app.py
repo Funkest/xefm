@@ -1024,6 +1024,20 @@ class StatusBar(Widget):
             self._isearch_cache = "   ".join(parts)
         return self._isearch_cache
 
+    def _quick_hints(self) -> str:
+        """The quick search's line: it owns only these keys, and every other
+        one acts on the file list — which is what the line has to say."""
+        walk = "/".join(k for k in (self._isearch_key("isearch.prev_match"),
+                                    self._isearch_key("isearch.next_match")) if k)
+        close = self._isearch_key("isearch.cancel")
+        parts = ["Quick search"]
+        if walk:
+            parts.append(f"{walk} prev/next match")
+        if close:
+            parts.append(f"{close} close")
+        parts.append("other keys act on the file")
+        return "   ".join(parts)
+
     def _text(self) -> str:
         """What the bar says right now.
 
@@ -1034,6 +1048,8 @@ class StatusBar(Widget):
         to show, which is the point of a footer overlay.
         """
         if self.app._isearch_active:
+            if getattr(self.app, "_isearch_quick", False):
+                return self._quick_hints()
             return self._isearch_hints()
         if self.app.panel.has_layers:
             return ""
@@ -1383,6 +1399,8 @@ class XeFMApp:
         #: cursor (restored on cancel); ``_isearch_matches`` caches the current
         #: hit indices for Up/Down navigation; ``_isearch_active`` only drives the
         #: bottom status-bar hint line.
+        self._isearch_quick = False
+        self._isearch_anchored = False
         self._isearch_active = False
         self._isearch_origin = 0
         self._isearch_matches: list[int] = []
@@ -3826,7 +3844,7 @@ class XeFMApp:
         if (not char or len(char) != 1 or not char.isprintable() or char == " "
                 or set(event.modifiers or ()) & {"ctrl", "alt", "cmd"}):
             return False
-        self.enter_isearch()
+        self.enter_isearch(quick=True)
         if not self._isearch_active:
             return False
         # The bar is the top layer now; the key that opened it is its first
@@ -7212,7 +7230,7 @@ class XeFMApp:
             region=self._active_pane_region())
         self.panel.render()
 
-    def enter_isearch(self) -> None:
+    def enter_isearch(self, quick: bool = False) -> None:
         """Incremental search over the active pane (the 'F' key).
 
         The prompt is not a centered modal: an ``ISearchBar`` overlay is pinned to
@@ -7228,7 +7246,14 @@ class XeFMApp:
         pattern's tokens — issue #347) and ``isearch.select_matches`` marks every
         match at once; ``isearch.accept`` stops at the current match;
         ``isearch.cancel`` restores the pre-search cursor. Reuses
-        ``FileListManager.find_matches`` for the hits."""
+        ``FileListManager.find_matches`` for the hits.
+
+        ``quick`` is the Orthodox keymap's type-ahead, which behaves like the
+        quick search of the function-key file managers: the name matches from
+        its start (``QUICK_SEARCH_MATCH``), Esc closes and leaves the cursor
+        on the match, and any other key that is not typing — Enter, F5, an
+        arrow sideways — closes the search and acts on the file list, so Enter
+        opens the match and F5 copies it. Up / Down still walk the matches."""
         if self._isearch_active or not self.active_pane()["files"]:
             return
         footer = self._footers.get(self.pm.active_pane)
@@ -7236,6 +7261,9 @@ class XeFMApp:
             return  # footer not drawn yet — nothing to anchor to
         x, y, w, h = footer.rect
         self._isearch_active = True
+        self._isearch_quick = quick
+        self._isearch_anchored = quick and getattr(
+            self.config, "QUICK_SEARCH_MATCH", "start") != "anywhere"
         self._isearch_origin = self.active_pane()["focused_index"]
         self._isearch_matches = []
         # Migemo only ever matches a *non-ASCII* name (migemo_search.has_hit),
@@ -7246,15 +7274,25 @@ class XeFMApp:
         self._isearch_migemo = any(
             not f.name.isascii() for f in self.active_pane()["files"])
         self._active_view().search_matches = set()
-        self._isearch_bar = ISearchBar(
-            on_change=self._isearch_recompute,
-            on_navigate=self._isearch_step,
-            on_select=self._isearch_toggle_select,
-            on_select_all=self._isearch_select_matches,
-            on_submit=self._isearch_stop,
-            on_cancel=self._isearch_cancel,
-            get_status=self._isearch_status,
-        )
+        if quick:
+            self._isearch_bar = ISearchBar(
+                prompt="Quick search:",
+                on_change=self._isearch_recompute,
+                on_navigate=self._isearch_step,
+                on_cancel=self._isearch_stop,
+                get_status=self._isearch_status,
+                on_passthrough=self._isearch_passthrough,
+            )
+        else:
+            self._isearch_bar = ISearchBar(
+                on_change=self._isearch_recompute,
+                on_navigate=self._isearch_step,
+                on_select=self._isearch_toggle_select,
+                on_select_all=self._isearch_select_matches,
+                on_submit=self._isearch_stop,
+                on_cancel=self._isearch_cancel,
+                get_status=self._isearch_status,
+            )
         # Positioned exactly over the footer, with its "status" surface so it
         # reads as the footer bar. No shadow/dim: the pane stays fully lit.
         self.panel.push_layer(self._isearch_bar, z=70,
@@ -7278,7 +7316,8 @@ class XeFMApp:
         all."""
         pane = self.active_pane()
         matches = self.flm.find_matches(
-            pane, pattern, match_all=True, return_indices_only=True)
+            pane, pattern, match_all=True, return_indices_only=True,
+            anchored=getattr(self, "_isearch_anchored", False))
         if (not matches and search_match.dead_end(pattern,
                                                   migemo=self._isearch_migemo)
                 and self._isearch_bar is not None
@@ -7352,6 +7391,8 @@ class XeFMApp:
     def _isearch_close(self) -> None:
         """Tear down the isearch overlay and clear the pane's match highlights."""
         self._isearch_active = False
+        self._isearch_quick = False
+        self._isearch_anchored = False
         self._isearch_matches = []
         self._active_view().search_matches = set()
         if (self.panel.has_layers
@@ -7371,6 +7412,13 @@ class XeFMApp:
         real, deliberately composed filter out of the history.
         """
         self._isearch_close()
+        self.panel.render()
+
+    def _isearch_passthrough(self, event) -> None:
+        """Quick search: a key the bar does not own ends the search at the
+        current match and then does what it does in the file list."""
+        self._isearch_close()
+        self.on_event(event)
         self.panel.render()
 
     def _isearch_cancel(self) -> None:

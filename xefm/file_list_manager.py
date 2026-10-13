@@ -887,7 +887,8 @@ class FileListManager:
         plural = "" if len(added) == 1 else "s"
         return True, f"Selected {len(added)} item{plural}"
 
-    def find_matches(self, pane_data, pattern, match_all=False, return_indices_only=False):
+    def find_matches(self, pane_data, pattern, match_all=False, return_indices_only=False,
+                     anchored=False):
         """Find all files matching the search pattern in the current pane.
 
         The pattern is the shared incremental-search query (``xefm.search_match``):
@@ -910,7 +911,7 @@ class FileListManager:
 
         # Compiled once for the whole pane: the Migemo regex per token is the
         # expensive step, and it does not depend on the file being tested.
-        tokens = search_match.compile_query(pattern)
+        tokens = search_match.compile_query(pattern, anchored=anchored)
         if not tokens:
             return []
 
