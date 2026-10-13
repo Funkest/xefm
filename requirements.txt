@@ -24,7 +24,16 @@
 # PuiKit is XeFM's UI/rendering framework (the TUI/GUI backend layer), published
 # on PyPI as of 1.0. For co-development against a local checkout, ``make venv``
 # additionally installs it editable from ../puikit, which overrides this pin.
-# 1.7.7 is the floor, and a hard one: every Markdown dialog -- Help, file
+# 1.8.0 is the floor, and a hard one: the conflict dialog and the compare
+# dialog size their boxes before they open through ``Panel.layout_context()``,
+# an AttributeError on any older PuiKit, so neither would open -- a copy or
+# move that hits an existing file would stall on a prompt that never appears.
+# The conflict dialog also asks its message for its height with
+# ``MarkdownView.measure`` (on an older PuiKit the base ``measure`` answers 0,
+# and the size/date table would be clipped) and reads ``LayoutContext
+# .vector_shapes``. All three arrived in puikit 1.8.0 (issue #545, puikit#154),
+# with ``LayoutContext`` measuring a style in the face it is drawn in.
+# 1.7.7 was the previous floor, and a hard one: every Markdown dialog -- Help, file
 # details, a viewer's key list, an action's page -- builds its MarkdownView with
 # ``on_link=``, a TypeError on any older PuiKit, so none of them would open.
 # 1.7.7 is where that per-view link handler arrived, with keyboard link focus
@@ -141,7 +150,7 @@
 # itself from under a covering confirm box -- issue #333), and
 # ``MenuBar.open_menu`` / ``open_menu_mnemonic`` (keyboard menu activation --
 # issue #304).
-puikit>=1.7.7
+puikit>=1.8.0
 pygments
 boto3
 watchdog
