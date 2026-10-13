@@ -33,7 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-from puikit import CapabilityProfile, Panel, PROFILE_GUI_DESKTOP  # noqa: E402
+from puikit import CapabilityProfile, Panel, PROFILE_GUI_DESKTOP, PROFILE_TUI  # noqa: E402
 from puikit.backends.memory_backend import MemoryBackend  # noqa: E402
 
 from xefm import dialog_geometry as dg  # noqa: E402
@@ -447,3 +447,34 @@ class StatusBarGoesQuiet(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --------------------------------------------------------------------------- #
+# The title bar's height is known before the dialog is drawn
+# --------------------------------------------------------------------------- #
+
+class TitleContentTop(unittest.TestCase):
+    """A dialog sizes its box before it is shown, from ``title_content_top``;
+    the row it reserves must be the one ``draw_title_bar`` then returns."""
+
+    def _check(self, backend):
+        from puikit.widgets.base import Widget
+
+        panel = Panel(backend)
+        seen = {}
+
+        class Probe(Widget):
+            def draw(self, ctx):
+                seen["top"] = dg.draw_title_bar(ctx, "Title", surface_bg=None,
+                                                border=None)
+
+        panel.add(Probe(), x=0, y=0, w=40, h=10)
+        panel.render()
+        self.assertAlmostEqual(dg.title_content_top(panel.layout_context()),
+                               seen["top"])
+
+    def test_grid(self):
+        self._check(MemoryBackend(width=60, height=20, capabilities=PROFILE_TUI))
+
+    def test_vector(self):
+        self._check(_Vector(width=60, height=20, capabilities=PROFILE_GUI_DESKTOP))

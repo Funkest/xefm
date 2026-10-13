@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import ctypes
 import errno
+import math
 import os
 import re
 import shutil
@@ -38,6 +39,7 @@ import sys
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any, Callable, Optional
 
 from puikit.backend import Style
@@ -48,9 +50,12 @@ from puikit.widgets.base import Widget
 
 from xefm.archive import (ArchiveInUseError, get_archive_cache,
                           get_member_archive_path, release_archives_under)
-from xefm.dialog_geometry import OPEN_MS_VIEWER, animate_open, draw_title_bar
+from xefm.dialog_geometry import (OPEN_MS_VIEWER, animate_open, draw_title_bar,
+                                  title_content_top)
+from xefm.diff_viewer import show_diff_viewer
 from xefm.path import Path
 from xefm.progress_manager import OperationType, ProgressManager
+from xefm.str_format import format_size
 from xefm.task import Cancelled, Task, TaskManager
 
 #: Operation kind -> (verb label, progress-manager op type).
@@ -473,7 +478,9 @@ class FileOperationService:
                  panel: Any) -> tuple[list, int]:
         """Detect top-level conflicts and resolve each, file-by-file, through the
         task's UI bridge. Returns ``(plan, skipped)`` where plan is a
-        list of ``(target, dest_base, overwrite)`` for the survivors."""
+        list of ``(target, dest_base, overwrite)`` for the survivors.
+        ``overwrite`` is a bool, or an :class:`OverwriteOlder` for a folder
+        merged under "overwrite older", whose files are decided one by one."""
         conflicts = [t for t in targets if (dest_dir / t.name).exists()]
         total = len(conflicts)
         plan: list = []
@@ -489,12 +496,18 @@ class FileOperationService:
             action = apply_all
             if action is None:
                 action, apply = task.ask(
-                    _conflict_prompt(t.name, idx, total, z),
+                    _conflict_prompt(t, dest, idx, total, z),
                     headless=("skip", False))
                 if apply:
                     apply_all = action
             if action == "cancel":
                 raise Cancelled()
+            if action == "overwrite_older":
+                if _merges_into(t, dest):
+                    # A folder merge: decided file by file inside it.
+                    plan.append((t, dest, OverwriteOlder()))
+                    continue
+                action = "overwrite" if _dest_is_older(t, dest) else "skip"
             if action == "skip":
                 skipped += 1
             elif action == "keep_both":
@@ -568,9 +581,12 @@ class FileOperationService:
         verb = {"move": "Moved", "duplicate": "Duplicated"}.get(kind, "Copied")
         before = len(errors)
         ok = self._copy_tree(task, target, dest_base, overwrite, prog, log, verb, errors)
-        if kind == "move" and ok > 0 and len(errors) == before:
+        if (kind == "move" and ok > 0 and len(errors) == before
+                and not _kept_any(overwrite)):
             # Only remove the source once the whole tree copied cleanly — never
-            # drop files a partial copy left behind. Cleanup errors are ignored.
+            # drop files a partial copy left behind, nor ones "overwrite older"
+            # kept because the destination's copy was newer. Cleanup errors are
+            # ignored.
             self._delete_tree(task, target, None, None, [])
         return ok
 
@@ -660,7 +676,8 @@ class FileOperationService:
                     # whole tree copied cleanly. ``result()`` here only tallies
                     # locally — ``per_async`` is filled once, in the final drain.
                     ok_async = sum(f.result() for j, f in futures if j == i)
-                    if sync_ok[i] + ok_async > 0 and not terr:
+                    if (sync_ok[i] + ok_async > 0 and not terr
+                            and not _kept_any(overwrite)):
                         self._delete_tree(task, target, None, None, [])
             for j, f in futures:
                 per_async[j] += f.result()  # re-raises a job's Cancelled
@@ -712,6 +729,7 @@ class FileOperationService:
             return 0
         prog.file_end(slot)
         if not copied:
+            _log_kept(log, overwrite, src)
             return 0  # skipped (inner collision under a non-overwrite dir)
         _log_op(log, verb, src, dest)
         if cleanup_src:
@@ -764,6 +782,7 @@ class FileOperationService:
         if copied:
             _log_op(log, verb, src, dest)  # one line per file, with the real dest
             return 1
+        _log_kept(log, overwrite, src)
         return 0  # skipped (inner collision under a non-overwrite dir)
 
     def _copy_file(self, task: Task, src: Path, dest: Path, overwrite: bool,
@@ -778,8 +797,14 @@ class FileOperationService:
         except Exception:  # noqa: BLE001
             size = 0
         prog.file_bytes(slot, 0, size)
-        if dest.exists() and not overwrite:
-            return False  # inner collision under a non-overwrite dir — leave it
+        if dest.exists():
+            if not overwrite:
+                return False  # inner collision under a non-overwrite dir — leave it
+            if isinstance(overwrite, OverwriteOlder):
+                if not _dest_is_older(src, dest):
+                    overwrite.kept = True
+                    return False  # the destination's copy is as new — keep it
+        overwrite = bool(overwrite)  # the storage layer takes a plain flag
         same = src.get_scheme() == dest.get_scheme()
         local = same and src.get_scheme() == "file"
         if local and not src.is_symlink() and _clone_file(src, dest, overwrite):
@@ -955,6 +980,13 @@ def _log_op(log, verb: str, src: Path, dest: Path) -> None:
         log(f"{verb} '{src.name}' → '{dest.name}': {src.parent} → {dest.parent}")
 
 
+def _log_kept(log, overwrite: Any, src: Path) -> None:
+    """Log a file "overwrite older" left alone, so a move that leaves part of
+    its source behind says why."""
+    if log is not None and isinstance(overwrite, OverwriteOlder):
+        log(f"Kept '{src.name}': the destination's copy is not older")
+
+
 def _log_del(log, path: Path) -> None:
     """Log one delete compactly: the name once, then its directory."""
     if log is not None:
@@ -1092,14 +1124,65 @@ def _merges_into(target: Path, dest: Optional[Path]) -> bool:
             and dest.is_dir())
 
 
+# --- "overwrite older" -------------------------------------------------------
+
+#: Modification times closer than this count as equal. FAT and exFAT store
+#: them at 2-second resolution, and a copy to or from one routinely lands a
+#: second or two off its original — which without slack would read as "older"
+#: and be re-copied on every pass (rsync's ``--modify-window`` answers the same
+#: thing).
+_MTIME_SLACK = 2.0
+
+
+def _mtime(path: Path) -> Optional[float]:
+    try:
+        return path.stat().st_mtime
+    except Exception:  # noqa: BLE001 — unreadable: no basis to compare on
+        return None
+
+
+def _dest_is_older(src: Path, dest: Path) -> bool:
+    """True when ``dest`` was modified clearly before ``src`` — the case
+    "overwrite older" replaces. Either time unreadable means no: the rule
+    never overwrites on a guess."""
+    s, d = _mtime(src), _mtime(dest)
+    return s is not None and d is not None and s - d > _MTIME_SLACK
+
+
+class OverwriteOlder:
+    """The ``overwrite`` value of a folder merged under "overwrite older": each
+    colliding file inside is overwritten only when its destination is older.
+    Truthy, so everything that treats ``overwrite`` as a flag sees a merge.
+    ``kept`` turns True once a file was left alone, which is what stops a move
+    from deleting its source afterwards (a plain assignment, so pool workers
+    can set it without a lock)."""
+
+    def __init__(self) -> None:
+        self.kept = False
+
+    def __bool__(self) -> bool:
+        return True
+
+    def __repr__(self) -> str:
+        return f"OverwriteOlder(kept={self.kept})"
+
+
+def _kept_any(overwrite: Any) -> bool:
+    return isinstance(overwrite, OverwriteOlder) and overwrite.kept
+
+
 # --- conflict dialog ---------------------------------------------------------
 
-#: (action id, button label) for the conflict dialog, in row order.
+#: (action id, button label, shortcut key) for the conflict dialog, in row
+#: order. "compare" is the one that answers nothing: it opens the two files in
+#: the diff viewer above the dialog, which is still there when that closes.
 _CONFLICT_ACTIONS = (
-    ("overwrite", "Overwrite"),
-    ("skip", "Skip"),
-    ("keep_both", "Keep both"),
-    ("cancel", "Cancel"),
+    ("overwrite", "Overwrite", "o"),
+    ("overwrite_older", "Overwrite older", "u"),
+    ("skip", "Skip", "s"),
+    ("keep_both", "Keep both", "k"),
+    ("compare", "Compare", "d"),
+    ("cancel", "Cancel", "c"),
 )
 
 #: The dialog's default action: initially focused *and* drawn as the accent
@@ -1110,48 +1193,136 @@ _CONFLICT_ACTIONS = (
 #: harmless choice rather than the one that destroys data.
 _DEFAULT_CONFLICT_ACTION = "skip"
 
+#: Widest the dialog grows (it shrinks to the window): enough for the six
+#: buttons in one row on a character grid.
+_DIALOG_W = 84
+#: Gap between the message and the checkbox row below it: one blank row, the
+#: same on a grid and on a vector backend.
+_MSG_GAP = 1.0
 
-def _conflict_prompt(name: str, index: int, total: int, z: int):
+
+class ConflictSide:
+    """What the dialog shows of one side of a conflict: the path (for Compare),
+    whether it is a folder, its size and its modification time (``None`` when
+    unreadable). Gathered by :meth:`of` on the task thread, so a remote stat
+    never runs on the UI thread."""
+
+    def __init__(self, path: Any, is_dir: bool, size: Optional[int],
+                 mtime: Optional[float]):
+        self.path = path
+        self.is_dir = is_dir
+        self.size = size
+        self.mtime = mtime
+
+    @classmethod
+    def of(cls, path: Path) -> "ConflictSide":
+        try:
+            is_dir = path.is_dir() and not path.is_symlink()
+        except Exception:  # noqa: BLE001
+            is_dir = False
+        try:
+            st = path.stat()
+            size, mtime = (None if is_dir else st.st_size), st.st_mtime
+        except Exception:  # noqa: BLE001 — shown as unknown
+            size, mtime = None, None
+        return cls(path, is_dir, size, mtime)
+
+
+def _sides_markdown(source: ConflictSide, existing: ConflictSide) -> str:
+    """A two-row table of both sides' size and modification time, the newer and
+    the larger side each marked. Times closer than :data:`_MTIME_SLACK` are not
+    called newer — the same rule "Overwrite older" decides by."""
+    newer = larger = None
+    if source.mtime is not None and existing.mtime is not None:
+        if source.mtime - existing.mtime > _MTIME_SLACK:
+            newer = source
+        elif existing.mtime - source.mtime > _MTIME_SLACK:
+            newer = existing
+    if source.size is not None and existing.size is not None \
+            and source.size != existing.size:
+        larger = source if source.size > existing.size else existing
+
+    def row(label: str, side: ConflictSide) -> str:
+        if side.is_dir:
+            size = "folder"
+        elif side.size is None:
+            size = "?"
+        else:
+            size = format_size(side.size)
+            if side is larger:
+                size += " · **larger**"
+        if side.mtime is None:
+            when = "?"
+        else:
+            when = datetime.fromtimestamp(side.mtime).strftime("%Y-%m-%d %H:%M")
+            if side is newer:
+                when += " · **newer**"
+        return f"| **{label}** | {size} | {when} |"
+
+    return "\n".join(["| | Size | Modified |", "|---|--:|---|",
+                      row("Source", source), row("Existing", existing)])
+
+
+def _conflict_prompt(target: Path, dest: Path, index: int, total: int, z: int):
     """Return a ``show_fn(panel, deliver)`` for ``Task.ask``: it pushes a
     :class:`ConflictDialog` whose result ``(action, apply_to_all)`` is handed to
-    ``deliver``. The dialog stacks just above the progress dialog (``z + 5``)."""
+    ``deliver``. Both sides are stat'ed here, on the task thread; the dialog
+    stacks just above the progress dialog (``z + 5``)."""
+    source, existing = ConflictSide.of(target), ConflictSide.of(dest)
+
     def show(panel: Any, deliver: Callable[[Any], None]) -> None:
-        dialog = ConflictDialog(name, index, total, on_result=deliver)
+        dialog = ConflictDialog(target.name, index, total, on_result=deliver,
+                                source=source, existing=existing)
         dialog.show(panel, z=z + 5)
         panel.render()
     return show
 
 
 class ConflictDialog(FocusContainer, Widget):
-    """Per-conflict resolution modal: names the colliding file (``i of N``), a row
-    of actions (Overwrite / Skip / Keep both / Cancel), and an "apply to all
-    remaining" checkbox. Reports ``(action, apply_to_all)`` through ``on_result``.
-    Keyboard: ``o/s/k/c`` shortcuts, ``a``/Space toggles the checkbox, Tab and
-    Left/Right move focus (Left/Right along the button row, as in a regular
-    message box; Up/Down hop between the row and the checkbox), Enter activates
-    the focused button, Esc cancels."""
+    """Per-conflict resolution modal: names the colliding file (``i of N``),
+    tabulates both sides' size and modification time, a row of actions
+    (Overwrite / Overwrite older / Skip / Keep both / Compare / Cancel), and an
+    "apply to all remaining" checkbox. Reports ``(action, apply_to_all)``
+    through ``on_result``. Compare is offered only when both sides are files.
+    Keyboard: ``o/u/s/k/d/c`` shortcuts (``=`` compares too, as in the main
+    view), ``a``/Space toggles the checkbox, Tab and Left/Right move focus
+    (Left/Right along the button row, as in a regular message box; Up/Down hop
+    between the row and the checkbox), Enter activates the focused button, Esc
+    cancels."""
 
     focusable = True
     focus_stop_when_empty = True
 
     def __init__(self, name: str, index: int, total: int,
-                 on_result: Callable[[tuple[str, bool]], None]):
+                 on_result: Callable[[tuple[str, bool]], None], *,
+                 source: Optional[ConflictSide] = None,
+                 existing: Optional[ConflictSide] = None):
         self.name = name
         self.title = f"File exists ({index} of {total})" if total > 1 else "File exists"
         self.on_result = on_result
+        self.source, self.existing = source, existing
         self._panel: Any = None
+        self._z = 75
         self._size = (0.0, 0.0)
         # The filename renders as a Markdown `code` span so it stands out from the
         # prose (matching the confirm dialogs). Display-only — not a focus child.
-        self._msg = MarkdownView(f"{_code(name)} already exists in the destination.")
+        text = f"{_code(name)} already exists in the destination."
+        if source is not None and existing is not None:
+            text += "\n\n" + _sides_markdown(source, existing)
+        self._msg = MarkdownView(text)
         self._checkbox = Checkbox("Apply to all remaining", checked=False)
+        comparable = (source is not None and existing is not None
+                      and not source.is_dir and not existing.is_dir)
+        #: The (action, label, key) rows this dialog offers.
+        self._actions = [a for a in _CONFLICT_ACTIONS
+                         if a[0] != "compare" or comparable]
         self._buttons = [
             Button(label,
                    variant=("primary" if action == _DEFAULT_CONFLICT_ACTION else "secondary"),
                    on_click=(lambda a=action: self._resolve(a)))
-            for action, label in _CONFLICT_ACTIONS
+            for action, label, _key in self._actions
         ]
-        default = next(i for i, (action, _l) in enumerate(_CONFLICT_ACTIONS)
+        default = next(i for i, (action, _l, _k) in enumerate(self._actions)
                        if action == _DEFAULT_CONFLICT_ACTION)
         self._focused: Any = self._buttons[default]
         #: The button focus returns to when Down leaves the checkbox row.
@@ -1167,13 +1338,35 @@ class ConflictDialog(FocusContainer, Widget):
 
     def show(self, panel: Any, z: int = 75) -> None:
         self._panel = panel
+        self._z = z
         sw, _sh = panel.backend.size_units
-        w = float(max(48, min(72, int(sw) - 4)))
-        h = 9.0  # title + message (may wrap 2 rows) + checkbox + button row
+        w = float(max(48, min(_DIALOG_W, int(sw) - 4)))
+        # Sized to what draw() lays out, bottom-up: border row, button rows,
+        # checkbox row, the gap, the message as it wraps at this width (the
+        # size/date table's height is the backend's, not a row count), title.
+        lc = panel.layout_context()
+        msg_h = self._msg.measure(lc, "y", w - 4).preferred
+        h = (title_content_top(lc) + msg_h + _MSG_GAP + 1.0
+             + self._buttons_h(lc, w - 4) + 1.0)
+        if not lc.vector_shapes:
+            h = float(math.ceil(h))  # whole rows on a grid
         panel.push_layer(self, z=z, hints={"shadow": True, "w": w, "h": h})
         animate_open(panel, self, OPEN_MS_VIEWER)
 
+    def _compare(self) -> None:
+        """Open both files in the diff viewer above this dialog. The dialog stays
+        pushed beneath it, so closing the viewer lands back here, still waiting
+        for an answer."""
+        panel = self._panel
+        if panel is None or self.source is None or self.existing is None:
+            return
+        show_diff_viewer(panel, self.source.path, self.existing.path, z=self._z + 5)
+        panel.render()
+
     def _resolve(self, action: str) -> None:
+        if action == "compare":
+            self._compare()
+            return
         apply_all = self._checkbox.checked
         panel = self._panel
         if panel is not None and panel.has_layers and panel._layers[-1].widget is self:
@@ -1195,28 +1388,55 @@ class ConflictDialog(FocusContainer, Widget):
         y = draw_title_bar(ctx, self.title, surface_bg=surface_bg, border=border, y=1.0)
         self._child_rects = []
 
-        # Button row along the bottom; the checkbox sits one row above it, snapped
-        # to an integer grid row (a Checkbox clips at a fractional y on the
-        # character grid). The message fills the gap between title and checkbox.
+        # Button rows along the bottom; the checkbox sits one row above them,
+        # snapped to an integer grid row (a Checkbox clips at a fractional y on
+        # the character grid). The message fills the gap between title and
+        # checkbox.
         lc = ctx.layout_context()
         bh = self._buttons[0].measure(lc, "y", 0.0).preferred
-        by = box_h - bh - 1.0  # a full row of bottom padding (clear of the border)
-        cb_y = float(int(by) - 1)
+        rows = self._button_rows(lc, box_w - 4)
+        # a full row of bottom padding (clear of the border)
+        by = box_h - 1.0 - self._buttons_h(lc, box_w - 4)
+        cb_y = by - 1.0 if ctx.vector_shapes else float(int(by) - 1)
 
         # Markdown message (the filename as a `code` span), on the popup surface.
         self._msg.style = Style(bg=surface_bg)
-        ctx.draw_child(self._msg, 2, y, max(1.0, box_w - 4), max(1.0, cb_y - y - 0.25))
+        ctx.draw_child(self._msg, 2, y, max(1.0, box_w - 4), max(1.0, cb_y - y - _MSG_GAP))
 
         ctx.draw_child(self._checkbox, 2, cb_y, box_w - 4, 1.0,
                        hints={"focused": self._focused is self._checkbox})
         self._child_rects.append((self._checkbox, (2.0, box_w - 2.0, cb_y, cb_y + 1.0)))
 
-        bx = 2.0
+        for row in rows:
+            bx = 2.0
+            for btn, bw in row:
+                ctx.draw_child(btn, bx, by, bw, bh,
+                               hints={"focused": self._focused is btn})
+                self._child_rects.append((btn, (bx, bx + bw, by, by + bh)))
+                bx += bw + 1.0
+            by += bh + 1.0
+
+    def _buttons_h(self, lc: Any, avail: float) -> float:
+        """Height of the button rows at ``avail`` wide, a row of gap between."""
+        bh = self._buttons[0].measure(lc, "y", 0.0).preferred
+        n = len(self._button_rows(lc, avail))
+        return bh * n + (n - 1)
+
+    def _button_rows(self, lc: Any, avail: float) -> list:
+        """The buttons as ``[(button, width), …]`` rows, a row breaking where
+        the next button would cross ``avail`` — six of them do not fit one row
+        of a narrow window."""
+        bh = self._buttons[0].measure(lc, "y", 0.0).preferred
+        rows: list = [[]]
+        x = 0.0
         for btn in self._buttons:
             bw = btn.measure(lc, "x", bh).preferred
-            ctx.draw_child(btn, bx, by, bw, bh, hints={"focused": self._focused is btn})
-            self._child_rects.append((btn, (bx, bx + bw, by, by + bh)))
-            bx += bw + 1.0
+            if rows[-1] and x + bw > avail:
+                rows.append([])
+                x = 0.0
+            rows[-1].append((btn, bw))
+            x += bw + 1.0
+        return rows
 
     # --- events --------------------------------------------------------------
 
@@ -1253,9 +1473,11 @@ class ConflictDialog(FocusContainer, Widget):
         elif char == "a" or key == "space":
             self._checkbox.toggle()
             self._render()
+        elif char == "=":
+            self._resolve("compare")
         else:
-            for action, _label in _CONFLICT_ACTIONS:
-                if char == action[0]:  # o / s / k / c
+            for action, _label, shortcut in self._actions:
+                if char == shortcut:
                     self._resolve(action)
                     return
 

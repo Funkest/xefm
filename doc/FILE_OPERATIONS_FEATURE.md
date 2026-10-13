@@ -145,44 +145,55 @@ against duplicating a large tree by accident.
 
 ## Conflict resolution
 
-When a copy, move, or archive extraction would overwrite an existing file, XeFM
-stops and asks what to do instead of silently overwriting. The dialog offers:
+When a copy or move would land on a file or folder that already exists, XeFM
+stops and asks what to do instead of silently overwriting. The dialog names the
+item and shows both sides side by side — size and modification time of the
+**Source** and of the **Existing** one — with the newer and the larger side
+marked, so you can decide without leaving the dialog:
 
-- **o — Overwrite**: replace the existing file with the new one.
-- **s — Skip**: skip this file and continue (copy/move only).
-- **r — Rename**: type a different destination name.
-- **c — Cancel**: abort the whole operation.
+```
+ File exists (2 of 5)
+ report.pdf already exists in the destination.
 
-### Rename
+ │          │              Size │ Modified                 │
+ │ Source   │ 120.6 KB · larger │ 2026-10-13 09:43 · newer │
+ │ Existing │            2.0 KB │ 2026-10-12 09:43         │
 
-Choosing **Rename** opens an input field pre-filled with the original name. Edit
-it to whatever you want and press **Enter**. If the new name *also* collides,
-the dialog reappears so you can overwrite, rename again, or cancel — this
-repeats until you pick a free name or cancel.
-
-Renaming lets you keep both files (the original and the incoming one) rather
-than overwriting, which is a safer choice for important files.
-
-### Multiple conflicts
-
-When several files collide, XeFM walks through them one at a time. For each
-conflict you can Overwrite, Rename, or Skip that file — or choose **Skip All**
-to skip every remaining conflict at once. Files with no conflict are copied or
-moved automatically. Each conflict is handled individually; there is no
-automatic numbering or pattern-based batch renaming (for that, see
-[Batch Rename](BATCH_RENAME_FEATURE.md)).
-
-Conflict resolution works across every storage type XeFM supports (local ↔ S3,
-and so on) and is available whenever the corresponding confirmation setting is
-enabled:
-
-```python
-CONFIRM_COPY = True             # copy conflicts
-CONFIRM_MOVE = True             # move conflicts
-CONFIRM_EXTRACT_ARCHIVE = True  # extraction conflicts
+ [ ] Apply to all remaining
+   Overwrite   Overwrite older   [ Skip ]   Keep both   Compare   Cancel
 ```
 
-All three are on by default.
+| Key | Choice | What happens |
+|---|---|---|
+| `o` | **Overwrite** | Replace the existing item. A folder is merged: its files are copied into the existing folder, replacing same-named ones. |
+| `u` | **Overwrite older** | Replace the existing item only if it is older than the source; otherwise skip it. For a folder, the merge decides file by file. |
+| `s` | **Skip** | Leave the existing item alone and go on (the default — Enter). |
+| `k` | **Keep both** | Copy under a free name instead: `report (1).pdf`. |
+| `d` or `=` | **Compare** | Open the two files in the [diff viewer](DIFF_VIEWER_FEATURE.md). Close it (`q` / Esc) to come back to the same dialog. Shown only when both sides are files. |
+| `c` / Esc | **Cancel** | Stop the whole operation. |
+
+`a` or Space toggles **Apply to all remaining**. Checked, your choice answers
+every later conflict of the same operation without asking again. With
+**Overwrite older** that is "overwrite all older": each remaining file is
+still judged on its own dates.
+
+### What "older" means
+
+The existing item counts as older when its modification time is more than
+two seconds before the source's. Times closer than that count as equal and the
+file is skipped, because FAT/exFAT drives (USB sticks, SD cards) store times in
+2-second steps and would otherwise look "older" on every copy. If either time
+can't be read, the file is skipped, so nothing is overwritten on a guess.
+
+When a **move** merges a folder under Overwrite older, files whose existing copy
+was newer stay in the source folder, and the source folder is not removed. The
+log names each one (`Kept '…': the destination's copy is not older`).
+
+Conflict resolution works across every storage type XeFM supports (local ↔ S3,
+SFTP, and so on). It always asks, even with `CONFIRM_COPY` / `CONFIRM_MOVE`
+turned off; those settings control only the "Copy N item(s) to …?" question
+before the operation starts. Extracting an archive into a folder that already
+exists asks its own question first (`CONFIRM_EXTRACT_ARCHIVE`).
 
 ## Progress display
 
