@@ -502,6 +502,16 @@ class PathImpl(ABC):
         """
         return {'type': self.SCHEME or 'unknown', 'details': [],
                 'format_hint': 'standard'}
+
+    def target(self) -> Optional['Path']:
+        """The real place this path stands for, when it is a reference to one
+        rather than a place itself — an entry of a ``.xefml`` tree (#573). The
+        pane-sync keys reveal it, and bulk work on a selection acts on it.
+
+        ``None`` for every path that is itself the place, which is every path
+        but a reference. Not abstract: a backend written before this existed
+        keeps working (#426's rule for the published base)."""
+        return None
     
     # Compatibility methods
     @abstractmethod
@@ -1203,6 +1213,11 @@ class Path:
     def get_extended_metadata(self) -> dict:
         """Return storage-specific metadata for display in info dialogs"""
         return self._impl.get_extended_metadata()
+
+    def target(self) -> Optional['Path']:
+        """The real place a reference stands for, or ``None`` — see
+        :meth:`PathImpl.target`."""
+        return self._impl.target()
     
     def move_to(self, destination: 'Path', overwrite: bool = False) -> bool:
         """

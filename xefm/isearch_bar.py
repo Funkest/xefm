@@ -54,6 +54,10 @@ from puikit.widgets.text_edit import TextEdit
 from xefm.actions import ISEARCH
 from xefm.config import is_action_for_event
 
+#: The keys a quick-search bar keeps for its field; any other key it does not
+#: own passes through to the file list (``ISearchBar.on_passthrough``).
+_EDIT_KEYS = frozenset({"backspace", "delete"})
+
 # Context rows kept visible above and below the match a search jumps to.
 SEARCH_SCROLL_MARGIN = 3
 
@@ -103,6 +107,7 @@ class ISearchBar(FocusContainer, Widget):
         on_submit: Callable[[], None] | None = None,
         on_cancel: Callable[[], None] | None = None,
         get_status: Callable[[], tuple[int, int]] | None = None,
+        on_passthrough: Callable[[Event], None] | None = None,
     ):
         self.prompt = prompt
         self.surface = surface
@@ -126,6 +131,11 @@ class ISearchBar(FocusContainer, Widget):
         #: Returns ``(position, total)`` for the match counter on the right edge —
         #: the 1-based index of the cursor within the matches, and the match count.
         self.get_status = get_status
+        #: Quick-search mode (the Orthodox type-ahead): a key the bar does not
+        #: own — anything but typing, Backspace / Delete and the bar's own
+        #: actions — is handed here instead of to the field, so the owner can
+        #: close the search and let the key act on the file list.
+        self.on_passthrough = on_passthrough
 
         self._panel = None
         self.edit = TextEdit(text=text, on_change=self._edit_changed,
@@ -269,6 +279,9 @@ class ISearchBar(FocusContainer, Widget):
                 if is_action_for_event(event, name, context=ISEARCH):
                     handler()
                     return True
+            if self.on_passthrough is not None and event.key not in _EDIT_KEYS:
+                self.on_passthrough(event)
+                return True
             # Not one of the bar's own: editing keys (and any inherited action
             # it does not run) go to the field.
             self.edit.handle_event(event)
