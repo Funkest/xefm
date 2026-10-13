@@ -54,6 +54,12 @@ class Helpers(unittest.TestCase):
         self.assertEqual(tags.parse_finder(plistlib.dumps(["A\n99", 3, ""])),
                          [Tag("A", 0)])
 
+    def test_a_tag_without_a_color_is_written_as_finder_writes_it(self):
+        """Finder shows a colorless tag only as "Name\n0" (#605)."""
+        import plistlib
+        data = tags.format_finder([Tag("Work"), Tag("Red", 6)])
+        self.assertEqual(plistlib.loads(data), ["Work\n0", "Red\n6"])
+
     def test_apply_change_ignores_case_and_keeps_order(self):
         cur = [Tag("Work"), Tag("Red", 6)]
         self.assertEqual(tags.apply_change(cur, add=[Tag("work"), Tag("New")],

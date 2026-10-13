@@ -145,7 +145,10 @@ def parse_finder(data: bytes) -> list[Tag]:
 
 
 def format_finder(tags: Iterable[Tag]) -> bytes:
-    return plistlib.dumps([f"{t.name}\n{t.color}" if t.color else t.name for t in tags],
+    """Every name with its color index, ``"Work\n0"`` for none — what
+    ``NSURLTagNamesKey`` writes. Foundation reads a bare ``"Work"`` too, but
+    Finder did not show it (#605)."""
+    return plistlib.dumps([f"{t.name}\n{t.color}" for t in tags],
                           fmt=plistlib.FMT_BINARY)
 
 
