@@ -15,7 +15,7 @@ it lives in is described in
 | Plan mode in the viewer | `DirectoryDiffView._sync`, `_open_plan`, `_confirm_plan`, `_on_sync_complete`, `_cycle_focused`, `_plan_footer` |
 | What the plan needs from the scan | `TreeNode.left_mtime` / `right_mtime` / `type_mismatch`, written by `_record_sides` |
 | Differences-only view | `DirectoryDiffView._diff_only`, read by `_flatten` |
-| Actions | `dir_diff.sync` (`s`), `dir_diff.plan_cycle` (`SPACE`), `dir_diff.differences_only` (`d`) |
+| Actions | `dir_diff.sync` (`s`), `dir_diff.cycle_sync_action` (`SPACE`), `dir_diff.toggle_identical` (`d`) |
 
 `dir_sync` has no UI and does no I/O. It reads `TreeNode`s, so it is tested
 against trees the viewer scanned synchronously, with no widget involved. It

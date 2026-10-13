@@ -86,8 +86,8 @@ is worked out again. Your other changes are kept.
 | Key | Action |
 |-----|--------|
 | `s` | Open a plan, or run the open one (`dir_diff.sync`) |
-| `Space` | Change the focused item's action (`dir_diff.plan_cycle`) |
-| `d` | Show only differences, or everything (`dir_diff.differences_only`) |
+| `Space` | Change the focused item's action (`dir_diff.cycle_sync_action`) |
+| `d` | Show or hide the items that are the same on both sides (`dir_diff.toggle_identical`) |
 | `Esc` | Leave the plan |
 
 All of them can be rebound in `KEY_BINDINGS`. See

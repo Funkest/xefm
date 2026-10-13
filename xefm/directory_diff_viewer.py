@@ -1209,9 +1209,9 @@ class DirectoryDiffView(Widget):
             (merge, "merge sides in $TEXT_DIFF"),
             (self._keys_label("dir_diff.sync", "s"),
              "sync: plan from active side · again to run"),
-            (self._keys_label("dir_diff.plan_cycle", "Space"),
+            (self._keys_label("dir_diff.cycle_sync_action", "Space"),
              "change the focused node's sync action"),
-            (self._keys_label("dir_diff.differences_only", "d"),
+            (self._keys_label("dir_diff.toggle_identical", "d"),
              "show only differences / everything"),
             (self._keys_label("dir_diff.rescan", "r"), "rescan"),
             (self._keys_label("quit", "q") + " / Esc", "close"),
@@ -1753,8 +1753,8 @@ class DirectoryDiffView(Widget):
                 "dir_diff.split_left": lambda: self._nudge_split(-0.05),
                 "dir_diff.split_right": lambda: self._nudge_split(0.05),
                 "dir_diff.sync": self._sync,
-                "dir_diff.plan_cycle": self._cycle_focused,
-                "dir_diff.differences_only": self._toggle_diff_only,
+                "dir_diff.cycle_sync_action": self._cycle_focused,
+                "dir_diff.toggle_identical": self._toggle_identical,
             }
         return self._handlers
 
@@ -1791,7 +1791,7 @@ class DirectoryDiffView(Widget):
 
     # --- sync plan (#560) ----------------------------------------------------
 
-    def _toggle_diff_only(self) -> None:
+    def _toggle_identical(self) -> None:
         """Show only what differs, or everything again. The cursor stays on
         its node when that node is still shown."""
         node = self._current()
@@ -1860,8 +1860,8 @@ class DirectoryDiffView(Widget):
                  f"{len(ops.copies)} copy", f"{len(ops.deletes)} delete",
                  f"{ops.skipped + ops.mismatched} skip"]
         hints = (
-            (self._footer_key("dir_diff.plan_cycle", "Space"), "change"),
-            (self._footer_key("dir_diff.differences_only", "d"), "all/diff"),
+            (self._footer_key("dir_diff.cycle_sync_action", "Space"), "change"),
+            (self._footer_key("dir_diff.toggle_identical", "d"), "all/diff"),
             (self._footer_key("dir_diff.sync", "s"), "run"),
             ("Esc", "leave plan"),
         )

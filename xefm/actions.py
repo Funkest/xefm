@@ -1037,10 +1037,10 @@ _DIR_DIFF_ACTIONS = [
     # every surface inherits from common.
     _a("dir_diff.sync", DIR_DIFF, "Sync: plan from the active side, or run it",
        default_keys=("s",)),
-    _a("dir_diff.plan_cycle", DIR_DIFF, "Change the focused node's sync action",
+    _a("dir_diff.cycle_sync_action", DIR_DIFF, "Change the focused node's sync action",
        default_keys=("SPACE",)),
-    _a("dir_diff.differences_only", DIR_DIFF,
-       "Show only the differences, or everything", default_keys=("d",)),
+    _a("dir_diff.toggle_identical", DIR_DIFF,
+       "Show or hide the items that are the same on both sides", default_keys=("d",)),
 ]
 
 _ISEARCH_ACTIONS = [

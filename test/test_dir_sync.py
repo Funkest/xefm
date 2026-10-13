@@ -261,7 +261,7 @@ def test_tab_turns_the_plan_around(opened):
     assert "right → left" in view._footer()
 
 
-def test_differences_only_hides_identical_rows(opened):
+def test_toggle_identical_hides_identical_rows(opened):
     panel, view = opened
     assert any(n.name == "same.txt" for n in view.visible)
     panel.dispatch_event(_key("d", "d"))
