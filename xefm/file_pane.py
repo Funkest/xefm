@@ -278,6 +278,11 @@ class FilePane(Widget):
         #: controller sets this while isearch is open; empty otherwise). Matched
         #: rows get a subtle green background so every hit is visible at once.
         self.search_matches: set[int] = set()
+        #: ``str`` paths on the file clipboard (#577), and whether they were cut.
+        #: Their names draw in italics, a cut one also faded — Explorer's ghost,
+        #: here as an aid only: the status bar is what says what is carried.
+        self.clipboard_marks: frozenset = frozenset()
+        self.clipboard_cut = False
         #: Called with the clicked row index — the controller makes this pane
         #: active and moves the cursor there. ``-1`` for a click that landed
         #: past the last row (the empty space below the listing, or an empty
@@ -825,6 +830,11 @@ class FilePane(Widget):
                                    base, dim),
                           on=eff_bg, target=name_target)
         col_fg = ctx.ink(_dim_ink(theme.muted_text, base, dim), on=eff_bg, target=LC_LARGE)
+        name_attr = row_attr
+        if self.clipboard_marks and str(entry) in self.clipboard_marks:
+            name_attr = row_attr | TextAttribute.ITALIC
+            if self.clipboard_cut:
+                name_fg = ctx.ink(_dim_ink(name_fg, base, 0.5), on=eff_bg, target=HIDDEN_LC)
         # A vector backend composites, so glyphs on any *filled* row (selected /
         # matched / cursor) draw over a transparent bg and land directly on the fill
         # already painted — no per-run bg repaint (which would also break the cursor
@@ -857,7 +867,7 @@ class FilePane(Widget):
         # once, here, is what makes every hidden row agree.
         name_ink = not hidden
         ctx.draw_text(content_left, y, name_text,
-                      Style(fg=name_fg, bg=text_bg, attr=row_attr, underline_color=under),
+                      Style(fg=name_fg, bg=text_bg, attr=name_attr, underline_color=under),
                       ink=name_ink)
         if dots:
             x = content_left + measure(name_text) + measure(" ")
@@ -871,7 +881,7 @@ class FilePane(Widget):
                 x += dot_w
         if ext_text:
             ctx.draw_text(ext_x, y, ext_text,
-                          Style(fg=name_fg, bg=text_bg, attr=row_attr, underline_color=under),
+                          Style(fg=name_fg, bg=text_bg, attr=name_attr, underline_color=under),
                           ink=name_ink)
         # The columns opt out for the same reason the hidden name does, and they
         # have wanted to for longer: they are inked at LC_LARGE just above, to sit

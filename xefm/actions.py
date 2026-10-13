@@ -419,8 +419,11 @@ _DETAILS: dict[str, str] = {
         "is selected — in your editor. An `edit` rule in `FILE_ASSOCIATIONS` "
         "picks the program per file type; otherwise `TEXT_EDITOR` is used. "
         "Files that go to the same editor open in one session.\n\n"
-        "Local files only: directories and files on remote or archive panes "
-        "are skipped, with a note in the log."),
+        "A file on a writable remote (SSH, S3) is downloaded to a local copy "
+        "under `~/.xefm/edit/`, and every save of that copy is uploaded back — "
+        "after a question if the remote file changed meanwhile. A failed "
+        "upload keeps the copy and says where it is. Files inside archives "
+        "are read-only and are skipped, with a note in the log."),
     # --- navigation ---
     "open_item": (
         "On a directory, enters it. On an archive XeFM can read, browses it "
@@ -542,6 +545,14 @@ _DETAILS: dict[str, str] = {
         "under the cursor. With several items selected, opens batch rename: "
         "a regular-expression find and replace across all of them, with a "
         "preview before anything changes."),
+    "rename_in_editor": (
+        "Writes the selected names — or the name under the cursor — to a "
+        "text file, one per line, and opens it in `TEXT_EDITOR`. Change the "
+        "names in place and save; each changed line renames its file, after "
+        "a confirmation listing every change. Lines cannot be added or "
+        "removed, and swapped names are handled.\n\n"
+        "When the editor opens in its own window, XeFM waits for you to "
+        "choose Apply once the file is saved."),
     "create_file": (
         "Asks for a name and creates an empty file in the active pane's "
         "directory, with the cursor on it."),
@@ -670,6 +681,63 @@ _DETAILS: dict[str, str] = {
         "asks the one you pick which shares it offers, and mounts your choice "
         "through the operating system — the pane then goes there like any "
         "other directory. macOS and Windows."),
+    "index_search": (
+        "Searches the index your operating system keeps — Spotlight on "
+        "macOS, Windows Search on Windows — in this folder and everything "
+        "below it, and shows the matches as a list. Write the query as you "
+        "would in Spotlight (words, kind:pdf, date:today, metadata like "
+        "kMDItemPixelWidth > 4000) or in Windows Search (words; where … for "
+        "a raw SQL condition). Earlier queries are offered again."),
+    "clipboard_copy": (
+        "Puts the selected files — or the one under the cursor — on the "
+        "clipboard. Nothing is copied yet: paste copies them into whatever "
+        "folder you are in then, in either pane, or in another application on "
+        "macOS and Windows. With text selected in the log, copies that text "
+        "instead. The status bar shows what the clipboard holds."),
+    "clipboard_cut": (
+        "Like copy, but paste moves the files instead of copying them. The "
+        "cut files are shown faded until then."),
+    "clipboard_paste": (
+        "Copies (or, after a cut, moves) what the clipboard holds into the "
+        "folder of the active pane, asking about names that already exist. "
+        "On macOS and Windows, files copied in Finder or Explorer paste too. "
+        "Each pane's footer says how many names a paste there would meet."),
+    "quick_view": (
+        "Turns the other pane into a preview of the item under the cursor, "
+        "following it as the cursor moves: the start of a text file, a "
+        "picture, a hex dump of a binary, or a folder's item count and size. "
+        "The other pane's own folder comes back when quick view closes. On a "
+        "remote location only small files are read."),
+    "jobs": (
+        "Lists the copy, move and delete operations running in the "
+        "background, and the ones queued behind them. Choose a running one "
+        "to bring its progress dialog back — where a question it is waiting "
+        "on is answered, and Esc can cancel it. Choose a queued one to drop "
+        "it. Send an operation to the background with the Background button "
+        "when it asks to start, or with B (or Esc) in its progress dialog."),
+    "find_similar": (
+        "Scans the selection, or the current folder, for files with identical "
+        "content, or for similar images, videos or audio, using similar-files. The scan runs as "
+        "its own process and keeps going after you quit XeFM; the status bar "
+        "and the jobs list show it, and its groups can be looked at while it "
+        "is still running. Each group is a folder of the results tree; select "
+        "files and press Shift-O to work on the real files in the other pane. "
+        "Similar videos need ffmpeg, similar audio needs fpcalc (Chromaprint); "
+        "similar images need nothing more."),
+    "new_tab": (
+        "Opens another tab in the active pane, showing the same place, and "
+        "switches to it. Each pane has its own tabs, and each tab keeps its "
+        "own directory, cursor, selection, sort and filter — a search result "
+        "or an imported list too. The tab strip appears above the path once a "
+        "pane has more than one tab."),
+    "close_tab": (
+        "Closes the active pane's current tab and shows the next one. A "
+        "pane's only tab cannot be closed."),
+    "flat_view": (
+        "Shows every file below the active pane's directory as one flat list, "
+        "named relative to it — sort, filter and copy work across the whole "
+        "tree. With a selection, only the selected directories and files are "
+        "flattened. Press it again, or Backspace, to go back."),
     "open_list_from_clipboard": (
         "Shows the paths on the clipboard, one per line, as the active pane's "
         "listing — the files can be in many directories. Nothing on disk "
@@ -832,6 +900,7 @@ _FILER_ACTIONS = [
     _a("delete_files", FILER, "Delete the selected files and directories"),
     _a("rename", FILER, "Rename the focused item, or batch-rename the selection",
        aliases=("rename_file",)),
+    _a("rename_in_editor", FILER, "Rename the selection by editing its names in TEXT_EDITOR"),
     _a("create_file", FILER, "Create a new file"),
     _a("create_directory", FILER, "Create a new directory"),
     # Viewing
@@ -870,6 +939,9 @@ _FILER_ACTIONS = [
        aliases=("drives_dialog",)),
     _a("connect_server", FILER, "Connect to a network server",
        aliases=("connect_to_server",)),
+    # Every file below the directory as one list (#547). Shift-B rather than
+    # Ctrl-B, which is tmux's prefix and would never reach XeFM inside it.
+    _a("flat_view", FILER, "Show every file below this directory as one list"),
     # A list of paths in place of a directory (Go > Open List), "open" as
     # open_item opens an archive: the pane shows something else, and
     # go_parent leaves it. Unbound. Not "paste" -- nothing is written, and a
@@ -881,6 +953,30 @@ _FILER_ACTIONS = [
     _a("open_list_from_file", FILER,
        "Open the list file under the cursor as the pane's list",
        default_keys=()),
+    # The OS search index (#579): Spotlight on macOS, Windows Search on Windows.
+    _a("index_search", FILER, "Search the OS index under this folder"),
+    # The file clipboard (#577): copy / cut now, paste wherever you go next.
+    # Letters (Y, Shift-Y, G) as well as chords, so it is an expert path too.
+    _a("clipboard_copy", FILER, "Copy files to the clipboard"),
+    _a("clipboard_cut", FILER, "Cut files to the clipboard"),
+    _a("clipboard_paste", FILER, "Paste the clipboard into this folder"),
+    _a("clipboard_clear", FILER, "Empty the file clipboard", default_keys=()),
+    # Quick view (#569): the other pane previews the cursor item.
+    _a("quick_view", FILER, "Preview the item under the cursor in the other pane"),
+    # Background jobs (#567). Ctrl-G: a plain Ctrl+letter every terminal sends
+    # and nothing else uses.
+    _a("jobs", FILER, "List background jobs"),
+    # Similar-file scans (#571), run by similar-files as their own process.
+    # Unbound: the Tools menu and the palette reach it.
+    _a("find_similar", FILER, "Find identical files, or similar images, videos or audio",
+       default_keys=()),
+    # Folder tabs (#563), per pane. All on keys a terminal delivers: Ctrl-TAB
+    # never arrives there, so next/previous are Ctrl-PAGE_DOWN / Ctrl-PAGE_UP.
+    _a("new_tab", FILER, "Open a new tab in this pane, at the same place"),
+    _a("open_in_new_tab", FILER, "Open the directory under the cursor in a new tab"),
+    _a("close_tab", FILER, "Close this pane's current tab"),
+    _a("next_tab", FILER, "Show this pane's next tab"),
+    _a("prev_tab", FILER, "Show this pane's previous tab"),
     # Panes
     _a("sync_current_to_other", FILER, "Go to the other pane's directory"),
     _a("sync_other_to_current", FILER, "Send this directory to the other pane"),
@@ -907,6 +1003,7 @@ _FILER_ACTIONS = [
     _a("toggle_hidden", FILER, "Show or hide hidden files"),
     _a("toggle_color_scheme", FILER, "Cycle to the next color theme"),
     _a("redraw", FILER, "Redraw the screen"),
+    _a("reread", FILER, "Re-read both panes' directories", default_keys=()),
     _a("menu", FILER, "Open the menu bar"),
     # Every action of the file list, searchable and runnable — the long tail
     # the menu bar deliberately leaves out (discussion #550).
@@ -916,6 +1013,8 @@ _FILER_ACTIONS = [
     _a("subshell", FILER, "Open a subshell in this directory"),
     _a("edit_config", FILER, "Edit config.py, then reload it"),
     _a("reload_config", FILER, "Re-read config.py and apply it live"),
+    _a("install_extension", FILER, "Install the extension package under the cursor"),
+    _a("extensions", FILER, "List the extension packages and whether they loaded"),
 ]
 
 _TEXT_VIEWER_ACTIONS = [
@@ -1040,6 +1139,15 @@ _DIR_DIFF_ACTIONS = [
        default_keys=("[",)),
     _a("dir_diff.split_right", DIR_DIFF, "Move the centre split right",
        default_keys=("]",)),
+    # Sync (#560): s opens a plan from the active side and, pressed again,
+    # runs it; Space changes one node's action. Not f: that is isearch, which
+    # every surface inherits from common.
+    _a("dir_diff.sync", DIR_DIFF, "Sync: plan from the active side, or run it",
+       default_keys=("s",)),
+    _a("dir_diff.cycle_sync_action", DIR_DIFF, "Change the focused node's sync action",
+       default_keys=("SPACE",)),
+    _a("dir_diff.toggle_identical", DIR_DIFF,
+       "Show or hide the items that are the same on both sides", default_keys=("d",)),
 ]
 
 _ISEARCH_ACTIONS = [

@@ -97,9 +97,13 @@ Everything that ends up on the clipboard.
 
 | Item | Action |
 |------|--------|
+| Copy | `clipboard_copy` — see [File Clipboard](FILE_CLIPBOARD_FEATURE.md) |
+| Cut | `clipboard_cut` |
+| Paste | `clipboard_paste` |
+| Clear Clipboard | `clipboard_clear` *(ships unbound)* |
 | Copy Name(s) | `copy_names` |
 | Copy Full Path(s) | `copy_paths` |
-| Copy Log Selection | `copy_log_selection` |
+| Copy Log Selection | `copy_log_selection` *(ships unbound; the Copy key does it when the log has a selection)* |
 | Copy All Logs | `copy_log_all` *(ships unbound)* |
 
 The log items act on the log pane under the file panes: select log text with
@@ -115,6 +119,7 @@ the mouse for the first, take the whole buffer with the second. See
 | Jump to Path… | `jump_to_path` |
 | Drives… | `drives` |
 | History… | `history` |
+| Flat View | `flat_view` — see [Flat View](FLAT_VIEW_FEATURE.md) |
 | Open List → From Clipboard | `open_list_from_clipboard` *(ships unbound)* — see [File lists](FILE_LIST_IMPORT_FEATURE.md) |
 | Open List → From Command… | `open_list_from_command` *(ships unbound)* |
 | Open List → From File | `open_list_from_file` *(ships unbound)* — also **Open as List** on a file's right-click menu |
@@ -142,18 +147,28 @@ the mouse for the first, take the whole buffer with the second. See
 | Filter… | `filter` |
 | Search Files… | `find_files` |
 | Search Content… | `find_in_files` |
+| Search Spotlight… / Search Windows Search… | `index_search` — see [Searching the OS Index](OS_INDEX_SEARCH_FEATURE.md) |
 | Show Hidden Files | `toggle_hidden` |
 | Reverse Sort | *(menu only)* |
 | Sort By ▸ | (submenu: Name / Extension / Size / Date — also the `quick_sort_*` actions) |
 | Theme ▸ | (submenu of installed themes) |
 | Next Theme | `toggle_color_scheme` *(ships unbound)* |
 | Switch Pane | `switch_pane` |
+| Quick View | `quick_view` — see [Quick View](QUICK_VIEW_FEATURE.md) |
+| Background Jobs… | `jobs` — see [Background Jobs](BACKGROUND_JOBS_FEATURE.md) |
+| Keymap ▸ | AFX style / Orthodox — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md) |
+| New Tab | `new_tab` — see [Folder Tabs](FOLDER_TABS_FEATURE.md) |
+| Open in New Tab | `open_in_new_tab` |
+| Close Tab | `close_tab` |
+| Next Tab | `next_tab` |
+| Previous Tab | `prev_tab` |
 
 ### Tools Menu
 
 | Item | Action |
 |------|--------|
 | Command Palette… | `command_palette` |
+| Find Similar Files… | `find_similar` *(ships unbound)* — see [Find Similar Files](FIND_SIMILAR_FILES_FEATURE.md) |
 | External Programs… | `programs` |
 | Subshell Here | `subshell` *(desktop mode: in a terminal window)* |
 | Edit Configuration… | `edit_config` *(ships unbound)* |

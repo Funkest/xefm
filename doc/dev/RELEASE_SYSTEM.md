@@ -175,6 +175,17 @@ invent a tag GitHub does not have, which is why `tag` pushes it), then
 `gh release create vX.Y.Z --generate-notes --verify-tag`. If the Release already
 exists it says so and changes nothing, so re-running the pipeline is free.
 
+It then runs `make release-skill`, which builds
+`dist/xefm-extension-authoring.zip` (`make skill-zip`) and uploads it with
+`--clobber`. That zip is the AI-agent skill for writing extensions. Its name
+carries no version, so
+`https://github.com/crftwr/xefm/releases/latest/download/xefm-extension-authoring.zip`
+always resolves to the latest copy. Each Release still keeps the copy that
+matches its own API, and
+`doc/EXTENSION_AUTHORING_SKILL_FEATURE.md` points agents at these URLs. The zip
+is pure Python and builds on any machine, so it rides along with the Release
+instead of being a fourth artifact to remember.
+
 ### `make release-whl`
 
 1. Builds `dist/xefm-<ver>.tar.gz` + `.whl` **only if missing** — after
@@ -222,7 +233,7 @@ decide for you:
 | Target | Publishes | Use |
 |--------|-----------|-----|
 | `make tag VERSION=x.y.z` | the tag | bump `__version__`, commit, tag, push |
-| `make release-github` | the Release | open the GitHub Release at that tag |
+| `make release-github` | the Release | open the GitHub Release at that tag, with the agent skill zip attached |
 | `make release-whl` | PyPI + Release | sdist + wheel → PyPI, and attached to the Release |
 | `make release-macos-dmg` | Release | attach the macOS DMG (macOS only) |
 | `make release-windows-zip` | Release | attach the Windows portable zip (Windows only) |

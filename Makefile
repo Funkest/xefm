@@ -1,6 +1,6 @@
 # XeFM Makefile
 
-.PHONY: help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config venv clean-venv check-venv install-puikit
+.PHONY: skill-zip release-skill help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config venv clean-venv check-venv install-puikit
 
 # Python interpreter selection
 # All Python is run through the project virtual environment (.venv). There is no
@@ -141,7 +141,8 @@ help:
 	@echo ""
 	@echo "Release (one target per artifact; run in this order):"
 	@echo "  tag VERSION=x.y.z  - Bump __version__, commit, tag, push (no publishing)"
-	@echo "  release-github     - Open the GitHub Release at that tag"
+	@echo "  release-github     - Open the GitHub Release at that tag (attaches the agent skill zip)"
+	@echo "  skill-zip          - Build dist/xefm-extension-authoring.zip (AI-agent skill)"
 	@echo "  release-whl        - Upload sdist + wheel to PyPI, and to the Release"
 	@echo "  release-macos-dmg  - (on macOS)   attach XeFM-<ver>-macos.dmg to the Release"
 	@echo "  release-windows-zip- (on Windows) attach XeFM-<ver>-win64.zip to the Release"
@@ -508,6 +509,7 @@ demo: check-venv
 #
 #   make tag VERSION=x.y.z     any machine  bump __version__, commit, tag, push
 #   make release-github        any machine  open the GitHub Release at that tag
+#                                           (and attach the AI-agent skill zip)
 #   make release-whl           any machine  sdist + wheel -> PyPI (+ the Release)
 #   make release-macos-dmg     macOS        XeFM-<ver>-macos.dmg  -> the Release
 #   make release-windows-zip   Windows      XeFM-<ver>-win64.zip  -> the Release
@@ -617,6 +619,24 @@ release-github:
 		gh release create v$(XEFM_VERSION) --title "v$(XEFM_VERSION)" --generate-notes --verify-tag && \
 		echo "Opened GitHub Release v$(XEFM_VERSION) ✓"; \
 	fi
+	@$(MAKE) --no-print-directory release-skill
+
+# --- The extension-authoring skill for AI agents ------------------------------
+# A plain zip of xefm/skills/xefm-extension-authoring/, for any Agent Skills
+# client (doc/EXTENSION_AUTHORING_SKILL_FEATURE.md). The asset name carries no
+# version so .../releases/latest/download/xefm-extension-authoring.zip is a URL
+# that never changes; each Release still holds the copy matching its own API.
+# Pure Python and platform-independent, so release-github attaches it itself —
+# it is not a fourth artifact to remember.
+SKILL_ZIP := dist/xefm-extension-authoring.zip
+
+skill-zip:
+	@$(PYTHON) -c "from xefm.extensions import write_skill_zip; print('wrote', write_skill_zip('$(SKILL_ZIP)'))"
+
+release-skill: skill-zip
+	@$(call check_release_exists)
+	gh release upload v$(XEFM_VERSION) "$(SKILL_ZIP)" --clobber
+	@echo "Attached $(notdir $(SKILL_ZIP)) to release v$(XEFM_VERSION) ✓"
 
 # --- The Python distributions -----------------------------------------------
 # `build` and `twine` are release-time tooling, not needed to run or develop

@@ -4,6 +4,7 @@
 # add the end-user tools and prune everything not needed to install and run XeFM.
 include requirements.txt
 recursive-include xefm/tools *
+recursive-include xefm/skills *
 
 # Development trees and build byproducts — kept out of the sdist.
 prune tools

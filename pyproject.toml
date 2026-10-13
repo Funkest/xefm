@@ -59,9 +59,10 @@ Issues = "https://github.com/crftwr/xefm/issues"
 include = ["xefm*"]
 
 [tool.setuptools.package-data]
-# End-user external programs invoked by XeFM (xefm/tools/*). The ``_config.py``
+# End-user external programs invoked by XeFM (xefm/tools/*), and the AI-agent
+# skill for writing extensions (xefm/skills/, see `xefm ext skill`). The ``_config.py``
 # template ships automatically as a package .py module.
-xefm = ["tools/*"]
+xefm = ["tools/*", "skills/*/*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "xefm.__version__" }

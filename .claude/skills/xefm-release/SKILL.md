@@ -65,6 +65,7 @@ make tag VERSION=x.y.z   # preflight → pytest → bump __version__ → commit
                          # "Releasing x.y.z" → tag vx.y.z → build gate
                          # (sdist+wheel+twine check) → push commit and tag
 make release-github      # open the GitHub Release (auto body — replaced in step 4)
+                         # and attach xefm-extension-authoring.zip (the agent skill)
 make release-whl         # HEAD must sit exactly on the tag; sdist + wheel
                          # → PyPI, both also attached to the Release
 make release-macos-dmg   # macOS: build, sign and notarize the DMG, attach it
