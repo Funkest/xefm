@@ -768,6 +768,7 @@ For detailed information about specific features, see these dedicated guides:
 
 ### File Operations
 - [File Operations Feature](FILE_OPERATIONS_FEATURE.md) - Copy, move, duplicate, rename-conflict handling, and progress
+- [File Clipboard](FILE_CLIPBOARD_FEATURE.md) - Copy or cut now, paste wherever you go next (and with Finder / Explorer)
 - [Background Jobs](BACKGROUND_JOBS_FEATURE.md) - Keep working while a copy, move or delete runs
 - [Find Similar Files](FIND_SIMILAR_FILES_FEATURE.md) - Identical files and similar images, videos and audio, in scans that outlive XeFM
 - [Batch Rename Feature](BATCH_RENAME_FEATURE.md) - Regex-based renaming for multiple files

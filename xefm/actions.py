@@ -662,6 +662,20 @@ _DETAILS: dict[str, str] = {
         "asks the one you pick which shares it offers, and mounts your choice "
         "through the operating system — the pane then goes there like any "
         "other directory. macOS and Windows."),
+    "clipboard_copy": (
+        "Puts the selected files — or the one under the cursor — on the "
+        "clipboard. Nothing is copied yet: paste copies them into whatever "
+        "folder you are in then, in either pane, or in another application on "
+        "macOS and Windows. With text selected in the log, copies that text "
+        "instead. The status bar shows what the clipboard holds."),
+    "clipboard_cut": (
+        "Like copy, but paste moves the files instead of copying them. The "
+        "cut files are shown faded until then."),
+    "clipboard_paste": (
+        "Copies (or, after a cut, moves) what the clipboard holds into the "
+        "folder of the active pane, asking about names that already exist. "
+        "On macOS and Windows, files copied in Finder or Explorer paste too. "
+        "Each pane's footer says how many names a paste there would meet."),
     "quick_view": (
         "Turns the other pane into a preview of the item under the cursor, "
         "following it as the cursor moves: the start of a text file, a "
@@ -912,6 +926,12 @@ _FILER_ACTIONS = [
     _a("open_list_from_file", FILER,
        "Open the list file under the cursor as the pane's list",
        default_keys=()),
+    # The file clipboard (#577): copy / cut now, paste wherever you go next.
+    # Letters (Y, Shift-Y, G) as well as chords, so it is an expert path too.
+    _a("clipboard_copy", FILER, "Copy files to the clipboard"),
+    _a("clipboard_cut", FILER, "Cut files to the clipboard"),
+    _a("clipboard_paste", FILER, "Paste the clipboard into this folder"),
+    _a("clipboard_clear", FILER, "Empty the file clipboard", default_keys=()),
     # Quick view (#569): the other pane previews the cursor item.
     _a("quick_view", FILER, "Preview the item under the cursor in the other pane"),
     # Background jobs (#567). Ctrl-G: a plain Ctrl+letter every terminal sends

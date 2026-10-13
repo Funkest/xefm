@@ -97,9 +97,13 @@ Everything that ends up on the clipboard.
 
 | Item | Action |
 |------|--------|
+| Copy | `clipboard_copy` — see [File Clipboard](FILE_CLIPBOARD_FEATURE.md) |
+| Cut | `clipboard_cut` |
+| Paste | `clipboard_paste` |
+| Clear Clipboard | `clipboard_clear` *(ships unbound)* |
 | Copy Name(s) | `copy_names` |
 | Copy Full Path(s) | `copy_paths` |
-| Copy Log Selection | `copy_log_selection` |
+| Copy Log Selection | `copy_log_selection` *(ships unbound; the Copy key does it when the log has a selection)* |
 | Copy All Logs | `copy_log_all` *(ships unbound)* |
 
 The log items act on the log pane under the file panes: select log text with

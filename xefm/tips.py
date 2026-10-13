@@ -249,11 +249,20 @@ TIPS: tuple[tuple[str, str], ...] = (
      "fold."),
 
     ("Take the log with you",
-     "Select log text by dragging across it — the copy keys "
-     "({key:copy_log_selection}) then put the highlight on the clipboard. "
+     "Select log text by dragging across it — the copy key "
+     "({key:clipboard_copy}) then puts the highlight on the clipboard instead "
+     "of files. "
      "To hand someone the whole thing — a bug report, say — "
      "**Edit ▸ Copy All Logs** takes every line, including the ones scrolled "
      "out of sight."),
+
+    ("Copy here, paste there",
+     "{key:clipboard_copy} puts the selected files on the clipboard and "
+     "{key:clipboard_cut} cuts them; {key:clipboard_paste} copies or moves them "
+     "into whatever folder you are in by then — a third folder, or (on macOS "
+     "and Windows) Finder or Explorer. The status bar shows what you are "
+     "carrying, and each pane's footer how many names a paste there would "
+     "meet."),
 
     ("Make XeFM yours",
      "Every key binding and many behaviors live in `~/.xefm/config.py`. "

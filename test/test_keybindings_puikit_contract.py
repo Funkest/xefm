@@ -151,15 +151,17 @@ class TestKeybindingsPuikitContract(unittest.TestCase):
         self.assertEqual(self.action(key("r", mods={"ctrl"})), "reveal_in_os")
         self.assertEqual(self.action(key("n", mods={"ctrl"})), "copy_names")
         self.assertEqual(self.action(key("p", mods={"ctrl"})), "copy_paths")
-        self.assertEqual(
-            self.action(key("c", mods={"ctrl"})), "copy_log_selection"
-        )
+        # Copy / cut / paste: the file clipboard (#577). The copy chord also
+        # copies the log's selected text when there is one (in the handler).
+        self.assertEqual(self.action(key("c", mods={"ctrl"})), "clipboard_copy")
+        self.assertEqual(self.action(key("x", mods={"ctrl"})), "clipboard_cut")
+        self.assertEqual(self.action(key("v", mods={"ctrl"})), "clipboard_paste")
         # Plain Enter is still the ordinary open.
         self.assertEqual(self.action(key("enter")), "open_item")
 
     # --- negative cases ------------------------------------------------------
     def test_unbound_key_returns_none(self):
-        self.assertIsNone(self.action(key("y", "y")))
+        self.assertIsNone(self.action(key("z", "z")))
 
     def test_shift_does_not_trigger_unshifted_letter(self):
         # Shift-Q is not bound; must not fall through to 'quit' ('q' no-mods).
@@ -174,16 +176,18 @@ class TestThreeCases(unittest.TestCase):
         with case("darwin", "gui") as kb:
             keys, _ = kb.get_keys_for_action("open_with_os", "filer")
             self.assertEqual(keys, ["Command-ENTER", "Ctrl-O"])
-            keys, _ = kb.get_keys_for_action("copy_log_selection", "filer")
-            self.assertEqual(keys, ["Command-C", "Ctrl-C"])
+            keys, _ = kb.get_keys_for_action("clipboard_copy", "filer")
+            self.assertEqual(keys, ["Command-C", "Ctrl-C", "Y"])
+            keys, _ = kb.get_keys_for_action("clipboard_paste", "filer")
+            self.assertEqual(keys, ["Command-V", "Ctrl-V", "G"])
 
     def test_windows_desktop_adds_ctrl_enter(self):
         with case("win32", "gui") as kb:
             keys, _ = kb.get_keys_for_action("open_with_os", "filer")
             self.assertEqual(keys, ["Ctrl-ENTER", "Ctrl-O"])
-            # No Command on Windows, so the log copy keeps the common chord.
-            keys, _ = kb.get_keys_for_action("copy_log_selection", "filer")
-            self.assertEqual(keys, ["Ctrl-C"])
+            # No Command on Windows, so copy keeps the common chord.
+            keys, _ = kb.get_keys_for_action("clipboard_copy", "filer")
+            self.assertEqual(keys, ["Ctrl-C", "Y"])
 
     def test_terminal_case_is_the_common_table(self):
         for platform_name in ("darwin", "win32", "linux"):
@@ -193,7 +197,9 @@ class TestThreeCases(unittest.TestCase):
                                          ("reveal_in_os", ["Ctrl-R"]),
                                          ("copy_names", ["Ctrl-N"]),
                                          ("copy_paths", ["Ctrl-P"]),
-                                         ("copy_log_selection", ["Ctrl-C"])):
+                                         ("clipboard_copy", ["Ctrl-C", "Y"]),
+                                         ("clipboard_cut", ["Ctrl-X", "Shift-Y"]),
+                                         ("clipboard_paste", ["Ctrl-V", "G"])):
                     keys, _ = kb.get_keys_for_action(action, "filer")
                     self.assertEqual(keys, expected, action)
 
