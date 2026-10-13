@@ -73,7 +73,7 @@ from xefm.dir_scan import is_hidden, alloc_from_stat
 from xefm.disk_usage import UsageScan, reports_allocation
 from xefm.file_list_manager import FileListManager
 from xefm.file_monitor_manager import FileMonitorManager
-from xefm.file_pane import FilePane
+from xefm.file_pane import DEFAULT_BG, LC_BODY, LC_LARGE, FilePane, _mix
 from xefm.filter_list_dialog import show_filter_list
 from xefm.history_input_dialog import show_history_input
 from xefm.completion import FilepathCompleter
@@ -1020,20 +1020,34 @@ class PaneHeader(Widget):
                         _breadcrumbs(text, pane["path"], pad_x, ctx.measure_text))
 
     def _draw_tabs(self, ctx, tabs, pad_x, y, avail, active) -> None:
-        """The tab strip: one label per tab, ``1 src  2 docs  3 ⌕ TODO``, the
-        current one bold on a selection band (accent while the pane is active),
-        the others muted. Every tab gets an equal share when they do not all
-        fit, each label elided to its share."""
+        """The tab strip: one chip per tab, ``1 src  2 docs  3 ⌕ TODO``, with a
+        gap between chips so every tab has an edge. The current tab is filled
+        with the accent — a softer accent on the inactive pane — and bold; the
+        others are a quiet tint of the header with muted text. Every tab gets an
+        equal share when they do not all fit, each label elided to its share.
+
+        Each chip carries its own fill rather than drawing on the bar's: a
+        selection colour on the header surface could all but vanish into it,
+        which left neither the tabs' edges nor the current one visible (#563
+        hand check). Text is inked against the chip it sits on."""
         theme = ctx.theme
+        base = ctx.background or DEFAULT_BG
+        idle_bg = _mix(base, theme.text, 0.18)
+        current_bg = theme.accent if active else _mix(base, theme.accent, 0.45)
+        idle_fg = ctx.ink(theme.muted_text, on=idle_bg, target=LC_LARGE)
+        current_fg = ctx.ink(theme.text, on=current_bg, target=LC_BODY)
         current = self.app.pm.tab_index[self.pane_name]
         gap = 1.0
-        labels = [f"{i + 1} {_tab_label(t)}" for i, t in enumerate(tabs)]
-        widths = [ctx.measure_text(lab) + 1.0 for lab in labels]
+        labels = [_tab_label(t) for t in tabs]
+        # The label's inset on each side of its chip: half a unit where the
+        # backend draws sub-cell, a whole cell on a grid — where a half would
+        # floor to nothing on the left and leave the whole padding on the right
+        # (#563 hand check).
+        inset = 0.5 if ctx.vector_shapes else 1.0
+        widths = [ctx.measure_text(lab) + 2 * inset for lab in labels]
         share = (avail - gap * (len(tabs) - 1)) / len(tabs)
         if sum(widths) + gap * (len(tabs) - 1) > avail:
             widths = [min(w, max(share, 2.0)) for w in widths]
-        band = getattr(theme, "selection_active_bg" if active
-                       else "selection_inactive_bg", None) or theme.accent
         x = pad_x
         self._tab_row = (y, y + 1.0)
         self._tab_hits = []
@@ -1041,14 +1055,15 @@ class PaneHeader(Widget):
             if x >= pad_x + avail:
                 break
             w = min(w, pad_x + avail - x)
-            shown = elide(label, max(0.0, w - 1.0), where="end",
+            shown = elide(label, max(0.0, w - 2 * inset), where="end",
                           measure=ctx.measure_text)
+            chip = current_bg if i == current else idle_bg
+            ctx.fill_rect(x, y, w, 1.0, Style(bg=chip))
             if i == current:
-                ctx.fill_rect(x, y, w, 1.0, Style(bg=band))
-                style = Style(fg=theme.text, bg=band, attr=TextAttribute.BOLD)
+                style = Style(fg=current_fg, bg=chip, attr=TextAttribute.BOLD)
             else:
-                style = Style(fg=theme.muted_text)
-            ctx.draw_text(x + 0.5, y, shown, style)
+                style = Style(fg=idle_fg, bg=chip)
+            ctx.draw_text(x + inset, y, shown, style, ink=False)
             self._tab_hits.append((x, x + w, i))
             x += w + gap
 
