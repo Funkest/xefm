@@ -385,8 +385,9 @@ class FileOperationService:
             return
         verb = _VERB[kind]
 
-        def go() -> None:
-            self._submit(panel, kind, targets, dest_dir, on_complete, log, z, background)
+        def go(detached: bool = False) -> None:
+            self._submit(panel, kind, targets, dest_dir, on_complete, log, z,
+                         background, detached=detached)
 
         confirm = getattr(self.config, f"CONFIRM_{verb.upper()}", True)
         if not confirm:
@@ -408,21 +409,33 @@ class FileOperationService:
             lines = [f"{verb} **{len(targets)}** item(s) to {_code(str(dest_dir))}?", ""]
             lines += _item_list_md(targets)
             buttons, icon, default = (verb, "Cancel"), "info", 0
+        # "Background" starts the operation with no progress dialog, queued
+        # behind any other background job (#567). Offered only where there is
+        # a pump to run it on — tests run synchronously.
+        if background and kind != "duplicate":
+            buttons = (buttons[0], "Background", buttons[1])
+            default = 2 if default == 1 else 0
         message = "\n".join(lines)
         ok_label = buttons[0]
 
         def on_result(label: str) -> None:
             if label == ok_label:
                 go()
+            elif label == "Background":
+                go(detached=True)
+                if log is not None:
+                    log(f"{verb} {len(targets)} item(s) in the background")
             else:
                 panel.render()
 
         show_message_box(panel, message, title=verb, icon=icon, buttons=buttons,
-                         default=default, cancel=1, on_result=on_result, z=z, markdown=True)
+                         default=default, cancel=len(buttons) - 1,
+                         on_result=on_result, z=z, markdown=True)
         panel.render()
 
     def _submit(self, panel: Any, kind: str, targets: list, dest_dir: Optional[Path],
-                on_complete, log, z: int, background: bool) -> None:
+                on_complete, log, z: int, background: bool, *,
+                detached: bool = False) -> None:
         task = Task(f"{_VERB[kind]}…", config=self.config, kind=kind)
         task.progress.start_operation(_OP_TYPE[kind], 0, description="")
         # The archives this task reads out of are its own from the moment it is
@@ -438,7 +451,7 @@ class FileOperationService:
                     unpin()
 
         self.tasks.submit(task, panel, run=run, on_done=on_complete, z=z,
-                          background=background)
+                          background=background, detached=detached)
 
     # --- the linear worker (runs on the task thread) -------------------------
 

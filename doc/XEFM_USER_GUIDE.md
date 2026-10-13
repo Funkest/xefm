@@ -768,6 +768,7 @@ For detailed information about specific features, see these dedicated guides:
 
 ### File Operations
 - [File Operations Feature](FILE_OPERATIONS_FEATURE.md) - Copy, move, duplicate, rename-conflict handling, and progress
+- [Background Jobs](BACKGROUND_JOBS_FEATURE.md) - Keep working while a copy, move or delete runs
 - [Batch Rename Feature](BATCH_RENAME_FEATURE.md) - Regex-based renaming for multiple files
 - [Archive Feature](ARCHIVE_FEATURE.md) - Create, extract, and browse archives (incl. password-protected)
 - [File Details Feature](FILE_DETAILS_FEATURE.md) - Viewing detailed file information

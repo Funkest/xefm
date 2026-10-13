@@ -112,7 +112,7 @@ from xefm.directory_diff_viewer import show_directory_diff_viewer
 from xefm.file_operations import (CloseGate, FileOperationService,
                                   format_op_errors, format_op_summary,
                                   serialized_log, transfer_workers)
-from xefm.task import Cancelled, Task, TaskManager
+from xefm.task import Cancelled, Task, TaskManager, TaskStatus
 from xefm.text_dialog import show_markdown
 from xefm.text_encoding import sniff_bom
 from xefm.tips import tip_count
@@ -1156,6 +1156,15 @@ class StatusBar(Widget):
         if ctx.vector_shapes:
             pad_x += 1.0
         avail = max(0.0, ctx.size_units[0] - 2 * pad_x)
+        # Background jobs (#567) take the right end, ahead of the hints: the
+        # hints are always the same, a job's progress is news.
+        jobs = self.app._jobs_text()
+        if jobs:
+            jobs = elide(jobs, avail, where="end", measure=ctx.measure_text)
+            jw = ctx.measure_text(jobs)
+            ctx.draw_text(pad_x + avail - jw, 0, jobs,
+                          Style(fg=ctx.theme.accent, attr=TextAttribute.BOLD))
+            avail = max(0.0, avail - jw - 2.0)
         text = elide(self._text(), avail, where="end", measure=ctx.measure_text)
         ctx.draw_text(pad_x, 0, text, Style(fg=ctx.theme.muted_text))
 
@@ -2869,6 +2878,7 @@ class XeFMApp:
                 "quit": (self.confirm_quit, False),
                 "help": (self.show_help, False),
                 "command_palette": (self.show_command_palette, False),
+                "jobs": (self.show_jobs, False),
                 "menu": (self.menu_bar.open_menu, None),
                 "redraw": (lambda: None, True),
                 "reread": (self.reread, False),
@@ -3804,10 +3814,15 @@ class XeFMApp:
             SEPARATOR,
             MenuItem("Switch Pane", on_select=lambda: self._menu("switch_pane"), shortcut=sc("switch_pane")),
             SEPARATOR,
+            MenuItem("Background Jobs…", on_select=self.show_jobs,
+                     enabled=lambda: bool(self.tasks.background_tasks()),
+                     shortcut=sc("jobs")),
+            SEPARATOR,
             MenuItem("Keymap", submenu=Menu(*[
                 MenuItem(label, on_select=lambda n=name: self.set_keymap_preset(n),
                          checked=lambda n=name: self._keymap_preset == n)
                 for name, label in keymap_presets.LABELS.items()])),
+            SEPARATOR,
             # Folder tabs (#563): per pane, so every item acts on the active one.
             MenuItem("New Tab", on_select=lambda: self._menu("new_tab"),
                      shortcut=sc("new_tab")),
@@ -4664,12 +4679,91 @@ class XeFMApp:
         self.panel.render()
 
     def confirm_quit(self) -> None:
-        """A modal confirm before quitting — the canonical message-box pattern."""
+        """A modal confirm before quitting — the canonical message-box pattern.
+
+        With background jobs running or queued it says so, and defaults to
+        Cancel: quitting stops a copy part-way, which is not what a reflexive
+        Enter should do."""
+        jobs = self.tasks.background_tasks()
+        if not jobs:
+            show_message_box(
+                self.panel, "Quit XeFM?", title="Confirm", icon="warning",
+                buttons=("Quit", "Cancel"), default=0, cancel=1,
+                on_result=lambda label: self._quit() if label == "Quit" else None,
+            )
+            self.panel.render()
+            return
+        n = len(jobs)
+
+        def on_result(label: str) -> None:
+            if label == "Quit":
+                # Let each worker reach its next checkpoint and remove the
+                # file it was half-way through, rather than die mid-write.
+                if not self.tasks.cancel_all(timeout=3.0):
+                    getLogger("Main").warning("A background job did not stop in time; "
+                                              "a partly written file may be left behind")
+                self._quit()
+
         show_message_box(
-            self.panel, "Quit XeFM?", title="Confirm", icon="warning",
-            buttons=("Quit", "Cancel"), default=0, cancel=1,
-            on_result=lambda label: self._quit() if label == "Quit" else None,
-        )
+            self.panel,
+            f"**{n}** background job{'' if n == 1 else 's'} "
+            f"{'is' if n == 1 else 'are'} still running or queued. Quitting "
+            f"stops {'it' if n == 1 else 'them'} part-way.",
+            title="Quit XeFM?", icon="warning", buttons=("Quit", "Cancel"),
+            default=1, cancel=1, on_result=on_result, markdown=True)
+        self.panel.render()
+
+    # --- background jobs (#567) ----------------------------------------------
+
+    def _jobs_text(self) -> str:
+        """The status bar's job segment: the running job and its progress, how
+        many wait behind it, and "needs you" when one is waiting on a prompt.
+        Empty with no background jobs."""
+        jobs = self.tasks.background_tasks()
+        if not jobs:
+            return ""
+        key = self._keys_label("jobs")
+        hint = f" ({key})" if key else ""
+        waiting = next((t for t in jobs if t.needs_attention), None)
+        if waiting is not None:
+            return f"⚠ {waiting.title.rstrip('… ')} needs you{hint}"
+        running = next((t for t in jobs if t.status is TaskStatus.RUNNING), None)
+        parts = []
+        if running is not None:
+            pct = int(running.progress.get_progress_percentage())
+            parts.append(f"⟳ {running.title.rstrip('… ')} {pct}%")
+        queued = self.tasks.queued_count()
+        if queued:
+            parts.append(f"+{queued} queued")
+        return " ".join(parts) + hint
+
+    def show_jobs(self) -> None:
+        """List the background jobs. Choosing a running one brings it forward
+        — its progress dialog, where a waiting prompt is answered and Esc can
+        cancel it; choosing a queued one drops it from the queue."""
+        jobs = self.tasks.background_tasks()
+        if not jobs:
+            self.log_info("No background jobs")
+            return
+
+        def label(task) -> str:
+            name = task.title.rstrip("… ")
+            if task.status is not TaskStatus.RUNNING:
+                return f"{name} — queued (Enter removes it)"
+            pct = int(task.progress.get_progress_percentage())
+            state = "needs you" if task.needs_attention else f"{pct}%"
+            return f"{name} — {state}"
+
+        def chosen(task) -> None:
+            if task is not None:
+                queued = task.status is not TaskStatus.RUNNING
+                self.tasks.bring_forward(task)
+                if queued:
+                    self.log_info(f"Removed from the queue: {task.title.rstrip('… ')}")
+            self.panel.render()
+
+        show_choice_dialog(self.panel, "Background Jobs",
+                           [(t, label(t)) for t in jobs], on_result=chosen)
         self.panel.render()
 
     def show_favorites(self) -> None:
@@ -8161,6 +8255,7 @@ class XeFMApp:
             ("go_parent", "Go to parent directory"),
             ("go_root", "Go to the root of the current drive or location"),
             ("switch_pane", "Switch active pane"),
+            ("jobs", "List background jobs; bring one forward or drop it from the queue"),
             ("new_tab", "Open a new tab in this pane, at the same place"),
             ("open_in_new_tab", "Open the directory under the cursor in a new tab"),
             ("close_tab", "Close this pane's current tab"),
