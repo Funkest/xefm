@@ -86,6 +86,7 @@ from xefm.isearch_bar import ISearchBar
 from xefm import filters
 from xefm import name_key
 from xefm import tree_walk
+from xefm.quick_view import QuickView
 from xefm.log_manager import (LOG_ERROR_SOURCE, LOG_SOURCE, clear_log_sink,
                               getLogger, route_library_logger, set_log_sink)
 from xefm.pane_manager import PaneManager
@@ -2319,6 +2320,60 @@ class XeFMApp:
     def _sync_active(self) -> None:
         self.left_view.active = self.pm.active_pane == "left"
         self.right_view.active = self.pm.active_pane == "right"
+        # The preview is not a pane to work in: making its side active —
+        # Tab, a click, focus_left / focus_right — closes it.
+        if getattr(self, "_quick_view", None) is not None \
+                and self.pm.active_pane == self._quick_view_side:
+            self._close_quick_view()
+
+    # --- quick view (#569) ---------------------------------------------------
+
+    _quick_view = None
+
+    def quick_view(self) -> None:
+        """Toggle the inactive pane into a preview of the active pane's cursor
+        item (:mod:`xefm.quick_view`). The inactive pane's own directory,
+        cursor and selection are untouched, and come back when it closes."""
+        if self._quick_view is not None:
+            self._close_quick_view()
+            self.log_info("Quick view closed")
+            return
+        side = "right" if self.pm.active_pane == "left" else "left"
+        view = QuickView(self.panel)
+        column = LayoutView(VSplit(Item(view, weight=1, hints={"surface": "content"})))
+        if side == "left":
+            self._quick_view_saved = self.pane_splitter.first
+            self.pane_splitter.first = column
+        else:
+            self._quick_view_saved = self.pane_splitter.second
+            self.pane_splitter.second = column
+        self._quick_view = view
+        self._quick_view_side = side
+        self._quick_view_follow()
+        self.log_info(f"Quick view — {self._keys_label('quick_view')} closes it")
+
+    def _close_quick_view(self) -> None:
+        view = self._quick_view
+        if view is None:
+            return
+        view.close()
+        if self._quick_view_side == "left":
+            self.pane_splitter.first = self._quick_view_saved
+        else:
+            self.pane_splitter.second = self._quick_view_saved
+        self._quick_view = None
+        self._quick_view_saved = None
+
+    def _quick_view_follow(self) -> None:
+        """Tell the preview where the cursor is; it decides whether that is
+        news. Called after every event the file list handles."""
+        view = self._quick_view
+        if view is None:
+            return
+        pane = self.active_pane()
+        entry = self._focused_entry()
+        info = (pane.get("file_info") or {}).get(str(entry)) if entry else None
+        view.follow(entry, info)
 
     def _on_click(self, pane_name: str, index: int) -> None:
         """A FilePane was left-clicked: make it active and move the cursor.
@@ -2710,6 +2765,7 @@ class XeFMApp:
                 "quit": (self.confirm_quit, False),
                 "help": (self.show_help, False),
                 "command_palette": (self.show_command_palette, False),
+                "quick_view": (self.quick_view, True),
                 "menu": (self.menu_bar.open_menu, None),
                 "redraw": (lambda: None, True),
                 # --- cursor ---
@@ -3484,6 +3540,9 @@ class XeFMApp:
                      shortcut=sc("toggle_color_scheme")),
             SEPARATOR,
             MenuItem("Switch Pane", on_select=lambda: self._menu("switch_pane"), shortcut=sc("switch_pane")),
+            MenuItem("Quick View", on_select=lambda: self._menu("quick_view"),
+                     checked=lambda: self._quick_view is not None,
+                     shortcut=sc("quick_view")),
             title="View",
         )
         help_menu = Menu(
@@ -7640,6 +7699,7 @@ class XeFMApp:
             ("go_parent", "Go to parent directory"),
             ("go_root", "Go to the root of the current drive or location"),
             ("switch_pane", "Switch active pane"),
+            ("quick_view", "Preview the item under the cursor in the other pane"),
             ("nav_left", "Focus left pane / go to parent"),
             ("nav_right", "Focus right pane / go to parent"),
             ("favorites", "Go to a favorite directory or file"),
@@ -8353,10 +8413,12 @@ class XeFMApp:
                 self.panel.render()
             elif action is None and self._menu_mnemonic(event):
                 self.panel.render()
+            self._quick_view_follow()
             return
         if event.type in self._MOUSE:
             if self.panel.dispatch_event(event):
                 self.panel.render()
+            self._quick_view_follow()
 
     def run(self) -> None:
         self.panel.render()

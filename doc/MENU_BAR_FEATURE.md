@@ -148,6 +148,7 @@ the mouse for the first, take the whole buffer with the second. See
 | Theme ▸ | (submenu of installed themes) |
 | Next Theme | `toggle_color_scheme` *(ships unbound)* |
 | Switch Pane | `switch_pane` |
+| Quick View | `quick_view` — see [Quick View](QUICK_VIEW_FEATURE.md) |
 
 ### Tools Menu
 

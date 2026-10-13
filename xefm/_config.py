@@ -363,6 +363,7 @@ class Config:
         
         # === File Viewing & Editing ===
         'view_file': ['V'],                    # View file using configured viewer
+        'quick_view': ['Shift-V'],             # Preview the cursor item in the other pane (again to close)
         'edit_file': ['E'],                    # Edit selected file with configured text editor (also inside the text viewer)
         'file_details': ['I'],                 # Show detailed file information dialog
         
