@@ -214,8 +214,8 @@ class Strip(_Base):
         self._focus("inner")
         self._do("open_in_new_tab")
         screen = self._draw()
-        self.assertIn("1 a", screen)
-        self.assertIn("2 inner", screen)
+        self.assertIn(" a ", screen)
+        self.assertIn(" inner ", screen)
         self.assertEqual(len(self.app._headers["left"]._tab_hits), 2)
 
     def test_a_click_on_a_tab_shows_it(self):

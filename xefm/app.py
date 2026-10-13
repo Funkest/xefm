@@ -1038,7 +1038,7 @@ class PaneHeader(Widget):
         current_fg = ctx.ink(theme.text, on=current_bg, target=LC_BODY)
         current = self.app.pm.tab_index[self.pane_name]
         gap = 1.0
-        labels = [f"{i + 1} {_tab_label(t)}" for i, t in enumerate(tabs)]
+        labels = [_tab_label(t) for t in tabs]
         # The label's inset on each side of its chip: half a unit where the
         # backend draws sub-cell, a whole cell on a grid — where a half would
         # floor to nothing on the left and leave the whole padding on the right
