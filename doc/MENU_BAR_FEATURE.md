@@ -127,6 +127,9 @@ the mouse for the first, take the whole buffer with the second. See
 | Select to Cursor | `select_range` |
 | Select All Items | `select_all` |
 | Clear Selection | `unselect_all` |
+| Select by Pattern… | `select_by_pattern` — see [Select by Pattern](SELECT_BY_PATTERN_FEATURE.md) |
+| Unselect by Pattern… | `unselect_by_pattern` |
+| Select Same Extension | `select_same_extension` *(ships unbound)* |
 | Compare and Select… | `compare_selection` |
 | Compare Selected Files… | `diff_files` |
 | Compare Directories… | `diff_directories` |

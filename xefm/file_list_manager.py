@@ -16,6 +16,15 @@ from datetime import datetime
 from xefm.str_format import format_size
 
 
+def file_extension(name):
+    """The extension of ``name`` for grouping files by it: from the last dot,
+    composed and lowercased — ``''`` for a name with none, or with only a
+    leading dot (``.bashrc``)."""
+    name = name_key.nfc(name)
+    dot = name.rfind('.')
+    return name[dot:].lower() if dot > 0 else ""
+
+
 class FileListManager:
     """Manages file lists, sorting, filtering, and selection.
     
@@ -734,6 +743,102 @@ class FileListManager:
             return True, f"Deselected {len(paths)} match{plural}"
         selected.update(paths)
         return True, f"Selected {len(paths)} match{plural}"
+
+    def select_by_pattern(self, pane_data, pattern, select=True):
+        """Add every *file* whose name ``pattern`` matches to the selection, or
+        remove them when ``select`` is false (issue #544).
+
+        ``pattern`` is read exactly as the ';' filter reads it — space- or
+        ``;``-separated globs, or the name of a filter a config defines — and
+        goes through :func:`xefm.filters.matcher`, so the comparison is the
+        filter's: composed, case-insensitive, and against the pane-relative name
+        a search-results pane shows. A pattern that filters a pane down to some
+        files selects those same files here.
+
+        Directories are left alone, as ``toggle_select_files`` leaves them: the
+        filter keeps them visible whatever the pattern says, so it has never had
+        an answer for them to borrow.
+
+        Returns:
+            Tuple of (success: bool, message: str)
+        """
+        pattern = pattern.strip()
+        if not pattern:
+            return False, "No pattern given"
+        files = pane_data['files']
+        info_cache = pane_data.get('file_info') or {}
+        # The listing's own attribute records, so a defined filter's predicate
+        # sees real sizes and dates; a pane without a snapshot falls back to the
+        # display cache, which has the two fields a glob needs.
+        records = {str(p): a for p, a in (pane_data.get('_listing_entries') or ())}
+        try:
+            match = filters.matcher(pattern)
+            hits = []
+            for p in files:
+                key = str(p)
+                a = records.get(key) or info_cache.get(key) or {}
+                if 'cmp_name' not in a:
+                    a = {**a, 'cmp_name': name_key.compare_name(p)}
+                is_dir = a['is_dir'] if 'is_dir' in a else p.is_dir()
+                if not is_dir and match(p, a):
+                    hits.append(key)
+        except Exception as e:
+            self.logger.error(f"Pattern '{pattern}' failed: {e}")
+            return False, f"Pattern '{filters.label(pattern)}' failed: {e}"
+        return self._apply_bulk_selection(
+            pane_data, hits, select, f"matching '{filters.label(pattern)}'")
+
+    def select_same_extension(self, pane_data):
+        """Add every file with the focused file's extension to the selection
+        (issue #544) — no prompt, the cursor is the question.
+
+        The extension is everything from the last dot of the name, compared
+        case-insensitively, so the cursor on ``a.JPG`` selects ``b.jpg`` too.
+        A name with no extension (or only a leading dot, ``.bashrc``) selects
+        the other files with none. Unlike the extension column and sort, there
+        is no length cap: ``MAX_EXTENSION_LENGTH`` decides what fits on screen,
+        not which files belong together.
+
+        Returns:
+            Tuple of (success: bool, message: str)
+        """
+        files = pane_data['files']
+        if not files:
+            return False, "No files in current directory"
+        info_cache = pane_data.get('file_info') or {}
+
+        def is_dir(p):
+            info = info_cache.get(str(p))
+            return info['is_dir'] if info else p.is_dir()
+
+        focused = files[min(pane_data['focused_index'], len(files) - 1)]
+        if is_dir(focused):
+            return False, "The cursor is not on a file"
+        ext = file_extension(focused.name)
+        hits = [str(p) for p in files
+                if not is_dir(p) and file_extension(p.name) == ext]
+        return self._apply_bulk_selection(
+            pane_data, hits, True,
+            f"with extension '{ext}'" if ext else "without an extension")
+
+    @staticmethod
+    def _apply_bulk_selection(pane_data, hits, select, what):
+        """Add ``hits`` to, or remove them from, the pane's selection and say how
+        many actually changed — the part select/unselect-by-pattern and
+        same-extension share."""
+        if not hits:
+            return False, f"No files {what}"
+        chosen = pane_data['selected_files']
+        if select:
+            changed = [k for k in hits if k not in chosen]
+            chosen.update(changed)
+            verb = "Selected"
+        else:
+            changed = [k for k in hits if k in chosen]
+            chosen.difference_update(changed)
+            verb = "Unselected"
+        noun = "file" if len(changed) == 1 else "files"
+        return True, f"{verb} {len(changed)} {noun} {what}"
 
     def select_range(self, pane_data):
         """Select every item between the nearest already-selected item and the

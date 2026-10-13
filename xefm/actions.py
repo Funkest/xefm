@@ -469,6 +469,21 @@ _DETAILS: dict[str, str] = {
         "In Terminal.app, iTerm2 and Linux terminals Shift-Space arrives as a "
         "plain Space; bind this to a key the terminal can send (for example "
         "`Ctrl-Y`) if you work there."),
+    "select_by_pattern": (
+        "Asks for a file-name pattern and adds every file it matches to the "
+        "selection; what was selected already stays selected. The pattern is "
+        "written as for **Filter**: several separated by spaces (`*.jpg *.png`), "
+        "or the name of a filter defined in `FILTERS` in `config.py`, and the "
+        "list offers the patterns you used before. Directories are never "
+        "selected this way."),
+    "unselect_by_pattern": (
+        "The same prompt as **Select by pattern**, removing the matching files "
+        "from the selection instead. Everything else stays selected."),
+    "select_same_extension": (
+        "Adds every file with the same extension as the one under the cursor "
+        "to the selection, without asking: on `photo.JPG` it selects every "
+        "`.jpg`, whatever its case. On a file with no extension it selects the "
+        "other files with none."),
     "cursor_next_selected": (
         "Moves the cursor to the next marked item below it. When there is "
         "none, the cursor stays and the log says so."),
@@ -787,6 +802,13 @@ _FILER_ACTIONS = [
     # console, where the gesture is a convention users already have, are worth
     # more than a key no surface reads as "range".
     _a("select_range", FILER, "Select from the nearest selected item to the cursor"),
+    # #544. ' and " (Shift-') are cfiler's keys for the same thing, next to the
+    # filter's ; and : — see the File Selection block of _config.py.
+    _a("select_by_pattern", FILER, "Select the files matching a pattern"),
+    _a("unselect_by_pattern", FILER, "Unselect the files matching a pattern"),
+    # Unbound: the Select menu and the palette carry it.
+    _a("select_same_extension", FILER,
+       "Select every file with the cursor file's extension", default_keys=()),
     _a("cursor_next_selected", FILER, "Jump to the next selected item"),
     _a("cursor_prev_selected", FILER, "Jump to the previous selected item"),
     # Clipboard
