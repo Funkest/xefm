@@ -68,6 +68,9 @@ from xefm.log_manager import getLogger
 logger = getLogger("Extensions")
 
 MANIFEST = "xefm-extension.toml"
+#: The AI-agent skill for writing extensions, shipped inside the package so
+#: every install channel has it (``xefm ext skill``).
+SKILL_DIR = Path(__file__).parent / "skills" / "xefm-extension-authoring"
 INSTALLED_SET = "extensions.toml"
 
 #: Where packages may say they run. ``desktop`` is the native GUI, ``tui`` the
@@ -110,7 +113,14 @@ class Problem:
     message: str
 
     def __str__(self) -> str:
+        if self.where.startswith(_CODE):
+            return f"{self.severity}: {self.where[len(_CODE):]}: {self.message}"
         return f"{self.severity}: {MANIFEST}: {self.where}: {self.message}"
+
+
+#: ``Problem.where`` prefix for a finding in the package's code rather than its
+#: manifest; what follows is ``path/in/package.py:line``.
+_CODE = "code:"
 
 
 def _quote(key: str) -> str:
@@ -464,6 +474,8 @@ def check_manifest(manifest: Manifest, *, others: Iterable[Manifest] = (),
                 warn("requires.host_packages", f"'{package}' is not importable "
                      "in this XeFM — the extension will not load here")
 
+    problems.extend(lint_code(manifest.root))
+
     own = python_top_level(manifest.root)
     if manifest.runs_code and not own:
         err("(layout)", "the manifest references code, but the package has no "
@@ -487,6 +499,68 @@ def check_manifest(manifest: Manifest, *, others: Iterable[Manifest] = (),
             err("(layout)", f"top-level module '{name}' is also provided by "
                 f"'{other.id or other.root.name}' — one process has one "
                 f"'{name}'; rename it (e.g. vendor it under your own package)")
+    return problems
+
+
+#: The XeFM modules an extension may import: the customization API itself and
+#: the published base classes for storage backends. Everything else in the
+#: ``xefm`` package is internal and moves without notice.
+PUBLIC_MODULES = ("xefm.user_api", "xefm.path_base")
+
+
+def lint_code(root: Path) -> list[Problem]:
+    """What the authoring rules say about the package's own Python files, read
+    from their syntax trees — never imported. Vendored code (any ``_vendor``
+    directory) is someone else's and is not judged.
+
+    Errors are the API contract: a private name (``ctx._app``) or an import of
+    an internal ``xefm`` module works today and breaks on any release. Warnings
+    are conventions with a reason: ``print()`` does not reach the user (use
+    ``ctx.message``), and editing ``sys.path`` is how two extensions' vendored
+    copies of one library end up colliding."""
+    problems: list[Problem] = []
+    root = Path(root)
+    for path in sorted(root.rglob("*.py")):
+        rel = path.relative_to(root)
+        if "_vendor" in rel.parts or any(p.startswith(".") for p in rel.parts):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (SyntaxError, OSError, UnicodeDecodeError):
+            continue  # the reference check reports unreadable referenced modules
+        where = lambda node: f"{_CODE}{rel.as_posix()}:{node.lineno}"  # noqa: E731
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr.startswith("_") \
+                    and not node.attr.startswith("__") \
+                    and not (isinstance(node.value, ast.Name)
+                             and node.value.id in ("self", "cls")):
+                problems.append(Problem(
+                    "error", where(node),
+                    f"'.{node.attr}' is private — use only the public API "
+                    "(ctx.pane, ctx.invoke, ctx.run_program, ctx.message, …)"))
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                names = ([a.name for a in node.names] if isinstance(node, ast.Import)
+                         else [node.module or ""] if node.level == 0 else [])
+                for name in names:
+                    if (name == "xefm" or name.startswith("xefm.")) \
+                            and not any(name == m or name.startswith(m + ".")
+                                        for m in PUBLIC_MODULES):
+                        problems.append(Problem(
+                            "error", where(node),
+                            f"'{name}' is internal to XeFM — import only "
+                            f"{' or '.join(PUBLIC_MODULES)}"))
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) \
+                    and node.func.id == "print":
+                problems.append(Problem(
+                    "warning", where(node),
+                    "print() does not reach the user — use ctx.message(...), or "
+                    "logging.getLogger(__name__) for diagnostics"))
+            elif isinstance(node, ast.Attribute) and node.attr == "path" \
+                    and isinstance(node.value, ast.Name) and node.value.id == "sys":
+                problems.append(Problem(
+                    "warning", where(node),
+                    "do not touch sys.path — import vendored code as "
+                    "yourpackage._vendor.name"))
     return problems
 
 
@@ -558,6 +632,89 @@ def check_package(root: Path, *, others: Iterable[Manifest] = (),
 
 def errors(problems: Iterable[Problem]) -> list[Problem]:
     return [p for p in problems if p.severity == "error"]
+
+
+# --- a new package ------------------------------------------------------------
+
+def package_name_for(ext_id: str) -> str:
+    """The Python package a new extension gets: the id with ``-`` and ``.``
+    turned into ``_`` (``hello-xefm`` → ``hello_xefm``)."""
+    name = re.sub(r"[-.]+", "_", ext_id)
+    return name if name.isidentifier() else f"ext_{name}"
+
+
+def scaffold(ext_id: str, parent: Path) -> Path:
+    """Create ``parent/<ext_id>/`` holding a package that passes
+    :func:`check_package` with no findings at all: a manifest with one action,
+    the action over a plain-function module, settings defaults and a test. The
+    starting point ``xefm ext new`` gives an author — or an assistant — so the
+    rules are met before the first edit rather than discovered after it."""
+    if not _ID_RE.match(ext_id):
+        raise InstallError(f"'{ext_id}' is not a valid id: lowercase letters, "
+                           "digits, '.', '_' or '-', starting with a letter or digit")
+    root = Path(parent) / ext_id
+    if root.exists():
+        raise InstallError(f"{root} already exists")
+    pkg = package_name_for(ext_id)
+    short = ext_id.split("-")[0].split(".")[0]
+    (root / pkg).mkdir(parents=True)
+    (root / "tests").mkdir()
+    (root / MANIFEST).write_text(f'''[extension]
+id = "{ext_id}"
+version = "0.1.0"
+api_version = {_api_version()}
+name = "{ext_id}"
+description = "TODO: one line saying what this extension does"
+min_xefm = "{_XEFM_VERSION}"
+
+[contributes.actions]
+"{short}.hello" = {{ entry = "{pkg}.actions:hello" }}
+
+[settings]
+defaults = "{pkg}.settings:Settings"
+''', encoding="utf-8")
+    (root / pkg / "__init__.py").write_text(f'''"""{ext_id} — an XeFM extension."""
+''', encoding="utf-8")
+    (root / pkg / "actions.py").write_text(f'''"""The actions {ext_id} contributes. Each takes the action context ``ctx``;
+keep the work itself in plain functions (see logic.py) so it can be tested
+without XeFM."""
+
+from {pkg}.logic import greeting
+
+
+def hello(ctx):
+    """Say hello in the log pane.
+
+    Shows the configured greeting with the name under the cursor."""
+    entry = ctx.pane.focused
+    ctx.message(greeting(ctx.extension.settings.GREETING,
+                         entry.name if entry else None))
+''', encoding="utf-8")
+    (root / pkg / "logic.py").write_text('''"""Plain functions with no XeFM in them — what the tests exercise."""
+
+
+def greeting(text, name):
+    return f"{text}, {name}" if name else text
+''', encoding="utf-8")
+    (root / pkg / "settings.py").write_text(f'''"""Defaults for the settings a user may change in config.py with a plain
+class named {config_class_name(Manifest(root, {"extension": {"id": ext_id}}))}."""
+
+
+class Settings:
+    GREETING = "Hello"
+''', encoding="utf-8")
+    # pythonpath = . puts the package root on the path for the tests; a
+    # conftest.py would do it too, but at the root it would be a top-level
+    # module every package shares a name with.
+    (root / "pytest.ini").write_text("[pytest]\npythonpath = .\n", encoding="utf-8")
+    (root / "tests" / f"test_{pkg}.py").write_text(f'''from {pkg}.logic import greeting
+
+
+def test_greeting():
+    assert greeting("Hello", "a.txt") == "Hello, a.txt"
+    assert greeting("Hello", None) == "Hello"
+''', encoding="utf-8")
+    return root
 
 
 # --- where things live --------------------------------------------------------

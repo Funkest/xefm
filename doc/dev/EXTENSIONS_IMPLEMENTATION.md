@@ -49,6 +49,52 @@ outright.
 Keys are validated against `xefm.config`'s `_MODIFIER_ALIASES`, `_NAMED_KEYS`
 and `_PUNCT_NAMES`, the same tables `KeyBindings` parses with.
 
+### The code lint (`lint_code`)
+
+The check also lints every `.py` file in the package, skipping `_vendor/` and
+dot-paths. It uses `ast.walk` over each file's syntax tree:
+
+- **Error:** an `Attribute` whose name starts with `_` but not `__`, unless it
+  is on `self` or `cls`. This is the `user_api` firewall.
+- **Error:** an absolute import of an `xefm` module outside `PUBLIC_MODULES`
+  (`xefm.user_api`, `xefm.path_base`).
+- **Warning:** a call to `print`.
+- **Warning:** `sys.path`.
+
+These findings use `where = "code:<rel path>:<line>"`, and `Problem.__str__`
+prints them without the manifest prefix.
+
+## The authoring skill and the scaffold
+
+The user asked for an AI-agent skill whose instructions, followed as written,
+satisfy every extension requirement. Three pieces make that hold.
+
+- **The skill:** `xefm/skills/xefm-extension-authoring/SKILL.md`. It ships as
+  package data (`pyproject.toml`, `MANIFEST.in`). The macOS and Windows bundle
+  scripts copy the whole `xefm/` tree, so the skill reaches every channel.
+  `xefm ext skill [--install DIR]` prints its path or copies it into
+  `~/.claude/skills/`.
+- **The scaffold:** `scaffold(id, parent)`, behind `xefm ext new`, writes a
+  package with zero findings. It has a manifest, a thin `actions.py` over a
+  plain `logic.py`, `settings.py`, `tests/`, and a `pytest.ini` with
+  `pythonpath = .`. A root `conftest.py` would do the same job, but it would be
+  a top-level module name shared by every package, and the collision check
+  would refuse it.
+- **The checker:** it enforces everything the skill states as a rule, and the
+  skill's workflow ends at "`xefm ext check` is clean".
+
+`test/test_extension_skill.py` keeps the three in step. It asserts that:
+
+- the scaffold has no findings, and its generated test passes when run in a
+  subprocess;
+- the skill's example manifest passes, with each reference stubbed;
+- the contribution kinds, events and public modules the skill lists equal the
+  checker's;
+- every `ctx.*`, `PaneApi` and `EntryInfo` name the skill cites exists;
+- every `xefm ext` subcommand the skill uses exists.
+
+If the API or the checker changes, these tests fail until the skill is updated.
+
 ## Loading
 
 `ConfigManager.load_config` runs these steps in order:

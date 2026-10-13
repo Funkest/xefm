@@ -44,6 +44,14 @@ def _parser() -> argparse.ArgumentParser:
                        ("disable", "keep a package installed but unloaded")):
         p = sub.add_parser(name, help=text)
         p.add_argument("id")
+    new = sub.add_parser("new", help="create a package that passes the check, to start from")
+    new.add_argument("id")
+    new.add_argument("--dir", default=".", help="where to create it (default: here)")
+
+    skill = sub.add_parser("skill", help="the AI-agent skill for writing extensions")
+    skill.add_argument("--install", nargs="?", const=str(Path.home() / ".claude" / "skills"),
+                       metavar="DIR", help="copy it into DIR (default ~/.claude/skills)")
+
     sub.add_parser("sync", help="reinstall listed packages whose files are missing")
     settings = sub.add_parser("settings", help="print a package's settings class "
                               "for config.py, with every default")
@@ -153,6 +161,29 @@ def main(argv: list[str] | None = None, layout: ext.Layout | None = None) -> int
             print(f"error: {exc}", file=sys.stderr)
             return 1
         print(f"{args.id} {args.command}d — takes effect on the next config reload")
+        return 0
+
+    if args.command == "new":
+        try:
+            root = ext.scaffold(args.id, Path(args.dir))
+        except ext.InstallError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(f"created {root} — edit it, then: xefm ext check {root}")
+        return 0
+
+    if args.command == "skill":
+        source = ext.SKILL_DIR
+        if args.install is None:
+            print(source / "SKILL.md")
+            print("Install it for Claude Code with: xefm ext skill --install")
+            return 0
+        import shutil
+        target = Path(args.install).expanduser() / source.name
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(source, target)
+        print(f"installed the {source.name} skill in {target}")
         return 0
 
     if args.command == "settings":

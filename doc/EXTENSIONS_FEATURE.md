@@ -26,6 +26,7 @@ xefm ext disable hello-xefm   # keep it, but don't load it
 xefm ext enable hello-xefm
 xefm ext uninstall hello-xefm # asks whether to delete its data too
 xefm ext sync                 # reinstall anything listed but missing
+xefm ext settings hello-xefm  # its settings class, ready to paste into config.py
 ```
 
 Inside XeFM:
@@ -95,6 +96,31 @@ config still loads.
 `extension-data/`.
 
 ## Writing a package
+
+The quickest start is the scaffold. It creates a package that already passes
+the check, with one action, settings and a test:
+
+```bash
+xefm ext new hello-xefm
+```
+
+### With an AI assistant
+
+XeFM ships a skill for AI coding agents that walks through writing, checking
+and installing a package. The skill covers the manifest, the API your code may
+use, settings, dependencies and testing, and it has the agent run
+`xefm ext check` until the package is clean. Install it for Claude Code with:
+
+```bash
+xefm ext skill --install          # into ~/.claude/skills/
+xefm ext skill                    # just print where it is
+```
+
+Then ask for the feature ("make an XeFM extension that…"). If the agent follows
+the skill, the result meets the requirements below. `xefm ext check` verifies
+every one of them, so a clean check confirms it.
+
+### The layout
 
 A package is a folder containing a manifest and, if it runs code, a Python
 package:
@@ -200,6 +226,18 @@ Each problem it reports names the manifest field it concerns:
 ```
 error: xefm-extension.toml: contributes.actions."hello.greet".entry: module hello_xefm.actions has no top-level 'greet'
 ```
+
+The check also reads the package's Python files, again without running
+them:
+
+- **Error:** using a private name such as `ctx._app` (anything starting with
+  `_` on an object other than `self`), or importing an XeFM module other than
+  `xefm.user_api` and `xefm.path_base`. Such code works today and breaks on
+  any release.
+- **Warning:** `print()`, which never reaches you (use `ctx.message`), and
+  changing `sys.path`.
+
+Files under a `_vendor/` folder are skipped.
 
 The exit status is 0 when the package would install. An install runs the same
 check and installs nothing if it finds an error.
