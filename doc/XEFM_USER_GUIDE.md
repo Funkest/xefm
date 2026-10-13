@@ -769,7 +769,7 @@ For detailed information about specific features, see these dedicated guides:
 ### File Operations
 - [File Operations Feature](FILE_OPERATIONS_FEATURE.md) - Copy, move, duplicate, rename-conflict handling, and progress
 - [Background Jobs](BACKGROUND_JOBS_FEATURE.md) - Keep working while a copy, move or delete runs
-- [Find Similar Files](FIND_SIMILAR_FILES_FEATURE.md) - Identical files and similar videos, in scans that outlive XeFM
+- [Find Similar Files](FIND_SIMILAR_FILES_FEATURE.md) - Identical files and similar images, videos and audio, in scans that outlive XeFM
 - [Batch Rename Feature](BATCH_RENAME_FEATURE.md) - Regex-based renaming for multiple files
 - [Archive Feature](ARCHIVE_FEATURE.md) - Create, extract, and browse archives (incl. password-protected)
 - [File Details Feature](FILE_DETAILS_FEATURE.md) - Viewing detailed file information

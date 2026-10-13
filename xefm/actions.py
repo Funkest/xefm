@@ -671,12 +671,13 @@ _DETAILS: dict[str, str] = {
         "when it asks to start, or with B (or Esc) in its progress dialog."),
     "find_similar": (
         "Scans the selection, or the current folder, for files with identical "
-        "content or for similar videos, using similar-files. The scan runs as "
+        "content, or for similar images, videos or audio, using similar-files. The scan runs as "
         "its own process and keeps going after you quit XeFM; the status bar "
         "and the jobs list show it, and its groups can be looked at while it "
         "is still running. Each group is a folder of the results tree; select "
         "files and press Shift-O to work on the real files in the other pane. "
-        "Similar videos need ffmpeg."),
+        "Similar videos need ffmpeg, similar audio needs fpcalc (Chromaprint); "
+        "similar images need nothing more."),
     "open_list_from_clipboard": (
         "Shows the paths on the clipboard, one per line, as the active pane's "
         "listing — the files can be in many directories. Nothing on disk "
@@ -893,7 +894,7 @@ _FILER_ACTIONS = [
     _a("jobs", FILER, "List background jobs"),
     # Similar-file scans (#571), run by similar-files as their own process.
     # Unbound: the Tools menu and the palette reach it.
-    _a("find_similar", FILER, "Find identical files or similar videos",
+    _a("find_similar", FILER, "Find identical files, or similar images, videos or audio",
        default_keys=()),
     # Panes
     _a("sync_current_to_other", FILER, "Go to the other pane's directory"),

@@ -6,7 +6,9 @@ don't need twice:
 | Method | Finds | Needs |
 |--------|-------|-------|
 | **Identical files** | the same content under different names or in different folders | nothing more |
+| **Similar images** | the same picture resized, re-encoded or lightly edited | nothing more |
 | **Similar videos** | the same video re-encoded or resized, and clips cut from a longer video | [ffmpeg](https://ffmpeg.org) on your `PATH` |
+| **Similar audio** | the same recording re-encoded, or with its tags changed | `fpcalc` from [Chromaprint](https://acoustid.org/chromaprint) on your `PATH` (`brew install chromaprint`, `apt install libchromaprint-tools`) |
 
 The detection is done by [similar-files](https://github.com/crftwr/similar-files),
 which XeFM runs for you. A method that is missing something shows in the menu

@@ -265,3 +265,27 @@ def test_a_running_scan_offers_its_provisional_groups(app, dirs):
     assert [f.name for f in pane["files"]] == ["g (1)"]
     from xefm import app as xefm_app
     assert "groups may change" in xefm_app._xefml_header_text(pane["path"], 200)
+
+
+class TestMethods:
+    """The launcher offers all four of similar-files' methods (#571):
+    identical, images, video and audio. Images need only Pillow, which XeFM
+    already ships; video and audio need an external program, and say which."""
+
+    def test_every_method_is_a_similar_files_extractor(self):
+        from similar_files.registry import extractors
+        names = [m for m, _ in similar_scan.METHODS if m != similar_scan.IDENTICAL]
+        assert names == [similar_scan.IMAGE, similar_scan.VIDEO, similar_scan.AUDIO]
+        known = extractors()
+        for name in names:
+            assert name in known, name
+            assert name in similar_scan.LABELS
+
+    def test_images_need_nothing_beyond_pillow(self):
+        assert similar_scan.unavailable(similar_scan.IMAGE) is None
+
+    def test_audio_without_fpcalc_says_what_to_install(self):
+        from unittest.mock import patch
+        with patch("shutil.which", return_value=None):
+            why = similar_scan.unavailable(similar_scan.AUDIO)
+        assert why is not None and "fpcalc" in why

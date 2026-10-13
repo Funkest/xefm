@@ -43,14 +43,20 @@ from xefm.log_manager import getLogger
 logger = getLogger("SimilarScan")
 
 IDENTICAL = "identical"
+IMAGE = "image"
 VIDEO = "video"
+AUDIO = "audio"
 
-#: The methods the launcher offers, in its order: (name, label).
+#: The methods the launcher offers, in its order: (name, label). The names are
+#: similar-files' own extractor names, passed to its CLI as they are.
 METHODS = (
     (IDENTICAL, "Identical files — the same content"),
+    (IMAGE, "Similar images — resized, re-encoded or lightly edited"),
     (VIDEO, "Similar videos — re-encoded, resized, or cut from a longer one"),
+    (AUDIO, "Similar audio — the same recording re-encoded or re-tagged"),
 )
-LABELS = {IDENTICAL: "Identical files", VIDEO: "Similar videos"}
+LABELS = {IDENTICAL: "Identical files", IMAGE: "Similar images",
+          VIDEO: "Similar videos", AUDIO: "Similar audio"}
 
 #: A running scan rewrites its status every few seconds (similar_files.status
 #: HEARTBEAT is 5). One quiet for this long, whose process is gone, is lost.
