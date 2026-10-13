@@ -1339,10 +1339,15 @@ class StatusBar(Widget):
         jobs = self.app._jobs_text()
         if jobs:
             jobs = elide(jobs, avail, where="end", measure=ctx.measure_text)
-            jw = ctx.measure_text(jobs)
-            ctx.draw_text(x + avail - jw, 0, jobs,
-                          Style(fg=ctx.theme.accent, attr=TextAttribute.BOLD))
+            jobs_style = Style(fg=ctx.theme.accent, attr=TextAttribute.BOLD)
+            jw = ctx.measure_text(jobs, jobs_style)
+            jx = x + avail - jw
+            ctx.draw_text(jx, 0, jobs, jobs_style)
+            # A click on it opens the jobs list (#599 hand check).
+            self._jobs_hit = (jx, jx + jw)
             avail = max(0.0, avail - jw - 2.0)
+        else:
+            self._jobs_hit = None
         full = self._text()
         text = elide(full, avail, where="end", measure=ctx.measure_text)
         ctx.draw_text(x, 0, text, Style(fg=ctx.theme.muted_text))
@@ -1367,6 +1372,10 @@ class StatusBar(Widget):
         clip = getattr(self, "_clip_hit", None)
         if clip is not None and clip[0] <= x < clip[1]:
             self.app.clipboard_show()
+            return True
+        jobs = getattr(self, "_jobs_hit", None)
+        if jobs is not None and jobs[0] <= x < jobs[1]:
+            self.app.show_jobs()
             return True
         for x0, x1, action in self._hits:
             if x0 <= x < x1:
@@ -5525,31 +5534,32 @@ class XeFMApp:
     # --- background jobs (#567) ----------------------------------------------
 
     def _jobs_text(self) -> str:
-        """The status bar's job segment: the running job and its progress, how
-        many wait behind it, and "needs you" when one is waiting on a prompt;
-        then similar-file scans (#571) — running ones with their progress, and
-        finished ones not looked at yet. Empty when there is nothing."""
-        key = self._keys_label("jobs")
-        hint = f" ({key})" if key else ""
+        """The status bar's job segment, kept short (#599 hand check): the
+        running job and its progress, and how many wait behind it — ``⟳ Copy
+        42% +2`` — or ``⚠ Copy`` when one waits on a prompt; then similar-file
+        scans (#571), running ones with their progress and finished ones not
+        looked at yet. No key hint: a click on it opens the list. Empty when
+        there is nothing."""
         parts = []
         jobs = self.tasks.background_tasks()
         waiting = next((t for t in jobs if t.needs_attention), None)
-        if waiting is not None:
-            return f"⚠ {waiting.title.rstrip('… ')} needs you{hint}"
         running = self.tasks.running_task()
-        if running is not None:
-            pct = int(running.progress.get_progress_percentage())
-            parts.append(f"⟳ {running.title.rstrip('… ')} {pct}%")
         queued = self.tasks.queued_count()
-        if queued:
-            parts.append(f"+{queued} queued")
+        more = f" +{queued}" if queued else ""
+        if waiting is not None:
+            parts.append(f"⚠ {waiting.title.rstrip('… ')}{more}")
+        elif running is not None:
+            pct = int(running.progress.get_progress_percentage())
+            parts.append(f"⟳ {running.title.rstrip('… ')} {pct}%{more}")
+        elif queued:
+            parts.append(f"⟳ +{queued}")
         for job, state, text in self._scan_rows:
             if state in (similar_scan.RUNNING, similar_scan.STARTING):
                 parts.append(f"⟳ {job.label} {text}")
             elif not job.seen:
                 mark = "✓" if state == similar_scan.DONE else "⚠"
                 parts.append(f"{mark} {job.label}: {text}")
-        return " ".join(parts) + hint if parts else ""
+        return "  ".join(parts)
 
     # --- similar-file scans (#571) -------------------------------------------
 

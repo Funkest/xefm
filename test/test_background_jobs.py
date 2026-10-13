@@ -324,16 +324,26 @@ def app(tmp_path):
 def test_the_status_bar_names_the_running_job(app):
     task, release, done = _held_task(app.tasks, app.panel, detached=True)
     _second, release2, _ = _held_task(app.tasks, app.panel, detached=True)
-    text = app._jobs_text()
-    assert text.startswith("⟳ Copy")
-    assert "+1 queued" in text
+    assert app._jobs_text() == "⟳ Copy 0% +1"      # short: no key, no "queued"
     third, release3, _ = _held_task(app.tasks, app.panel)
     app.tasks.detach(third)                    # sent back: suspended, queued
-    assert "+2 queued" in app._jobs_text()
+    assert app._jobs_text() == "⟳ Copy 0% +2"
     release3.set()
-    assert "Ctrl-G" in text or "Ctrl+G" in text or "⌃G" in text
     release.set()
     release2.set()
+
+
+def test_a_click_on_the_job_segment_opens_the_list(app):
+    from puikit import Event, EventType
+    _task, release, _ = _held_task(app.tasks, app.panel, detached=True)
+    app.panel.render()
+    x0, x1 = app.status._jobs_hit
+    opened = []
+    app.show_jobs = lambda: opened.append(True)
+    app.status.handle_event(Event(type=EventType.MOUSE_CLICK, button="left",
+                                  x=(x0 + x1) / 2, y=0))
+    assert opened == [True]
+    release.set()
 
 
 def test_quitting_with_jobs_asks_and_defaults_to_cancel(app):

@@ -15,13 +15,13 @@ XeFM: browse, view files, even start another operation.
 The right end of the status bar shows the job:
 
 ```
-⟳ Copy 42% +1 queued (Ctrl-G)
+⟳ Copy 42% +1
 ```
 
-If more wait behind it, `+N queued` says how many.
+`+1` is how many more jobs wait behind it.
 
-**View → Background Jobs…** (`Ctrl-G`) lists every job: what it does, from
-where to where, and how far it is.
+**Click it**, or choose **View → Background Jobs…** (`Ctrl-G`), to list every
+job: what it does, from where to where, and how far it is.
 
 ```
 Copy 12 items  ~/photos → s3://bucket/backup — 42% (1.2G / 2.9G)
@@ -55,10 +55,10 @@ the destination, it stops and waits. No dialog pops up in the middle of your
 work. The status bar shows instead:
 
 ```
-⚠ Copy needs you (Ctrl-G)
+⚠ Copy
 ```
 
-Open the jobs list and choose the job. Its progress dialog comes back with the
+Click it to open the jobs list, and choose the job. Its progress dialog comes back with the
 question, and once you answer, it carries on. Send it back with **Run in
 background** if you like.
 
