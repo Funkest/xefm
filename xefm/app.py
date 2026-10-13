@@ -87,7 +87,7 @@ from xefm import search_options as search_opts
 from xefm.isearch_bar import ISearchBar
 from xefm import filters
 from xefm import name_key
-from xefm import document_text, keymap_presets, similar_scan, tree_walk, xefml
+from xefm import document_text, keymap_presets, os_index, similar_scan, tree_walk, xefml
 from xefm.file_clipboard import FileClipboard, conflicts as clipboard_conflicts
 from xefm.quick_view import QuickView
 from xefm.log_manager import (LOG_ERROR_SOURCE, LOG_SOURCE, clear_log_sink,
@@ -3071,6 +3071,7 @@ class XeFMApp:
                 "drives": (self.show_drives, False),
                 "connect_server": (self.show_connect_server, False),
                 "find_files": (self.show_search, False),
+                "index_search": (self.index_search, False),
                 "find_in_files": (self.show_content_search, False),
                 "history": (self.show_history, False),
                 "programs": (self.show_programs, False),
@@ -3490,6 +3491,11 @@ class XeFMApp:
         placeholder for binaries (issue #212). A file inside a
         password-protected zip prompts for the password first (#180).
         """
+        # A Finder saved search (Smart Folder) is a query, not a document:
+        # Enter runs it (#579).
+        if getattr(entry, "suffix", "") == ".savedSearch" and os_index.engine() == "Spotlight":
+            self._open_saved_search(pane, entry)
+            return
         # A reference in a .xefml tree that points at a directory goes there:
         # wrapping the real directory inside the tree would turn a snapshot
         # into a live view (#573).
@@ -3958,6 +3964,11 @@ class XeFMApp:
             MenuItem("Filter…", on_select=self.enter_filter, shortcut=sc("filter")),
             MenuItem("Search Files…", on_select=self.show_search, shortcut=sc("find_files")),
             MenuItem("Search Content…", on_select=self.show_content_search, shortcut=sc("find_in_files")),
+            # The OS index (#579): named for what it is on this platform.
+            MenuItem(f"Search {os_index.engine() or 'Index'}…",
+                     on_select=lambda: self._menu("index_search"),
+                     enabled=lambda: os_index.engine() is not None,
+                     shortcut=sc("index_search")),
             SEPARATOR,
             MenuItem("Show Hidden Files", on_select=lambda: self._menu("toggle_hidden"),
                      checked=lambda: self.flm.show_hidden, shortcut=sc("toggle_hidden")),
@@ -6832,6 +6843,104 @@ class XeFMApp:
             region=self._active_pane_region())
         self.panel.render()
 
+    # --- the OS search index (#579) ----------------------------------------------
+
+    _INDEX_STATE = "index_search.history"
+
+    def index_search(self) -> None:
+        """Search the index the OS keeps — Spotlight on macOS, Windows Search
+        on Windows — under the active pane's folder, and show the matches as
+        a list pane (#579). The query is the engine's own language: Spotlight
+        reads it as its search field does (words, ``kind:pdf``, metadata
+        predicates); Windows Search matches words against names and
+        contents, or takes ``where …`` as raw SQL. Earlier queries are
+        offered again, most recent first."""
+        why = os_index.unavailable()
+        if why:
+            self.log_info(why)
+            return
+        pane = self.active_pane()
+        scope = pane["path"]
+        if pane.get("virtual") or path_schemes.is_uri(str(scope)):
+            self.log_info(f"{os_index.engine()} searches local folders; this pane "
+                          f"is showing {scope}")
+            return
+
+        def run(text: str) -> None:
+            query = text.strip()
+            if query:
+                self._record_history(self._INDEX_STATE, query)
+                self._run_index_search(self.pm.active_pane, query, str(scope))
+            self.panel.render()
+
+        show_history_input(
+            self.panel, self._history(self._INDEX_STATE),
+            title=f"Search {os_index.engine()}", prompt="Query:",
+            accept_label="search", on_accept=run,
+            on_remove=lambda q: self._forget_history(self._INDEX_STATE, q),
+            on_cancel=self.panel.render, region=self._active_pane_region())
+        self.panel.render()
+
+    def _history(self, key: str) -> list:
+        history = self.state_manager.get_state(key, [])
+        return [c for c in history if isinstance(c, str)] if isinstance(history, list) else []
+
+    def _record_history(self, key: str, entry: str) -> None:
+        history = [c for c in self._history(key) if c != entry]
+        history.insert(0, entry)
+        self.state_manager.set_state(key, history[:self._LIST_COMMAND_HISTORY_MAX])
+
+    def _forget_history(self, key: str, entry: str) -> bool:
+        history = self._history(key)
+        if entry not in history:
+            return False
+        history.remove(entry)
+        self.state_manager.set_state(key, history)
+        return True
+
+    def _run_index_search(self, pane_name: str, query: str, scope: str, *,
+                          title: str | None = None, run_search=None) -> None:
+        """Query the OS index on a task — the progress dialog counts matches,
+        Esc stops it — and open what it found as ``pane_name``'s list."""
+        engine = os_index.engine() or "Index"
+        title = title or f"{engine}: {query}"
+        task = Task(title, config=self.config, kind="index_search", busy_label="Searching…")
+        search = run_search or (lambda t: os_index.search(
+            query, scope, cancelled=t.cancelled,
+            on_count=lambda n: setattr(t, "counted", n)))
+
+        def run(t: Task) -> dict:
+            return {"result": search(t), "cancelled": t.cancelled()}
+
+        def on_done(res: dict) -> None:
+            result = res.get("result")
+            if res.get("cancelled") or result is None or result.cancelled:
+                self.log_info(f"{title}: stopped")
+            elif result.error:
+                self.log_info(f"{title}: {result.error}")
+            elif not result.paths:
+                self.log_info(f"{title}: nothing found")
+            else:
+                self.open_path_list(pane_name, result.paths, title=title, base=scope)
+            self.panel.render()
+
+        self.tasks.submit(task, self.panel, run=run, on_done=on_done)
+
+    def _open_saved_search(self, pane: dict, entry) -> None:
+        """``Enter`` on a Finder saved search (a Smart Folder's
+        ``.savedSearch``): run its query in its scopes and show the matches as
+        a list, titled with its name."""
+        try:
+            query, scopes = os_index.read_saved_search(entry.read_bytes())
+        except (OSError, ValueError) as e:
+            self.log_info(f"{entry.name}: {e}")
+            return
+        self._run_index_search(
+            self._pane_name_of(pane), query, str(pane["path"]), title=entry.stem,
+            run_search=lambda t: os_index.search_saved(
+                query, scopes, cancelled=t.cancelled,
+                on_count=lambda n: setattr(t, "counted", n)))
+
     def _list_command_history(self) -> list:
         """The commands run so far, most recent first."""
         history = self.state_manager.get_state(self._LIST_COMMAND_STATE, [])
@@ -8996,6 +9105,7 @@ class XeFMApp:
             ("clear_filter", "Clear the filename filter"),
             ("find_files", "Recursive filename search"),
             ("find_in_files", "Recursive content (grep) search"),
+            ("index_search", "Search the OS index (Spotlight / Windows Search) under this folder"),
             ("options", "In the search dialog: case, pattern, subfolders"),
         )),
         # The only non-file-list surface here, and deliberately: the search bar

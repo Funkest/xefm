@@ -774,6 +774,7 @@ For detailed information about specific features, see these dedicated guides:
 - [Batch Rename Feature](BATCH_RENAME_FEATURE.md) - Regex-based renaming for multiple files
 - [Archive Feature](ARCHIVE_FEATURE.md) - Create, extract, and browse archives (incl. password-protected)
 - [File Details Feature](FILE_DETAILS_FEATURE.md) - Viewing detailed file information
+- [Searching the OS Index](OS_INDEX_SEARCH_FEATURE.md) - Spotlight and Windows Search, results as a list
 - [Documents as Text](DOCUMENT_VIEWER_FEATURE.md) - PDF, Office and EPUB files in the viewer and in content search
 - [Quick View](QUICK_VIEW_FEATURE.md) - The other pane previews the item under the cursor
 - [Tree Files](TREE_FILES_FEATURE.md) - Browse .xefml groups of references, act on the real files

@@ -147,6 +147,7 @@ the mouse for the first, take the whole buffer with the second. See
 | Filter… | `filter` |
 | Search Files… | `find_files` |
 | Search Content… | `find_in_files` |
+| Search Spotlight… / Search Windows Search… | `index_search` — see [Searching the OS Index](OS_INDEX_SEARCH_FEATURE.md) |
 | Show Hidden Files | `toggle_hidden` |
 | Reverse Sort | *(menu only)* |
 | Sort By ▸ | (submenu: Name / Extension / Size / Date — also the `quick_sort_*` actions) |
