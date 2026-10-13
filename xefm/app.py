@@ -35,6 +35,7 @@ import socket
 import subprocess
 import threading
 import time
+import types
 import sys
 from pathlib import Path as _StdPath
 from urllib.parse import quote, unquote, urlsplit
@@ -729,7 +730,8 @@ def _virtual_header_text(virtual: dict, avail: float, measure=len) -> str:
     and the root its rows are named relative to. No row count — the footer
     already has it.
 
-    **A list** reads ``[title] root``, in the bracket style of an archive's
+    **A list** — or a branch view, titled ``Branch`` — reads ``[title] root``,
+    in the bracket style of an archive's
     ``[foo.zip]/sub``, and the root has priority. It is derived from the paths,
     not from where the pane was, so the header is the one place that says what
     a row's ``src/main.py`` is relative to. When space runs out the title is
@@ -743,7 +745,7 @@ def _virtual_header_text(virtual: dict, avail: float, measure=len) -> str:
     root = virtual.get("root")
     has_root = root is not None and root is not name_key.WHOLE_PATH
 
-    if virtual.get("kind") == "list":
+    if virtual.get("kind") in ("list", "branch"):
         title = virtual["title"]
         if not has_root:
             return elide(f"[{title}]", avail, where="end", measure=measure)
@@ -1314,6 +1316,22 @@ def _search_rules(show_hidden: bool, recursive: bool):
         return recursive and attrs["is_dir"] and shows(entry, attrs)
 
     return shows, descend
+
+def _branch_files(root, cancel, show_hidden: bool):
+    """Yield ``(entry, attrs)`` for every file below ``root`` — branch view's
+    walk. A hidden entry is skipped unless the pane shows them, and is not
+    descended either; a symbolic link to a directory is neither listed nor
+    descended, so a link pointing back up the tree cannot loop."""
+    def shows(entry, attrs) -> bool:
+        return show_hidden or not is_hidden(entry.name, attrs)
+
+    def descend(entry, attrs) -> bool:
+        return attrs["is_dir"] and not attrs["is_link"] and shows(entry, attrs)
+
+    for entry, attrs in tree_walk.walk(root, cancel, descend):
+        if not attrs["is_dir"] and shows(entry, attrs):
+            yield entry, attrs
+
 
 class XeFMApp:
     """Controller: owns pane state and maps key actions onto it."""
@@ -2424,7 +2442,8 @@ class XeFMApp:
         self._list_pane(self._pane_name_of(pane), on_ready=landed)
 
     def _list_virtual(self, pane: dict, virtual: dict, *, on_ready=None,
-                      on_empty=None, on_result=None, load=None) -> None:
+                      on_empty=None, on_result=None, load=None,
+                      entries=None) -> None:
         """(Re)build a virtual pane's listing from ``virtual['results']`` on a
         worker thread — the virtual counterpart of :meth:`_list_pane`.
 
@@ -2457,6 +2476,10 @@ class XeFMApp:
         as a list file on a remote host. Its ``relative`` count and
         ``problems`` ride along in the result, with ``total``, the number of
         paths listed.
+
+        ``entries`` — ``[(Path, attrs), …]`` a walk has already read (branch
+        view) — are installed as they are, with no probe: the walk's own
+        listings were the existence check.
 
         ``on_result(result)`` runs just before a listing is installed, for a
         caller that reports what was left out (``missing``, ``unreachable``);
@@ -2501,10 +2524,11 @@ class XeFMApp:
                 listed = resolved.paths
                 extra = {"relative": resolved.relative,
                          "problems": list(resolved.problems)}
+            read = {} if entries is None else {"entries": entries}
             result = self.flm.compute_virtual_listing(
                 listed, filter_pattern=filter_pattern, sort_mode=sort_mode,
                 sort_reverse=sort_reverse, rel_root=rel_root,
-                derive_root=derive_root)
+                derive_root=derive_root, **read)
             result["total"] = len(listed)
             result.update(extra)
             self._result_queue.put((pane_name, gen, result, on_ready,
@@ -2739,6 +2763,7 @@ class XeFMApp:
                 "open_item": (lambda: self._open(self.active_pane()), True),
                 "go_parent": (lambda: self._go_parent(self.active_pane()), True),
                 "go_root": (lambda: self._go_root(self.active_pane()), True),
+                "branch_view": (self.branch_view, True),
                 "nav_left": (self._act_nav_left, True),
                 "nav_right": (self._act_nav_right, True),
                 "focus_left": (lambda: self._activate_pane("left"), True),
@@ -3411,6 +3436,10 @@ class XeFMApp:
                      enabled=lambda: platform.system() in ("Darwin", "Windows")),
             MenuItem("History…", on_select=self.show_history, shortcut=sc("history")),
             SEPARATOR,
+            MenuItem("Branch View", on_select=lambda: self._menu("branch_view"),
+                     checked=lambda: (self.active_pane().get("virtual") or {})
+                     .get("kind") == "branch",
+                     shortcut=sc("branch_view")),
             # A list of paths in place of a directory (#453): where the pane
             # goes, like everything above, and left again with Parent
             # Directory. One submenu for the three sources rather than three
@@ -5865,6 +5894,105 @@ class XeFMApp:
                         load=lambda: path_list.read_lists(files),
                         relative_to=relative_to)
 
+    def branch_view(self) -> None:
+        """Show every file below the active pane's directory as one flat list —
+        branch view (#547) — or, on a pane already showing one, go back.
+
+        Everything that works on a list works here: sort by size to find what
+        takes the space, by date to see what changed across the tree, filter by
+        ``*.jpg`` and copy the matches into one folder. Rows are named relative
+        to the directory, as search results are.
+
+        With a selection, only that is flattened: each selected directory's
+        files, and each selected file as itself — the narrower view, without a
+        second key. Files only: a directory has no row of its own, since every
+        file below it is already there.
+
+        The walk is :func:`xefm.tree_walk.walk`, on a task with the progress
+        dialog counting what it found and Esc stopping it, so a large or remote
+        tree never holds the window. Hidden entries follow the pane: what it
+        does not show is neither listed nor descended. Symbolic links to
+        directories are not descended, so a link back up the tree cannot make
+        the walk endless. The list is a snapshot — leave it and come back to
+        see what has changed since."""
+        pane = self.active_pane()
+        virtual = pane.get("virtual")
+        if virtual and virtual.get("kind") == "branch":
+            self._go_parent(pane)
+            return
+        if virtual:
+            self.log_info("Branch view flattens a directory; this pane is "
+                          "showing a list")
+            return
+        info = pane.get("file_info") or {}
+        selected = [f for f in pane["files"] if str(f) in pane["selected_files"]]
+        roots = [f for f in selected if (info.get(str(f)) or {}).get("is_dir")]
+        picked = [f for f in selected if f not in roots]
+        if not selected:
+            roots = [pane["path"]]
+        self._run_branch_walk(self.pm.active_pane, roots, picked)
+
+    def _run_branch_walk(self, pane_name: str, roots: list, picked: list) -> None:
+        """Walk ``roots`` for :meth:`branch_view` on a task and open what it
+        finds, together with the files ``picked`` from the selection, as pane
+        ``pane_name``'s branch list. Esc stops the walk and leaves the pane as
+        it was: a part of a tree, in whatever order the storage answered,
+        would look complete and not be."""
+        pane = self.pane(pane_name)
+        root = pane["path"]
+        show_hidden = self.flm.show_hidden
+        # The selected files' records from the listing the pane already has —
+        # copied without the compared name, which was made for a directory pane
+        # and is recomputed relative to the branch root.
+        records = {str(p): a for p, a in (pane.get("_listing_entries") or ())}
+        picked_entries = [(f, {k: v for k, v in records[str(f)].items()
+                               if k != "cmp_name"})
+                          for f in picked if str(f) in records]
+        task = Task(f"Branch view: {root}", config=self.config,
+                    kind="branch_view", busy_label="Reading…")
+
+        def run(t: Task) -> dict:
+            flag = types.SimpleNamespace(is_set=t.cancelled)
+            found = list(picked_entries)
+            for r in roots:
+                for entry, attrs in _branch_files(r, flag, show_hidden):
+                    found.append((entry, attrs))
+                    t.counted = len(found)
+            return {"entries": found, "cancelled": t.cancelled()}
+
+        def on_done(res: dict) -> None:
+            if res.get("cancelled") or "entries" not in res:
+                self.log_info("Branch view: cancelled")
+            else:
+                self._open_branch(pane_name, root, res["entries"])
+            self.panel.render()
+
+        self.tasks.submit(task, self.panel, run=run, on_done=on_done)
+
+    def _open_branch(self, pane_name: str, root, entries: list) -> None:
+        """Install ``entries`` — the walk's ``(Path, attrs)`` — as pane
+        ``pane_name``'s branch list, named relative to ``root``. Go to parent,
+        or the branch view key again, lands back on the row the cursor was on."""
+        pane = self.pane(pane_name)
+        if not entries:
+            self.log_info(f"Branch view: no files below {root}")
+            return
+        files = pane["files"]
+        idx = pane["focused_index"]
+        return_to = files[idx].name if files and 0 <= idx < len(files) else None
+        virtual = {"kind": "branch", "title": "Branch", "root": root,
+                   "results": [p for p, _ in entries], "meta": {},
+                   "return_to": return_to}
+
+        def landed(p: dict) -> None:
+            n = len(virtual["results"])
+            self.log_info(f"Branch view: {n} file{'' if n == 1 else 's'} below "
+                          f"{root}  — {self._keys_label('branch_view')} or "
+                          f"{self._keys_label('go_parent')} back")
+
+        self._list_virtual(pane, virtual, on_ready=landed, entries=entries)
+        self.panel.render()
+
     def _copy_to_clipboard(self, render, label: str) -> None:
         """Shared body of the clipboard-copy actions: gather the selection (or
         cursor entry), join ``render(entry)`` for each with newlines, push it to
@@ -7649,6 +7777,7 @@ class XeFMApp:
             ("jump_to_path", "Jump to a typed path"),
             ("drives", "Open the drives / locations picker"),
             ("history", "Go to a recently-visited directory"),
+            ("branch_view", "Show every file below this directory as one list"),
             ("open_list_from_clipboard",
              "Open the paths on the clipboard as a list (Go menu)"),
             ("open_list_from_command",

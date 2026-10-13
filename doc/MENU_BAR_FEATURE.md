@@ -115,6 +115,7 @@ the mouse for the first, take the whole buffer with the second. See
 | Jump to Path… | `jump_to_path` |
 | Drives… | `drives` |
 | History… | `history` |
+| Branch View | `branch_view` — see [Branch View](BRANCH_VIEW_FEATURE.md) |
 | Open List → From Clipboard | `open_list_from_clipboard` *(ships unbound)* — see [File lists](FILE_LIST_IMPORT_FEATURE.md) |
 | Open List → From Command… | `open_list_from_command` *(ships unbound)* |
 | Open List → From File | `open_list_from_file` *(ships unbound)* — also **Open as List** on a file's right-click menu |
