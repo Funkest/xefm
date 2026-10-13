@@ -876,6 +876,12 @@ class S3PathImpl(PathImpl):
         """Whether this path is absolute"""
         return True  # S3 paths are always absolute
     
+    def forget_cached_metadata(self) -> None:
+        self._size_cached = None
+        self._mtime_cached = None
+        if self._key:
+            self._cache.invalidate_key(self._bucket, self._key)
+
     def stat(self):
         """Return the result of os.stat() on this path"""
         if not self._key:

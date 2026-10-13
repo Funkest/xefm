@@ -768,9 +768,16 @@ For detailed information about specific features, see these dedicated guides:
 
 ### File Operations
 - [File Operations Feature](FILE_OPERATIONS_FEATURE.md) - Copy, move, duplicate, rename-conflict handling, and progress
+- [File Clipboard](FILE_CLIPBOARD_FEATURE.md) - Copy or cut now, paste wherever you go next (and with Finder / Explorer)
+- [Background Jobs](BACKGROUND_JOBS_FEATURE.md) - Keep working while a copy, move or delete runs
+- [Find Similar Files](FIND_SIMILAR_FILES_FEATURE.md) - Identical files and similar images, videos and audio, in scans that outlive XeFM
 - [Batch Rename Feature](BATCH_RENAME_FEATURE.md) - Regex-based renaming for multiple files
 - [Archive Feature](ARCHIVE_FEATURE.md) - Create, extract, and browse archives (incl. password-protected)
 - [File Details Feature](FILE_DETAILS_FEATURE.md) - Viewing detailed file information
+- [Searching the OS Index](OS_INDEX_SEARCH_FEATURE.md) - Spotlight and Windows Search, results as a list
+- [Documents as Text](DOCUMENT_VIEWER_FEATURE.md) - PDF, Office and EPUB files in the viewer and in content search
+- [Quick View](QUICK_VIEW_FEATURE.md) - The other pane previews the item under the cursor
+- [Tree Files](TREE_FILES_FEATURE.md) - Browse .xefml groups of references, act on the real files
 - [File Monitoring Feature](FILE_MONITORING_FEATURE.md) - Automatic refresh when directories change on disk
 
 ### Remote and Cloud Storage
@@ -779,6 +786,9 @@ For detailed information about specific features, see these dedicated guides:
 
 ### Navigation and Search
 - [Navigation Dialogs Feature](NAVIGATION_DIALOGS_FEATURE.md) - Favorites, jump, history, and drives pickers
+- [Keymap Presets](KEYMAP_PRESETS_FEATURE.md) - A function-key layout with nothing on the bare letters
+- [Folder Tabs](FOLDER_TABS_FEATURE.md) - Several places kept open in each pane
+- [Flat View](FLAT_VIEW_FEATURE.md) - Every file below a directory as one flat list
 - [Connect to Server](CONNECT_TO_SERVER_FEATURE.md) - Mount a NAS or file server from inside XeFM
 - [Tab Completion Feature](TAB_COMPLETION_FEATURE.md) - Path completion in input dialogs
 - [Migemo Search Feature](MIGEMO_SEARCH_FEATURE.md) - Japanese matching from typed romaji in incremental search

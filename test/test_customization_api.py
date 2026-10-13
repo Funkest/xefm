@@ -221,15 +221,15 @@ def test_a_config_missing_an_action_still_gets_its_keys():
 
 
 def test_the_context_table_is_rebuilt_when_the_registry_changes(kb):
-    assert kb.find_action_for_event(key("y", "y"), False, xa.FILER) is None
-    kb._bindings = dict(kb._bindings, mine=["Y"])
+    assert kb.find_action_for_event(key("z", "z"), False, xa.FILER) is None
+    kb._bindings = dict(kb._bindings, mine=["Z"])
     xa.registry.register(xa.Action(name="mine", context=xa.FILER,
                                    func=lambda ctx: None, source="user"))
     try:
-        assert kb.find_action_for_event(key("y", "y"), False, xa.FILER) == "mine"
+        assert kb.find_action_for_event(key("z", "z"), False, xa.FILER) == "mine"
     finally:
         xa.registry.unregister_source("user")
-    assert kb.find_action_for_event(key("y", "y"), False, xa.FILER) is None
+    assert kb.find_action_for_event(key("z", "z"), False, xa.FILER) is None
 
 
 # --------------------------------------------------------------------------- #
@@ -272,25 +272,25 @@ def test_every_shipped_rename_keeps_its_alias(old, current, context):
 def test_a_config_binding_an_old_name_still_works():
     """The whole point of aliases: a config written before a rename keeps
     working, key for key."""
-    bindings = {old: ["Y"] for old, _c, _x in SHIPPED_RENAMES if _x == xa.FILER}
+    bindings = {old: ["Z"] for old, _c, _x in SHIPPED_RENAMES if _x == xa.FILER}
     kb = KeyBindings(bindings)
     for old, current, context in SHIPPED_RENAMES:
         if context is not xa.FILER:
             continue
-        assert kb.find_action_for_event(key("y", "y"), True, context) is not None
-        assert kb.get_keys_for_action(current, context)[0] == ["Y"], current
+        assert kb.find_action_for_event(key("z", "z"), True, context) is not None
+        assert kb.get_keys_for_action(current, context)[0] == ["Z"], current
 
 
 def test_an_old_viewer_name_still_reaches_its_viewer():
     # A config from before the rename: the old spelling, and only the old one.
     bindings = dict(DefaultConfig.KEY_BINDINGS)
     del bindings["image_viewer.zoom_in"]
-    bindings["image_zoom_in"] = ["Y"]
+    bindings["image_zoom_in"] = ["Z"]
     kb = KeyBindings(bindings)
-    assert kb.find_action_for_event(key("y", "y"), False,
+    assert kb.find_action_for_event(key("z", "z"), False,
                                     xa.IMAGE_VIEWER) == "image_viewer.zoom_in"
     assert kb.get_keys_for_action("image_viewer.zoom_in",
-                                  xa.IMAGE_VIEWER)[0] == ["Y"]
+                                  xa.IMAGE_VIEWER)[0] == ["Z"]
 
 
 def test_the_current_name_wins_when_a_config_has_both():
@@ -508,10 +508,10 @@ def test_a_user_action_runs_from_the_key_it_is_bound_to(app_with):
     def select_docs(ctx):
         ctx.pane.select(lambda e: e.suffix == ".docx")
 
-    bindings = dict(DefaultConfig.KEY_BINDINGS, **{"select-docs": ["Shift-Y"]})
+    bindings = dict(DefaultConfig.KEY_BINDINGS, **{"select-docs": ["Shift-Z"]})
     app, tmp = app_with(ACTIONS={"select-docs": select_docs}, KEY_BINDINGS=bindings)
 
-    app.on_event(key("y", "Y", {"shift"}))
+    app.on_event(key("z", "Z", {"shift"}))
     chosen = sorted(os.path.basename(p) for p in app.active_pane()["selected_files"])
     assert chosen == ["b.docx", "c.docx"]
 
@@ -705,7 +705,7 @@ def test_the_help_dialog_lists_the_config_s_own_actions(app_with):
 
     app, _ = app_with(
         ACTIONS={"select-docs": {"func": mine, "description": "Select documents"}},
-        KEY_BINDINGS=dict(DefaultConfig.KEY_BINDINGS, **{"select-docs": ["Shift-Y"]}))
+        KEY_BINDINGS=dict(DefaultConfig.KEY_BINDINGS, **{"select-docs": ["Shift-Z"]}))
     app.panel.render = lambda *a, **k: None
     import xefm.app as module
     original = module.show_markdown

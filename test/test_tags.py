@@ -1,0 +1,396 @@
+"""File tags (#585): the stores (Finder, XDG, NTFS stream, SSH, S3), the edit
+helpers, carrying tags on copy, the file list's tag cache, and the B / J
+integration.
+
+Store tests that need the real OS facility skip elsewhere: Finder tags run on
+macOS, XDG tags on Linux. The NTFS-stream store is exercised through its file
+format (on a non-Windows system ``name:xefm.tags`` is an ordinary file); the
+SSH store runs its remote scripts through a local ``sh``.
+
+Run with: python -m pytest test/test_tags.py -v
+"""
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import unittest
+from unittest.mock import patch
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+
+from xefm import tags  # noqa: E402
+from xefm.tags import Tag  # noqa: E402
+
+DARWIN = sys.platform == "darwin"
+LINUX = sys.platform.startswith("linux")
+
+
+class _Tmp(unittest.TestCase):
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def file(self, name="a.txt"):
+        path = os.path.join(self.tmp, name)
+        with open(path, "w") as f:
+            f.write(name)
+        return path
+
+
+class Helpers(unittest.TestCase):
+    def test_finder_format_round_trips(self):
+        tagged = [Tag("Work"), Tag("Red", 6), Tag("日本語", 4)]
+        self.assertEqual(tags.parse_finder(tags.format_finder(tagged)), tagged)
+
+    def test_finder_parse_tolerates_junk(self):
+        self.assertEqual(tags.parse_finder(b"not a plist"), [])
+        import plistlib
+        self.assertEqual(tags.parse_finder(plistlib.dumps(["A\n99", 3, ""])),
+                         [Tag("A", 0)])
+
+    def test_apply_change_ignores_case_and_keeps_order(self):
+        cur = [Tag("Work"), Tag("Red", 6)]
+        self.assertEqual(tags.apply_change(cur, add=[Tag("work"), Tag("New")],
+                                           remove=["red"]),
+                         [Tag("Work"), Tag("New")])
+
+    def test_parse_names(self):
+        self.assertEqual(tags.parse_names(" a, b ,,A, c "), ["a", "b", "c"])
+
+    def test_common(self):
+        self.assertEqual(tags.common([[Tag("a"), Tag("b")], [Tag("B"), Tag("c")]]),
+                         [Tag("b")])
+        self.assertEqual(tags.common([]), [])
+
+    def test_new_tag_colors(self):
+        finder = tags.NtfsStreamTags()   # a store with colors
+        self.assertEqual(tags.new_tag("Red", finder), Tag("Red", 6))
+        self.assertEqual(tags.new_tag("work", finder, [Tag("Work", 4)]), Tag("work", 4))
+        self.assertEqual(tags.new_tag("Red", tags.XdgTags()), Tag("Red", 0))
+
+    def test_store_for(self):
+        self.assertIs(tags.store_for("s3://bucket/key.txt"), tags._s3)
+        self.assertIsNone(tags.store_for("s3://bucket/"))
+        self.assertIs(tags.store_for("ssh://host/a"), tags._ssh)
+        self.assertIsNone(tags.store_for("archive:///x.zip#a.txt"))
+        with patch.object(sys, "platform", "win32"):
+            self.assertIs(tags.store_for("C:\\a.txt"), tags._ntfs)
+
+
+@unittest.skipUnless(DARWIN, "Finder tags are macOS")
+class FinderStore(_Tmp):
+    def test_write_read_remove(self):
+        path = self.file()
+        store = tags.store_for(path)
+        self.assertIsInstance(store, tags.FinderTags)
+        self.assertEqual(store.read(path), [])
+        store.write(path, [Tag("Work"), Tag("Red", 6)])
+        self.assertEqual(store.read(path), [Tag("Work"), Tag("Red", 6)])
+        out = subprocess.run(["xattr", "-p", "com.apple.metadata:_kMDItemUserTags", path],
+                             capture_output=True)
+        self.assertEqual(out.returncode, 0, "what Finder reads is there")
+        store.write(path, [])
+        self.assertEqual(store.read(path), [])
+        store.write(path, [])  # removing nothing is fine
+
+    def test_missing_file_is_an_error(self):
+        with self.assertRaises(tags.TagError):
+            tags.FinderTags().read(os.path.join(self.tmp, "nope"))
+
+
+@unittest.skipUnless(LINUX and hasattr(os, "setxattr"), "user.xdg.tags is Linux")
+class XdgStore(_Tmp):
+    def test_write_read_remove(self):
+        path = self.file()
+        store = tags.XdgTags()
+        try:
+            store.write(path, [Tag("Work"), Tag("Red", 6)])
+        except tags.TagError as exc:
+            self.skipTest(f"no user xattrs on this filesystem: {exc}")
+        self.assertEqual(os.getxattr(path, "user.xdg.tags"), b"Work,Red")
+        self.assertEqual(store.read(path), [Tag("Work"), Tag("Red")])
+        store.write(path, [])
+        self.assertEqual(store.read(path), [])
+
+
+class NtfsStreamStore(_Tmp):
+    def test_round_trip_and_remove(self):
+        path = self.file()
+        store = tags.NtfsStreamTags()
+        self.assertEqual(store.read(path), [])
+        store.write(path, [Tag("Work"), Tag("Red", 6)])
+        self.assertEqual(store.read(path), [Tag("Work"), Tag("Red", 6)])
+        store.write(path, [])
+        self.assertEqual(store.read(path), [])
+        self.assertFalse(os.path.exists(path + ":xefm.tags"))
+
+
+class _LocalShell:
+    """A stand-in SSH connection that runs the remote command with ``sh``."""
+    hostname = "local"
+
+    def __init__(self):
+        self.commands = []
+
+    def run_remote(self, command, **kwargs):
+        self.commands.append(command)
+        return subprocess.run(["sh", "-c", command], capture_output=True)
+
+
+class _SshPath:
+    def __init__(self, remote, conn):
+        self.remote_path, self.hostname, self._conn = remote, "local", conn
+
+    def _get_connection(self):
+        return self._conn
+
+    def __str__(self):
+        return f"ssh://local{self.remote_path}"
+
+
+class SshStore(_Tmp):
+    @unittest.skipUnless(DARWIN, "the macOS branch runs xattr locally")
+    def test_macos_host_round_trip_in_one_command_each(self):
+        conn = _LocalShell()
+        store = tags.SshTags()
+        a = _SshPath(self.file("a b.txt"), conn)
+        c = _SshPath(self.file("c.txt"), conn)
+        self.assertEqual(store.write_many([(a, [Tag("Work"), Tag("Red", 6)]),
+                                           (c, [])]), [])
+        found = store.read_many([a, c])
+        self.assertEqual(found[str(a)], [Tag("Work"), Tag("Red", 6)])
+        self.assertEqual(found[str(c)], [])
+        self.assertEqual(tags.FinderTags().read(a.remote_path),
+                         [Tag("Work"), Tag("Red", 6)], "Finder sees the same tags")
+        self.assertEqual(len(conn.commands), 3, "probe once, then one command per batch")
+
+    def test_linux_host_parsing(self):
+        """The Linux branch, fed canned getfattr output."""
+        store = tags.SshTags()
+        store._hosts["local"] = ("Linux", {"getfattr", "setfattr"})
+
+        class Canned:
+            hostname = "local"
+
+            def run_remote(self, command, **kwargs):
+                if command.startswith("getfattr -R"):
+                    out = (b"# file: /d/a\\303\\244.txt\n"
+                           b'user.xdg.tags="Work,Red"\n\n'
+                           b"# file: /d/b.txt\n"
+                           b'user.xdg.tags="Other"\n')
+                else:
+                    out = b"/d/a.txt\0Work,Red\0/d/b.txt\0\0"
+                return subprocess.CompletedProcess([], 0, out, b"")
+
+        conn = Canned()
+        a, b = _SshPath("/d/a.txt", conn), _SshPath("/d/b.txt", conn)
+        found = store.read_many([a, b])
+        self.assertEqual(found[str(a)], [Tag("Work"), Tag("Red")])
+        self.assertEqual(found[str(b)], [])
+        self.assertEqual(store.find(_SshPath("/d", conn), "work"),
+                         ["ssh://local/d/aä.txt"])
+
+    def test_a_missing_tool_names_the_package(self):
+        store = tags.SshTags()
+        store._hosts["local"] = ("Linux", set())
+        found = store.read_many([_SshPath("/a", _LocalShell())])
+        error = found["ssh://local/a"]
+        self.assertIsInstance(error, tags.TagError)
+        self.assertIn("'attr' package", str(error))
+
+
+class S3Store(unittest.TestCase):
+    def test_tags_are_valueless_keys_and_other_tags_are_kept(self):
+        calls = []
+
+        class Client:
+            def get_object_tagging(self, **kw):
+                return {"TagSet": [{"Key": "Work", "Value": ""},
+                                   {"Key": "owner", "Value": "ops"}]}
+
+            def put_object_tagging(self, **kw):
+                calls.append(kw)
+
+        class Impl:
+            _bucket, _key = "b", "k.txt"
+
+            def _client(self):
+                return Client()
+
+        store = tags.S3Tags()
+        self.assertEqual(store.read(Impl()), [Tag("Work")])
+        store.write(Impl(), [Tag("New")])
+        self.assertEqual(calls[0]["Tagging"]["TagSet"],
+                         [{"Key": "owner", "Value": "ops"}, {"Key": "New", "Value": ""}])
+
+
+class Carry(_Tmp):
+    def test_tags_follow_a_copy(self):
+        src, dest = self.file("a.txt"), self.file("b.txt")
+        store = tags.store_for(src)
+        if store is None or not store.cheap:
+            self.skipTest("no local tag store here")
+        try:
+            store.write(src, [Tag("Work"), Tag("Red", 6)])
+        except tags.TagError as exc:
+            self.skipTest(f"no tags on this filesystem: {exc}")
+        tags.carry(src, dest)
+        self.assertEqual([t.name for t in store.read(dest)], ["Work", "Red"])
+
+    def test_untagged_source_writes_nothing(self):
+        with patch.object(tags, "store_for") as store_for:
+            store = store_for.return_value
+            store.read.return_value = []
+            tags.carry("a", "b")
+            store.write.assert_not_called()
+
+
+class Cache(unittest.TestCase):
+    def test_reads_off_thread_then_answers(self):
+        ready = threading.Event()
+        cache = tags.TagCache(on_ready=ready.set)
+        files = ["x"]
+        with patch.object(tags, "store_for", return_value=tags.XdgTags()), \
+             patch.object(tags, "read", return_value=[Tag("Work")]):
+            self.assertIsNone(cache.get(files, "/a"))
+            self.assertTrue(ready.wait(2))
+            self.assertEqual(cache.get(files, "/a"), [Tag("Work")])
+        self.assertIn("work", cache.seen)
+
+    def test_a_new_listing_starts_afresh_and_costly_stores_are_skipped(self):
+        cache = tags.TagCache()
+        with patch.object(tags, "store_for", return_value=tags.S3Tags()):
+            self.assertEqual(cache.get(["x"], "s3://b/k"), [])
+        with patch.object(tags, "store_for", return_value=None):
+            self.assertEqual(cache.get(["y"], "/a"), [])
+
+
+class AppIntegration(_Tmp):
+    """B toggles and edits tags; J lists tags; picking one finds the files."""
+
+    def setUp(self):
+        super().setUp()
+        from puikit.backends import create_backend
+        from xefm import app as xefm_app
+        from xefm import favorites
+        from xefm.state_manager import XeFMStateManager
+        self.file("a.txt")
+        self.file("b.txt")
+        os.mkdir(os.path.join(self.tmp, "sub"))
+        self.deep = self.file(os.path.join("sub", "deep.txt"))
+        store = tags.store_for(self.deep)
+        if store is None or not store.cheap:
+            self.skipTest("no local tag store here")
+        try:
+            store.write(self.deep, [])
+        except tags.TagError as exc:
+            self.skipTest(f"no tags on this filesystem: {exc}")
+        self.store = store
+        self.state_dir = tempfile.mkdtemp()
+        self.sm = XeFMStateManager(db_path=os.path.join(self.state_dir, "state.db"))
+        patcher = patch.object(favorites, "get_config_favorites", lambda: [])
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = patch.object(favorites, "get_state_manager", lambda: self.sm)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.b = create_backend("memory")
+        self.b.open()
+        self.app = xefm_app.XeFMApp(self.b, self.tmp, self.tmp,
+                                    left_provided=True, right_provided=True,
+                                    state_manager=self.sm)
+        self.app.file_monitor.stop_monitoring()
+        self.app.file_monitor.enabled = False
+        self.app._settle_listings()
+
+    def tearDown(self):
+        try:
+            self.app.file_monitor.stop_monitoring()
+            self.b.close()
+        except Exception:
+            pass
+        shutil.rmtree(getattr(self, "state_dir", ""), ignore_errors=True)
+        super().tearDown()
+
+    def top(self):
+        return self.app.panel._layers[-1].widget
+
+    def focus(self, name):
+        pane = self.app.active_pane()
+        pane["focused_index"] = [f.name for f in pane["files"]].index(name)
+
+    def drain(self):
+        deadline = time.time() + 5
+        while self.app.tasks.has_active() and time.time() < deadline:
+            self.b.run_animation_ticks()
+            time.sleep(0.005)
+        self.b.run_animation_ticks()
+
+    def choose(self, label_part):
+        from xefm.choice_dialog import ChoiceDialog
+        dialog = self.top()
+        self.assertIsInstance(dialog, ChoiceDialog)
+        labels = [label for _, label in dialog._rows]
+        index = next(i for i, label in enumerate(labels) if label_part in label)
+        dialog._index = index
+        dialog._accept()
+
+    def test_b_edits_then_toggles_tags(self):
+        from xefm.input_dialog import InputDialog
+        self.focus("a.txt")
+        a = os.path.join(self.tmp, "a.txt")
+        self.app.add_favorite()
+        self.choose("Edit tags…")
+        dialog = self.top()
+        self.assertIsInstance(dialog, InputDialog)
+        dialog.edit.text = "Work, Red"
+        dialog._accept()
+        self.assertEqual([t.name for t in self.store.read(a)], ["Work", "Red"])
+        if self.store.has_colors:
+            self.assertEqual(self.store.read(a)[1].color, 6, "Red gets Finder's red")
+        # Known now: B offers it as a toggle, checked, and choosing it removes it.
+        self.app.add_favorite()
+        self.choose("✓ Work")
+        self.assertEqual([t.name for t in self.store.read(a)], ["Red"])
+
+    def test_b_on_a_selection_tags_every_item(self):
+        pane = self.app.active_pane()
+        pane["selected_files"] = {str(f) for f in pane["files"]
+                                  if f.name in ("a.txt", "b.txt")}
+        self.app._remember_tags([Tag("Shared")])
+        self.app.add_favorite()
+        self.choose("Shared")
+        for name in ("a.txt", "b.txt"):
+            self.assertEqual([t.name for t in self.store.read(
+                os.path.join(self.tmp, name))], ["Shared"])
+
+    def test_j_lists_the_tag_and_finds_tagged_files_below(self):
+        self.store.write(self.deep, [Tag("Deep")])
+        self.app._remember_tags([Tag("Deep")])
+        self.app.show_favorites()
+        dialog = self.top()
+        labels = [dialog.to_label(r) for r in dialog.all_items]
+        self.assertTrue(any(label.startswith("Tag: Deep") for label in labels), labels)
+        self.app.panel.pop_layer()
+        with patch.object(type(self.store), "find", return_value=None):
+            self.app.find_by_tag("deep")
+            self.drain()
+        self.app._settle_listings()
+        pane = self.app.active_pane()
+        self.assertTrue(pane.get("virtual"))
+        self.assertEqual([str(f) for f in pane["files"]], [self.deep])
+
+    def test_unsupported_places_offer_no_tag_rows(self):
+        with patch.object(tags, "store_for", return_value=None):
+            rows = self.app._tag_rows(self.app.active_pane())
+        self.assertEqual(rows, [])
+
+
+if __name__ == "__main__":
+    unittest.main()

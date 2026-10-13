@@ -424,6 +424,19 @@ class ActionContext:
         #: name reaches the built-in rather than recurring into itself.
         self._invoking: set[str] = set()
 
+    # --- the running extension ------------------------------------------- #
+
+    @property
+    def extension(self):
+        """While an extension package's action or hook runs, its handle:
+        ``id``, ``version``, ``settings`` (the extension's defaults overlaid
+        with the plain ``config.py`` class named after it, e.g.
+        ``CommandPaletteConfig``), ``state`` (a key-value store kept in XeFM's
+        state database) and ``data_dir`` (its own directory under
+        ``~/.xefm/extension-data/``). ``None`` for an action defined in
+        ``config.py`` itself."""
+        return getattr(self, "_extension", None)
+
     # --- panes -------------------------------------------------------------- #
 
     @property

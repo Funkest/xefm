@@ -109,6 +109,12 @@ To remove one, highlight it in the **J** list and press the remove key
 (**Shift-Delete** by default). Favorites written in `FAVORITES` are
 not removed there: delete them from your config.
 
+### Tags in the same dialogs
+
+**B** also tags files, and **J** also finds them by tag. The **B** dialog
+lists your tags after the favorite rows, and the **J** list shows them after
+your favorites. See [File Tags](FILE_TAGS_FEATURE.md).
+
 ### Default favorites
 
 XeFM ships with four — Home, Documents, Downloads and Desktop — and they are

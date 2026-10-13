@@ -3,6 +3,9 @@
 ## Overview
 The batch rename feature allows you to rename multiple files at once using regex patterns and destination templates with special macros.
 
+To rename by editing the names themselves in your text editor instead of
+writing a pattern, see [Rename in the Editor](RENAME_IN_EDITOR_FEATURE.md).
+
 ## How to Use
 
 1. **Select Multiple Files**: Use the space bar to select multiple files in the file manager
