@@ -1005,6 +1005,8 @@ _FILER_ACTIONS = [
     _a("subshell", FILER, "Open a subshell in this directory"),
     _a("edit_config", FILER, "Edit config.py, then reload it"),
     _a("reload_config", FILER, "Re-read config.py and apply it live"),
+    _a("install_extension", FILER, "Install the extension package under the cursor"),
+    _a("extensions", FILER, "List the extension packages and whether they loaded"),
 ]
 
 _TEXT_VIEWER_ACTIONS = [

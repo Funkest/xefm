@@ -1798,6 +1798,7 @@ class XeFMApp:
         as ordinary log lines, one per bad entry, and a config that uses the API
         at all gets the one-line preview notice: this is not a stable surface
         yet, and the log pane is where a user finds that out."""
+        self._report_extensions()
         (warnings, action_count, hook_count, sort_count,
          filter_count, decoder_count, scheme_count,
          lexer_count) = load_user_entries(config)
@@ -1824,6 +1825,97 @@ class XeFMApp:
             getattr(config, "KEY_BINDINGS", None) or {})
         if swallowed:
             self.log_info(f"Config warning: {swallowed}")
+
+    def install_extension(self) -> None:
+        """Install the extension package under the cursor — a folder holding
+        ``xefm-extension.toml``, or a ``.zip`` of one — after showing what it
+        adds. The same check ``xefm ext check`` runs decides first; a package
+        that fails it is refused with every finding listed."""
+        from xefm import extensions as _ext
+        entry = self._focused_entry()
+        if entry is None or not self._is_local(entry):
+            self.log_info("Install Extension: put the cursor on a local "
+                          "extension folder or .zip")
+            return
+        work = tempfile.mkdtemp(prefix="xefm-ext-")
+        try:
+            root = _ext.fetch(str(entry), _StdPath(work))
+            manifest = _ext.read_manifest(root)
+            problems = _ext.check_manifest(
+                manifest, others=[m for m in _ext.discover(_ext.Layout(
+                    config_manager.config_dir)) if m.id != manifest.id])
+        except (_ext.InstallError, _ext.ManifestError, OSError) as exc:
+            shutil.rmtree(work, ignore_errors=True)
+            self.log_info(f"Install Extension: {exc}")
+            return
+        shutil.rmtree(work, ignore_errors=True)
+        if _ext.errors(problems):
+            show_message_box(
+                self.panel, "\n".join(str(p) for p in problems),
+                title=f"{manifest.id or entry.name} cannot be installed",
+                icon="error")
+            self.panel.render()
+            return
+        lines = _ext.summarize(manifest) or ["(nothing)"]
+        warnings = [f"⚠ {p.where}: {p.message}" for p in problems]
+
+        def answered(label: str) -> None:
+            if label != "Install":
+                self.panel.render()
+                return
+            try:
+                installed = _ext.install(str(entry), _ext.Layout(config_manager.config_dir))
+            except (_ext.InstallError, _ext.ManifestError, OSError) as exc:
+                self.log_info(f"Install Extension failed: {exc}")
+                self.panel.render()
+                return
+            self.log_info(f"Installed extension {installed.id} {installed.version}")
+            self.reload_config()
+
+        show_message_box(
+            self.panel,
+            "\n".join(lines + warnings
+                      + ["", "Extensions run inside XeFM with your permissions."]),
+            title=f"Install {manifest.name} {manifest.version}?",
+            icon="question", buttons=("Install", "Cancel"), default=1, cancel=1,
+            on_result=answered)
+        self.panel.render()
+
+    def show_extensions(self) -> None:
+        """What the last config load did with each extension package: loaded,
+        disabled, or left out and why. Managing them is ``xefm ext``."""
+        from xefm import extensions as _ext
+        report = getattr(config_manager, "extension_report", None)
+        rows = []
+        if report is not None:
+            rows += [f"✓ {m.id} {m.version}" for m in report.loaded]
+            rows += [f"– {label}: {reason}" for label, reason in report.skipped]
+            rows += [f"⚠ {w}" for w in report.warnings]
+        if not rows:
+            rows = [f"No extension packages in {_ext.Layout(config_manager.config_dir).packages}"]
+        rows += ["", "Manage them from a shell with `xefm ext list | install | "
+                 "uninstall | enable | disable`."]
+        show_message_box(self.panel, "\n".join(rows), title="Extensions")
+        self.panel.render()
+
+    def _report_extensions(self) -> None:
+        """One log line for the extension packages the config load folded in,
+        and one per package that was left out or had an entry skipped, with
+        the reason — the only place a user learns why an extension is quiet."""
+        from xefm import extensions as _extensions
+        _extensions.state_manager_for_handles = self.state_manager
+        report = getattr(config_manager, "extension_report", None)
+        if report is None:
+            return
+        if report.loaded:
+            names = ", ".join(f"{m.id} {m.version}" for m in report.loaded)
+            self.log_info(f"Extensions: {names} (Preview API "
+                          f"{_extensions._api_version()})")
+        for label, reason in report.skipped:
+            if reason != "disabled":
+                self.log_info(f"Extension {label} not loaded: {reason}")
+        for warning in report.warnings:
+            self.log_info(f"Extension warning: {warning}")
 
     def _start_initial_listings(self) -> None:
         """Kick off the two startup listings, on worker threads like every other
@@ -3096,6 +3188,8 @@ class XeFMApp:
                 "subshell": (self.subshell, False),
                 "edit_config": (self.edit_config, False),
                 "reload_config": (self.reload_config, False),
+                "install_extension": (self.install_extension, False),
+                "extensions": (self.show_extensions, False),
                 # --- file operations ---
                 "create_directory": (self.create_directory, False),
                 "create_file": (self.create_file, False),
@@ -3936,6 +4030,10 @@ class XeFMApp:
             SEPARATOR,
             MenuItem("Edit Configuration…", on_select=self.edit_config,
                      shortcut=sc("edit_config")),
+            MenuItem("Extensions…", on_select=self.show_extensions,
+                     shortcut=sc("extensions")),
+            MenuItem("Install Extension", on_select=self.install_extension,
+                     enabled=has_files, shortcut=sc("install_extension")),
             MenuItem("Reload Configuration", on_select=self.reload_config,
                      shortcut=sc("reload_config")),
             title="Tools",
@@ -9466,6 +9564,8 @@ class XeFMApp:
             ("command_palette", "Search every action by name and run it"),
             ("edit_config", "Edit ~/.xefm/config.py, then reload (Tools menu)"),
             ("reload_config", "Reload ~/.xefm/config.py (Tools menu)"),
+            ("install_extension", "Install the extension package under the cursor (Tools menu)"),
+            ("extensions", "List extension packages (Tools menu)"),
             ("help", "Show this help"),
             ("quit", "Quit XeFM"),
         )),
@@ -10132,6 +10232,7 @@ examples:
   xefm --backend gui              native desktop window (Windows/macOS)
   xefm --backend web              browser tab
   xefm --left ~/projects --right ~/downloads
+  xefm ext --help                 manage extension packages
 
 Project home: https://github.com/crftwr/xefm
 """
@@ -10188,6 +10289,11 @@ def _web_access_message(url: str) -> str:
 
 
 def main() -> None:
+    # `xefm ext …` manages extension packages and never opens a window, so it
+    # is dispatched before the UI's own arguments are parsed.
+    if len(sys.argv) > 1 and sys.argv[1] == "ext":
+        from xefm.extension_cli import main as ext_main
+        sys.exit(ext_main(sys.argv[2:]))
     args = create_parser().parse_args()
 
     backend_name = _BACKENDS.get(args.backend, args.backend)

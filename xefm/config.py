@@ -624,6 +624,7 @@ class ConfigManager:
     def __init__(self):
         self.logger = getLogger("Config")
         self.config_dir = Path.home() / '.xefm'
+        self.extension_report = None
         self.config_file = self.config_dir / 'config.py'
         self.user_tools_dir = self.config_dir / 'tools'
         self.user_extensions_dir = self.config_dir / 'extensions'
@@ -738,6 +739,7 @@ class ConfigManager:
         # so xefm_tool('example_tool.py') in a config resolves to the user copy.
         self.ensure_user_tools_dir()
         self.prepare_user_extensions()
+        self._config_namespace = {}
 
         # Load template config class for filling in missing fields
         template_config_class = _load_template_config()
@@ -754,6 +756,7 @@ class ConfigManager:
                     pass
                 self.config = EmptyConfig()
                 _copy_missing_fields(self.config, template_config_class)
+                self._load_extensions()
                 return self.config
         
         # Try to load the configuration file
@@ -765,6 +768,8 @@ class ConfigManager:
                 
             config_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(config_module)
+            # Extension settings are classes beside Config, found by name.
+            self._config_namespace = vars(config_module)
             
             # Get the Config class
             if hasattr(config_module, 'Config'):
@@ -783,8 +788,23 @@ class ConfigManager:
         
         # Copy any missing fields from template
         _copy_missing_fields(self.config, template_config_class)
-        
+        self._load_extensions()
+
         return self.config
+
+    def _load_extensions(self):
+        """Fold the enabled extension packages into the loaded config, after
+        the template has filled what ``config.py`` left out — so "config.py
+        wins" compares against the user's own entries and the defaults both.
+        The report is kept for the app to put in the log pane."""
+        from xefm import extensions as _extensions
+        try:
+            self.extension_report = _extensions.load(
+                self.config, _extensions.Layout(self.config_dir),
+                namespace=getattr(self, "_config_namespace", {}))
+        except Exception as e:
+            self.logger.error(f"Could not load extensions: {e}")
+            self.extension_report = None
     
     def get_config(self):
         """Get the current configuration, loading if necessary"""

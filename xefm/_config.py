@@ -516,6 +516,8 @@ class Config:
         # open/reload this file without leaving XeFM, e.g. 'edit_config': ['Y'].
         'edit_config': [],                     # Edit this config.py in TEXT_EDITOR, then reload
         'reload_config': [],                   # Re-read this config.py and apply live
+        'install_extension': [],               # Install the extension package (folder or .zip) under the cursor
+        'extensions': [],                      # List extension packages and why any did not load
 
         # === Viewer-local actions (rebindable, not listed above) ==============
         # Every key the modal viewers use is a named action too, and every one of
