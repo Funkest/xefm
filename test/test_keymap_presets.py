@@ -197,23 +197,12 @@ class InTheApp(unittest.TestCase):
         for ch in text:
             self.app.on_event(_key(ch, ch))
 
-    def test_quick_search_matches_the_start_of_the_name(self):
-        # "a" is in alpha and beta; only alpha *starts* with it.
+    def test_quick_search_is_the_i_search_with_its_matching(self):
         self._quick("a")
-        self.assertEqual(self.app._isearch_bar.prompt, "Quick search:")
-        self.assertEqual(self.app._isearch_matches,
-                         [i for i, f in enumerate(self.app.active_pane()["files"])
-                          if f.name == "alpha.txt"])
-
-    def test_quick_search_anywhere_when_configured(self):
-        self.app.config.QUICK_SEARCH_MATCH = "anywhere"
-        try:
-            self._quick("a")
-            names = {self.app.active_pane()["files"][i].name
-                     for i in self.app._isearch_matches}
-            self.assertEqual(names, {"alpha.txt", "beta.txt"})
-        finally:
-            self.app.config.QUICK_SEARCH_MATCH = "start"
+        self.assertEqual(self.app._isearch_bar.prompt, "I-Search:")
+        names = {self.app.active_pane()["files"][i].name
+                 for i in self.app._isearch_matches}
+        self.assertEqual(names, {"alpha.txt", "beta.txt"}, "contains, as I-Search")
 
     def test_esc_closes_and_keeps_the_cursor_on_the_match(self):
         self._quick("r")
@@ -252,14 +241,12 @@ class InTheApp(unittest.TestCase):
         self._quick("r")
         self.assertIn("other keys act on the file", self.app.status._text())
 
-    def test_the_isearch_key_keeps_its_own_behaviour(self):
+    def test_the_isearch_key_keeps_its_own_closing(self):
         self.app.set_keymap_preset("orthodox")
         self.app.enter_isearch()
-        self.assertEqual(self.app._isearch_bar.prompt, "I-Search:")
-        self.app.on_event(_key("a", "a"))
-        names = {self.app.active_pane()["files"][i].name
-                 for i in self.app._isearch_matches}
-        self.assertEqual(names, {"alpha.txt", "beta.txt"}, "contains, as before")
+        self.app.on_event(_key("r", "r"))
+        self.app.on_event(_key("f5"))
+        self.assertTrue(self.app._isearch_active, "F5 does not end an I-Search")
 
     def test_the_default_keymap_has_no_type_ahead(self):
         self.app.on_event(_key("z", "z"))

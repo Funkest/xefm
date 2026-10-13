@@ -162,12 +162,3 @@ def test_pane_and_dialog_agree(flm, pane, pattern):
     pane_rows = list(NAMES) if not pattern.strip() else isearch(flm, pane, pattern)
     assert dialog_rows == pane_rows
 
-
-def test_anchored_first_token_matches_at_the_start_only():
-    """The Orthodox quick search: the first word starts the name, the rest
-    match anywhere."""
-    tokens = search_match.compile_query("rep 24", anchored=True)
-    assert search_match.hit(tokens, "report-2024.pdf")
-    assert not search_match.hit(tokens, "my-report-2024.pdf")
-    assert search_match.hit(search_match.compile_query("rep"), "my-report.pdf"), \
-        "unanchored is unchanged"

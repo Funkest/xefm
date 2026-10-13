@@ -36,30 +36,21 @@ from xefm import name_key
 Token = tuple[str, "re.Pattern | None"]
 
 
-def compile_query(pattern: str, *, anchored: bool = False) -> list[Token]:
+def compile_query(pattern: str) -> list[Token]:
     """``pattern``'s whitespace-separated tokens, each compiled once for reuse
-    across every candidate — see the module docstring on why this is hoisted.
-
-    ``anchored`` makes the first token match at the start of the name instead
-    of anywhere — the quick search of the function-key file managers, which
-    the Orthodox keymap's type-ahead follows. The tokens after it still match
-    anywhere, so ``rep 24`` finds ``report-2024.pdf``."""
+    across every candidate — see the module docstring on why this is hoisted."""
     tokens: list[Token] = []
-    for index, token in enumerate(pattern.split()):
+    for token in pattern.split():
         # Normalize the query once here rather than every candidate in `hit`:
         # the pane hands in names that are already NFC (xefm.name_key), so a
         # pasted NFD pattern is the only side left that could disagree.
         token = name_key.nfc(token)
         glob = token.lower()
-        at_start = anchored and index == 0
-        if not glob.startswith('*') and not at_start:
+        if not glob.startswith('*'):
             glob = '*' + glob
         if not glob.endswith('*'):
             glob = glob + '*'
-        regex = migemo_search.get_regex(token)
-        if regex is not None and at_start:
-            regex = re.compile(r"\A(?:" + regex.pattern + ")", regex.flags)
-        tokens.append((glob, regex))
+        tokens.append((glob, migemo_search.get_regex(token)))
     return tokens
 
 

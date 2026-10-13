@@ -1025,12 +1025,13 @@ class StatusBar(Widget):
         return self._isearch_cache
 
     def _quick_hints(self) -> str:
-        """The quick search's line: it owns only these keys, and every other
-        one acts on the file list — which is what the line has to say."""
+        """The Orthodox type-ahead search's line: it owns only these keys, and
+        every other one acts on the file list — which is what the line has to
+        say."""
         walk = "/".join(k for k in (self._isearch_key("isearch.prev_match"),
                                     self._isearch_key("isearch.next_match")) if k)
         close = self._isearch_key("isearch.cancel")
-        parts = ["Quick search"]
+        parts = ["I-Search"]
         if walk:
             parts.append(f"{walk} prev/next match")
         if close:
@@ -1400,7 +1401,6 @@ class XeFMApp:
         #: hit indices for Up/Down navigation; ``_isearch_active`` only drives the
         #: bottom status-bar hint line.
         self._isearch_quick = False
-        self._isearch_anchored = False
         self._isearch_active = False
         self._isearch_origin = 0
         self._isearch_matches: list[int] = []
@@ -7248,12 +7248,12 @@ class XeFMApp:
         ``isearch.cancel`` restores the pre-search cursor. Reuses
         ``FileListManager.find_matches`` for the hits.
 
-        ``quick`` is the Orthodox keymap's type-ahead, which behaves like the
-        quick search of the function-key file managers: the name matches from
-        its start (``QUICK_SEARCH_MATCH``), Esc closes and leaves the cursor
-        on the match, and any other key that is not typing — Enter, F5, an
-        arrow sideways — closes the search and acts on the file list, so Enter
-        opens the match and F5 copies it. Up / Down still walk the matches."""
+        ``quick`` is the Orthodox keymap's type-ahead. It matches as above, and
+        closes the way the function-key file managers' quick search does: Esc
+        leaves the cursor on the match, and any other key that is not typing —
+        Enter, F5, an arrow sideways — closes the search and acts on the file
+        list, so Enter opens the match and F5 copies it. Up / Down still walk
+        the matches."""
         if self._isearch_active or not self.active_pane()["files"]:
             return
         footer = self._footers.get(self.pm.active_pane)
@@ -7262,8 +7262,6 @@ class XeFMApp:
         x, y, w, h = footer.rect
         self._isearch_active = True
         self._isearch_quick = quick
-        self._isearch_anchored = quick and getattr(
-            self.config, "QUICK_SEARCH_MATCH", "start") != "anywhere"
         self._isearch_origin = self.active_pane()["focused_index"]
         self._isearch_matches = []
         # Migemo only ever matches a *non-ASCII* name (migemo_search.has_hit),
@@ -7276,7 +7274,6 @@ class XeFMApp:
         self._active_view().search_matches = set()
         if quick:
             self._isearch_bar = ISearchBar(
-                prompt="Quick search:",
                 on_change=self._isearch_recompute,
                 on_navigate=self._isearch_step,
                 on_cancel=self._isearch_stop,
@@ -7316,8 +7313,7 @@ class XeFMApp:
         all."""
         pane = self.active_pane()
         matches = self.flm.find_matches(
-            pane, pattern, match_all=True, return_indices_only=True,
-            anchored=getattr(self, "_isearch_anchored", False))
+            pane, pattern, match_all=True, return_indices_only=True)
         if (not matches and search_match.dead_end(pattern,
                                                   migemo=self._isearch_migemo)
                 and self._isearch_bar is not None
@@ -7392,7 +7388,6 @@ class XeFMApp:
         """Tear down the isearch overlay and clear the pane's match highlights."""
         self._isearch_active = False
         self._isearch_quick = False
-        self._isearch_anchored = False
         self._isearch_matches = []
         self._active_view().search_matches = set()
         if (self.panel.has_layers

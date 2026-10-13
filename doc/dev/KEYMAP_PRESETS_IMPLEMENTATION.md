@@ -83,16 +83,11 @@ same event to the panel, where the search bar is now the top layer. The key
 that opened the search becomes its first character. Shift is allowed, since a
 capital is typing.
 
-`quick=True` gives the classic quick search, the way Total Commander's
-behaves:
+`quick=True` keeps I-Search's prompt and matching, and changes only how the
+search closes, which follows Total Commander's quick search. The user asked
+for that much and no more: the display and the matching stay XeFM's.
 
-- **Start-of-name matching.** `search_match.compile_query(anchored=True)`
-  drops the leading `*` from the first token's glob and anchors its Migemo
-  regex with `\A`. Later tokens still match anywhere.
-  `QUICK_SEARCH_MATCH = 'anywhere'` turns the anchoring off. The setting is
-  read through `_isearch_anchored` when the search opens.
-- **The bar is built in quick-search mode.** It has no select, select-all or
-  accept callbacks, and its prompt is "Quick search:".
+- **The bar has no select, select-all or accept callbacks.**
   - `on_cancel` is `_isearch_stop`, so Esc keeps the match instead of
     restoring the origin.
   - `on_passthrough` is `_isearch_passthrough`. `ISearchBar.handle_event`
@@ -102,7 +97,7 @@ behaves:
   - `_isearch_passthrough` closes the search and feeds the event to `on_event`,
     so Enter reaches `open_item` and F5 reaches `copy_files` on the match.
 - **The status bar** shows `_quick_hints` (prev/next, close, "other keys act on
-  the file") instead of the I-Search hint line.
+  the file") instead of the usual I-Search hint line.
 
 The I-Search key (`enter_isearch()` with no argument) is unchanged.
 

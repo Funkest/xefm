@@ -26,18 +26,12 @@ example, is `K`.
 ## Orthodox
 
 The layout shared by the classic two-pane file managers. No letter runs a
-command. Typing a letter or digit opens **quick search** with that character,
-as in those file managers:
+command. Typing a letter or digit opens [incremental search](XEFM_USER_GUIDE.md)
+with that character, so `r` `e` `p` jumps to `report.txt`. It closes the way
+those file managers' quick search does:
 
-- The search box replaces the pane's footer, and shows what you typed and how
-  many files match.
-- Matching works like this:
-  - The name must **start with** what you typed, so `r` `e` `p` jumps to
-    `report.txt`.
-  - Words after a space can match anywhere in the name, so `rep 24` finds
-    `report-2024.pdf`.
-  - A letter that would match nothing is not added.
-- `↑` / `↓` jump to the previous / next match. `Backspace` removes a letter.
+- `↑` / `↓` jump to the previous / next match, and `Backspace` removes a
+  letter.
 - `Esc` closes the search and leaves the cursor on the match.
 - **Any other key closes the search and does its usual job.** `Enter` opens
   the match, `F5` copies it, `F3` views it, and so on, with no extra key press
@@ -45,10 +39,10 @@ as in those file managers:
 - There is no timeout. The search stays open until you press a key that
   closes it.
 
-To match anywhere in the name instead of from its start, set
-`QUICK_SEARCH_MATCH = 'anywhere'` in `config.py`. The I-Search key keeps its
-own behavior under every preset. It matches anywhere, lets you mark matches as
-you go, and stays open until Enter or Esc.
+Matching is the same as for any incremental search. What you type can appear
+anywhere in the name, and romaji finds Japanese names. When you open the
+search with the I-Search key, it keeps its own keys under every preset: it
+lets you mark matches as you go, and stays open until Enter or Esc.
 
 | Key | Action |
 |-----|--------|
