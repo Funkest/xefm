@@ -1,6 +1,7 @@
 # Background Jobs — Implementation
 
-[#567](https://github.com/crftwr/xefm/issues/567), part 1 of discussion
+[#567](https://github.com/crftwr/xefm/issues/567) and
+[#599](https://github.com/crftwr/xefm/issues/599), part 1 of discussion
 [#468](https://github.com/crftwr/xefm/discussions/468). User-facing behavior is
 in [`doc/BACKGROUND_JOBS_FEATURE.md`](../BACKGROUND_JOBS_FEATURE.md). The task
 system it extends is described in
@@ -18,21 +19,37 @@ changes.
 
 | Piece | |
 |---|---|
-| `_Job` | One running task: its dialog, `finished` event, `on_done`, `z`, and whether it holds the queue's slot |
-| `submit(..., detached=True)` | Start in the background, through the queue |
-| `detach(task)` | Close the dialog and set `task.background` |
-| `bring_forward(task)` | Show the dialog again, or drop a queued task |
-| `background_tasks()`, `queued_count()` | For the status bar and the jobs list |
-| `_tick(job)` | The per-frame pump, now per job |
-| `_start_next()` | Give the slot to the next queued job |
+| `_Job` | One running task: its dialog, `finished` event, `on_done`, `z` |
+| `_Waiting` | One queue entry: a task not started yet (with its `run`, `on_done`, `z`), or a started one suspended (`job`) |
+| `_slot` | The one background job allowed to run |
+| `submit(..., detached=True)` | Queue the task; `_start_next` starts it when the slot is free |
+| `detach(task)` | Close the dialog, set `task.background`; unless it holds the slot, suspend it and queue it |
+| `bring_forward(task)` | Show the dialog again; a suspended queued task leaves the queue and resumes in front; a not-started one is dropped |
+| `background_tasks()`, `running_task()`, `queued_count()`, `is_queued()` | For the status bar and the jobs list |
+| `_tick(job)` | The per-frame pump, per job; teardown frees the slot and drops the task from the queue |
+| `_start_next()` | Give the slot to the next queued job: resume a suspended one, or start one |
 
-**The serial queue.** One background job runs at a time. `_slot_taken()` is
-true while any job either holds the slot (it was started detached) or is
-background (it was detached later). A detached `submit` waits in `_queue`
-while the slot is taken. Every teardown calls `_start_next()`. A queued task
-cancelled before it started is finished and reported as cancelled without
-running. A foreground `submit` never waits, because the user chose to watch
-it.
+**The serial queue** (#599). At most one background job runs: the one in
+`_slot`. #567 first queued only the jobs *started* detached. A job sent back
+from the foreground kept running, so several ran at once, and the status bar,
+which named one running job and the queue's length, under-reported them.
+Now a job sent back that does not already hold the slot is **suspended
+first, then queued**. Every background job in motion other than the slot's
+is therefore in the queue and stopped. `_start_next` runs on every teardown
+and every enqueue. The slot's job keeps the slot while it is brought forward,
+so answering its prompt does not let the next one start. A foreground
+`submit` never waits, because the user chose to watch it.
+
+**Suspension.** `Task.suspend()` clears `_running`, and the worker waits at
+its next **pausable** `checkpoint()`, setting `task.paused` while it does.
+`resume()` and `request_cancel()` both release it; cancel unwinds as usual.
+The checkpoints inside a transfer pass `pausable=False`: the remote byte
+callback, and the local chunk loop, which may be filling a cache that is
+streamed to a remote on close. A remote stream held for as long as another
+job runs can time out, so a job pauses only between files. In the parallel
+copy, each pool worker's per-file checkpoint is pausable, so the pool drains
+the files in flight and then every worker waits. A task suspended while
+blocked in `ask` stays there until brought forward, which resumes it.
 
 **Prompts wait.** `Task.ask` already blocks the worker on a request that the
 main thread services. `_tick` now calls `dialog.pump` only while the task is
@@ -48,11 +65,19 @@ bar's percentage.
 
 ## `ProgressDialog`
 
-It takes `on_background` (the manager's `detach`). **B** calls it. The Esc box
-became **Run in background / Cancel operation / Keep running**, with Keep
-running as both the default and the cancel button, so a stray Enter or Esc
-changes nothing. A dialog built without a manager behind it offers no
-background button.
+It takes `on_background` (the manager's `detach`). Two `Button`s along the
+foot, drawn the way PuiKit's message box draws its row: **Run in
+background** (only when there is a manager to take it) and **Cancel**. Tab
+and the arrows move focus, Enter and Space press, and a click is routed
+through the rects captured in `draw`. The content above lays out in the
+height that is left, floored to a whole unit so the foot-anchored rows keep
+their spacing on a vector backend. The box grew from 10 to 12 rows for the
+buttons.
+
+The **B** key that #567 used is gone, because nothing on screen said it
+existed. **Cancel** and Esc open the same box, **Cancel operation / Keep
+running**. Keep running is both the default and the cancel button, so a
+stray Enter or Esc changes nothing.
 
 ## `FileOperationService`
 
@@ -67,7 +92,12 @@ to `TaskManager.submit`.
 - `StatusBar.draw` draws `XeFMApp._jobs_text()` at the right end, in the
   accent color, and the key hints give way to it.
 - `show_jobs` (action `jobs`, `Ctrl-G`, View → Background Jobs…) is a
-  `ChoiceDialog` of `background_tasks()`. Choosing one calls `bring_forward`.
+  `ChoiceDialog` of `background_tasks()`. Each row is the title,
+  `Task.detail` (set by `FileOperationService` through
+  `describe_operation`: "12 items  ~/photos → s3://bucket", "3 items in
+  ~/tmp"; a sync names its counts), and the state: percent with bytes,
+  needs you, paused and queued, or queued. Choosing one calls
+  `bring_forward`.
 - `confirm_quit` with background jobs names them and defaults to Cancel.
   Quitting anyway calls `TaskManager.cancel_all(timeout=3.0)`, which cancels
   the queue and every running task and waits for the workers to unwind at
@@ -87,10 +117,23 @@ parallel background jobs.
 ## Tests
 
 `test/test_background_jobs.py`, on the memory backend with real animation
-ticks. Each task body waits on an `Event` the test releases. It covers detach
-(the dialog goes, the task completes), queued jobs running in order, a
-foreground task not waiting for the queue, a background prompt waiting until
-brought forward and then answered, dropping a queued job, **B** and the Esc
-box, the copy confirmation's Background button copying with no dialog, delete
-still defaulting to Cancel, the status bar text, the quit guard, and
-`cancel_all` waiting for the workers.
+ticks. Each task body waits on an `Event` the test releases, and calls
+`checkpoint()` while it waits. Covered:
+
+- detach: the dialog goes and the task completes;
+- detached jobs running in order;
+- a foreground task not waiting for the queue;
+- a background prompt waiting until brought forward, then answered;
+- dropping a queued job;
+- the dialog's two buttons, the Background button, `B` no longer a key, and
+  the Cancel confirm;
+- a job sent back while another runs being suspended and finishing only after
+  it, and one sent back to a free slot running on;
+- a suspended job brought forward running in front, and a suspended job
+  cancelled;
+- `checkpoint(pausable=False)` not pausing;
+- `describe_operation`, and the jobs list's detail and states;
+- the copy confirmation's Background button copying with no dialog, and
+  delete still defaulting to Cancel;
+- the status bar text, the quit guard, and `cancel_all` waiting for the
+  workers.

@@ -5536,7 +5536,7 @@ class XeFMApp:
         waiting = next((t for t in jobs if t.needs_attention), None)
         if waiting is not None:
             return f"⚠ {waiting.title.rstrip('… ')} needs you{hint}"
-        running = next((t for t in jobs if t.status is TaskStatus.RUNNING), None)
+        running = self.tasks.running_task()
         if running is not None:
             pct = int(running.progress.get_progress_percentage())
             parts.append(f"⟳ {running.title.rstrip('… ')} {pct}%")
@@ -5723,11 +5723,22 @@ class XeFMApp:
             return
 
         def label(task) -> str:
+            """What the job does, where, and how far it is (#599): "Copy 12
+            items  ~/photos → s3://bucket/ — 42% (1.2 GB / 2.9 GB)"."""
             name = task.title.rstrip("… ")
-            if task.status is not TaskStatus.RUNNING:
+            if task.detail:
+                name = f"{name} {task.detail}"
+            if self.tasks.is_queued(task):
+                if task.status is TaskStatus.RUNNING:
+                    return f"{name} — paused, queued (Enter runs it now)"
                 return f"{name} — queued (Enter removes it)"
-            pct = int(task.progress.get_progress_percentage())
-            state = "needs you" if task.needs_attention else f"{pct}%"
+            if task.needs_attention:
+                return f"{name} — needs you"
+            state = f"{int(task.progress.get_progress_percentage())}%"
+            op = task.progress.get_current_operation() or {}
+            if op.get("total_bytes"):
+                state += (f" ({format_size(op.get('processed_bytes', 0), compact=True)}"
+                          f" / {format_size(op['total_bytes'], compact=True)})")
             return f"{name} — {state}"
 
         def scan_label(job, state, text) -> str:
@@ -5739,9 +5750,10 @@ class XeFMApp:
             if value is not None:
                 kind, item = value
                 if kind == "task":
-                    queued = item.status is not TaskStatus.RUNNING
+                    dropped = (self.tasks.is_queued(item)
+                               and item.status is not TaskStatus.RUNNING)
                     self.tasks.bring_forward(item)
-                    if queued:
+                    if dropped:
                         self.log_info(f"Removed from the queue: {item.title.rstrip('… ')}")
                 else:
                     self._open_scan(item)

@@ -991,16 +991,24 @@ class _RecordingCtx:
     vector_shapes = False
     snap = True
 
-    def __init__(self, w=70.0, h=8.0):
+    def __init__(self, w=70.0, h=10.0):
         self.size_units = (w, h)
         self.panel = None
         self.theme = None
         self.texts = []
         self.children = []
         self.child_hints = []
+        #: The dialog's buttons, kept apart from the bars and spinner the
+        #: tests count (#599).
+        self.buttons = []
 
     def measure_text(self, text, style=None):
         return float(display_width(text))
+
+    def layout_context(self):
+        from puikit.layout import LayoutContext
+        return LayoutContext(base_w=1, base_h=1, snap=True,
+                             measure=lambda text, style=None: float(display_width(text)))
 
     def draw_text(self, x, y, text, style=None):
         self.texts.append((x, y, text))
@@ -1009,6 +1017,10 @@ class _RecordingCtx:
         pass
 
     def draw_child(self, child, x, y, w, h, **kw):
+        from puikit.widgets import Button
+        if isinstance(child, Button):
+            self.buttons.append((child, x, y, w, h))
+            return
         self.children.append((child, x, y, w, h))
         self.child_hints.append(kw.get("hints"))
 
@@ -1098,8 +1110,8 @@ def _settled_dialog_rows(profile, screen_h=30):
         rows = backend.snapshot()
         top = next((i for i, r in enumerate(rows) if "┌" in r), None)
         bottom = next((i for i, r in enumerate(rows) if "└" in r), None)
-        if top is not None and bottom is not None and bottom - top == 9:
-            return rows  # the full 10-row box
+        if top is not None and bottom is not None and bottom - top == 11:
+            return rows  # the full 12-row box: content, then the buttons
         time.sleep(0.002)
     raise AssertionError("the progress dialog never reached its full size")
 
@@ -1124,7 +1136,7 @@ def test_progress_dialog_separates_summary_from_file_rows():
     task.progress.start_operation(OperationType.COPY, 0, description="")
     task.progress.update_operation_total(4)
     task.progress.file_begin("a.bin")
-    ctx = _RecordingCtx(h=10.0)
+    ctx = _RecordingCtx(h=12.0)
     ProgressDialog(task).draw(ctx)
     label_y = next(y for _x, y, t in ctx.texts if "items" in t)
     row_y = next(y for _x, y, t in ctx.texts if t == "a.bin")
@@ -1146,7 +1158,7 @@ def test_progress_dialog_children_carry_the_popup_surface():
     task.progress.start_operation(OperationType.COPY, 0, description="")
     dialog = ProgressDialog(task)
 
-    ctx = _RecordingCtx(h=10.0)
+    ctx = _RecordingCtx(h=12.0)
     ctx.theme = _PopupTheme()
     dialog.draw(ctx)  # counting phase → the busy spinner
     assert ctx.child_hints == [surface]
@@ -1154,13 +1166,13 @@ def test_progress_dialog_children_carry_the_popup_surface():
     task.progress.update_operation_total(4)
     task.progress.update_progress("big.bin", processed_items=1)
     task.progress.update_file_byte_progress(1024 * 1024, 4 * 1024 * 1024)
-    ctx = _RecordingCtx(h=10.0)
+    ctx = _RecordingCtx(h=12.0)
     ctx.theme = _PopupTheme()
     dialog.draw(ctx)  # single-file layout → the items bar and the byte bar
     assert ctx.child_hints == [surface, surface]
 
     task.progress.file_begin("worker.bin")
-    ctx = _RecordingCtx(h=10.0)
+    ctx = _RecordingCtx(h=12.0)
     ctx.theme = _PopupTheme()
     dialog.draw(ctx)  # transfers layout → the primary bar
     assert ctx.child_hints == [surface]
