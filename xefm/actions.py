@@ -662,6 +662,12 @@ _DETAILS: dict[str, str] = {
         "asks the one you pick which shares it offers, and mounts your choice "
         "through the operating system — the pane then goes there like any "
         "other directory. macOS and Windows."),
+    "quick_view": (
+        "Turns the other pane into a preview of the item under the cursor, "
+        "following it as the cursor moves: the start of a text file, a "
+        "picture, a hex dump of a binary, or a folder's item count and size. "
+        "The other pane's own folder comes back when quick view closes. On a "
+        "remote location only small files are read."),
     "jobs": (
         "Lists the copy, move and delete operations running in the "
         "background, and the ones queued behind them. Choose a running one "
@@ -906,6 +912,8 @@ _FILER_ACTIONS = [
     _a("open_list_from_file", FILER,
        "Open the list file under the cursor as the pane's list",
        default_keys=()),
+    # Quick view (#569): the other pane previews the cursor item.
+    _a("quick_view", FILER, "Preview the item under the cursor in the other pane"),
     # Background jobs (#567). Ctrl-G: a plain Ctrl+letter every terminal sends
     # and nothing else uses.
     _a("jobs", FILER, "List background jobs"),

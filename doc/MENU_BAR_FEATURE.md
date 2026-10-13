@@ -149,6 +149,7 @@ the mouse for the first, take the whole buffer with the second. See
 | Theme ▸ | (submenu of installed themes) |
 | Next Theme | `toggle_color_scheme` *(ships unbound)* |
 | Switch Pane | `switch_pane` |
+| Quick View | `quick_view` — see [Quick View](QUICK_VIEW_FEATURE.md) |
 | Background Jobs… | `jobs` — see [Background Jobs](BACKGROUND_JOBS_FEATURE.md) |
 | Keymap ▸ | AFX style / Orthodox — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md) |
 | New Tab | `new_tab` — see [Folder Tabs](FOLDER_TABS_FEATURE.md) |
