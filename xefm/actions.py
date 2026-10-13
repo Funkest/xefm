@@ -671,6 +671,11 @@ _DETAILS: dict[str, str] = {
     "close_tab": (
         "Closes the active pane's current tab and shows the next one. A "
         "pane's only tab cannot be closed."),
+    "flat_view": (
+        "Shows every file below the active pane's directory as one flat list, "
+        "named relative to it — sort, filter and copy work across the whole "
+        "tree. With a selection, only the selected directories and files are "
+        "flattened. Press it again, or Backspace, to go back."),
     "open_list_from_clipboard": (
         "Shows the paths on the clipboard, one per line, as the active pane's "
         "listing — the files can be in many directories. Nothing on disk "
@@ -871,6 +876,9 @@ _FILER_ACTIONS = [
        aliases=("drives_dialog",)),
     _a("connect_server", FILER, "Connect to a network server",
        aliases=("connect_to_server",)),
+    # Every file below the directory as one list (#547). Shift-B rather than
+    # Ctrl-B, which is tmux's prefix and would never reach XeFM inside it.
+    _a("flat_view", FILER, "Show every file below this directory as one list"),
     # A list of paths in place of a directory (Go > Open List), "open" as
     # open_item opens an archive: the pane shows something else, and
     # go_parent leaves it. Unbound. Not "paste" -- nothing is written, and a
@@ -1048,6 +1056,15 @@ _DIR_DIFF_ACTIONS = [
        default_keys=("[",)),
     _a("dir_diff.split_right", DIR_DIFF, "Move the centre split right",
        default_keys=("]",)),
+    # Sync (#560): s opens a plan from the active side and, pressed again,
+    # runs it; Space changes one node's action. Not f: that is isearch, which
+    # every surface inherits from common.
+    _a("dir_diff.sync", DIR_DIFF, "Sync: plan from the active side, or run it",
+       default_keys=("s",)),
+    _a("dir_diff.cycle_sync_action", DIR_DIFF, "Change the focused node's sync action",
+       default_keys=("SPACE",)),
+    _a("dir_diff.toggle_identical", DIR_DIFF,
+       "Show or hide the items that are the same on both sides", default_keys=("d",)),
 ]
 
 _ISEARCH_ACTIONS = [

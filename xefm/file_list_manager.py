@@ -177,7 +177,8 @@ class FileListManager:
 
     def compute_virtual_listing(self, paths, *, filter_pattern=None,
                                 sort_mode='filename', sort_reverse=False,
-                                rel_root=None, derive_root=False, cancel=None):
+                                rel_root=None, derive_root=False, cancel=None,
+                                entries=None):
         """Build a listing dict from an explicit list of ``Path`` objects — a
         virtual pane (a search-results feed, an imported list) — instead of
         reading a directory. **No pane mutation**, so a worker thread can call
@@ -200,8 +201,16 @@ class FileListManager:
 
         Unlike :meth:`compute_listing` this does **not** apply the hidden-file
         filter: a list someone produced, or a search that already honoured
-        ``show_hidden``, has no single directory whose dotfiles to hide."""
-        probed = path_list.probe(paths, cancel=cancel)
+        ``show_hidden``, has no single directory whose dotfiles to hide.
+
+        ``entries`` — ``[(Path, attrs), …]`` already read, by a walk that had
+        them from its own listings (flat view) — stands in for the probe:
+        reading every row again would double the round trips on a remote tree,
+        to learn nothing the walk did not."""
+        if entries is not None:
+            probed = path_list.Probed(list(entries), 0, 0)
+        else:
+            probed = path_list.probe(paths, cancel=cancel)
         if derive_root:
             rel_root = path_list.common_root(
                 [p for p, _ in probed.entries]) or name_key.WHOLE_PATH
