@@ -1706,7 +1706,6 @@ class XeFMApp:
         self.state_manager = state_manager if state_manager is not None else get_state_manager()
         # The keymap preset (View > Keymap, or KEY_PRESET in config.py) is
         # written into KEY_BINDINGS itself, so every surface reads one table.
-        self._settle_keymap_choice()
         self._apply_keymap_preset()
         self._left_provided = left_provided
         self._right_provided = right_provided
@@ -4909,33 +4908,12 @@ class XeFMApp:
     #: State key for the keymap preset chosen at first launch or from View >
     #: Keymap.
     _KEYMAP_STATE = "keymap.preset"
-    #: Set while a first launch's keymap question is unanswered, so quitting
-    #: before answering asks again rather than passing for an older install.
-    _KEYMAP_ASK_STATE = "keymap.ask"
-
-    def _settle_keymap_choice(self) -> None:
-        """Decide, once at startup, whether the keymap question is still open
-        (#597). An install carried over from an earlier XeFM — ``config.py``
-        was already there, and no preset was ever chosen — keeps AFX, the
-        keymap it has been running, without being asked. A first launch is
-        asked, in :meth:`run`."""
-        if keymap_presets.resolve(
-                self.config, self.state_manager.get_state(self._KEYMAP_STATE, None)):
-            return
-        if (config_manager.created_config
-                or self.state_manager.get_state(self._KEYMAP_ASK_STATE, False)):
-            self.state_manager.set_state(self._KEYMAP_ASK_STATE, True)
-            return
-        self.state_manager.set_state(self._KEYMAP_STATE, keymap_presets.AFX)
-        # Said from run(): the log pane does not exist yet.
-        self._keymap_carried_over = True
-
     def _apply_keymap_preset(self) -> None:
         """Lay the preset in force over ``config.KEY_BINDINGS`` and rebuild
         every keymap built from it: the app's, and the shared one the help
-        dialog and the menus resolve through. ``_keymap_preset`` is None while
-        the first launch's question is open; :data:`keymap_presets.FALLBACK`
-        stands in until it is answered."""
+        dialog and the menus resolve through. ``_keymap_preset`` is None until
+        a preset has been chosen; :data:`keymap_presets.FALLBACK` stands in
+        until :meth:`run` has asked."""
         chosen = self.state_manager.get_state(self._KEYMAP_STATE, None)
         self._keymap_preset = keymap_presets.resolve(self.config, chosen)
         keymap_presets.apply(self.config, self._keymap_preset)
@@ -4943,9 +4921,10 @@ class XeFMApp:
         config_manager._key_bindings = None
 
     def _ask_keymap_preset(self) -> None:
-        """The first launch's question: which keymap. Neither is the default,
-        so there is no Cancel and Esc does nothing; one must be chosen. Quit
-        before choosing, and the next launch asks again."""
+        """Which keymap, asked at the first launch with none chosen — a new
+        install and one from before presets alike (#597). Neither is the
+        default, so there is no Cancel and Esc does nothing; one must be
+        chosen. Quit before choosing, and the next launch asks again."""
         names = list(keymap_presets.PRESETS)
         labels = [keymap_presets.LABELS[n] for n in names]
         lines = ["Choose how XeFM's keys work. **View > Keymap** changes it "
@@ -4975,7 +4954,6 @@ class XeFMApp:
                           f"the keymap — change it there")
             return
         self.state_manager.set_state(self._KEYMAP_STATE, name)
-        self.state_manager.set_state(self._KEYMAP_ASK_STATE, False)
         self._apply_keymap_preset()
         self.status.invalidate()
         self.menu_bar.set_menu(self._build_menu())
@@ -11001,9 +10979,6 @@ class XeFMApp:
         if self._keymap_preset is None:
             self._ask_keymap_preset()
         else:
-            if getattr(self, "_keymap_carried_over", False):
-                self.log_info(f"Keymap: {keymap_presets.LABELS[keymap_presets.AFX]}, "
-                              f"as before — View > Keymap offers the others")
             self._maybe_show_startup_tip()
         try:
             self.backend.run_event_loop(self.on_event)

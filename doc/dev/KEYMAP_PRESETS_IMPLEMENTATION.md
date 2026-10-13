@@ -127,24 +127,22 @@ and an unknown name give `FALLBACK`; an unknown name is also logged.
 
 ### The first launch
 
-`XeFMApp._settle_keymap_choice` runs once in `__init__`, before the first
-apply. When `resolve` already gives a preset, it does nothing. Otherwise:
+With no preset chosen, `_keymap_preset` is None and `FALLBACK` is applied
+for the moment. `run()` then calls `_ask_keymap_preset` in place of that
+launch's tip of the day, so two dialogs never stack. A new install and an
+upgrade from before presets are treated alike. Telling them apart was tried
+first: an existing `config.py` meant AFX was kept without asking. That was
+dropped because it made AFX a default after all, which #597 removes. The
+cost is one question for upgrading users, and it is asked once.
 
-- `config_manager.created_config` is set when this process wrote `config.py`
-  because there was none. That is a first launch, so the question stays open:
-  state `keymap.ask = True`, and `_keymap_preset` stays None.
-- `keymap.ask` already True means a first launch whose question was never
-  answered (XeFM quit with the dialog open). It stays open.
-- Neither means an install carried over from before presets existed. It gets
-  `keymap.preset = 'afx'`, the keymap it was running, and `run()` logs one
-  line saying so. The log pane does not exist yet in `__init__`.
+The dialog is a markdown message box with one button per preset and no
+Cancel. It is opened with PuiKit's `dismissable=False`, so Esc does nothing.
+A preset button calls `set_keymap_preset`, which stores the choice. Quitting
+with the dialog open stores nothing, so the next launch asks again.
+`__init__` never opens the dialog, because tests construct the app without
+`run()`.
 
-`run()` calls `_ask_keymap_preset` when `_keymap_preset` is None, in place
-of that launch's tip of the day, so two dialogs never stack. It is a
-markdown message box with one button per preset and no Cancel, opened with
-PuiKit's `dismissable=False` so Esc does nothing. A preset button calls
-`set_keymap_preset`, which also clears `keymap.ask`. `__init__` never opens the dialog, because tests construct the
-app without `run()`.
+`make keymap-reset` deletes the stored choice, for hand-checking the dialog.
 
 `XeFMApp._apply_keymap_preset` runs right after the state manager exists, and
 again in `reload_config` after the new config replaces the old one. It
@@ -211,7 +209,7 @@ The app half covers:
 - switching relabeling the keymap;
 - a typed letter opening search with it, and no type-ahead under AFX;
 - the choice surviving a restart, and `KEY_PRESET` winning over the menu;
-- the first launch: carried over → AFX, fresh → asked with no Cancel, quit unanswered → asked again;
+- the first launch: nothing chosen → asked with no Cancel, quit unanswered → asked again;
 - the log line on switching with overriding entries.
 
 It isolates itself from the developer's `~/.xefm/config.py` by emptying the

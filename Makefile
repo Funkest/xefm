@@ -1,6 +1,6 @@
 # XeFM Makefile
 
-.PHONY: skill-zip release-skill help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config keymap-reset-first-launch keymap-reset-upgrade venv clean-venv check-venv install-puikit
+.PHONY: skill-zip release-skill help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config keymap-reset venv clean-venv check-venv install-puikit
 
 # Python interpreter selection
 # All Python is run through the project virtual environment (.venv). There is no
@@ -136,8 +136,7 @@ help:
 	@echo "  uninstall      - Uninstall XeFM"
 	@echo "  dev-install    - Install in development mode"
 	@echo "  install-config - Copy default config to ~/.xefm/config.py (overwrites existing)"
-	@echo "  keymap-reset-first-launch - Next launch asks for the keymap preset, as a first launch"
-	@echo "  keymap-reset-upgrade      - Next launch picks AFX silently, as an upgrade from before presets"
+	@echo "  keymap-reset   - Forget the chosen keymap preset; the next launch asks again"
 	@echo "  lint           - Run code linting"
 	@echo "  format         - Format code"
 	@echo ""
@@ -490,23 +489,14 @@ install-config:
 		echo "Configuration installed successfully"; \
 	fi
 
-# Keymap preset state (#597), for hand-checking the first launch without
-# moving ~/.xefm aside. Quit XeFM first. Python's sqlite3 rather than the
-# sqlite3 CLI, which a Windows box may not have.
-#   keymap-reset-first-launch: forget the chosen preset and mark the question
-#     open, so the next launch asks (config.py exists, so without the mark it
-#     would pass for an upgrade).
-#   keymap-reset-upgrade: forget both, so the next launch takes the path of an
-#     install from before presets: AFX, no question.
+# Keymap preset state (#597), for hand-checking the launch that asks for a
+# preset without moving ~/.xefm aside. Quit XeFM first. Python's sqlite3
+# rather than the sqlite3 CLI, which a Windows box may not have.
 KEYMAP_STATE_DB := $(XEFM_HOME)/.xefm/state.db
 
-keymap-reset-first-launch: check-venv
-	@$(PYTHON) -c "import sqlite3, sys, time; c = sqlite3.connect(sys.argv[1]); c.execute(\"DELETE FROM app_state WHERE key = 'keymap.preset'\"); c.execute(\"INSERT OR REPLACE INTO app_state (key, value, updated_at) VALUES ('keymap.ask', 'true', ?)\", (time.time(),)); c.commit()" "$(KEYMAP_STATE_DB)"
-	@echo "Keymap preset forgotten; the next launch asks for one"
-
-keymap-reset-upgrade: check-venv
+keymap-reset: check-venv
 	@$(PYTHON) -c "import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute(\"DELETE FROM app_state WHERE key IN ('keymap.preset', 'keymap.ask')\"); c.commit()" "$(KEYMAP_STATE_DB)"
-	@echo "Keymap preset forgotten; the next launch keeps AFX, as an upgrade"
+	@echo "Keymap preset forgotten; the next launch asks for one"
 
 lint: check-venv
 	@echo "Running linting..."

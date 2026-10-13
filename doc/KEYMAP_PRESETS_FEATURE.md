@@ -14,13 +14,15 @@ remembers your choice for later sessions.
 
 ## The first launch
 
-On its first start, XeFM shows a **Keymap** dialog with one button per preset.
-It has no Cancel, and `Esc` does not close it: choose one to go on. You can
-switch later from View → Keymap.
+When no preset has been chosen yet, XeFM starts with a **Keymap** dialog
+with one button per preset. That includes the first start after updating from
+a version without presets. The dialog has no Cancel, and `Esc` does not close
+it: choose one to go on. You can switch later from View → Keymap.
 
-If you used an earlier version of XeFM, there is no question. XeFM keeps AFX
-style, the keymap you have been using, and says so in the log. View → Keymap
-offers the other.
+If you are updating and want the keys you have been using, choose **AFX
+style**. Your `config.py` may hold a full copy of the old keymap. See
+[A config.py from an earlier XeFM](#a-configpy-from-an-earlier-xefm) before
+choosing another preset.
 
 ## AFX style
 

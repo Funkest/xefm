@@ -1,8 +1,8 @@
 """Keymap presets (#565, #597): the whole keymap, chosen as one.
 
 A preset is a complete keymap. The presets are peers: none is the default
-the others are laid over, and the first launch asks which one to use (an
-install carried over from an earlier XeFM keeps AFX, which it was running).
+the others are laid over, and a launch with none chosen — a new install or
+an upgrade from before presets alike — asks which one to use.
 
 - **AFX** (:mod:`xefm.keymap_afx`) — one letter runs one command.
 - **Orthodox** — function keys, and typing a letter searches.
@@ -49,8 +49,8 @@ logger = getLogger("Keymap")
 #: AFX's table; the direction, not the details.
 AFX = "afx"
 ORTHODOX = "orthodox"
-#: The preset in force when none has been chosen yet: an install from before
-#: presets existed, and a first launch until the question is answered.
+#: The table in force for the moment a launch with no preset chosen spends
+#: before its question is answered. Not a default: nothing is stored.
 FALLBACK = AFX
 #: Earlier spellings still accepted, so a config or a saved menu choice that
 #: says ``'default'`` keeps meaning what it meant.

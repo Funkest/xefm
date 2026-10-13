@@ -27,7 +27,10 @@ from xefm import app as xefm_app  # noqa: E402
 from xefm import config as xefm_config  # noqa: E402
 from xefm.state_manager import XeFMStateManager  # noqa: E402
 
-AFX_TABLE = keymap_afx.bindings()
+def _afx():
+    """The AFX table as the presets will build it now — built at the call,
+    since its desktop overrides read the backend another test may have set."""
+    return keymap_afx.bindings()
 
 
 def _config_with(**overrides):
@@ -45,7 +48,7 @@ class Apply(unittest.TestCase):
     def test_afx_is_its_whole_table(self):
         config = _config_with()
         keymap_presets.apply(config, keymap_presets.AFX)
-        self.assertEqual(config.KEY_BINDINGS, AFX_TABLE)
+        self.assertEqual(config.KEY_BINDINGS, _afx())
         self.assertFalse(keymap_presets.type_ahead(config))
 
     def test_orthodox_is_its_whole_table(self):
@@ -72,7 +75,7 @@ class Apply(unittest.TestCase):
                                  action)
         # A key that is not a letter stays where the preset says nothing:
         # '.' still shows hidden files.
-        self.assertEqual(_keys(config, "toggle_hidden"), AFX_TABLE["toggle_hidden"])
+        self.assertEqual(_keys(config, "toggle_hidden"), _afx()["toggle_hidden"])
 
     def test_orthodox_follows_total_commander(self):
         config = _config_with()
@@ -104,7 +107,7 @@ class Apply(unittest.TestCase):
     def test_a_viewer_keeps_its_letters(self):
         config = _config_with()
         keymap_presets.apply(config, keymap_presets.ORTHODOX)
-        self.assertEqual(_keys(config, "toggle_wrap"), AFX_TABLE["toggle_wrap"])
+        self.assertEqual(_keys(config, "toggle_wrap"), _afx()["toggle_wrap"])
 
     def test_config_py_overrides_every_preset(self):
         for name in keymap_presets.PRESETS:
@@ -117,9 +120,9 @@ class Apply(unittest.TestCase):
     def test_an_entry_equal_to_afx_still_overrides(self):
         """No "untouched" test any more: an entry is an entry, whatever it
         happens to equal."""
-        config = _config_with(copy_files=AFX_TABLE["copy_files"])
+        config = _config_with(copy_files=_afx()["copy_files"])
         keymap_presets.apply(config, keymap_presets.ORTHODOX)
-        self.assertEqual(config.KEY_BINDINGS["copy_files"], AFX_TABLE["copy_files"])
+        self.assertEqual(config.KEY_BINDINGS["copy_files"], _afx()["copy_files"])
 
     def test_an_old_name_overrides_the_action_it_names(self):
         config = _config_with(rename_file=["Ctrl-K"])
@@ -128,7 +131,7 @@ class Apply(unittest.TestCase):
         self.assertEqual(config.KEY_BINDINGS["rename_file"], ["Ctrl-K"])
 
     def test_replaced_names_what_config_py_changes(self):
-        config = _config_with(copy_files=AFX_TABLE["copy_files"],
+        config = _config_with(copy_files=_afx()["copy_files"],
                               help=["F1"])
         self.assertEqual(keymap_presets.replaced(config, keymap_presets.AFX), [])
         self.assertEqual(keymap_presets.replaced(config, keymap_presets.ORTHODOX),
@@ -140,7 +143,7 @@ class Apply(unittest.TestCase):
         keymap_presets.apply(config, keymap_presets.ORTHODOX)
         self.assertEqual(_keys(config, "copy_files"), ["F5"])
         keymap_presets.apply(config, keymap_presets.AFX)
-        self.assertEqual(config.KEY_BINDINGS, dict(AFX_TABLE, quit=[]))
+        self.assertEqual(config.KEY_BINDINGS, dict(_afx(), quit=[]))
         self.assertFalse(keymap_presets.type_ahead(config))
 
     def test_no_two_actions_share_a_key_in_the_file_list(self):
@@ -203,7 +206,7 @@ class InTheApp(unittest.TestCase):
         self.db = os.path.join(self.state_dir, "state.db")
         self.app = self._open()
 
-    def _open(self, created=False):
+    def _open(self):
         from puikit.backends import create_backend
         self.b = create_backend("memory")
         self.b.open()
@@ -213,9 +216,7 @@ class InTheApp(unittest.TestCase):
         shared = xefm_config.get_config()
         if not hasattr(self, "_saved_base"):
             self._saved_base = getattr(shared, "_KEY_BINDINGS_BASE", None)
-            self._saved_created = xefm_config.config_manager.created_config
         shared._KEY_BINDINGS_BASE = {}
-        xefm_config.config_manager.created_config = created
         app = xefm_app.XeFMApp(self.b, self.tmp, self.tmp,
                                left_provided=True, right_provided=True,
                                state_manager=XeFMStateManager(db_path=self.db))
@@ -227,7 +228,6 @@ class InTheApp(unittest.TestCase):
 
     def tearDown(self):
         # Leave the shared config as it was found for the next test file.
-        xefm_config.config_manager.created_config = self._saved_created
         self.app.config._KEY_BINDINGS_BASE = self._saved_base
         self.app.set_keymap_preset("afx")
         self.app.file_monitor.stop_monitoring()
@@ -332,6 +332,7 @@ class InTheApp(unittest.TestCase):
     def test_key_preset_in_config_wins(self):
         self.app.config.KEY_PRESET = "default"
         try:
+            self.app._apply_keymap_preset()
             self.app.set_keymap_preset("orthodox")
             self.assertEqual(self.app._keymap_preset, "afx")
             self.assertIn("KEY_PRESET", self.app.log.lines[-1][0])
@@ -340,22 +341,23 @@ class InTheApp(unittest.TestCase):
 
     # --- the first launch (#597) ---------------------------------------------
 
-    def _reopen(self, created=False):
+    def _reopen(self):
+        self.app.file_monitor.stop_monitoring()
+        self.b.close()
+        self.app = self._open()
+
+    def _forget(self):
         self.app.file_monitor.stop_monitoring()
         self.b.close()
         os.remove(self.db)
-        self.app = self._open(created=created)
+        self.app = self._open()
 
-    def test_an_install_from_before_presets_keeps_afx(self):
-        """config.py was already there and no preset was ever chosen: the
-        keymap it has been running, without a question."""
-        self._reopen(created=False)
-        self.assertEqual(self.app._keymap_preset, "afx")
-        self.assertEqual(self.app.state_manager.get_state("keymap.preset"), "afx")
-
-    def test_a_first_launch_asks(self):
-        self._reopen(created=True)
+    def test_nothing_chosen_is_asked_new_install_or_upgrade_alike(self):
+        """No preset is the default: with none chosen, whether config.py is
+        new or from an earlier XeFM, the launch asks."""
+        self._forget()
         self.assertIsNone(self.app._keymap_preset)
+        self.assertIsNone(self.app.state_manager.get_state("keymap.preset"))
         asked = []
         with patch.object(xefm_app, "show_message_box",
                           lambda *a, **k: asked.append(k)):
@@ -368,16 +370,11 @@ class InTheApp(unittest.TestCase):
         self.assertEqual(self._action(_key("f5")), "copy_files")
 
     def test_quitting_unanswered_asks_again_at_the_next_launch(self):
-        self._reopen(created=True)
-        # Next launch: config.py exists now, but the question is still open.
-        self.app.file_monitor.stop_monitoring()
-        self.b.close()
-        self.app = self._open(created=False)
+        self._forget()
+        self._reopen()
         self.assertIsNone(self.app._keymap_preset)
         self.app.set_keymap_preset("afx")
-        self.app.file_monitor.stop_monitoring()
-        self.b.close()
-        self.app = self._open(created=False)
+        self._reopen()
         self.assertEqual(self.app._keymap_preset, "afx")
 
     def test_switching_says_what_config_py_replaces(self):
