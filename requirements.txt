@@ -171,3 +171,8 @@ libarchive-c
 # upstream release could move the internals that patch touches. See
 # discussion #332 before bumping.
 pymigemo==0.0.1
+# comtypes reaches Windows Search (the OS's own file index) over COM, for
+# index_search (#579): OLE DB against Search.CollatorDSO. Pure Python on
+# ctypes, Windows only. macOS needs nothing -- Spotlight is queried through
+# /usr/bin/mdfind. Without it the action says how to install it.
+comtypes; sys_platform == "win32"

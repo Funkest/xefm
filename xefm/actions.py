@@ -662,6 +662,13 @@ _DETAILS: dict[str, str] = {
         "asks the one you pick which shares it offers, and mounts your choice "
         "through the operating system — the pane then goes there like any "
         "other directory. macOS and Windows."),
+    "index_search": (
+        "Searches the index your operating system keeps — Spotlight on "
+        "macOS, Windows Search on Windows — in this folder and everything "
+        "below it, and shows the matches as a list. Write the query as you "
+        "would in Spotlight (words, kind:pdf, date:today, metadata like "
+        "kMDItemPixelWidth > 4000) or in Windows Search (words; where … for "
+        "a raw SQL condition). Earlier queries are offered again."),
     "open_list_from_clipboard": (
         "Shows the paths on the clipboard, one per line, as the active pane's "
         "listing — the files can be in many directories. Nothing on disk "
@@ -873,6 +880,8 @@ _FILER_ACTIONS = [
     _a("open_list_from_file", FILER,
        "Open the list file under the cursor as the pane's list",
        default_keys=()),
+    # The OS search index (#579): Spotlight on macOS, Windows Search on Windows.
+    _a("index_search", FILER, "Search the OS index under this folder"),
     # Panes
     _a("sync_current_to_other", FILER, "Go to the other pane's directory"),
     _a("sync_other_to_current", FILER, "Send this directory to the other pane"),

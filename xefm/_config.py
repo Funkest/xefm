@@ -378,6 +378,8 @@ class Config:
         'isearch': ['F'],                       # Enter incremental search mode (isearch)
         'find_files': ['Shift-F'],          # Show filename search dialog
         'find_in_files': ['Shift-G'],         # Show content search dialog (grep)
+        # The OS's own index: Spotlight on macOS, Windows Search on Windows.
+        'index_search': ['Ctrl-F'],           # Search the OS index under this folder (results as a list)
         'filter': [';'],                       # Enter filter mode to show only matching files
         'clear_filter': [':'],                 # Clear current file filter
         

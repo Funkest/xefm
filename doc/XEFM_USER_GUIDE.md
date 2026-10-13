@@ -771,6 +771,7 @@ For detailed information about specific features, see these dedicated guides:
 - [Batch Rename Feature](BATCH_RENAME_FEATURE.md) - Regex-based renaming for multiple files
 - [Archive Feature](ARCHIVE_FEATURE.md) - Create, extract, and browse archives (incl. password-protected)
 - [File Details Feature](FILE_DETAILS_FEATURE.md) - Viewing detailed file information
+- [Searching the OS Index](OS_INDEX_SEARCH_FEATURE.md) - Spotlight and Windows Search, results as a list
 - [File Monitoring Feature](FILE_MONITORING_FEATURE.md) - Automatic refresh when directories change on disk
 
 ### Remote and Cloud Storage
