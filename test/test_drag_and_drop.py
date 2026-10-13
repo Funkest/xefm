@@ -88,7 +88,7 @@ class FilePaneGesture(unittest.TestCase):
     def test_file_drop_reports_paths_and_row(self):
         drops = []
         view = self._pane_widget([_F("/a/one"), _F("/a/two")],
-                                 on_drop=lambda i, paths: drops.append((i, paths)))
+                                 on_drop=lambda i, paths, op=None: drops.append((i, paths)))
         view.handle_event(Event(type=EventType.FILE_DROP, x=1.0, y=1.0,
                                 hints={"paths": ["/x/f.txt"]}))
         self.assertEqual(drops, [(1, ["/x/f.txt"])])
@@ -96,7 +96,7 @@ class FilePaneGesture(unittest.TestCase):
     def test_file_drop_below_rows_targets_pane_dir(self):
         drops = []
         view = self._pane_widget([_F("/a/one")],
-                                 on_drop=lambda i, paths: drops.append((i, paths)))
+                                 on_drop=lambda i, paths, op=None: drops.append((i, paths)))
         view.handle_event(Event(type=EventType.FILE_DROP, x=1.0, y=9.0,
                                 hints={"paths": ["/x/f.txt"]}))
         self.assertEqual(drops, [(-1, ["/x/f.txt"])])
@@ -158,9 +158,10 @@ class AppDragDrop(unittest.TestCase):
         self.app.panel.begin_file_drag = fake
         self.app._start_drag("left", idx, Event(type=EventType.MOUSE_DRAG, x=0, y=0))
         # The exported path is exactly the pane entry's path (symlink-resolved dirs
-        # and all), and copy is the only operation offered.
+        # and all), offered for copy or move — the receiver picks, by the
+        # user's drag modifiers (#589).
         self.assertEqual(seen["paths"], [str(pane["files"][idx])])
-        self.assertEqual(seen["ops"], ("copy",))
+        self.assertEqual(seen["ops"], ("copy", "move"))
 
     def test_start_drag_carries_whole_selection(self):
         for n in ("a.txt", "b.txt", "c.txt"):
@@ -197,7 +198,7 @@ class AppDragDrop(unittest.TestCase):
         try:
             src_file = self._write(outside, "dropped.txt", "hello")
             calls = self._capture_copy()
-            self.app._on_drop("left", -1, [src_file])
+            self.app._on_drop("left", -1, [src_file], "copy")
             self.assertEqual(len(calls), 1)
             targets, dest_dir = calls[0]
             self.assertEqual([str(t) for t in targets], [src_file])
@@ -275,7 +276,7 @@ class AppDragDrop(unittest.TestCase):
         self.app.panel.begin_file_drag = lambda paths, **kw: True
         self.app._start_drag("left", file_idx, Event(type=EventType.MOUSE_DRAG, x=0, y=0))
         calls = self._capture_copy()
-        self.app._on_drop("left", sub_idx, [str(pane["files"][file_idx])])
+        self.app._on_drop("left", sub_idx, [str(pane["files"][file_idx])], "copy")
         self.assertEqual(len(calls), 1)
         _targets, dest_dir = calls[0]
         self.assertEqual(str(dest_dir), str(pane["files"][sub_idx]))

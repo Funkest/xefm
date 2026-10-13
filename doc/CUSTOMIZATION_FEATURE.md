@@ -773,6 +773,11 @@ Rename it.
 neither is `~/.xefm/tools/`, which holds [external programs](EXTERNAL_PROGRAMS_FEATURE.md)
 XeFM runs as separate processes.
 
+**Turning one into a package.** Give a directory here an
+`xefm-extension.toml` and it becomes an [extension package](EXTENSIONS_FEATURE.md):
+XeFM wires its actions, hooks and themes in for you, without any lines in
+`config.py`, and it can be shared and installed with `xefm ext install`.
+
 **Keeping them elsewhere.** If you keep your extensions in their own project
 directory — under version control, say — add it to the path yourself at the top
 of `config.py`:

@@ -72,6 +72,19 @@ def ssh_command(hostname: str, port: Optional[str] = None,
     prompt on), accept a host seen for the first time, and notice a dead
     link within about a minute rather than waiting on it forever.
     """
+    return _ssh_options(port, identity_file) + ['-s', hostname, 'sftp']
+
+
+def ssh_exec_command(hostname: str, remote_command: str, port: Optional[str] = None,
+                     identity_file: Optional[str] = None) -> List[str]:
+    """The ``ssh`` command line that runs ``remote_command`` (already quoted
+    for the remote shell) on ``hostname`` — same options as the SFTP session,
+    so it never prompts either. Used for what SFTP v3 cannot do, such as
+    reading and writing extended attributes (file tags, #585)."""
+    return _ssh_options(port, identity_file) + [hostname, remote_command]
+
+
+def _ssh_options(port: Optional[str], identity_file: Optional[str]) -> List[str]:
     cmd = ['ssh',
            '-o', 'ForwardX11=no',
            '-o', 'ForwardAgent=no',
@@ -85,7 +98,6 @@ def ssh_command(hostname: str, port: Optional[str] = None,
         cmd.extend(['-p', str(port)])
     if identity_file:
         cmd.extend(['-i', identity_file])
-    cmd.extend(['-s', hostname, 'sftp'])
     return cmd
 
 
@@ -165,6 +177,20 @@ class SSHConnection:
         self._client: Optional[SFTPClient] = None
         self._stderr: List[bytes] = []
         self._cache = get_ssh_cache()
+
+    def run_remote(self, remote_command: str, *, input: bytes | None = None,
+                   timeout: float = 60.0) -> subprocess.CompletedProcess:
+        """Run one shell command on the host, outside the SFTP session, and
+        return its result (bytes). Each call is its own ssh process — a
+        handshake, unless the user's ssh config multiplexes — so callers batch
+        many files into one command."""
+        cmd = ssh_exec_command(self.hostname, remote_command, self.port,
+                               self.identity_file)
+        kwargs = {}
+        if os.name == 'nt':
+            kwargs['creationflags'] = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+        return subprocess.run(cmd, input=input, capture_output=True,
+                              timeout=timeout, **kwargs)
 
     # --- connecting -------------------------------------------------------------
 

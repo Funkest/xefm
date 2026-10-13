@@ -261,15 +261,19 @@ video/trip.mov                    310.5M / 1.4G
 
 ### Cancelling
 
-While an operation runs, normal input is blocked so you can't move the cursor or
-start another command. Press **ESC** to cancel. Cancellation is checked between
+While an operation's progress dialog is open, the rest of XeFM waits for it.
+To keep working instead, send the operation to the
+[background](BACKGROUND_JOBS_FEATURE.md): press **B**, or choose **Run in
+background** after **ESC**.
+
+Press **ESC**, then **Cancel operation**, to cancel. **ESC** asks first, and
+Enter or **ESC** again keeps the operation running. Cancellation is checked between
 files and, for large files, at each chunk — so it may take a moment to stop at
 the next checkpoint. Partial files are removed cleanly, leaving nothing
 half-written behind.
 
 This applies to remote transfers too: a slow upload to S3 or an SFTP server
-stops when you press **ESC**, rather than running to completion in the
-background. A cancelled S3 upload leaves no object behind and no partially
+stops when you cancel it, rather than running on to completion. A cancelled S3 upload leaves no object behind and no partially
 uploaded pieces to be billed for; a cancelled download leaves no file on disk.
 An SFTP transfer stops within about half a second of the keypress.
 

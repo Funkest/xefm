@@ -81,9 +81,10 @@ def test_multiple_actions():
 
 def test_has_action():
     """Test checking if action is available for file"""
-    # PDF has open/view; its edit is None in the default config (no editor).
+    # PDF has open; its view is None (the built-in viewer shows its text, #575)
+    # and its edit is None (no editor) in the default config.
     assert has_action_for_file('doc.pdf', 'open'), "PDF should have open action"
-    assert has_action_for_file('doc.pdf', 'view'), "PDF should have view action"
+    assert not has_action_for_file('doc.pdf', 'view'), "PDF view is the built-in viewer"
     assert not has_action_for_file('doc.pdf', 'edit'), "PDF edit is None in default config"
     print("✓ has_action_for_file() works for available actions")
     
