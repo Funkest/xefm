@@ -57,6 +57,8 @@ from xefm.actions import DIR_DIFF as _CONTEXT
 from xefm.config import (KeyBindings, find_action_for_event,
                          format_key_for_display, get_keys_for_action)
 from xefm.file_operations import FileOperationService, compare_mtimes
+from xefm import dir_sync
+from xefm.choice_dialog import show_choice_dialog
 
 
 class DifferenceType(Enum):
@@ -115,6 +117,13 @@ class TreeNode:
     children_scanned: bool = False
     content_compared: bool = False
     _hi_pri: bool = False
+    #: Each side's modification time as scanned, for the sync plan's "newer on
+    #: the target" check — None where the side is absent or unreadable.
+    left_mtime: Optional[float] = None
+    right_mtime: Optional[float] = None
+    #: A file on one side and a directory of the same name on the other. The
+    #: node is shown as a directory; a sync never copies one over the other.
+    type_mismatch: bool = False
 
 
 #: Scan-task priorities (higher = pulled off the queue first).
@@ -253,6 +262,7 @@ class DiffEngine:
             child = TreeNode(part, left.path if left else None, right.path if right else None,
                              is_dir, DifferenceType.IDENTICAL, node.depth + 1, False,
                              parent=node)
+            _record_sides(child, left, right)
             node.children.append(child)
             node = child
 
@@ -297,6 +307,18 @@ class DiffEngine:
                         return True
         except (OSError, IOError, PermissionError):
             return False
+
+
+def _record_sides(node: TreeNode, left: Optional[FileInfo],
+                  right: Optional[FileInfo]) -> None:
+    """Copy what the scan learned about each side onto ``node``: the mtimes,
+    and whether the two sides disagree on being a directory."""
+    if left is not None:
+        node.left_mtime = left.mtime if left.is_accessible else None
+    if right is not None:
+        node.right_mtime = right.mtime if right.is_accessible else None
+    if left is not None and right is not None:
+        node.type_mismatch = left.is_directory != right.is_directory
 
 
 def summarize_directory(node: TreeNode) -> DifferenceType:
@@ -347,6 +369,12 @@ class DirectoryDiffView(Widget):
     :func:`show_directory_diff_viewer`."""
 
     focusable = True
+
+    #: Class-level defaults for the sync plan state (set per instance in
+    #: __init__), so a view built without it — tests use ``__new__`` — still
+    #: flattens and draws.
+    _plan = None
+    _diff_only = False
 
     _MOUSE = frozenset({
         EventType.MOUSE_DOWN, EventType.MOUSE_UP,
@@ -428,6 +456,11 @@ class DirectoryDiffView(Widget):
         # across the freshly built tree so the user keeps their place.
         self._restore_expanded: Optional[set[str]] = None
         self._restore_cursor_path: Optional[str] = None
+        #: The open sync plan (#560), or None. While one is open the verdict
+        #: gutter shows each node's action instead of its verdict.
+        self._plan: Optional[dir_sync.SyncPlan] = None
+        #: Hide identical nodes, so a large tree shows only what differs.
+        self._diff_only = False
         if background:
             self._start_coordinator()
         else:
@@ -631,11 +664,13 @@ class DirectoryDiffView(Widget):
                     child.left_path = li.path
                 if ri is not None:
                     child.right_path = ri.path
+                _record_sides(child, li, ri)
                 continue
             is_dir = bool((li and li.is_directory) or (ri and ri.is_directory))
             child = TreeNode(name, li.path if li else None, ri.path if ri else None,
                              is_dir, DifferenceType.PENDING, parent.depth + 1, False,
                              parent=parent)
+            _record_sides(child, li, ri)
             parent.children.append(child)
             self._classify_new_locked(child)
         parent.children.sort(key=lambda c: (not c.is_directory, c.name.lower()))
@@ -838,6 +873,8 @@ class DirectoryDiffView(Widget):
 
     def _flatten(self, node: TreeNode, out: list[TreeNode]) -> None:
         if node.depth > 0:
+            if self._diff_only and node.difference_type == DifferenceType.IDENTICAL:
+                return
             out.append(node)
         if node.is_expanded:
             for child in node.children:
@@ -1170,6 +1207,12 @@ class DirectoryDiffView(Widget):
             (move, "move focused → other side"),
             (delete, "delete focused (active side)"),
             (merge, "merge sides in $TEXT_DIFF"),
+            (self._keys_label("dir_diff.sync", "s"),
+             "sync: plan from active side · again to run"),
+            (self._keys_label("dir_diff.cycle_sync_action", "Space"),
+             "change the focused node's sync action"),
+            (self._keys_label("dir_diff.toggle_identical", "d"),
+             "show only differences / everything"),
             (self._keys_label("dir_diff.rescan", "r"), "rescan"),
             (self._keys_label("quit", "q") + " / Esc", "close"),
         ]
@@ -1345,6 +1388,8 @@ class DirectoryDiffView(Widget):
                     f"{self._dirs_scanned}/{self._dirs_total} "
                     f"({self._pct(self._dirs_scanned, self._dirs_total)}%) · "
                     f"{queued} queued · esc cancel ")
+        if self._plan is not None:
+            return self._plan_footer()
         diffs = sum(1 for n in self.visible if n.difference_type in _IS_DIFF)
         # Every key named here comes from the live keymap, so a rebind reads the
         # same in the footer as it does in the help dialog (issue #382); an
@@ -1358,6 +1403,7 @@ class DirectoryDiffView(Widget):
             (self._footer_key("dir_diff.switch_side", "Tab"), "side"),
             (self._footer_key("dir_diff.activate", "Enter"), "diff"),
             (self._footer_key("edit_file", "E"), "merge"),
+            (self._footer_key("dir_diff.sync", "s"), "sync"),
             (self._footer_key("quit", "q"), "close"),
         )
         parts = [f"{len(self.visible)} nodes", f"{diffs} differences"]
@@ -1462,6 +1508,10 @@ class DirectoryDiffView(Widget):
         # in draw()); its bg matches so the band stays continuous behind it.
         sep = _SEPARATOR.get(verdict, " ! ")
         sep_fg = _DIFF_FG if is_diff else self._muted
+        planned = self._plan.glyph(node) if self._plan is not None else None
+        if planned is not None:
+            sep = planned
+            sep_fg = {" × ": _DIFF_FG, " · ": self._muted}.get(planned, self._accent)
         ctx.draw_text(self._sep_x, y, sep,
                       Style(fg=sep_fg, bg=self._gutter_bg, attr=TextAttribute.BOLD, font=MONO))
         side(self._right_x, self._right_w, node.right_path, self.active == "right", False)
@@ -1671,7 +1721,9 @@ class DirectoryDiffView(Widget):
                 handler()
                 self._update_priorities()
                 return True
-        if event.key == "escape" or action == "quit":
+        if (event.key == "escape" or action == "quit") and self._plan is not None:
+            self._leave_plan()
+        elif event.key == "escape" or action == "quit":
             self._close()
         else:
             handler = self._handlers_table().get(action)
@@ -1700,6 +1752,9 @@ class DirectoryDiffView(Widget):
                 "dir_diff.rescan": self._restart_scan,
                 "dir_diff.split_left": lambda: self._nudge_split(-0.05),
                 "dir_diff.split_right": lambda: self._nudge_split(0.05),
+                "dir_diff.sync": self._sync,
+                "dir_diff.cycle_sync_action": self._cycle_focused,
+                "dir_diff.toggle_identical": self._toggle_identical,
             }
         return self._handlers
 
@@ -1727,6 +1782,159 @@ class DirectoryDiffView(Widget):
 
     def _switch_side(self) -> None:
         self.active = "right" if self.active == "left" else "left"
+        if self._plan is not None:
+            # The active side is the plan's source, so switching turns the
+            # plan around. Changes made for the other direction mean nothing
+            # in this one.
+            self._plan.source = self.active
+            self._plan.overrides.clear()
+
+    # --- sync plan (#560) ----------------------------------------------------
+
+    def _toggle_identical(self) -> None:
+        """Show only what differs, or everything again. The cursor stays on
+        its node when that node is still shown."""
+        node = self._current()
+        self._diff_only = not self._diff_only
+        self._reflow()
+        if node is not None and node in self.visible:
+            self.cursor = self.visible.index(node)
+        self._ensure_cursor_visible()
+
+    def _sync(self) -> None:
+        """The sync key: open a plan, or — with one open — confirm and run it."""
+        if self._plan is None:
+            self._open_plan()
+        else:
+            self._confirm_plan()
+
+    def _open_plan(self) -> None:
+        """Ask for a mode and open a plan from the active side to the other.
+        Only once the comparison has finished: a plan made earlier would miss
+        whatever had not been compared yet."""
+        if self._panel is None:
+            return
+        if self._fileops is None:
+            self._notify("Sync is not available here.")
+            return
+        if self._scanning or not dir_sync.is_settled(self.root):
+            self._notify("The comparison is still running. Sync once it has "
+                         "finished.")
+            return
+        src, dst = self.active, "right" if self.active == "left" else "left"
+        rows = [
+            (dir_sync.UPDATE, f"Update — copy new and changed files {src} → {dst}"),
+            (dir_sync.MIRROR, f"Mirror — the same, and delete what only "
+                              f"{dst} has"),
+        ]
+
+        def chosen(mode) -> None:
+            if mode is not None:
+                self._plan = dir_sync.SyncPlan(mode, self.active,
+                                               self.left_path, self.right_path)
+                self._diff_only = True
+                self._reflow()
+                self._ensure_cursor_visible()
+            self._render()
+
+        show_choice_dialog(self._panel, "Sync", rows, on_result=chosen,
+                           z=self._child_z)
+        self._render()
+
+    def _leave_plan(self) -> None:
+        self._plan = None
+        self._render()
+
+    def _cycle_focused(self) -> None:
+        """Change the focused node's action to its next choice."""
+        node = self._current()
+        if self._plan is None or node is None:
+            return
+        self._plan.cycle(node)
+
+    def _plan_footer(self) -> str:
+        plan = self._plan
+        ops = plan.operations(self.root)
+        mode = dir_sync.MODE_LABELS[plan.mode]
+        parts = [f"{mode} {plan.source} → {plan.target}",
+                 f"{len(ops.copies)} copy", f"{len(ops.deletes)} delete",
+                 f"{ops.skipped + ops.mismatched} skip"]
+        hints = (
+            (self._footer_key("dir_diff.cycle_sync_action", "Space"), "change"),
+            (self._footer_key("dir_diff.toggle_identical", "d"), "all/diff"),
+            (self._footer_key("dir_diff.sync", "s"), "run"),
+            ("Esc", "leave plan"),
+        )
+        parts += [f"{keys} {word}" for keys, word in hints if keys]
+        return " " + " · ".join(parts) + " "
+
+    def _plan_summary(self, ops: dir_sync.Operations) -> str:
+        """The confirmation's text: what will be written where, with the
+        deletions apart from the copies."""
+        plan = self._plan
+        src = self.left_path if plan.source == "left" else self.right_path
+        dst = self.right_path if plan.source == "left" else self.left_path
+        lines = [f"**{dir_sync.MODE_LABELS[plan.mode]}** `{src}` → `{dst}`", ""]
+        if ops.new:
+            lines.append(f"- Copy **{ops.new}** new item(s)")
+        if ops.replaced:
+            lines.append(f"- Replace **{ops.replaced}** changed file(s)")
+        if ops.back:
+            lines.append(f"- Copy **{ops.back}** item(s) back the other way")
+        if ops.skipped:
+            newer = (f", {ops.newer_kept} of them newer on {plan.target}"
+                     if ops.newer_kept else "")
+            lines.append(f"- Skip {ops.skipped} item(s){newer}")
+        if ops.mismatched:
+            lines.append(f"- Skip {ops.mismatched} name(s) that are a file on "
+                         f"one side and a folder on the other")
+        if ops.deletes:
+            lines += ["", f"**Delete {len(ops.deletes)} item(s) on "
+                          f"{plan.target}. This cannot be undone.**"]
+        return "\n".join(lines)
+
+    def _confirm_plan(self) -> None:
+        if self._panel is None or self._plan is None:
+            return
+        if self._scanning:
+            self._notify("The comparison is still running. Sync once it has "
+                         "finished.")
+            return
+        ops = self._plan.operations(self.root)
+        if ops.empty:
+            self._notify("Nothing to sync: every difference is skipped.")
+            return
+        deleting = bool(ops.deletes)
+
+        def on_result(label: str) -> None:
+            if label == "Sync":
+                self._fileops.sync(self._panel, ops.copies, ops.deletes,
+                                   on_complete=self._on_sync_complete,
+                                   z=self._child_z,
+                                   background=self._op_background)
+            self._render()
+
+        show_message_box(self._panel, self._plan_summary(ops), title="Sync",
+                         icon="warning" if deleting else "info",
+                         buttons=("Sync", "Cancel"),
+                         default=1 if deleting else 0, cancel=1,
+                         on_result=on_result, z=self._child_z, markdown=True)
+        self._render()
+
+    def _on_sync_complete(self, result: dict) -> None:
+        """The plan has run: close it, say what went wrong, and rescan so the
+        verdicts show what is now on disk."""
+        self._plan = None
+        if result.get("cancelled"):
+            self._notify("Sync cancelled. What was done so far stays done.")
+        elif result.get("failed") or result.get("errors"):
+            errors = result.get("errors") or []
+            shown = "\n".join(f"- {name}: {msg}" for name, msg in errors[:5])
+            more = f"\n- … and {len(errors) - 5} more" if len(errors) > 5 else ""
+            self._notify(f"{len(errors) or result['failed']} item(s) failed.\n\n"
+                         f"{shown}{more}")
+        self._restart_scan()
+        self._render()
 
 
 def show_directory_diff_viewer(panel: Any, left_path: Path, right_path: Path,
