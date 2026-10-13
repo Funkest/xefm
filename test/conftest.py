@@ -47,3 +47,21 @@ def drop_user_config_entries():
     image_decoders.clear()
     path_schemes.unregister_source("user")
     lexer_registry.clear()
+
+
+@pytest.fixture(autouse=True)
+def no_real_trash(monkeypatch):
+    """Keep every test away from the developer's own Trash / Recycle Bin.
+
+    ``delete_files`` sends to the system's trash, and on macOS and Windows
+    that is the user's real one, not a temp directory. A test that wants the
+    trash path patches ``xefm.trash.send`` itself (or drives the freedesktop
+    code with its own ``XDG_DATA_HOME``); anything else reaching the real
+    platform call fails loudly instead of leaving files in the user's Trash."""
+    from xefm import trash
+
+    def refuse(path):
+        raise AssertionError(f"a test reached the real {trash.NAME}: {path}")
+
+    monkeypatch.setattr(trash, "_trash_macos", refuse)
+    monkeypatch.setattr(trash, "_trash_windows", refuse)

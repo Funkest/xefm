@@ -533,10 +533,18 @@ _DETAILS: dict[str, str] = {
         "same directory, named the way Finder does: `report (2).txt`. Also on "
         "the File menu and the context menu."),
     "delete_files": (
-        "Deletes the selected items — or the item under the cursor when "
-        "nothing is selected — after a confirmation (`CONFIRM_DELETE`). "
-        "Directories are deleted with everything in them. The files are "
-        "removed, not moved to the Trash or Recycle Bin."),
+        "Moves the selected items — or the item under the cursor when nothing "
+        "is selected — to the system's Trash (the Recycle Bin on Windows), "
+        "after a confirmation (`CONFIRM_TRASH`). They can be restored from "
+        "Finder, Explorer or your desktop's file manager.\n\n"
+        "Where there is no Trash — SSH, S3, inside archives, and USB or "
+        "network drives on Windows — the items are deleted for good instead, "
+        "and the confirmation says so. `DELETE_TO_TRASH = False` makes this "
+        "always delete for good."),
+    "delete_permanently": (
+        "Deletes the selected items — or the item under the cursor — for "
+        "good, without going through the Trash, after a confirmation "
+        "(`CONFIRM_DELETE`). Directories are deleted with everything in them."),
     "rename": (
         "With one item, or none selected, asks for a new name for the item "
         "under the cursor. With several items selected, opens batch rename: "
@@ -821,7 +829,8 @@ _FILER_ACTIONS = [
     _a("move_files_to", FILER, "Move the selection to a directory typed in a prompt"),
     _a("duplicate_files", FILER, "Duplicate the selection in place",
        default_keys=()),
-    _a("delete_files", FILER, "Delete the selected files and directories"),
+    _a("delete_files", FILER, "Move the selection to the Trash (or delete it where there is none)"),
+    _a("delete_permanently", FILER, "Delete the selection for good, skipping the Trash"),
     _a("rename", FILER, "Rename the focused item, or batch-rename the selection",
        aliases=("rename_file",)),
     _a("create_file", FILER, "Create a new file"),

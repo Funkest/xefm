@@ -78,6 +78,7 @@ from xefm.connect_dialog import open_connect_server, run_connecting
 from xefm.input_dialog import show_input
 from xefm.choice_dialog import show_choice_dialog
 from xefm import favorites
+from xefm import trash
 from xefm import netmount
 from xefm.options import OptionSet
 from xefm.progressive_search_dialog import show_progressive_search
@@ -2814,6 +2815,7 @@ class XeFMApp:
                 "move_files_to": (self.move_files_to, None),
                 "duplicate_files": (self.duplicate_files, None),
                 "delete_files": (self.delete_files, None),
+                "delete_permanently": (self.delete_permanently, None),
                 "create_archive": (self.create_archive, None),
                 "extract_archive": (self.extract_archive, None),
             }
@@ -3357,8 +3359,10 @@ class XeFMApp:
                      enabled=has_files, shortcut=sc("copy_files_to")),
             MenuItem("Move to…", on_select=self.move_files_to,
                      enabled=has_files, shortcut=sc("move_files_to")),
-            MenuItem("Delete…", on_select=self.delete_files,
+            MenuItem(f"Move to {trash.NAME}…", on_select=self.delete_files,
                      enabled=has_files, shortcut=sc("delete_files")),
+            MenuItem("Delete Permanently…", on_select=self.delete_permanently,
+                     enabled=has_files, shortcut=sc("delete_permanently")),
             SEPARATOR,
             MenuItem("Create Archive…", on_select=self.create_archive,
                      enabled=has_files, shortcut=sc("create_archive")),
@@ -6106,13 +6110,24 @@ class XeFMApp:
         return False
 
     def delete_files(self) -> bool:
-        """Delete the active pane's selection (or cursor entry) via the shared
-        :class:`~xefm.file_operations.FileOperationService` (confirm honouring
-        ``CONFIRM_DELETE``, directories removed recursively); refresh the pane and
-        log the summary on completion.
+        """K / Delete: send the selection (or cursor entry) to the system's
+        trash (#591) where every item has one, else delete for good — after a
+        confirmation that says there is no trash here. ``DELETE_TO_TRASH =
+        False`` makes it :meth:`delete_permanently`."""
+        config = getattr(self, "config", None)
+        return self._delete(permanent=not getattr(config, "DELETE_TO_TRASH", True))
+
+    def delete_permanently(self) -> bool:
+        """Shift-K / Shift-Delete: delete the selection for good, skipping the
+        trash, via the shared :class:`~xefm.file_operations.FileOperationService`
+        (confirm honouring ``CONFIRM_DELETE``, directories removed
+        recursively); refresh the pane and log the summary on completion.
 
         Returns True when a guard bailed out synchronously (see ``_transfer`` for
         why the caller then needs to redraw)."""
+        return self._delete(permanent=True)
+
+    def _delete(self, permanent: bool) -> bool:
         pane = self.active_pane()
         targets = self._selected_or_focused(pane)
         if not targets:
@@ -6122,17 +6137,30 @@ class XeFMApp:
             self.log_info("Cannot delete inside a read-only archive")
             return True
 
+        to_trash = not permanent and all(trash.available(t) for t in targets)
+        verb = "Trash" if to_trash else "Delete"
+
         def on_complete(result: dict) -> None:
             pane["selected_files"].clear()
             # _relist, not _refresh: nothing navigated, so the cursor stays on
             # what it was on — or, when that was one of the files just deleted,
             # on the entry that took its place (#414).
             self._relist(pane)
-            self.log_info(format_op_summary("Delete", result))
-            self._report_op_failures("Delete", result)
+            self.log_info(format_op_summary(verb, result))
+            self._report_op_failures(verb, result)
             self.panel.render()
 
-        self._fileops.delete(self.panel, targets, on_complete=on_complete, log=self.log_info)
+        if to_trash:
+            self._fileops.trash(self.panel, targets, on_complete=on_complete,
+                                log=self.log_info)
+            return False
+        note = None
+        if not permanent:
+            # K was pressed expecting the trash; say plainly that there is none.
+            note = (f"There is no {trash.NAME} here, so these are deleted for "
+                    "good.")
+        self._fileops.delete(self.panel, targets, on_complete=on_complete,
+                             log=self.log_info, note=note)
         return False
 
     # --- archives (create / extract) -----------------------------------------
@@ -7689,7 +7717,8 @@ class XeFMApp:
             ("move_files", "Move selection to the other pane"),
             ("copy_files_to", "Copy selection to a typed directory"),
             ("move_files_to", "Move selection to a typed directory"),
-            ("delete_files", "Delete selection"),
+            ("delete_files", f"Move selection to the {trash.NAME}"),
+            ("delete_permanently", "Delete selection for good"),
             ("create_archive", "Create archive from selection"),
             ("extract_archive", "Extract the selected archive(s)"),
             ("file_details", "Show file details"),
@@ -8134,7 +8163,10 @@ class XeFMApp:
             MenuItem("Move to Other Pane", on_select=self.move_files, enabled=entry is not None),
             MenuItem("Copy to…", on_select=self.copy_files_to, enabled=entry is not None),
             MenuItem("Move to…", on_select=self.move_files_to, enabled=entry is not None),
-            MenuItem("Delete", on_select=self.delete_files, enabled=entry is not None),
+            MenuItem(f"Move to {trash.NAME}", on_select=self.delete_files,
+                     enabled=entry is not None),
+            MenuItem("Delete Permanently", on_select=self.delete_permanently,
+                     enabled=entry is not None),
             SEPARATOR,
             MenuItem("Copy Name(s)", on_select=self.copy_names_to_clipboard,
                      enabled=entry is not None),
