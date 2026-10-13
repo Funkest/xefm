@@ -419,8 +419,11 @@ _DETAILS: dict[str, str] = {
         "is selected — in your editor. An `edit` rule in `FILE_ASSOCIATIONS` "
         "picks the program per file type; otherwise `TEXT_EDITOR` is used. "
         "Files that go to the same editor open in one session.\n\n"
-        "Local files only: directories and files on remote or archive panes "
-        "are skipped, with a note in the log."),
+        "A file on a writable remote (SSH, S3) is downloaded to a local copy "
+        "under `~/.xefm/edit/`, and every save of that copy is uploaded back — "
+        "after a question if the remote file changed meanwhile. A failed "
+        "upload keeps the copy and says where it is. Files inside archives "
+        "are read-only and are skipped, with a note in the log."),
     # --- navigation ---
     "open_item": (
         "On a directory, enters it. On an archive XeFM can read, browses it "
@@ -542,6 +545,14 @@ _DETAILS: dict[str, str] = {
         "under the cursor. With several items selected, opens batch rename: "
         "a regular-expression find and replace across all of them, with a "
         "preview before anything changes."),
+    "rename_in_editor": (
+        "Writes the selected names — or the name under the cursor — to a "
+        "text file, one per line, and opens it in `TEXT_EDITOR`. Change the "
+        "names in place and save; each changed line renames its file, after "
+        "a confirmation listing every change. Lines cannot be added or "
+        "removed, and swapped names are handled.\n\n"
+        "When the editor opens in its own window, XeFM waits for you to "
+        "choose Apply once the file is saved."),
     "create_file": (
         "Asks for a name and creates an empty file in the active pane's "
         "directory, with the cursor on it."),
@@ -824,6 +835,7 @@ _FILER_ACTIONS = [
     _a("delete_files", FILER, "Delete the selected files and directories"),
     _a("rename", FILER, "Rename the focused item, or batch-rename the selection",
        aliases=("rename_file",)),
+    _a("rename_in_editor", FILER, "Rename the selection by editing its names in TEXT_EDITOR"),
     _a("create_file", FILER, "Create a new file"),
     _a("create_directory", FILER, "Create a new directory"),
     # Viewing
