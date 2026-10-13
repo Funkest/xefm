@@ -106,7 +106,10 @@ to `TaskManager.submit`.
   `describe_operation`: "12 items  ~/photos → s3://bucket", "3 items in
   ~/tmp"; a sync names its counts), and the state: percent with bytes,
   needs you, paused and queued, or queued. Choosing one calls
-  `bring_forward`.
+  `bring_forward`. The rows are live: `show_choice_dialog(..., refresh=)`
+  makes the `ChoiceDialog` ask for them again on every draw and repaint
+  itself every 0.5 s on its own animation tick. The selection stays on the
+  same value, and the dialog closes when no rows are left.
 - `confirm_quit` with background jobs names them and defaults to Cancel.
   Quitting anyway calls `TaskManager.cancel_all(timeout=3.0)`, which cancels
   the queue and every running task and waits for the workers to unwind at

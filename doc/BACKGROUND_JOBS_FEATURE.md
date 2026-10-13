@@ -22,7 +22,8 @@ The spinner in front turns while the job runs. `+1` is how many more jobs
 wait behind it.
 
 **Click it**, or choose **View → Background Jobs…** (`Ctrl-G`), to list every
-job: what it does, from where to where, and how far it is.
+job: what it does, from where to where, and how far it is. The list keeps up
+while it is open, and closes by itself once the last job has finished.
 
 ```
 Copy 12 items  ~/photos → s3://bucket/backup — 42% (1.2G / 2.9G)

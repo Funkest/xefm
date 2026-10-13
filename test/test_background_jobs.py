@@ -419,3 +419,26 @@ def test_the_jobs_list_shows_detail_and_state(app):
     assert labels[2].endswith("queued (Enter removes it)")
     for release in (release1, release2, release3):
         release.set()
+
+
+def test_the_jobs_list_follows_the_progress(app):
+    """The list is live (#599): its percentages move while it is open, and it
+    closes once the last job has ended."""
+    from xefm.choice_dialog import ChoiceDialog
+    from xefm.progress_manager import OperationType
+    task, release, done = _held_task(app.tasks, app.panel, detached=True)
+    task.progress.start_operation(OperationType.COPY, 4, description="")
+    app.show_jobs()
+    dialog = app.panel._layers[-1].widget
+    assert isinstance(dialog, ChoiceDialog)
+    task.progress.update_progress("a", processed_items=2)
+    time.sleep(0.6)
+    app.panel.backend.run_animation_ticks()
+    app.panel.render()
+    assert "50%" in dialog._rows[0][1]
+    assert "50%" in "\n".join(app.panel.backend.snapshot())
+    release.set()
+    _pump(app.panel, lambda: done)
+    time.sleep(0.6)
+    _pump(app.panel, lambda: not any(isinstance(layer.widget, ChoiceDialog)
+                                     for layer in app.panel._layers))

@@ -5806,9 +5806,16 @@ class XeFMApp:
                     self._open_scan(item)
             self.panel.render()
 
-        rows = [(("task", t), label(t)) for t in jobs]
-        rows += [(("scan", j), scan_label(j, st, tx)) for j, st, tx in self._scan_rows]
-        show_choice_dialog(self.panel, "Background Jobs", rows, on_result=chosen)
+        def rows() -> list:
+            """The list as it stands now: the dialog asks again a few times a
+            second, so the progress moves while it is open (#599)."""
+            items = [(("task", t), label(t)) for t in self.tasks.background_tasks()]
+            items += [(("scan", j), scan_label(j, st, tx))
+                      for j, st, tx in self._scan_rows]
+            return items
+
+        show_choice_dialog(self.panel, "Background Jobs", rows(), on_result=chosen,
+                           refresh=rows)
         self.panel.render()
 
     def show_favorites(self) -> None:
