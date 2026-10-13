@@ -26,6 +26,7 @@ archive browsing, and remote storage (S3 / SFTP).
 import argparse
 import getpass
 import importlib.util
+import itertools
 import os
 import platform
 import queue
@@ -36,6 +37,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import types
 import sys
 from pathlib import Path as _StdPath
 from urllib.parse import quote, unquote, urlsplit
@@ -86,7 +88,9 @@ from xefm import search_options as search_opts
 from xefm.isearch_bar import ISearchBar
 from xefm import filters
 from xefm import name_key
-from xefm import tree_walk
+from xefm import document_text, keymap_presets, os_index, similar_scan, tree_walk, xefml
+from xefm.file_clipboard import FileClipboard, conflicts as clipboard_conflicts
+from xefm.quick_view import QuickView
 from xefm.log_manager import (LOG_ERROR_SOURCE, LOG_SOURCE, clear_log_sink,
                               getLogger, route_library_logger, set_log_sink)
 from xefm.pane_manager import PaneManager
@@ -114,7 +118,7 @@ from xefm.directory_diff_viewer import show_directory_diff_viewer
 from xefm.file_operations import (CloseGate, FileOperationService,
                                   format_op_errors, format_op_summary,
                                   serialized_log, transfer_workers)
-from xefm.task import Cancelled, Task, TaskManager
+from xefm.task import Cancelled, Task, TaskManager, TaskStatus
 from xefm.text_dialog import show_markdown
 from xefm.text_encoding import sniff_bom
 from xefm.tips import tip_count
@@ -733,7 +737,8 @@ def _virtual_header_text(virtual: dict, avail: float, measure=len) -> str:
     and the root its rows are named relative to. No row count — the footer
     already has it.
 
-    **A list** reads ``[title] root``, in the bracket style of an archive's
+    **A list** — or a flat view, titled ``Flat view`` — reads ``[title] root``,
+    in the bracket style of an archive's
     ``[foo.zip]/sub``, and the root has priority. It is derived from the paths,
     not from where the pane was, so the header is the one place that says what
     a row's ``src/main.py`` is relative to. When space runs out the title is
@@ -747,7 +752,7 @@ def _virtual_header_text(virtual: dict, avail: float, measure=len) -> str:
     root = virtual.get("root")
     has_root = root is not None and root is not name_key.WHOLE_PATH
 
-    if virtual.get("kind") == "list":
+    if virtual.get("kind") in ("list", "flat"):
         title = virtual["title"]
         if not has_root:
             return elide(f"[{title}]", avail, where="end", measure=measure)
@@ -770,6 +775,46 @@ def _virtual_header_text(virtual: dict, avail: float, measure=len) -> str:
             if measure(shown) <= room:
                 return label + _VIRTUAL_ROOT_SEP + shown
     return elide(label, avail, where="end", measure=measure)
+
+
+def _xefml_header_text(path, avail: float, measure=len) -> str:
+    """``[results.xefml]/group`` for a pane inside a ``.xefml`` tree, and —
+    while its producer is still rewriting it — that the groups may change,
+    with the producer's progress. That part has priority over the path: acting
+    on a provisional group without knowing it is the mistake to prevent."""
+    file_path, key = xefml.split(path)
+    label = f"[{_StdPath(file_path).name}]" + (f"/{key}" if key else "")
+    try:
+        doc = xefml.load(file_path)
+    except OSError:
+        doc = None
+    if doc is None or not doc.provisional:
+        return abbreviate_path(label, avail, measure=measure)
+    pct = doc.progress_text()
+    note = f"  ·  scanning{' ' + pct if pct else ''} — groups may change"
+    room = avail - measure(note)
+    if room < measure("x" * 8):
+        return elide(note.strip(" ·"), avail, where="end", measure=measure)
+    return abbreviate_path(label, room, measure=measure) + note
+
+
+def _tab_label(pane: dict) -> str:
+    """What a tab is called in the strip: a directory's last component (the
+    whole path at a root, so ``/`` and ``s3://bucket/`` still say something),
+    an archive by its file name, a list by its title, a search by its query."""
+    virtual = pane.get("virtual")
+    if virtual:
+        if virtual.get("kind") == "search":
+            return f'⌕ {virtual.get("query", "")}'
+        root = virtual.get("root")
+        name = getattr(root, "name", "") if root is not name_key.WHOLE_PATH else ""
+        title = virtual.get("title", "")
+        return f"[{title}] {name}" if name else f"[{title}]"
+    path_str = str(pane["path"])
+    if path_str.startswith("archive://"):
+        label = _archive_header_label(path_str)
+        return label.rsplit("/", 1)[-1] or label
+    return pane["path"].name or path_str
 
 
 def _archive_header_label(path_str: str) -> str:
@@ -855,6 +900,13 @@ class PaneHeader(Widget):
         # path text's left inset.
         self._abs: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
         self._pad_x = 0.0
+        #: The tab strip's row and each tab's ``(x0, x1, index)``, captured
+        #: each draw so a click can tell which tab it landed on.
+        self._tab_row: tuple[float, float] | None = None
+        self._tab_hits: list[tuple[float, float, int]] = []
+
+    def _tabs(self) -> list:
+        return self.app.pm.tabs[self.pane_name]
 
     def menu_anchor(self) -> tuple[float, float]:
         """Where the directory's context menu opens from the keyboard: hanging
@@ -882,17 +934,79 @@ class PaneHeader(Widget):
             # A browsed archive: show [archive.zip]/sub rather than the raw URI.
             label = _archive_header_label(str(pane["path"]))
             text = abbreviate_path(label, avail, measure=ctx.measure_text)
+        elif xefml.is_xefml_path(pane["path"]):
+            text = _xefml_header_text(pane["path"], avail, measure=ctx.measure_text)
         else:
             # Drop whole directory components rather than cutting mid-name, so
             # every name still on screen is one the user can actually read.
             text = abbreviate_path(str(pane["path"]), avail, measure=ctx.measure_text)
         fg = ctx.theme.accent if active else ctx.theme.text
-        ctx.draw_text(pad_x, pad_y, text, Style(fg=fg, attr=TextAttribute.BOLD))
+        path_y = pad_y
+        tabs = self._tabs()
+        if len(tabs) > 1:
+            self._draw_tabs(ctx, tabs, pad_x, pad_y, avail, active)
+            path_y += 1.0
+        else:
+            self._tab_row = None
+            self._tab_hits = []
+        ctx.draw_text(pad_x, path_y, text, Style(fg=fg, attr=TextAttribute.BOLD))
+
+    def _draw_tabs(self, ctx, tabs, pad_x, y, avail, active) -> None:
+        """The tab strip: one label per tab, ``1 src  2 docs  3 ⌕ TODO``, the
+        current one bold on a selection band (accent while the pane is active),
+        the others muted. Every tab gets an equal share when they do not all
+        fit, each label elided to its share."""
+        theme = ctx.theme
+        current = self.app.pm.tab_index[self.pane_name]
+        gap = 1.0
+        labels = [f"{i + 1} {_tab_label(t)}" for i, t in enumerate(tabs)]
+        widths = [ctx.measure_text(lab) + 1.0 for lab in labels]
+        share = (avail - gap * (len(tabs) - 1)) / len(tabs)
+        if sum(widths) + gap * (len(tabs) - 1) > avail:
+            widths = [min(w, max(share, 2.0)) for w in widths]
+        band = getattr(theme, "selection_active_bg" if active
+                       else "selection_inactive_bg", None) or theme.accent
+        x = pad_x
+        self._tab_row = (y, y + 1.0)
+        self._tab_hits = []
+        for i, (label, w) in enumerate(zip(labels, widths)):
+            if x >= pad_x + avail:
+                break
+            w = min(w, pad_x + avail - x)
+            shown = elide(label, max(0.0, w - 1.0), where="end",
+                          measure=ctx.measure_text)
+            if i == current:
+                ctx.fill_rect(x, y, w, 1.0, Style(bg=band))
+                style = Style(fg=theme.text, bg=band, attr=TextAttribute.BOLD)
+            else:
+                style = Style(fg=theme.muted_text)
+            ctx.draw_text(x + 0.5, y, shown, style)
+            self._tab_hits.append((x, x + w, i))
+            x += w + gap
+
+    def handle_event(self, event) -> bool:
+        """A click on a tab shows it."""
+        if (event.type is EventType.MOUSE_CLICK and self._tab_row is not None
+                and self._tab_row[0] <= (event.y or 0.0) < self._tab_row[1]):
+            ex = event.x or 0.0
+            for x0, x1, index in self._tab_hits:
+                if x0 <= ex < x1:
+                    self.app.select_tab(self.pane_name, index)
+                    self.app.panel.render()
+                    return True
+        return False
 
     def measure(self, ctx, axis, available) -> SizeRequest:
         # Reserve a strip of top padding above the path (vector backends); the
         # bar is placed with size="content" so this height wins. See _bar_height.
-        return _bar_height(ctx) if axis == "y" else SizeRequest()
+        # A pane with more than one tab adds a row for the tab strip.
+        if axis != "y":
+            return SizeRequest()
+        req = _bar_height(ctx)
+        if len(self._tabs()) > 1:
+            h = req.preferred + 1.0
+            return SizeRequest(min=h, preferred=h, max=h)
+        return req
 
 
 class PaneFooter(Widget):
@@ -919,7 +1033,9 @@ class PaneFooter(Widget):
         filt = (f"  |  Filter: {filters.label(pane['filter_pattern'])}"
                 if pane["filter_pattern"] else "")
         sort = self.app.flm.get_sort_description(pane)
-        text = f"{dirs} dirs, {files} files{sel}  |  {sort}{filt}"
+        preview = self.app._paste_preview(pane)
+        paste = f"  |  {preview}" if preview else ""
+        text = f"{dirs} dirs, {files} files{sel}  |  {sort}{filt}{paste}"
         fg = ctx.theme.text if active else ctx.theme.muted_text
         style = Style(fg=fg, attr=TextAttribute.BOLD if active else TextAttribute.NORMAL)
 
@@ -1028,6 +1144,21 @@ class StatusBar(Widget):
             self._isearch_cache = "   ".join(parts)
         return self._isearch_cache
 
+    def _quick_hints(self) -> str:
+        """The Orthodox type-ahead search's line: it owns only these keys, and
+        every other one acts on the file list — which is what the line has to
+        say."""
+        walk = "/".join(k for k in (self._isearch_key("isearch.prev_match"),
+                                    self._isearch_key("isearch.next_match")) if k)
+        close = self._isearch_key("isearch.cancel")
+        parts = ["I-Search"]
+        if walk:
+            parts.append(f"{walk} prev/next match")
+        if close:
+            parts.append(f"{close} close")
+        parts.append("other keys act on the file")
+        return "   ".join(parts)
+
     def _text(self) -> str:
         """What the bar says right now.
 
@@ -1038,6 +1169,8 @@ class StatusBar(Widget):
         to show, which is the point of a footer overlay.
         """
         if self.app._isearch_active:
+            if getattr(self.app, "_isearch_quick", False):
+                return self._quick_hints()
             return self._isearch_hints()
         if self.app.panel.has_layers:
             return ""
@@ -1054,8 +1187,28 @@ class StatusBar(Widget):
         if ctx.vector_shapes:
             pad_x += 1.0
         avail = max(0.0, ctx.size_units[0] - 2 * pad_x)
+        # What the file clipboard carries leads the bar (#577), in every state
+        # the bar has — a search included, since "search for the destination,
+        # then paste" is how it is used.
+        x = pad_x
+        carried = self.app.clipboard.status()
+        if carried:
+            carried = elide(carried, avail, where="end", measure=ctx.measure_text)
+            ctx.draw_text(x, 0, carried, Style(fg=ctx.theme.accent, attr=TextAttribute.BOLD))
+            used = ctx.measure_text(carried + "  ")
+            x += used
+            avail = max(0.0, avail - used)
+        # Background jobs (#567) take the right end, ahead of the hints: the
+        # hints are always the same, a job's progress is news.
+        jobs = self.app._jobs_text()
+        if jobs:
+            jobs = elide(jobs, avail, where="end", measure=ctx.measure_text)
+            jw = ctx.measure_text(jobs)
+            ctx.draw_text(x + avail - jw, 0, jobs,
+                          Style(fg=ctx.theme.accent, attr=TextAttribute.BOLD))
+            avail = max(0.0, avail - jw - 2.0)
         text = elide(self._text(), avail, where="end", measure=ctx.measure_text)
-        ctx.draw_text(pad_x, 0, text, Style(fg=ctx.theme.muted_text))
+        ctx.draw_text(x, 0, text, Style(fg=ctx.theme.muted_text))
 
     def measure(self, ctx, axis, available) -> SizeRequest:
         # Reserve a strip of bottom padding below the hints (vector backends);
@@ -1319,6 +1472,29 @@ def _search_rules(show_hidden: bool, recursive: bool):
 
     return shows, descend
 
+#: Listing generations, unique across every pane and tab. A result names the
+#: side it was listed for and the generation it was started under; with tabs, a
+#: side's pane can be a different dict by the time it lands, and per-pane
+#: counters could hand that dict a number matching the stale result (#563).
+_LOAD_GENS = itertools.count(1)
+
+
+def _flat_files(root, cancel, show_hidden: bool):
+    """Yield ``(entry, attrs)`` for every file below ``root`` — flat view's
+    walk. A hidden entry is skipped unless the pane shows them, and is not
+    descended either; a symbolic link to a directory is neither listed nor
+    descended, so a link pointing back up the tree cannot loop."""
+    def shows(entry, attrs) -> bool:
+        return show_hidden or not is_hidden(entry.name, attrs)
+
+    def descend(entry, attrs) -> bool:
+        return attrs["is_dir"] and not attrs["is_link"] and shows(entry, attrs)
+
+    for entry, attrs in tree_walk.walk(root, cancel, descend):
+        if not attrs["is_dir"] and shows(entry, attrs):
+            yield entry, attrs
+
+
 class XeFMApp:
     """Controller: owns pane state and maps key actions onto it."""
 
@@ -1349,6 +1525,9 @@ class XeFMApp:
         # positions, recent dirs). Injectable so tests can supply a temp-db
         # manager instead of touching ~/.xefm/state.db.
         self.state_manager = state_manager if state_manager is not None else get_state_manager()
+        # The keymap preset (View > Keymap, or KEY_PRESET in config.py) is
+        # written into KEY_BINDINGS itself, so every surface reads one table.
+        self._apply_keymap_preset()
         self._left_provided = left_provided
         self._right_provided = right_provided
         self.flm = FileListManager(self.config)
@@ -1384,6 +1563,7 @@ class XeFMApp:
         #: cursor (restored on cancel); ``_isearch_matches`` caches the current
         #: hit indices for Up/Down navigation; ``_isearch_active`` only drives the
         #: bottom status-bar hint line.
+        self._isearch_quick = False
         self._isearch_active = False
         self._isearch_origin = 0
         self._isearch_matches: list[int] = []
@@ -1403,6 +1583,9 @@ class XeFMApp:
         self._drag_cancelled_in_place = False
 
         self.panel = Panel(backend)
+        # The file clipboard (#577): XeFM's own, with the OS one as a bridge
+        # where the backend has it (macOS / Windows desktop).
+        self.clipboard = FileClipboard(self.panel)
         # Where to learn which image formats this backend draws from a path —
         # ImageIO's list on macOS, the installed WIC codecs on Windows, Pillow's
         # registry in a terminal. It decides both which files the image viewer
@@ -1522,6 +1705,20 @@ class XeFMApp:
         )
         # (the theme + picker list were resolved above, before the menu / widgets)
         self.log_info(f"XeFM — {self.pm.left_pane['path']}")
+        # Scans run on without XeFM (#571): say what finished while it was
+        # closed, and keep watching what is still running.
+        self._refresh_scans()
+        unseen = [j for j, st, _t in self._scan_rows
+                  if st in similar_scan.FINISHED and not j.seen]
+        running = [j for j, st, _t in self._scan_rows if st not in similar_scan.FINISHED]
+        if unseen or running:
+            parts = []
+            if unseen:
+                parts.append(f"{len(unseen)} finished while XeFM was closed")
+            if running:
+                parts.append(f"{len(running)} still running")
+            self.log_info(f"Similar-file scans: {', '.join(parts)} — "
+                          f"{self._keys_label('jobs')} shows them")
 
         # Filesystem monitoring: observer threads post pane names to
         # ``reload_queue``; the main thread drains it via an animation tick (and
@@ -1723,6 +1920,8 @@ class XeFMApp:
 
             self._restore_one_pane('left', self.pm.left_pane, self._left_provided)
             self._restore_one_pane('right', self.pm.right_pane, self._right_provided)
+            self._restore_tabs('left', self._left_provided)
+            self._restore_tabs('right', self._right_provided)
         except Exception:
             pass
 
@@ -1793,6 +1992,7 @@ class XeFMApp:
             self.state_manager.save_pane_state('right', self.pm.right_pane)
             self.pm.save_cursor_position(self.pm.left_pane)
             self.pm.save_cursor_position(self.pm.right_pane)
+            self._save_tabs()
 
             # Persist the full visited-directory trail (most-recent-first,
             # de-duplicated) so the History picker survives restarts (#220),
@@ -1849,7 +2049,9 @@ class XeFMApp:
         listed = self._process_result_queue()
         loading = self._pump_loading_indicator()
         captured = self._drain_captured_output()
-        return listed or loading or captured
+        scans = self._pump_scans()
+        trees = self._pump_xefml()
+        return listed or loading or captured or scans or trees
 
     #: Log-pane styles for captured streams. stdout leaves its color unset so it
     #: resolves to ``theme.text`` at draw time (tracking the theme like
@@ -1895,7 +2097,18 @@ class XeFMApp:
         return appended
 
     def _pane_name_of(self, pane: dict) -> str:
-        return "left" if pane is self.pm.left_pane else "right"
+        """The side ``pane`` belongs to, whichever of its tabs it is."""
+        return self.pm.side_of(pane) or "right"
+
+    def _hold_if_hidden(self, pane: dict) -> bool:
+        """For a pane that is a tab not on screen: note that it owes a re-list,
+        and return True so the caller does nothing now — a listing is installed
+        on whichever tab its side is showing, so it must not start for another.
+        :meth:`_show_tab` re-lists it on the way in."""
+        if self.pm.is_shown(pane):
+            return False
+        pane["_stale"] = True
+        return True
 
     #: How long a listing may run before the pane shows a "Loading…" indicator.
     #: Below this, a fast (local) listing lands and swaps in with no flash; only a
@@ -1930,8 +2143,10 @@ class XeFMApp:
         reload it empties the pane for the length of a full re-scan in response to
         a change the user never made — see #239."""
         pane = self.pane(pane_name)
+        if xefml.is_xefml_path(pane["path"]):
+            self._note_xefml_anchor(pane)
         self._fire_directory_changed(pane_name, pane)
-        gen = pane["_load_gen"] = pane.get("_load_gen", 0) + 1
+        gen = pane["_load_gen"] = next(_LOAD_GENS)
         # "A listing is in flight", tracked separately from ``loading`` because
         # the two answer different questions: ``loading`` means "this pane is
         # blanked and showing (or about to show) an indicator", which a
@@ -2324,6 +2539,60 @@ class XeFMApp:
     def _sync_active(self) -> None:
         self.left_view.active = self.pm.active_pane == "left"
         self.right_view.active = self.pm.active_pane == "right"
+        # The preview is not a pane to work in: making its side active —
+        # Tab, a click, focus_left / focus_right — closes it.
+        if getattr(self, "_quick_view", None) is not None \
+                and self.pm.active_pane == self._quick_view_side:
+            self._close_quick_view()
+
+    # --- quick view (#569) ---------------------------------------------------
+
+    _quick_view = None
+
+    def quick_view(self) -> None:
+        """Toggle the inactive pane into a preview of the active pane's cursor
+        item (:mod:`xefm.quick_view`). The inactive pane's own directory,
+        cursor and selection are untouched, and come back when it closes."""
+        if self._quick_view is not None:
+            self._close_quick_view()
+            self.log_info("Quick view closed")
+            return
+        side = "right" if self.pm.active_pane == "left" else "left"
+        view = QuickView(self.panel)
+        column = LayoutView(VSplit(Item(view, weight=1, hints={"surface": "content"})))
+        if side == "left":
+            self._quick_view_saved = self.pane_splitter.first
+            self.pane_splitter.first = column
+        else:
+            self._quick_view_saved = self.pane_splitter.second
+            self.pane_splitter.second = column
+        self._quick_view = view
+        self._quick_view_side = side
+        self._quick_view_follow()
+        self.log_info(f"Quick view — {self._keys_label('quick_view')} closes it")
+
+    def _close_quick_view(self) -> None:
+        view = self._quick_view
+        if view is None:
+            return
+        view.close()
+        if self._quick_view_side == "left":
+            self.pane_splitter.first = self._quick_view_saved
+        else:
+            self.pane_splitter.second = self._quick_view_saved
+        self._quick_view = None
+        self._quick_view_saved = None
+
+    def _quick_view_follow(self) -> None:
+        """Tell the preview where the cursor is; it decides whether that is
+        news. Called after every event the file list handles."""
+        view = self._quick_view
+        if view is None:
+            return
+        pane = self.active_pane()
+        entry = self._focused_entry()
+        info = (pane.get("file_info") or {}).get(str(entry)) if entry else None
+        view.follow(entry, info)
 
     def _on_click(self, pane_name: str, index: int) -> None:
         """A FilePane was left-clicked: make it active and move the cursor.
@@ -2414,6 +2683,8 @@ class XeFMApp:
 
         This is the "no directory change" sibling of :meth:`_refresh`, which adds
         the cursor reset and the history record a navigation needs."""
+        if self._hold_if_hidden(pane):
+            return
         anchor = self._cursor_anchor(pane) if keep_cursor else None
 
         def landed(p: dict) -> None:
@@ -2429,7 +2700,8 @@ class XeFMApp:
         self._list_pane(self._pane_name_of(pane), on_ready=landed)
 
     def _list_virtual(self, pane: dict, virtual: dict, *, on_ready=None,
-                      on_empty=None, on_result=None, load=None) -> None:
+                      on_empty=None, on_result=None, load=None,
+                      entries=None) -> None:
         """(Re)build a virtual pane's listing from ``virtual['results']`` on a
         worker thread — the virtual counterpart of :meth:`_list_pane`.
 
@@ -2463,12 +2735,18 @@ class XeFMApp:
         ``problems`` ride along in the result, with ``total``, the number of
         paths listed.
 
+        ``entries`` — ``[(Path, attrs), …]`` a walk has already read (flat
+        view) — are installed as they are, with no probe: the walk's own
+        listings were the existence check.
+
         ``on_result(result)`` runs just before a listing is installed, for a
         caller that reports what was left out (``missing``, ``unreachable``);
         ``on_ready(pane)`` runs once the rows are in place. Both on the UI
         thread; so does ``on_empty(result)``."""
+        if self._hold_if_hidden(pane):
+            return
         pane_name = self._pane_name_of(pane)
-        gen = pane["_load_gen"] = pane.get("_load_gen", 0) + 1
+        gen = pane["_load_gen"] = next(_LOAD_GENS)
         pane["_load_pending"] = True
         entering = pane.get("virtual") is not virtual
         # Snapshot every input: the worker must not read the pane dict.
@@ -2506,10 +2784,11 @@ class XeFMApp:
                 listed = resolved.paths
                 extra = {"relative": resolved.relative,
                          "problems": list(resolved.problems)}
+            read = {} if entries is None else {"entries": entries}
             result = self.flm.compute_virtual_listing(
                 listed, filter_pattern=filter_pattern, sort_mode=sort_mode,
                 sort_reverse=sort_reverse, rel_root=rel_root,
-                derive_root=derive_root)
+                derive_root=derive_root, **read)
             result["total"] = len(listed)
             result.update(extra)
             self._result_queue.put((pane_name, gen, result, on_ready,
@@ -2554,13 +2833,15 @@ class XeFMApp:
         False. The file is the one focused when the sort was *asked for*: the old
         rows stay live while the worker runs, so a cursor moved in the meantime
         lands back on what the user was looking at when they pressed the key."""
+        if self._hold_if_hidden(pane):
+            return
         entries = pane.get("_listing_entries")
         if entries is None:
             self._relist(pane, keep_cursor=keep_cursor, on_ready=on_ready)
             return
 
         pane_name = self._pane_name_of(pane)
-        gen = pane["_load_gen"] = pane.get("_load_gen", 0) + 1
+        gen = pane["_load_gen"] = next(_LOAD_GENS)
         pane["_load_pending"] = True
 
         # Snapshot every input: the worker must not read the pane dict, which the
@@ -2715,8 +2996,12 @@ class XeFMApp:
                 "quit": (self.confirm_quit, False),
                 "help": (self.show_help, False),
                 "command_palette": (self.show_command_palette, False),
+                "quick_view": (self.quick_view, True),
+                "jobs": (self.show_jobs, False),
+                "find_similar": (self.find_similar, False),
                 "menu": (self.menu_bar.open_menu, None),
                 "redraw": (lambda: None, True),
+                "reread": (self.reread, False),
                 # --- cursor ---
                 "cursor_up": (self._act_cursor_up, True),
                 "cursor_down": (self._act_cursor_down, True),
@@ -2744,6 +3029,12 @@ class XeFMApp:
                 "open_item": (lambda: self._open(self.active_pane()), True),
                 "go_parent": (lambda: self._go_parent(self.active_pane()), True),
                 "go_root": (lambda: self._go_root(self.active_pane()), True),
+                "new_tab": (self.new_tab, True),
+                "open_in_new_tab": (self.open_in_new_tab, True),
+                "close_tab": (self.close_tab, True),
+                "next_tab": (self.next_tab, True),
+                "prev_tab": (self.prev_tab, True),
+                "flat_view": (self.flat_view, True),
                 "nav_left": (self._act_nav_left, True),
                 "nav_right": (self._act_nav_right, True),
                 "focus_left": (lambda: self._activate_pane("left"), True),
@@ -2785,6 +3076,7 @@ class XeFMApp:
                 "drives": (self.show_drives, False),
                 "connect_server": (self.show_connect_server, False),
                 "find_files": (self.show_search, False),
+                "index_search": (self.index_search, False),
                 "find_in_files": (self.show_content_search, False),
                 "history": (self.show_history, False),
                 "programs": (self.show_programs, False),
@@ -2810,6 +3102,10 @@ class XeFMApp:
                 "rename": (self.rename, False),
                 "rename_in_editor": (self.rename_in_editor, False),
                 "copy_names": (self.copy_names_to_clipboard, True),
+                "clipboard_copy": (lambda: self.clipboard_put(cut=False), True),
+                "clipboard_cut": (lambda: self.clipboard_put(cut=True), True),
+                "clipboard_paste": (self.clipboard_paste, True),
+                "clipboard_clear": (self.clipboard_clear, True),
                 "copy_paths": (self.copy_paths_to_clipboard, True),
                 "open_list_from_clipboard": (self.open_list_from_clipboard, True),
                 "open_list_from_command": (self.open_list_from_command, False),
@@ -3201,6 +3497,35 @@ class XeFMApp:
         placeholder for binaries (issue #212). A file inside a
         password-protected zip prompts for the password first (#180).
         """
+        # A Finder saved search (Smart Folder) is a query, not a document:
+        # Enter runs it (#579).
+        if getattr(entry, "suffix", "") == ".savedSearch" and os_index.engine() == "Spotlight":
+            self._open_saved_search(pane, entry)
+            return
+        # A reference in a .xefml tree that points at a directory goes there:
+        # wrapping the real directory inside the tree would turn a snapshot
+        # into a live view (#573).
+        target = entry.target()
+        if target is not None:
+            try:
+                is_dir = target.is_dir()
+            except Exception:  # noqa: BLE001 — unreachable: open it as a file
+                is_dir = False
+            if is_dir:
+                self._go_to_dir(pane, target, None)
+                self.log_info(f"Go to: {target}")
+                return
+        # A .xefml file is entered like an archive, whatever FILE_ASSOCIATIONS
+        # says: the extension means nothing else, and a config written before
+        # it existed has no rule for it.
+        if entry.suffix.lower() == xefml.SUFFIX and not xefml.is_xefml_path(entry):
+            self._remember_cursor(pane)
+            self._exit_virtual(pane)
+            pane["path"] = Path(xefml.uri_for(entry.absolute()))
+            self._refresh(pane, on_ready=self._restore_remembered_cursor)
+            self.log_info(f"Opened {entry.name}")
+            self._watch_xefml()
+            return
         configured, handler = get_builtin_handler_for_file(entry.name)
         if configured and handler is None:
             self.log_info(f"Nothing configured to open {entry.name}")
@@ -3220,7 +3545,8 @@ class XeFMApp:
         # viewer renders them, and a rich renderer likewise claims its type even
         # when binary — so both bypass this guard.
         if handler != "viewer" and rich_renderer_for(entry) is None \
-                and not is_image_file(entry) and looks_binary(entry):
+                and not is_image_file(entry) and not document_text.handles(entry) \
+                and looks_binary(entry):
             self.log_info(self._no_builtin_viewer_message(entry))
             return
         self._ensure_archive_password(entry, lambda: self._open_viewer(entry, pane))
@@ -3315,6 +3641,155 @@ class XeFMApp:
         self._go_to_dir(pane, root, self._top_level_name(path, root))
         self.log_info(f"Up to {root}")
 
+    # --- folder tabs (#563) --------------------------------------------------
+
+    def new_tab(self) -> None:
+        """Open a new tab in the active pane at the place it shows, after the
+        current one, cursor on the same row. A virtual pane's new tab is its
+        directory: the results stay where they are, in their own tab."""
+        side = self.pm.active_pane
+        pane = self.pane(side)
+        files = pane["files"]
+        idx = pane["focused_index"]
+        focus = files[idx].name if files and 0 <= idx < len(files) \
+            and not pane.get("virtual") else None
+        self._open_tab(side, pane["path"], focus=focus)
+
+    def open_in_new_tab(self) -> None:
+        """Open the directory under the cursor in a new tab of the active pane
+        — the tab to go into it in, keeping this one where it is."""
+        pane = self.active_pane()
+        entry = self._focused_entry()
+        info = (pane.get("file_info") or {}).get(str(entry)) if entry else None
+        if entry is None or not (info or {}).get("is_dir"):
+            self.log_info("Open in New Tab: put the cursor on a directory")
+            return
+        self._open_tab(self.pm.active_pane, entry)
+
+    def _open_tab(self, side: str, path, *, focus: str | None = None) -> None:
+        pane = self.pane(side)
+        self._remember_cursor(pane)
+        tab = self.pm.new_pane(path, like=pane)
+        self.pm.open_tab(side, tab)
+        self._show_tab(side, focus=focus)
+        n = len(self.pm.tabs[side])
+        self.log_info(f"New tab: {path}  ({self.pm.tab_index[side] + 1} of {n})")
+
+    def close_tab(self) -> None:
+        """Close the active pane's current tab and show the next one. A pane's
+        only tab stays: a pane always shows something."""
+        side = self.pm.active_pane
+        pane = self.pane(side)
+        if len(self.pm.tabs[side]) < 2:
+            self.log_info("This is the pane's only tab")
+            return
+        self._remember_cursor(pane)
+        self.pm.close_tab(side)
+        self._show_tab(side)
+        self.log_info(f"Closed tab: {_tab_label(pane)}")
+
+    def next_tab(self) -> None:
+        self._step_tab(+1)
+
+    def prev_tab(self) -> None:
+        self._step_tab(-1)
+
+    def _step_tab(self, delta: int) -> None:
+        side = self.pm.active_pane
+        if len(self.pm.tabs[side]) < 2:
+            self.log_info("This pane has one tab — "
+                          f"{self._keys_label('new_tab')} opens another")
+            return
+        self.select_tab(side, self.pm.tab_index[side] + delta)
+
+    def select_tab(self, side: str, index: int) -> None:
+        """Show tab ``index`` of ``side`` (wrapping), and make that pane
+        active — what a click on a tab means."""
+        self.pm.active_pane = side
+        self._sync_active()
+        if index % len(self.pm.tabs[side]) == self.pm.tab_index[side]:
+            return
+        self._remember_cursor(self.pane(side))
+        self.pm.select_tab(side, index)
+        self._show_tab(side)
+
+    def _show_tab(self, side: str, *, focus: str | None = None) -> None:
+        """Put ``side``'s current tab on screen.
+
+        A directory tab is re-read on the way in, keeping its rows on screen
+        while it is (a monitor reload's ``keep_visible``): its directory went
+        unwatched while hidden, and a file operation in the other pane may
+        have changed it. A tab never listed yet — a new one, or one restored
+        from the last session — is listed like a navigation. A virtual tab is
+        re-read only if something asked it to be while it was hidden (see
+        :meth:`_hold_if_hidden`); otherwise it is shown as it was left."""
+        pane = self.pane(side)
+        view = self.left_view if side == "left" else self.right_view
+        view.pane = pane
+        stale = pane.pop("_stale", False)
+        if pane.get("virtual"):
+            if stale or pane.get("_load_pending"):
+                self._relist(pane)
+            return
+        if pane.get("_listing_entries") is None and not pane.get("files"):
+            def landed(p: dict) -> None:
+                if focus is not None:
+                    self._select_by_name(p, focus)
+                else:
+                    self._restore_remembered_cursor(p)
+
+            self._refresh(pane, on_ready=landed)
+            return
+        anchor = self._cursor_anchor(pane)
+        self._list_pane(side, keep_visible=True,
+                        on_ready=lambda p: self._apply_cursor_anchor(p, anchor))
+
+    def _save_tabs(self) -> None:
+        """Every pane's tabs — path, sort, filter — and which is current, for
+        the next session. A virtual tab is saved as its directory."""
+        for side in ("left", "right"):
+            tabs = [{"path": str(t["path"]), "sort_mode": t["sort_mode"],
+                     "sort_reverse": t["sort_reverse"],
+                     "filter_pattern": t.get("filter_pattern", "")}
+                    for t in self.pm.tabs[side]]
+            self.state_manager.set_state(
+                f"tabs.{side}", {"active": self.pm.tab_index[side], "tabs": tabs})
+
+    def _restore_tabs(self, side: str, cmdline_provided: bool) -> None:
+        """Rebuild ``side``'s saved tabs around its current one, which
+        :meth:`_restore_one_pane` already restored. Nothing is read here: the
+        others are listed the first time they are shown, so a tab on a remote
+        host does not connect at startup. A pane opened on a directory from the
+        command line opens that alone."""
+        if cmdline_provided:
+            return
+        saved = self.state_manager.get_state(f"tabs.{side}", None)
+        if not isinstance(saved, dict):
+            return
+        entries = saved.get("tabs")
+        active = saved.get("active", 0)
+        if (not isinstance(entries, list) or len(entries) < 2
+                or not isinstance(active, int) or not 0 <= active < len(entries)):
+            return
+        current = self.pane(side)
+        tabs = []
+        for i, entry in enumerate(entries):
+            if i == active:
+                tabs.append(current)
+                continue
+            try:
+                tab = self.pm.new_pane(Path(entry["path"]), like=current)
+            except Exception:  # noqa: BLE001 — a bad entry costs that tab only
+                continue
+            mode = sort_keys.canonical(entry.get("sort_mode", tab["sort_mode"]))
+            if sort_keys.is_known(mode):
+                tab["sort_mode"] = mode
+            tab["sort_reverse"] = bool(entry.get("sort_reverse", tab["sort_reverse"]))
+            tab["filter_pattern"] = entry.get("filter_pattern", "") or ""
+            tabs.append(tab)
+        self.pm.tabs[side] = tabs
+        self.pm.tab_index[side] = next(i for i, t in enumerate(tabs) if t is current)
+
     # --- menus & dialogs -----------------------------------------------------
 
     def _build_menu(self) -> Menu:
@@ -3387,6 +3862,17 @@ class XeFMApp:
         # activation renders nothing on its own, so the line would sit
         # unpainted until the next event (#253).
         edit_menu = Menu(
+            MenuItem("Copy", on_select=lambda: self._menu("clipboard_copy"),
+                     enabled=has_files, shortcut=sc("clipboard_copy")),
+            MenuItem("Cut", on_select=lambda: self._menu("clipboard_cut"),
+                     enabled=has_files, shortcut=sc("clipboard_cut")),
+            MenuItem("Paste", on_select=lambda: self._menu("clipboard_paste"),
+                     enabled=lambda: self.clipboard.contents() is not None,
+                     shortcut=sc("clipboard_paste")),
+            MenuItem("Clear Clipboard", on_select=lambda: self._menu("clipboard_clear"),
+                     enabled=lambda: bool(self.clipboard.paths),
+                     shortcut=sc("clipboard_clear")),
+            SEPARATOR,
             MenuItem("Copy Name(s)", on_select=lambda: self._menu("copy_names"),
                      enabled=has_files, shortcut=sc("copy_names")),
             MenuItem("Copy Full Path(s)", on_select=lambda: self._menu("copy_paths"),
@@ -3419,6 +3905,10 @@ class XeFMApp:
                      enabled=lambda: platform.system() in ("Darwin", "Windows")),
             MenuItem("History…", on_select=self.show_history, shortcut=sc("history")),
             SEPARATOR,
+            MenuItem("Flat View", on_select=lambda: self._menu("flat_view"),
+                     checked=lambda: (self.active_pane().get("virtual") or {})
+                     .get("kind") == "flat",
+                     shortcut=sc("flat_view")),
             # A list of paths in place of a directory (#453): where the pane
             # goes, like everything above, and left again with Parent
             # Directory. One submenu for the three sources rather than three
@@ -3439,6 +3929,8 @@ class XeFMApp:
             MenuItem("Command Palette…", on_select=self.show_command_palette,
                      shortcut=sc("command_palette")),
             SEPARATOR,
+            MenuItem("Find Similar Files…", on_select=self.find_similar,
+                     shortcut=sc("find_similar")),
             MenuItem("External Programs…", on_select=self.show_programs, shortcut=sc("programs")),
             MenuItem("Subshell Here", on_select=self.subshell, shortcut=sc("subshell")),
             SEPARATOR,
@@ -3480,6 +3972,11 @@ class XeFMApp:
             MenuItem("Filter…", on_select=self.enter_filter, shortcut=sc("filter")),
             MenuItem("Search Files…", on_select=self.show_search, shortcut=sc("find_files")),
             MenuItem("Search Content…", on_select=self.show_content_search, shortcut=sc("find_in_files")),
+            # The OS index (#579): named for what it is on this platform.
+            MenuItem(f"Search {os_index.engine() or 'Index'}…",
+                     on_select=lambda: self._menu("index_search"),
+                     enabled=lambda: os_index.engine() is not None,
+                     shortcut=sc("index_search")),
             SEPARATOR,
             MenuItem("Show Hidden Files", on_select=lambda: self._menu("toggle_hidden"),
                      checked=lambda: self.flm.show_hidden, shortcut=sc("toggle_hidden")),
@@ -3492,6 +3989,33 @@ class XeFMApp:
                      shortcut=sc("toggle_color_scheme")),
             SEPARATOR,
             MenuItem("Switch Pane", on_select=lambda: self._menu("switch_pane"), shortcut=sc("switch_pane")),
+            MenuItem("Quick View", on_select=lambda: self._menu("quick_view"),
+                     checked=lambda: self._quick_view is not None,
+                     shortcut=sc("quick_view")),
+            SEPARATOR,
+            MenuItem("Background Jobs…", on_select=self.show_jobs,
+                     enabled=lambda: bool(self.tasks.background_tasks()),
+                     shortcut=sc("jobs")),
+            SEPARATOR,
+            MenuItem("Keymap", submenu=Menu(*[
+                MenuItem(label, on_select=lambda n=name: self.set_keymap_preset(n),
+                         checked=lambda n=name: self._keymap_preset == n)
+                for name, label in keymap_presets.LABELS.items()])),
+            SEPARATOR,
+            # Folder tabs (#563): per pane, so every item acts on the active one.
+            MenuItem("New Tab", on_select=lambda: self._menu("new_tab"),
+                     shortcut=sc("new_tab")),
+            MenuItem("Open in New Tab", on_select=lambda: self._menu("open_in_new_tab"),
+                     enabled=has_files, shortcut=sc("open_in_new_tab")),
+            MenuItem("Close Tab", on_select=lambda: self._menu("close_tab"),
+                     enabled=lambda: len(self.pm.tabs[self.pm.active_pane]) > 1,
+                     shortcut=sc("close_tab")),
+            MenuItem("Next Tab", on_select=lambda: self._menu("next_tab"),
+                     enabled=lambda: len(self.pm.tabs[self.pm.active_pane]) > 1,
+                     shortcut=sc("next_tab")),
+            MenuItem("Previous Tab", on_select=lambda: self._menu("prev_tab"),
+                     enabled=lambda: len(self.pm.tabs[self.pm.active_pane]) > 1,
+                     shortcut=sc("prev_tab")),
             title="View",
         )
         help_menu = Menu(
@@ -3949,6 +4473,64 @@ class XeFMApp:
         else:
             self.reload_config()
 
+    #: State key for the keymap preset chosen from View > Keymap.
+    _KEYMAP_STATE = "keymap.preset"
+
+    def _apply_keymap_preset(self) -> None:
+        """Lay the preset in force over ``config.KEY_BINDINGS`` and rebuild
+        every keymap built from it: the app's, and the shared one the help
+        dialog and the menus resolve through."""
+        chosen = self.state_manager.get_state(self._KEYMAP_STATE, None)
+        self._keymap_preset = keymap_presets.resolve(self.config, chosen)
+        keymap_presets.apply(self.config, self._keymap_preset)
+        self.keys = KeyBindings(self.config.KEY_BINDINGS)
+        config_manager._key_bindings = None
+
+    def set_keymap_preset(self, name: str) -> None:
+        """Switch to keymap preset ``name`` now and for later sessions. Help,
+        the menus and the status bar relabel at once. ``KEY_PRESET`` in
+        ``config.py`` wins over this, and is said to."""
+        configured = keymap_presets.canonical(getattr(self.config, "KEY_PRESET", None))
+        name = keymap_presets.canonical(name)
+        if configured and configured != name:
+            self.log_info(f"KEY_PRESET = {configured!r} in config.py decides "
+                          f"the keymap — change it there")
+            return
+        self.state_manager.set_state(self._KEYMAP_STATE, name)
+        self._apply_keymap_preset()
+        self.status.invalidate()
+        self.menu_bar.set_menu(self._build_menu())
+        hint = (" — typing a letter searches; F1 lists every key"
+                if keymap_presets.type_ahead(self.config) else "")
+        self.log_info(f"Keymap: {keymap_presets.LABELS[self._keymap_preset]}{hint}")
+        self.panel.render()
+
+    def _type_ahead(self, event) -> bool:
+        """Under a preset that frees the letters, an unbound typed key starts
+        incremental search with that character. True when it did."""
+        if not keymap_presets.type_ahead(self.config):
+            return False
+        char = getattr(event, "char", None)
+        if (not char or len(char) != 1 or not char.isprintable() or char == " "
+                or set(event.modifiers or ()) & {"ctrl", "alt", "cmd"}):
+            return False
+        self.enter_isearch(quick=True)
+        if not self._isearch_active:
+            return False
+        # The bar is the top layer now; the key that opened it is its first
+        # character.
+        self.panel.dispatch_event(event)
+        return True
+
+    def reread(self) -> None:
+        """Read both panes' directories again — Total Commander's F2. File
+        monitoring usually makes it unnecessary; it is for a location nothing
+        watches (a network share, a remote) and for a listing in doubt."""
+        self._relist(self.pm.left_pane)
+        self._relist(self.pm.right_pane)
+        self.log_info("Re-read both panes")
+        self.panel.render()
+
     def reload_config(self) -> None:
         """Re-read ``~/.xefm/config.py`` and apply what can change at runtime.
 
@@ -3966,8 +4548,9 @@ class XeFMApp:
             self.log_info(f"Config warning: {err}")
 
         self.config = new_config
-        # Rebuild the keymap from the (possibly rebound) KEY_BINDINGS.
-        self.keys = KeyBindings(new_config.KEY_BINDINGS)
+        # Rebuild the keymap from the (possibly rebound) KEY_BINDINGS, with
+        # the keymap preset laid over it again.
+        self._apply_keymap_preset()
         # The two surfaces that quote a key name instead of reading one on
         # demand: the status bar caches its hint line, and the menu holds the
         # shortcut strings resolved when it was built. Both were left naming the
@@ -4439,12 +5022,268 @@ class XeFMApp:
         self.panel.render()
 
     def confirm_quit(self) -> None:
-        """A modal confirm before quitting — the canonical message-box pattern."""
+        """A modal confirm before quitting — the canonical message-box pattern.
+
+        With background jobs running or queued it says so, and defaults to
+        Cancel: quitting stops a copy part-way, which is not what a reflexive
+        Enter should do."""
+        jobs = self.tasks.background_tasks()
+        if not jobs:
+            show_message_box(
+                self.panel, "Quit XeFM?", title="Confirm", icon="warning",
+                buttons=("Quit", "Cancel"), default=0, cancel=1,
+                on_result=lambda label: self._quit() if label == "Quit" else None,
+            )
+            self.panel.render()
+            return
+        n = len(jobs)
+
+        def on_result(label: str) -> None:
+            if label == "Quit":
+                # Let each worker reach its next checkpoint and remove the
+                # file it was half-way through, rather than die mid-write.
+                if not self.tasks.cancel_all(timeout=3.0):
+                    getLogger("Main").warning("A background job did not stop in time; "
+                                              "a partly written file may be left behind")
+                self._quit()
+
         show_message_box(
-            self.panel, "Quit XeFM?", title="Confirm", icon="warning",
-            buttons=("Quit", "Cancel"), default=0, cancel=1,
-            on_result=lambda label: self._quit() if label == "Quit" else None,
-        )
+            self.panel,
+            f"**{n}** background job{'' if n == 1 else 's'} "
+            f"{'is' if n == 1 else 'are'} still running or queued. Quitting "
+            f"stops {'it' if n == 1 else 'them'} part-way.",
+            title="Quit XeFM?", icon="warning", buttons=("Quit", "Cancel"),
+            default=1, cancel=1, on_result=on_result, markdown=True)
+        self.panel.render()
+
+    # --- background jobs (#567) ----------------------------------------------
+
+    def _jobs_text(self) -> str:
+        """The status bar's job segment: the running job and its progress, how
+        many wait behind it, and "needs you" when one is waiting on a prompt;
+        then similar-file scans (#571) — running ones with their progress, and
+        finished ones not looked at yet. Empty when there is nothing."""
+        key = self._keys_label("jobs")
+        hint = f" ({key})" if key else ""
+        parts = []
+        jobs = self.tasks.background_tasks()
+        waiting = next((t for t in jobs if t.needs_attention), None)
+        if waiting is not None:
+            return f"⚠ {waiting.title.rstrip('… ')} needs you{hint}"
+        running = next((t for t in jobs if t.status is TaskStatus.RUNNING), None)
+        if running is not None:
+            pct = int(running.progress.get_progress_percentage())
+            parts.append(f"⟳ {running.title.rstrip('… ')} {pct}%")
+        queued = self.tasks.queued_count()
+        if queued:
+            parts.append(f"+{queued} queued")
+        for job, state, text in self._scan_rows:
+            if state in (similar_scan.RUNNING, similar_scan.STARTING):
+                parts.append(f"⟳ {job.label} {text}")
+            elif not job.seen:
+                mark = "✓" if state == similar_scan.DONE else "⚠"
+                parts.append(f"{mark} {job.label}: {text}")
+        return " ".join(parts) + hint if parts else ""
+
+    # --- similar-file scans (#571) -------------------------------------------
+
+    #: The scans shown in the status bar and the jobs list: ``(job, state,
+    #: text)``, refreshed by :meth:`_refresh_scans` (and its poller) rather than
+    #: read from disk on every frame.
+    _scan_rows: list = []
+    _scans_base = None
+    _scan_poller = None
+
+    def _refresh_scans(self) -> bool:
+        """Re-read the scan folders; True when what the bar would say changed.
+        Starts the poller while a scan runs."""
+        rows = []
+        try:
+            for job in similar_scan.jobs(self._scans_base):
+                state = job.state()
+                if state in similar_scan.FINISHED and job.seen and len(rows) >= 5:
+                    continue
+                rows.append((job, state, job.summary()))
+        except Exception as e:  # noqa: BLE001 — a scan folder never breaks the bar
+            getLogger("Main").error(f"Could not read the scan folders: {e}")
+        changed = [(j.id, st, t) for j, st, t in rows] != \
+            [(j.id, st, t) for j, st, t in self._scan_rows]
+        self._scan_rows = rows
+        if any(st in (similar_scan.RUNNING, similar_scan.STARTING) for _j, st, _t in rows):
+            self._ensure_scan_poller()
+        return changed
+
+    def _ensure_scan_poller(self) -> None:
+        """A daemon thread that re-reads the scans every two seconds while one
+        runs, and wakes the UI only when something changed. It ends with the
+        last running scan."""
+        poller = self._scan_poller
+        if poller is not None and poller.is_alive():
+            return
+
+        def poll() -> None:
+            while True:
+                time.sleep(2.0)
+                self._scans_dirty = True
+                self._wake_pump()
+                if not any(st in (similar_scan.RUNNING, similar_scan.STARTING)
+                           for _j, st, _t in self._scan_rows):
+                    return
+
+        self._scan_poller = threading.Thread(target=poll, name="xefm-scan-poll",
+                                             daemon=True)
+        self._scan_poller.start()
+
+    def _pump_scans(self) -> bool:
+        """On the UI thread, from the pump: refresh the scans when the poller
+        asked, and say whether the bar needs a frame. A scan that has just
+        finished is announced in the log."""
+        if not getattr(self, "_scans_dirty", False):
+            return False
+        self._scans_dirty = False
+        before = {j.id: st for j, st, _t in self._scan_rows}
+        changed = self._refresh_scans()
+        for job, state, text in self._scan_rows:
+            if before.get(job.id) in (similar_scan.RUNNING, similar_scan.STARTING) \
+                    and state in similar_scan.FINISHED:
+                self.log_info(f"{job.label} scan: {text} — "
+                              f"{self._keys_label('jobs')} to open it")
+        return changed
+
+    def find_similar(self) -> None:
+        """Start a similar-files scan of the selection — or of the directory —
+        that keeps running after XeFM closes (#571). Its groups land as one
+        playlist per group, opened from the jobs list."""
+        pane = self.active_pane()
+        if pane.get("virtual"):
+            self.log_info("Find Similar Files scans a directory; this pane shows a list")
+            return
+        selected = [f for f in pane["files"] if str(f) in pane["selected_files"]]
+        roots = selected or [pane["path"]]
+        remote = [r for r in roots if path_schemes.is_uri(str(r))]
+        if remote:
+            self.log_info("Find Similar Files scans local folders (a mounted share "
+                          f"counts); this is {roots[0]}")
+            return
+        rows = []
+        for method, label in similar_scan.METHODS:
+            why = similar_scan.unavailable(method)
+            rows.append((method, label if why is None else f"{label} — {why}"))
+        what = f"{len(roots)} selected item(s)" if selected else str(pane["path"])
+
+        def chosen(method) -> None:
+            self.panel.render()
+            if method is None:
+                return
+            why = similar_scan.unavailable(method)
+            if why is not None:
+                self.log_info(f"{similar_scan.LABELS[method]}: {why}")
+                return
+            try:
+                job = similar_scan.start([str(r) for r in roots], method,
+                                         base=self._scans_base)
+            except OSError as e:
+                self.log_info(f"Could not start the scan: {e}")
+                return
+            self._refresh_scans()
+            self.log_info(f"{job.label} scan of {what} started — it keeps running "
+                          f"if you quit XeFM; {self._keys_label('jobs')} shows it")
+            self.panel.render()
+
+        show_choice_dialog(self.panel, "Find Similar Files", rows, on_result=chosen)
+        self.panel.render()
+
+    def _open_scan(self, job) -> None:
+        """A scan chosen in the jobs list: a running one offers to stop; a
+        finished one takes the pane to its groups — Enter opens a group as a
+        list — or, when it did not finish, to its log."""
+        state = job.state()
+        if state in (similar_scan.RUNNING, similar_scan.STARTING):
+            rows = []
+            if job.result_path.exists():
+                # The tree is rewritten with provisional groups as the scan
+                # goes (#573): they can be looked at already.
+                rows.append(("look", "Look at the groups so far (they may change)"))
+            rows += [("stop", "Stop the scan"), ("log", "Show its log")]
+
+            def act(choice) -> None:
+                if choice == "look":
+                    self._open_scan_result(job)
+                elif choice == "stop":
+                    job.stop()
+                    self.log_info(f"{job.label} scan: stopping — the groups found "
+                                  f"so far will be kept")
+                elif choice == "log":
+                    self._show_scan_log(job)
+                self.panel.render()
+
+            show_choice_dialog(self.panel, f"{job.label} — {job.progress_text()}",
+                               rows, on_result=act)
+            return
+        job.mark_seen()
+        self._refresh_scans()
+        if state in (similar_scan.DONE, similar_scan.CANCELLED) and job.result_path.exists():
+            self._open_scan_result(job)
+            self.log_info(f"{job.label}: {job.summary()} — Enter opens a group")
+        elif state in (similar_scan.DONE, similar_scan.CANCELLED):
+            self.log_info(f"{job.label}: nothing found")
+        else:
+            self._show_scan_log(job)
+
+    def _open_scan_result(self, job) -> None:
+        """Take the active pane into a scan's tree file: its groups are
+        folders, ``Shift-O`` reaches the real files (#573)."""
+        pane = self.active_pane()
+        self._remember_cursor(pane)
+        self._exit_virtual(pane)
+        pane["path"] = Path(xefml.uri_for(job.result_path))
+        self._refresh(pane)
+
+    def _show_scan_log(self, job) -> None:
+        if job.log_path.exists():
+            show_text_viewer(self.panel, Path(str(job.log_path)))
+        else:
+            self.log_info(f"{job.label}: no log")
+
+    def show_jobs(self) -> None:
+        """List the background jobs and the similar-file scans. Choosing a
+        running job brings it forward — its progress dialog, where a waiting
+        prompt is answered and Esc can cancel it; a queued one is dropped from
+        the queue. A scan opens its groups, or offers to stop it."""
+        self._refresh_scans()
+        jobs = self.tasks.background_tasks()
+        if not jobs and not self._scan_rows:
+            self.log_info("No background jobs")
+            return
+
+        def label(task) -> str:
+            name = task.title.rstrip("… ")
+            if task.status is not TaskStatus.RUNNING:
+                return f"{name} — queued (Enter removes it)"
+            pct = int(task.progress.get_progress_percentage())
+            state = "needs you" if task.needs_attention else f"{pct}%"
+            return f"{name} — {state}"
+
+        def scan_label(job, state, text) -> str:
+            when = job.id[:13].replace("-", " ")
+            new = "" if job.seen or state not in similar_scan.FINISHED else " · new"
+            return f"{job.label} — {text}{new}  ({when[:4]}-{when[4:6]}-{when[6:8]} {when[9:11]}:{when[11:13]})"
+
+        def chosen(value) -> None:
+            if value is not None:
+                kind, item = value
+                if kind == "task":
+                    queued = item.status is not TaskStatus.RUNNING
+                    self.tasks.bring_forward(item)
+                    if queued:
+                        self.log_info(f"Removed from the queue: {item.title.rstrip('… ')}")
+                else:
+                    self._open_scan(item)
+            self.panel.render()
+
+        rows = [(("task", t), label(t)) for t in jobs]
+        rows += [(("scan", j), scan_label(j, st, tx)) for j, st, tx in self._scan_rows]
+        show_choice_dialog(self.panel, "Background Jobs", rows, on_result=chosen)
         self.panel.render()
 
     def show_favorites(self) -> None:
@@ -5118,11 +5957,19 @@ class XeFMApp:
 
     @staticmethod
     def _virtual_focused_entry(pane: dict):
-        """The ``Path`` under the cursor of a virtual (search-results) ``pane``, or
-        ``None`` if the pane isn't virtual / has no rows. Used by the reveal keys
-        to find *which* highlighted result to open."""
-        if not pane.get("virtual"):
+        """The real ``Path`` under the cursor of a ``pane`` that shows entries
+        standing for places elsewhere — the row of a virtual (search-results)
+        pane, or the target of a reference in a ``.xefml`` tree (#573) — or
+        ``None``. Used by the reveal keys to find *which* place to open."""
+        files = pane["files"]
+        idx = pane["focused_index"]
+        if not (files and 0 <= idx < len(files)):
             return None
+        if pane.get("virtual"):
+            return files[idx]
+        if xefml.is_xefml_path(pane["path"]):
+            return files[idx].target()
+        return None
         files = pane["files"]
         idx = pane["focused_index"]
         if files and 0 <= idx < len(files):
@@ -5161,6 +6008,8 @@ class XeFMApp:
         set intact here — reveal without leaving virtual mode. Only meaningful when
         the active pane is the virtual one; returns False otherwise."""
         pane = self.active_pane()
+        if xefml.is_xefml_path(pane["path"]) and pane["selected_files"]:
+            return self._reveal_selected_targets(pane)
         entry = self._virtual_focused_entry(pane)
         if entry is None:
             return False
@@ -5173,6 +6022,157 @@ class XeFMApp:
         self.log_info(f"Revealed in other pane: {entry.parent}")
         self.panel.render()
         return True
+
+    def _reveal_selected_targets(self, pane: dict) -> bool:
+        """``sync_other_to_current`` over a selection in a ``.xefml`` tree:
+        open every selected reference's real file in the other pane as one
+        list, where duplicates spread over many folders can be dealt with
+        together (#549 decision 4). A provisional tree asks first — its groups
+        may still change under the selection."""
+        selected = [f for f in pane["files"] if str(f) in pane["selected_files"]]
+        targets = []
+        for entry in selected:
+            target = entry.target()
+            if target is not None:
+                targets.append(target)
+            elif entry.is_dir():
+                targets.extend(t for t in (c.target() for c in entry.iterdir()) if t)
+        if not targets:
+            self.log_info("Nothing selected points at a file")
+            return True
+        file_path, _key = xefml.split(pane["path"])
+        title = f"{_StdPath(file_path).name}: {len(targets)} selected"
+        other_name = "right" if self.pm.active_pane == "left" else "left"
+
+        def go() -> None:
+            self.open_path_list(other_name, [str(t) for t in targets], title=title)
+            self.panel.render()
+
+        try:
+            doc = xefml.load(file_path)
+        except OSError:
+            doc = None
+        if doc is not None and doc.provisional:
+            def on_result(label: str) -> None:
+                if label == "Open":
+                    go()
+                self.panel.render()
+
+            show_message_box(
+                self.panel,
+                f"This tree is still being written ({doc.progress_text() or 'in progress'}), "
+                f"and its groups may change.\n\nOpen the **{len(targets)}** selected "
+                f"file(s) in the other pane anyway?",
+                title="Provisional groups", icon="warning", buttons=("Open", "Cancel"),
+                default=1, cancel=1, on_result=on_result, markdown=True)
+            self.panel.render()
+            return True
+        go()
+        return True
+
+    # --- .xefml trees being rewritten (#573) ---------------------------------
+
+    _xefml_poller = None
+
+    def _watch_xefml(self) -> None:
+        """While a pane shows a provisional ``.xefml`` tree, look at the file
+        every two seconds and re-read the pane when a producer has rewritten
+        it. The poller ends once no pane shows a provisional tree."""
+        poller = self._xefml_poller
+        if poller is not None and poller.is_alive():
+            return
+
+        def provisional_files() -> set:
+            files = set()
+            for name in ("left", "right"):
+                path = self.pane(name)["path"]
+                if xefml.is_xefml_path(path):
+                    file_path, _key = xefml.split(path)
+                    try:
+                        if xefml.load(file_path).provisional:
+                            files.add(file_path)
+                    except OSError:
+                        pass
+            return files
+
+        def poll() -> None:
+            stamps = {}
+            while True:
+                time.sleep(2.0)
+                files = provisional_files()
+                if not files:
+                    self._xefml_dirty = True
+                    self._wake_pump()
+                    return
+                for f in files:
+                    try:
+                        stamp = xefml.load(f).stamp
+                    except OSError:
+                        continue
+                    if stamps.get(f) not in (None, stamp):
+                        self._xefml_dirty = True
+                        self._wake_pump()
+                    stamps[f] = stamp
+
+        self._xefml_poller = threading.Thread(target=poll, name="xefm-xefml-poll",
+                                              daemon=True)
+        self._xefml_poller.start()
+
+    def _pump_xefml(self) -> bool:
+        """On the UI thread: re-read every pane inside a ``.xefml`` tree that
+        changed. A pane whose group a rewrite renamed follows it by its
+        anchor; one whose group is gone returns to the top, and says why."""
+        if not getattr(self, "_xefml_dirty", False):
+            return False
+        self._xefml_dirty = False
+        changed = False
+        for name in ("left", "right"):
+            pane = self.pane(name)
+            if not xefml.is_xefml_path(pane["path"]):
+                continue
+            changed = True
+            file_path, key = xefml.split(pane["path"])
+            if pane["path"].exists():
+                self._relist(pane)
+                continue
+            top = key.split("/", 1)[0]
+            old = pane.get("_xefml_anchor")
+            try:
+                doc = xefml.load(file_path)
+                moved = xefml.find_group(doc, old) if old else None
+            except OSError:
+                moved = None
+            if moved:
+                rest = key.split("/", 1)[1] if "/" in key else ""
+                new = Path(xefml.uri_for(file_path) + moved + (f"/{rest}" if rest else ""))
+                pane["path"] = new if new.exists() else Path(xefml.uri_for(file_path) + moved)
+                self._refresh(pane)
+            else:
+                pane["path"] = Path(xefml.uri_for(file_path))
+                self._refresh(pane)
+                self.log_info(f"The group '{top}' changed while the scan went on; "
+                              f"back at the top of the tree")
+        return changed
+
+    def _note_xefml_anchor(self, pane: dict) -> None:
+        """Called as a pane lists a ``.xefml`` path: remember the anchor of the
+        group it is in, so a rewrite that renames the group can be followed
+        (:meth:`_pump_xefml`), and watch the file if it is provisional."""
+        path = pane["path"]
+        pane["_xefml_anchor"] = None
+        if not xefml.is_xefml_path(path):
+            return
+        file_path, key = xefml.split(path)
+        try:
+            doc = xefml.load(file_path)
+        except OSError:
+            return
+        if doc.provisional:
+            self._watch_xefml()
+        top = key.split("/", 1)[0]
+        node = doc.root.child(top) if top else None
+        if node is not None and node.is_group:
+            pane["_xefml_anchor"] = node.anchor_target()
 
     @staticmethod
     def _sniff_text_encoding(path, sample_size: int = 1024) -> str | None:
@@ -5233,6 +6233,17 @@ class XeFMApp:
                 continue
             try:
                 if match is not None and not match(e, attrs):
+                    continue
+                if document_text.handles(e):
+                    # A PDF or an Office file is searched through its text,
+                    # the same text the viewer shows (#575).
+                    extracted = document_text.extract(e)
+                    for line_num, line in enumerate(extracted.lines, 1):
+                        if cancel.is_set():
+                            return
+                        if regex.search(line):
+                            yield {"path": e, "line": line_num,
+                                   "text": line.strip()[:max_line]}
                     continue
                 encoding = self._sniff_text_encoding(e)
                 if encoding is None:
@@ -5815,10 +6826,42 @@ class XeFMApp:
                               index=siblings.index(entry),
                               on_close=self._restore_post_effect if has_effect else None,
                               on_navigate=on_navigate)
+        elif document_text.handles(entry):
+            # A PDF or an Office file: read its text first, on a task, since a
+            # document is parsed whole and may be large or remote (#575).
+            self._open_document(entry)
+            return
         else:
             show_text_viewer(self.panel, entry, state_manager=self.state_manager,
                              on_edit=lambda path: self._edit_entries([path]))
         self.panel.render()
+
+    def _open_document(self, entry) -> None:
+        """Extract ``entry``'s text (:mod:`xefm.document_text`) on a task —
+        the progress dialog shows, Esc stops it — then open the text viewer on
+        it: raw mode its plain text, rich mode its structure."""
+        task = Task(f"Reading {entry.name}…", config=self.config, kind="document",
+                    busy_label="Reading…")
+
+        def run(t: Task) -> dict:
+            extracted = document_text.extract(entry)
+            return {"document": extracted, "cancelled": t.cancelled()}
+
+        def on_done(res: dict) -> None:
+            doc = res.get("document")
+            if res.get("cancelled") or doc is None:
+                self.log_info(f"{entry.name}: not opened")
+            else:
+                if doc.problem:
+                    key = keys_label_for_action("open_with_os")
+                    hint = f" — {key} opens it in its application" if key else ""
+                    self.log_info(f"{entry.name}: {doc.problem}{hint}")
+                show_text_viewer(self.panel, entry, state_manager=self.state_manager,
+                                 on_edit=lambda path: self._edit_entries([path]),
+                                 document=doc)
+            self.panel.render()
+
+        self.tasks.submit(task, self.panel, run=run, on_done=on_done)
 
     def _restore_post_effect(self) -> None:
         """Re-apply the active theme's post-effect and repaint — the close hook
@@ -5925,6 +6968,128 @@ class XeFMApp:
         root = virtual["root"] if virtual else None
         self._copy_to_clipboard(lambda f: name_key.rel_name(f, root), "name")
 
+    # --- the file clipboard (#577) ------------------------------------------------
+
+    def clipboard_put(self, *, cut: bool) -> None:
+        """Copy (or cut) the selection — or the cursor item — to the file
+        clipboard. Nothing on disk changes: the files are copied or moved when
+        they are pasted, wherever the user is standing then.
+
+        With text selected in the log pane, the copy chord copies that text
+        instead — the highlight is on screen, so the chord acts on what can
+        be seen, as it did before the file clipboard existed."""
+        if not cut and self.log.selection_text():
+            self.copy_log_selection()
+            return
+        pane = self.active_pane()
+        targets = self._selected_or_focused(pane)
+        if not targets:
+            self.log_info("Nothing to copy" if not cut else "Nothing to cut")
+            return
+        local = [str(t) for t in targets if self._is_local(t)]
+        to_os = self.clipboard.put(targets, cut=cut, local_paths=local)
+        n = len(targets)
+        what = f"{n} item{'' if n == 1 else 's'}"
+        paste = self._keys_label("clipboard_paste")
+        verb = "Cut" if cut else "Copied"
+        then = "they move when you paste" if cut else "paste puts copies"
+        note = " (also on the system clipboard)" if to_os else ""
+        self.log_info(f"{verb} {what} to the clipboard{note} — {then} "
+                      f"into the folder you are in ({paste})")
+        self._clipboard_changed()
+
+    def clipboard_clear(self) -> None:
+        self.clipboard.clear()
+        self.log_info("Clipboard cleared")
+        self._clipboard_changed()
+
+    def clipboard_paste(self) -> None:
+        """Paste the clipboard into the active pane's folder: copy what was
+        copied, move what was cut, through the shared engine (confirmation
+        and conflict dialog as for C / M). Files another application put on
+        the system clipboard after XeFM's last copy are what is pasted then,
+        and the log says so."""
+        contents = self.clipboard.contents()
+        if contents is None:
+            self.log_info("The clipboard is empty")
+            return
+        pane = self.active_pane()
+        if pane.get("virtual"):
+            self.log_info("Cannot paste here: this pane is a list of results, "
+                          "not a folder")
+            return
+        if self._is_archive(pane["path"]):
+            self.log_info("Cannot paste here: this is a read-only archive")
+            return
+        dest = pane["path"]
+        sources = list(contents.paths)
+        if contents.cut:
+            # A cut pasted where it already is moves nothing.
+            sources = [p for p in sources if str(p.parent) != str(dest)]
+            if not sources:
+                self.log_info("Nothing to move: the cut items are already here")
+                return
+        origin = " from another app" if contents.from_other_app else ""
+        kind = "move" if contents.cut else "copy"
+
+        def on_complete(result: dict) -> None:
+            self._relist(self.pm.left_pane)
+            self._relist(self.pm.right_pane)
+            self.log_info(format_op_summary(kind.capitalize(), result) + origin)
+            self._report_op_failures(kind.capitalize(), result)
+            if not result.get("cancelled"):
+                if contents.from_other_app:
+                    if contents.cut:
+                        self.clipboard.take_os()
+                else:
+                    self.clipboard.consume()
+            self._clipboard_changed()
+            self._clipboard_ramp_hint()
+            self.panel.render()
+
+        op = self._fileops.move if contents.cut else self._fileops.copy
+        op(self.panel, sources, dest, on_complete=on_complete, log=self.log_info)
+        self.panel.render()
+
+    _clipboard_ramp_shown = False
+
+    def _clipboard_ramp_hint(self) -> None:
+        """Once per session, after a paste: the two-pane way is one key. The
+        clipboard is a ramp, not a destination (#342)."""
+        if self._clipboard_ramp_shown:
+            return
+        self._clipboard_ramp_shown = True
+        c, m = self._keys_label("copy_files"), self._keys_label("move_files")
+        if c and m:
+            self.log_info(f"Tip: {c} / {m} copy or move the selection straight to "
+                          f"the other pane, in one step")
+
+    def _clipboard_changed(self) -> None:
+        """Re-mark the rows on the clipboard in both panes."""
+        marks = self.clipboard.marks()
+        for view in (self.left_view, self.right_view):
+            view.clipboard_marks = marks
+            view.clipboard_cut = self.clipboard.cut
+        self.status.invalidate()
+
+    def _paste_preview(self, pane: dict) -> str:
+        """The pane footer's "paste: 2 conflicts" — from the names the pane
+        already lists, cached until the clipboard or the listing changes."""
+        if pane.get("virtual"):
+            return ""
+        contents = self.clipboard.contents()
+        if contents is None:
+            return ""
+        key = (id(pane["files"]), len(pane["files"]), str(pane["path"]),
+               self.clipboard.version, contents.paths)
+        cache = pane.get("_paste_preview")
+        if cache is not None and cache[0] == key:
+            return cache[1]
+        n = clipboard_conflicts(contents, pane["path"], (f.name for f in pane["files"]))
+        text = f"paste: {n} conflict{'' if n == 1 else 's'}" if n else ""
+        pane["_paste_preview"] = (key, text)
+        return text
+
     def copy_paths_to_clipboard(self) -> None:
         """Copy the active pane's selected full path(s) — or the cursor entry's
         path when nothing is selected — to the system clipboard, one per
@@ -5991,6 +7156,104 @@ class XeFMApp:
             on_remove=self._forget_list_command, on_cancel=self.panel.render,
             region=self._active_pane_region())
         self.panel.render()
+
+    # --- the OS search index (#579) ----------------------------------------------
+
+    _INDEX_STATE = "index_search.history"
+
+    def index_search(self) -> None:
+        """Search the index the OS keeps — Spotlight on macOS, Windows Search
+        on Windows — under the active pane's folder, and show the matches as
+        a list pane (#579). The query is the engine's own language: Spotlight
+        reads it as its search field does (words, ``kind:pdf``, metadata
+        predicates); Windows Search matches words against names and
+        contents, or takes ``where …`` as raw SQL. Earlier queries are
+        offered again, most recent first."""
+        why = os_index.unavailable()
+        if why:
+            self.log_info(why)
+            return
+        pane = self.active_pane()
+        scope = pane["path"]
+        if pane.get("virtual") or path_schemes.is_uri(str(scope)):
+            self.log_info(f"{os_index.engine()} searches local folders; this pane "
+                          f"is showing {scope}")
+            return
+
+        def run(text: str) -> None:
+            query = text.strip()
+            if query:
+                self._record_history(self._INDEX_STATE, query)
+                self._run_index_search(self.pm.active_pane, query, str(scope))
+            self.panel.render()
+
+        show_history_input(
+            self.panel, self._history(self._INDEX_STATE),
+            title=f"Search {os_index.engine()}", prompt="Query:",
+            accept_label="search", on_accept=run,
+            on_remove=lambda q: self._forget_history(self._INDEX_STATE, q),
+            on_cancel=self.panel.render, region=self._active_pane_region())
+        self.panel.render()
+
+    def _history(self, key: str) -> list:
+        history = self.state_manager.get_state(key, [])
+        return [c for c in history if isinstance(c, str)] if isinstance(history, list) else []
+
+    def _record_history(self, key: str, entry: str) -> None:
+        history = [c for c in self._history(key) if c != entry]
+        history.insert(0, entry)
+        self.state_manager.set_state(key, history[:self._LIST_COMMAND_HISTORY_MAX])
+
+    def _forget_history(self, key: str, entry: str) -> bool:
+        history = self._history(key)
+        if entry not in history:
+            return False
+        history.remove(entry)
+        self.state_manager.set_state(key, history)
+        return True
+
+    def _run_index_search(self, pane_name: str, query: str, scope: str, *,
+                          title: str | None = None, run_search=None) -> None:
+        """Query the OS index on a task — the progress dialog counts matches,
+        Esc stops it — and open what it found as ``pane_name``'s list."""
+        engine = os_index.engine() or "Index"
+        title = title or f"{engine}: {query}"
+        task = Task(title, config=self.config, kind="index_search", busy_label="Searching…")
+        search = run_search or (lambda t: os_index.search(
+            query, scope, cancelled=t.cancelled,
+            on_count=lambda n: setattr(t, "counted", n)))
+
+        def run(t: Task) -> dict:
+            return {"result": search(t), "cancelled": t.cancelled()}
+
+        def on_done(res: dict) -> None:
+            result = res.get("result")
+            if res.get("cancelled") or result is None or result.cancelled:
+                self.log_info(f"{title}: stopped")
+            elif result.error:
+                self.log_info(f"{title}: {result.error}")
+            elif not result.paths:
+                self.log_info(f"{title}: nothing found")
+            else:
+                self.open_path_list(pane_name, result.paths, title=title, base=scope)
+            self.panel.render()
+
+        self.tasks.submit(task, self.panel, run=run, on_done=on_done)
+
+    def _open_saved_search(self, pane: dict, entry) -> None:
+        """``Enter`` on a Finder saved search (a Smart Folder's
+        ``.savedSearch``): run its query in its scopes and show the matches as
+        a list, titled with its name."""
+        try:
+            query, scopes = os_index.read_saved_search(entry.read_bytes())
+        except (OSError, ValueError) as e:
+            self.log_info(f"{entry.name}: {e}")
+            return
+        self._run_index_search(
+            self._pane_name_of(pane), query, str(pane["path"]), title=entry.stem,
+            run_search=lambda t: os_index.search_saved(
+                query, scopes, cancelled=t.cancelled,
+                on_count=lambda n: setattr(t, "counted", n)))
 
     def _list_command_history(self) -> list:
         """The commands run so far, most recent first."""
@@ -6178,6 +7441,105 @@ class XeFMApp:
         self._open_list(pane_name, title=title,
                         load=lambda: path_list.read_lists(files),
                         relative_to=relative_to)
+
+    def flat_view(self) -> None:
+        """Show every file below the active pane's directory as one flat list —
+        flat view (#547) — or, on a pane already showing one, go back.
+
+        Everything that works on a list works here: sort by size to find what
+        takes the space, by date to see what changed across the tree, filter by
+        ``*.jpg`` and copy the matches into one folder. Rows are named relative
+        to the directory, as search results are.
+
+        With a selection, only that is flattened: each selected directory's
+        files, and each selected file as itself — the narrower view, without a
+        second key. Files only: a directory has no row of its own, since every
+        file below it is already there.
+
+        The walk is :func:`xefm.tree_walk.walk`, on a task with the progress
+        dialog counting what it found and Esc stopping it, so a large or remote
+        tree never holds the window. Hidden entries follow the pane: what it
+        does not show is neither listed nor descended. Symbolic links to
+        directories are not descended, so a link back up the tree cannot make
+        the walk endless. The list is a snapshot — leave it and come back to
+        see what has changed since."""
+        pane = self.active_pane()
+        virtual = pane.get("virtual")
+        if virtual and virtual.get("kind") == "flat":
+            self._go_parent(pane)
+            return
+        if virtual:
+            self.log_info("Flat view lists a directory's files; this pane is "
+                          "showing a list")
+            return
+        info = pane.get("file_info") or {}
+        selected = [f for f in pane["files"] if str(f) in pane["selected_files"]]
+        roots = [f for f in selected if (info.get(str(f)) or {}).get("is_dir")]
+        picked = [f for f in selected if f not in roots]
+        if not selected:
+            roots = [pane["path"]]
+        self._run_flat_walk(self.pm.active_pane, roots, picked)
+
+    def _run_flat_walk(self, pane_name: str, roots: list, picked: list) -> None:
+        """Walk ``roots`` for :meth:`flat_view` on a task and open what it
+        finds, together with the files ``picked`` from the selection, as pane
+        ``pane_name``'s flat list. Esc stops the walk and leaves the pane as
+        it was: a part of a tree, in whatever order the storage answered,
+        would look complete and not be."""
+        pane = self.pane(pane_name)
+        root = pane["path"]
+        show_hidden = self.flm.show_hidden
+        # The selected files' records from the listing the pane already has —
+        # copied without the compared name, which was made for a directory pane
+        # and is recomputed relative to the listing's root.
+        records = {str(p): a for p, a in (pane.get("_listing_entries") or ())}
+        picked_entries = [(f, {k: v for k, v in records[str(f)].items()
+                               if k != "cmp_name"})
+                          for f in picked if str(f) in records]
+        task = Task(f"Flat view: {root}", config=self.config,
+                    kind="flat_view", busy_label="Reading…")
+
+        def run(t: Task) -> dict:
+            flag = types.SimpleNamespace(is_set=t.cancelled)
+            found = list(picked_entries)
+            for r in roots:
+                for entry, attrs in _flat_files(r, flag, show_hidden):
+                    found.append((entry, attrs))
+                    t.counted = len(found)
+            return {"entries": found, "cancelled": t.cancelled()}
+
+        def on_done(res: dict) -> None:
+            if res.get("cancelled") or "entries" not in res:
+                self.log_info("Flat view: cancelled")
+            else:
+                self._open_flat(pane_name, root, res["entries"])
+            self.panel.render()
+
+        self.tasks.submit(task, self.panel, run=run, on_done=on_done)
+
+    def _open_flat(self, pane_name: str, root, entries: list) -> None:
+        """Install ``entries`` — the walk's ``(Path, attrs)`` — as pane
+        ``pane_name``'s flat list, named relative to ``root``. Go to parent,
+        or the flat view key again, lands back on the row the cursor was on."""
+        pane = self.pane(pane_name)
+        if not entries:
+            self.log_info(f"Flat view: no files below {root}")
+            return
+        files = pane["files"]
+        idx = pane["focused_index"]
+        return_to = files[idx].name if files and 0 <= idx < len(files) else None
+        virtual = {"kind": "flat", "title": "Flat view", "root": root,
+                   "results": [p for p, _ in entries], "meta": {},
+                   "return_to": return_to}
+
+        def landed(p: dict) -> None:
+            n = len(virtual["results"])
+            self.log_info(f"Flat view: {n} file{'' if n == 1 else 's'} below "
+                          f"{root}  — {self._keys_label('flat_view')} or "
+                          f"{self._keys_label('go_parent')} back")
+
+        self._list_virtual(pane, virtual, on_ready=landed, entries=entries)
+        self.panel.render()
 
     def _copy_to_clipboard(self, render, label: str) -> None:
         """Shared body of the clipboard-copy actions: gather the selection (or
@@ -7468,7 +8830,7 @@ class XeFMApp:
             region=self._active_pane_region())
         self.panel.render()
 
-    def enter_isearch(self) -> None:
+    def enter_isearch(self, quick: bool = False) -> None:
         """Incremental search over the active pane (the 'F' key).
 
         The prompt is not a centered modal: an ``ISearchBar`` overlay is pinned to
@@ -7484,7 +8846,14 @@ class XeFMApp:
         pattern's tokens — issue #347) and ``isearch.select_matches`` marks every
         match at once; ``isearch.accept`` stops at the current match;
         ``isearch.cancel`` restores the pre-search cursor. Reuses
-        ``FileListManager.find_matches`` for the hits."""
+        ``FileListManager.find_matches`` for the hits.
+
+        ``quick`` is the Orthodox keymap's type-ahead. It matches as above, and
+        closes the way the function-key file managers' quick search does: Esc
+        leaves the cursor on the match, and any other key that is not typing —
+        Enter, F5, an arrow sideways — closes the search and acts on the file
+        list, so Enter opens the match and F5 copies it. Up / Down still walk
+        the matches."""
         if self._isearch_active or not self.active_pane()["files"]:
             return
         footer = self._footers.get(self.pm.active_pane)
@@ -7492,6 +8861,7 @@ class XeFMApp:
             return  # footer not drawn yet — nothing to anchor to
         x, y, w, h = footer.rect
         self._isearch_active = True
+        self._isearch_quick = quick
         self._isearch_origin = self.active_pane()["focused_index"]
         self._isearch_matches = []
         # Migemo only ever matches a *non-ASCII* name (migemo_search.has_hit),
@@ -7502,15 +8872,24 @@ class XeFMApp:
         self._isearch_migemo = any(
             not f.name.isascii() for f in self.active_pane()["files"])
         self._active_view().search_matches = set()
-        self._isearch_bar = ISearchBar(
-            on_change=self._isearch_recompute,
-            on_navigate=self._isearch_step,
-            on_select=self._isearch_toggle_select,
-            on_select_all=self._isearch_select_matches,
-            on_submit=self._isearch_stop,
-            on_cancel=self._isearch_cancel,
-            get_status=self._isearch_status,
-        )
+        if quick:
+            self._isearch_bar = ISearchBar(
+                on_change=self._isearch_recompute,
+                on_navigate=self._isearch_step,
+                on_cancel=self._isearch_stop,
+                get_status=self._isearch_status,
+                on_passthrough=self._isearch_passthrough,
+            )
+        else:
+            self._isearch_bar = ISearchBar(
+                on_change=self._isearch_recompute,
+                on_navigate=self._isearch_step,
+                on_select=self._isearch_toggle_select,
+                on_select_all=self._isearch_select_matches,
+                on_submit=self._isearch_stop,
+                on_cancel=self._isearch_cancel,
+                get_status=self._isearch_status,
+            )
         # Positioned exactly over the footer, with its "status" surface so it
         # reads as the footer bar. No shadow/dim: the pane stays fully lit.
         self.panel.push_layer(self._isearch_bar, z=70,
@@ -7608,6 +8987,7 @@ class XeFMApp:
     def _isearch_close(self) -> None:
         """Tear down the isearch overlay and clear the pane's match highlights."""
         self._isearch_active = False
+        self._isearch_quick = False
         self._isearch_matches = []
         self._active_view().search_matches = set()
         if (self.panel.has_layers
@@ -7627,6 +9007,13 @@ class XeFMApp:
         real, deliberately composed filter out of the history.
         """
         self._isearch_close()
+        self.panel.render()
+
+    def _isearch_passthrough(self, event) -> None:
+        """Quick search: a key the bar does not own ends the search at the
+        current match and then does what it does in the file list."""
+        self._isearch_close()
+        self.on_event(event)
         self.panel.render()
 
     def _isearch_cancel(self) -> None:
@@ -7954,6 +9341,14 @@ class XeFMApp:
             ("go_parent", "Go to parent directory"),
             ("go_root", "Go to the root of the current drive or location"),
             ("switch_pane", "Switch active pane"),
+            ("quick_view", "Preview the item under the cursor in the other pane"),
+            ("jobs", "List background jobs; bring one forward or drop it from the queue"),
+            ("find_similar", "Find identical files, or similar images, videos or audio (Tools menu)"),
+            ("new_tab", "Open a new tab in this pane, at the same place"),
+            ("open_in_new_tab", "Open the directory under the cursor in a new tab"),
+            ("close_tab", "Close this pane's current tab"),
+            ("next_tab", "Show this pane's next tab"),
+            ("prev_tab", "Show this pane's previous tab"),
             ("nav_left", "Focus left pane / go to parent"),
             ("nav_right", "Focus right pane / go to parent"),
             ("favorites", "Go to a favorite directory or file"),
@@ -7963,6 +9358,7 @@ class XeFMApp:
             ("jump_to_path", "Jump to a typed path"),
             ("drives", "Open the drives / locations picker"),
             ("history", "Go to a recently-visited directory"),
+            ("flat_view", "Show every file below this directory as one list"),
             ("open_list_from_clipboard",
              "Open the paths on the clipboard as a list (Go menu)"),
             ("open_list_from_command",
@@ -7999,6 +9395,10 @@ class XeFMApp:
             ("rename", "Rename file/directory"),
             ("rename_in_editor", "Rename the selection in the TEXT_EDITOR"),
             ("copy_files", "Copy selection to the other pane"),
+            ("clipboard_copy", "Copy files to the clipboard (or the log's selected text)"),
+            ("clipboard_cut", "Cut files to the clipboard: they move when pasted"),
+            ("clipboard_paste", "Paste the clipboard into this folder"),
+            ("clipboard_clear", "Empty the file clipboard (Edit menu)"),
             ("copy_names", "Copy selection's name(s) to the clipboard"),
             ("copy_paths", "Copy selection's full path(s) to the clipboard"),
             ("move_files", "Move selection to the other pane"),
@@ -8020,6 +9420,7 @@ class XeFMApp:
             ("clear_filter", "Clear the filename filter"),
             ("find_files", "Recursive filename search"),
             ("find_in_files", "Recursive content (grep) search"),
+            ("index_search", "Search the OS index (Spotlight / Windows Search) under this folder"),
             ("options", "In the search dialog: case, pattern, subfolders"),
         )),
         # The only non-file-list surface here, and deliberately: the search bar
@@ -8053,7 +9454,7 @@ class XeFMApp:
             ("adjust_log_up", "Make the log pane larger"),
             ("adjust_log_down", "Make the log pane smaller"),
             ("reset_log_height", "Reset the log pane height"),
-            ("copy_log_selection", "Copy the log's selected text (drag to select)"),
+            ("copy_log_selection", "Copy the log's selected text — the copy key does it too (Edit menu)"),
             # These three carry their menu: nothing binds them out of the box,
             # so a row saying only "—" would name a feature and then withhold
             # the one way to reach it. The menu is stated rather than "unbound
@@ -8668,10 +10069,14 @@ class XeFMApp:
                 self.panel.render()
             elif action is None and self._menu_mnemonic(event):
                 self.panel.render()
+            elif action is None and self._type_ahead(event):
+                self.panel.render()
+            self._quick_view_follow()
             return
         if event.type in self._MOUSE:
             if self.panel.dispatch_event(event):
                 self.panel.render()
+            self._quick_view_follow()
 
     def run(self) -> None:
         self.panel.render()

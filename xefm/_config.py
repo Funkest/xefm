@@ -244,7 +244,21 @@ class Config:
     # close, that is the transfer, and one at a time is what a server was seen
     # to require.
     TRANSFER_CONCURRENCY = "auto"
-    
+
+    # Keymap preset: a second layout laid over KEY_BINDINGS below.
+    #   None        -- whatever View > Keymap last chose ('afx' until you
+    #                  choose another)
+    #   'afx'       -- the letters below: C copy, K delete, M move ... The
+    #                  single-key style of the X68000 filers and AFX (あふ).
+    #                  'default' is accepted as an old name for it.
+    #   'orthodox'  -- function keys: F3 view, F4 edit, F5 copy, F6 move,
+    #                  F7 new folder, F8 delete. No bare letter runs anything;
+    #                  typing a letter starts incremental search.
+    # A preset only replaces keys you have not changed here: an action you
+    # rebind below keeps your keys under every preset. Setting this wins over
+    # the View > Keymap menu. See doc/KEYMAP_PRESETS_FEATURE.md.
+    KEY_PRESET = None
+
     # Key bindings - customize your shortcuts
     # Each action can have multiple keys assigned to it
     # 
@@ -290,6 +304,9 @@ class Config:
         # because a missed Ctrl would land on K, delete. A missed Ctrl here
         # lands on T, which nothing is bound to.
         'command_palette': ['Ctrl-T'],         # Search every action by name and run it
+        # The background jobs list. The status bar's right end shows what is
+        # running; this brings a job forward (its prompt, or Esc to cancel).
+        'jobs': ['Ctrl-G'],                    # List background jobs
         
         # === Navigation ===
         'cursor_up': ['UP'],                   # Move cursor up one item
@@ -303,6 +320,9 @@ class Config:
         'reveal_in_os': ['Ctrl-R'],            # Reveal focused file in OS file manager
         'go_parent': ['BACKSPACE'],            # Go to parent directory
         'go_root': ['\\'],                     # Go to the root of the current drive/location
+        # Shift-B, not Ctrl-B: that is tmux's prefix, so inside tmux it would
+        # never arrive. A capital is a glyph, which every terminal delivers.
+        'flat_view': ['Shift-B'],            # Show every file below this directory as one flat list (again to go back)
         'switch_pane': ['TAB'],                # Switch between left and right panes
         'nav_left': ['LEFT'],                  # Left pane: go to parent, Right pane: switch to left pane
         'nav_right': ['RIGHT'],                # Right pane: go to parent, Left pane: switch to right pane
@@ -351,6 +371,16 @@ class Config:
         'copy_names': ['Ctrl-N'],              # Copy selected/focused file name(s) to clipboard
         'copy_paths': ['Ctrl-P'],              # Copy selected/focused full path(s) to clipboard
 
+        # === File Clipboard ===
+        # Copy or cut now, paste wherever you go next -- the folder you stand
+        # in, or (macOS / Windows) another application. C / M above stay the
+        # one-step way to the other pane. The copy key copies the log's
+        # selected text instead when the log has a selection.
+        'clipboard_copy': ['Ctrl-C', 'Y'],     # Copy files to the clipboard
+        'clipboard_cut': ['Ctrl-X', 'Shift-Y'],  # Cut files to the clipboard (moved on paste)
+        'clipboard_paste': ['Ctrl-V', 'G'],    # Paste the clipboard into this folder
+        'clipboard_clear': [],                 # Empty the file clipboard (Edit menu)
+
         # === File Operations ===
         'copy_files': {'keys': ['C'], 'selection': 'required'},  # Copy selected files to other pane
         'move_files': {'keys': ['M'], 'selection': 'required'},  # Move selected files to other pane
@@ -364,6 +394,7 @@ class Config:
         
         # === File Viewing & Editing ===
         'view_file': ['V'],                    # View file using configured viewer
+        'quick_view': ['Shift-V'],             # Preview the cursor item in the other pane (again to close)
         'edit_file': ['E'],                    # Edit selected file with configured text editor (also inside the text viewer)
         'file_details': ['I'],                 # Show detailed file information dialog
         
@@ -379,6 +410,8 @@ class Config:
         'isearch': ['F'],                       # Enter incremental search mode (isearch)
         'find_files': ['Shift-F'],          # Show filename search dialog
         'find_in_files': ['Shift-G'],         # Show content search dialog (grep)
+        # The OS's own index: Spotlight on macOS, Windows Search on Windows.
+        'index_search': ['Ctrl-F'],           # Search the OS index under this folder (results as a list)
         'filter': [';'],                       # Enter filter mode to show only matching files
         'clear_filter': [':'],                 # Clear current file filter
         
@@ -406,6 +439,15 @@ class Config:
         'connect_server': ['Shift-D'],  # Connect to a network server (macOS/Windows)
         
         # === Pane Management ===
+        # Folder tabs, per pane. T is a bare letter nothing else uses; Ctrl-W
+        # is the close every tabbed program has. Next/previous are on
+        # Ctrl-PAGE_DOWN / Ctrl-PAGE_UP because a terminal never delivers
+        # Ctrl-TAB.
+        'new_tab': ['T'],                      # Open a new tab in this pane at the same place
+        'open_in_new_tab': ['Shift-T'],        # Open the directory under the cursor in a new tab
+        'close_tab': ['Ctrl-W'],               # Close this pane's current tab
+        'next_tab': ['Ctrl-PAGE_DOWN'],        # Show this pane's next tab
+        'prev_tab': ['Ctrl-PAGE_UP'],          # Show this pane's previous tab
         'sync_current_to_other': ['O'],        # Sync current pane directory to other pane
         'sync_other_to_current': ['Shift-O'],  # Sync other pane directory to current pane
         'compare_selection': ['W'],            # Show file and directory comparison options
@@ -424,7 +466,7 @@ class Config:
         # Drag across the log with the mouse to select, then copy. Ctrl-C works
         # everywhere; the macOS desktop adds Command-C below, because copying
         # text is the one place that chord is the whole platform's convention.
-        'copy_log_selection': ['Ctrl-C'],      # Copy the log pane's selected text
+        'copy_log_selection': [],              # Copy the log pane's selected text (Edit menu; the copy key below does it when the log has a selection)
         'copy_log_all': [],                    # Copy the whole log (unbound; Edit menu, or bind a key here)
         
         # === Text Viewer ===
@@ -689,8 +731,11 @@ class Config:
         if sys.platform == 'darwin':
             # The Finder gesture: a modifier on the same Enter that opens.
             KEY_BINDINGS['open_with_os'] = ['Command-ENTER', 'Ctrl-O']
-            # Copying text on macOS is Command-C, wherever the text is.
-            KEY_BINDINGS['copy_log_selection'] = ['Command-C', 'Ctrl-C']
+            # Copy, cut and paste on macOS are Command-C / X / V, wherever --
+            # files in a pane, text in the log.
+            KEY_BINDINGS['clipboard_copy'] = ['Command-C', 'Ctrl-C', 'Y']
+            KEY_BINDINGS['clipboard_cut'] = ['Command-X', 'Ctrl-X', 'Shift-Y']
+            KEY_BINDINGS['clipboard_paste'] = ['Command-V', 'Ctrl-V', 'G']
         elif sys.platform == 'win32':
             KEY_BINDINGS['open_with_os'] = ['Ctrl-ENTER', 'Ctrl-O']
 
@@ -1277,10 +1322,13 @@ class Config:
     #     'edit': ['command'],       # Different command for edit
     # }
     FILE_ASSOCIATIONS = [
-        # PDF files
+        # PDF files. 'view' is None so V shows the document's text in XeFM's
+        # own viewer -- searchable, selectable, and on remote or archived files
+        # too; 'open' still hands it to Preview for how the pages look.
         {
             'pattern': '*.pdf',
-            'open|view': ['open', '-a', 'Preview'],
+            'open': ['open', '-a', 'Preview'],
+            'view': None,
             'edit': None,
         },
         # Image files. 'view' is deliberately None so V opens XeFM's own image
@@ -1307,19 +1355,34 @@ class Config:
             'open': ['open', '-a', 'Music'],
             'edit': None,
         },
-        # Microsoft Word documents
+        # Microsoft Office documents. The current formats (.docx .xlsx .pptx)
+        # are read as text by XeFM's own viewer on V; the old binary ones
+        # (.doc .xls .ppt) cannot be, and V hands them to the application.
         {
-            'pattern': ['*.doc', '*.docx'],
+            'pattern': ['*.docx'],
+            'open|edit': ['open', '-a', 'Microsoft Word'],
+            'view': None,
+        },
+        {
+            'pattern': ['*.doc'],
             'open|view|edit': ['open', '-a', 'Microsoft Word'],
         },
-        # Microsoft Excel spreadsheets
         {
-            'pattern': ['*.xls', '*.xlsx'],
+            'pattern': ['*.xlsx'],
+            'open|edit': ['open', '-a', 'Microsoft Excel'],
+            'view': None,
+        },
+        {
+            'pattern': ['*.xls'],
             'open|view|edit': ['open', '-a', 'Microsoft Excel'],
         },
-        # Microsoft PowerPoint presentations
         {
-            'pattern': ['*.ppt', '*.pptx'],
+            'pattern': ['*.pptx'],
+            'open|edit': ['open', '-a', 'Microsoft PowerPoint'],
+            'view': None,
+        },
+        {
+            'pattern': ['*.ppt'],
             'open|view|edit': ['open', '-a', 'Microsoft PowerPoint'],
         },
         # Note there is deliberately no entry listing text/code extensions.
