@@ -282,6 +282,95 @@ class FileOperationService:
         ``CONFIRM_DELETE`` (whose confirm button defaults to Cancel)."""
         self._start(panel, "delete", targets, None, on_complete, log, z, background)
 
+    def sync(self, panel: Any, copies: list, deletes: list, *,
+             on_complete: Optional[Callable[[dict], None]] = None,
+             log: Optional[Callable[[str], None]] = None,
+             z: int = 70, background: bool = True) -> None:
+        """Run a directory sync plan (:mod:`xefm.dir_sync`) as one task: every
+        ``(source, destination, overwrite)`` in ``copies``, then every path in
+        ``deletes``.
+
+        Unlike :meth:`copy`, each copy names its own destination — a plan
+        writes into many directories at once — and nothing is confirmed or
+        asked: the caller showed the whole plan and the user agreed to it, so
+        an existing destination is overwritten exactly when the plan says.
+        Copies come first, so a Mirror that is cancelled part-way has added
+        before it has removed. The result has the usual ``done`` / ``failed``
+        / ``errors`` / ``items`` counts, over copies and deletions together."""
+        if not copies and not deletes:
+            if log is not None:
+                log("Nothing to sync")
+            return
+        task = Task("Sync…", config=self.config, kind="sync")
+        task.progress.start_operation(OperationType.COPY, 0, description="")
+        sources = [src for src, _dest, _ow in copies]
+        unpins = _pin_source_archives(sources, "used by a running sync")
+
+        def run(task: Task) -> dict:
+            try:
+                return self._run_sync(task, copies, deletes, log)
+            finally:
+                for unpin in unpins:
+                    unpin()
+
+        self.tasks.submit(task, panel, run=run, on_done=on_complete, z=z,
+                          background=background)
+
+    def _run_sync(self, task: Task, copies: list, deletes: list, log) -> dict:
+        """The task body of :meth:`sync`, on the task thread."""
+        result = {"done": 0, "skipped": 0, "failed": 0, "cancelled": False,
+                  "items": 0, "errors": []}
+        prog = task.progress
+        mutated: dict = {}
+        if self.monitor:
+            for path in [dest for _src, dest, _ow in copies] + list(deletes):
+                parent = path.parent
+                mutated.setdefault(str(parent), parent)
+        for d in mutated.values():
+            self.monitor.suppress_path(d)
+        errors = result["errors"]
+        try:
+            steps = self._release_archives(
+                "copy", [(src, dest, ow) for src, dest, ow in copies], result, log)
+            steps = [("copy", src, dest, ow) for src, dest, ow in steps]
+            doomed = self._release_archives(
+                "delete", [(p, None, False) for p in deletes], result, log)
+            steps += [("delete", p, None, False) for p, _d, _o in doomed]
+
+            copy_items, copy_bytes = self._count(
+                task, "copy", None, [s[1] for s in steps if s[0] == "copy"])
+            del_items, _ = self._count(
+                task, "delete", None, [s[1] for s in steps if s[0] == "delete"])
+            prog.update_operation_total(copy_items + del_items,
+                                        total_bytes=copy_bytes)
+            for kind, target, dest, overwrite in steps:
+                task.checkpoint()
+                before = len(errors)
+                try:
+                    ok = self._execute_one(
+                        task, kind, target, dest, overwrite,
+                        dest.parent if dest is not None else None,
+                        prog, log, errors)
+                except Cancelled:
+                    raise
+                except Exception as exc:  # noqa: BLE001 — record + go on
+                    errors.append((str(target), str(exc)))
+                    if log is not None:
+                        log(f"Sync failed for {target.name}: {exc}")
+                    ok = 0
+                result["items"] += ok
+                if ok > 0 or len(errors) == before:
+                    result["done"] += 1
+                else:
+                    result["failed"] += 1
+        except Cancelled:
+            result["cancelled"] = True
+        finally:
+            for d in mutated.values():
+                self.monitor.release_path(d)
+            prog.finish_operation()
+        return result
+
     # --- confirm + submit ----------------------------------------------------
 
     def _start(self, panel: Any, kind: str, targets: list, dest_dir: Optional[Path],

@@ -121,6 +121,13 @@ Add modifiers before the main key, separated by hyphens:
 - Modifier **order doesn't matter**: `'Command-Shift-X'` equals `'Shift-Command-X'`
 - You can combine **multiple modifiers**: `'Command-Shift-X'`, `'Control-Alt-Delete'`
 
+### Keymap presets
+
+**View → Keymap** (or `KEY_PRESET` in `config.py`) switches the whole layout
+to another one, such as function keys (`F5` copy, `F8` delete) with nothing on
+the bare letters. A preset only replaces keys you have not changed. See
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md).
+
 ### What a terminal can carry
 
 The same XeFM runs as a desktop app and in a terminal, and a terminal cannot

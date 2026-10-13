@@ -161,3 +161,4 @@ def test_pane_and_dialog_agree(flm, pane, pattern):
     dialog_rows = filtered(list(NAMES), pattern)
     pane_rows = list(NAMES) if not pattern.strip() else isearch(flm, pane, pattern)
     assert dialog_rows == pane_rows
+
