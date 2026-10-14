@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path as _StdPath
 from typing import Optional
 
-from xefm.external_programs import SUBPROCESS_NO_WINDOW, xefm_python
+from xefm.external_programs import xefm_python
 from xefm.log_manager import getLogger
 
 logger = getLogger("SimilarScan")
@@ -268,8 +268,9 @@ def start(roots: list, method: str, *, base: Optional[_StdPath] = None,
     if sys.platform == "win32":
         DETACHED_PROCESS = 0x00000008
         CREATE_NEW_PROCESS_GROUP = 0x00000200
-        kwargs["creationflags"] = (DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-                                   | SUBPROCESS_NO_WINDOW)
+        # DETACHED_PROCESS already gives it no console, so no window to hide;
+        # CREATE_NO_WINDOW (SUBPROCESS_NO_WINDOW) would be ignored beside it.
+        kwargs["creationflags"] = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
     else:
         # Its own session: not in XeFM's process group, so neither closing the
         # terminal nor quitting XeFM signals it.
