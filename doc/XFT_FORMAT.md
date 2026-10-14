@@ -1,6 +1,6 @@
-# The .xefml Format
+# The .xft Format
 
-A `.xefml` file is **a tree of references to places**: groups that hold
+An `.xft` file is **a tree of references to places**: groups that hold
 other groups or references, and references that point at a file or folder
 somewhere (a local path, or a URI such as `ssh://…` or `s3://…`). XeFM
 browses it like an archive. See [Tree Files](TREE_FILES_FEATURE.md) for what
@@ -9,19 +9,23 @@ that looks like.
 The format is meant to be written by programs, such as a duplicate finder, a
 search tool or a catalogue script, and read by XeFM. Its first producer is
 [similar-files](https://github.com/crftwr/similar-files) (`--format tree`).
-This page is the specification. Producers write it from this description and
+This page is the specification.
+
+The format was called `.xefml` until #613 shortened the name to fit the
+four-character extension column XeFM's file list shows. XeFM still reads a
+`.xefml` file and a `"format": "xefml"` document; write `.xft` and `"xft"`. Producers write it from this description and
 need nothing from XeFM's code.
 
 ## The file
 
-- UTF-8 JSON, one object. The extension is `.xefml`.
+- UTF-8 JSON, one object. The extension is `.xft`.
 - **Replace it whole.** A producer that writes the file more than once
   writes a temporary file next to it and renames it over the old one
   (`os.replace`), so a reader never sees half a file.
 
 ```json
 {
-  "format": "xefml",
+  "format": "xft",
   "version": 1,
   "title": "Similar videos in /Users/me/Movies",
   "generator": {"name": "similar-files", "version": "0.2.0"},
@@ -51,7 +55,7 @@ need nothing from XeFM's code.
 
 | Key | Required | Meaning |
 |---|---|---|
-| `format` | yes | Always `"xefml"`. |
+| `format` | yes | Always `"xft"`. |
 | `version` | yes | `1`. A reader refuses a version it does not know. |
 | `nodes` | yes | The top-level nodes. |
 | `title` | no | What the tree is, in a few words. |

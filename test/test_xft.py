@@ -1,6 +1,6 @@
-""".xefml tree files (#573): the format, the xefml:// scheme, and the pane.
+""".xft tree files (#573): the format, the xft:// scheme, and the pane.
 
-Run with: python -m pytest test/test_xefml.py -v
+Run with: python -m pytest test/test_xft.py -v
 """
 
 import errno
@@ -14,14 +14,14 @@ import unittest
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
-from xefm import xefml  # noqa: E402
+from xefm import xft  # noqa: E402
 from xefm import app as xefm_app  # noqa: E402
 from xefm.path import Path  # noqa: E402
 from xefm.state_manager import XeFMStateManager  # noqa: E402
 
 
 def _doc(nodes, **top):
-    data = {"format": "xefml", "version": 1, "title": "Test", "nodes": nodes}
+    data = {"format": "xft", "version": 1, "title": "Test", "nodes": nodes}
     data.update(top)
     return data
 
@@ -34,7 +34,7 @@ def _leaf(name, target, size=5, mtime=1_700_000_000.0, role="member"):
 class Format(unittest.TestCase):
 
     def test_duplicate_and_slashed_names_are_made_unique(self):
-        doc = xefml.parse(_doc([
+        doc = xft.parse(_doc([
             {"name": "a/b", "children": [_leaf("x", "/1"), _leaf("X", "/2"), _leaf("x", "/3")]},
             {"name": "a_b", "children": []},
         ]))
@@ -44,32 +44,32 @@ class Format(unittest.TestCase):
                          ["x", "X [2]", "x [3]"])
 
     def test_defaults_and_refusals(self):
-        doc = xefml.parse(_doc([]))
+        doc = xft.parse(_doc([]))
         self.assertTrue(doc.final and doc.complete)
         with self.assertRaises(ValueError):
-            xefml.parse({"format": "xefml", "version": 2, "nodes": []})
+            xft.parse({"format": "xft", "version": 2, "nodes": []})
         with self.assertRaises(ValueError):
-            xefml.parse({"format": "other"})
+            xft.parse({"format": "other"})
 
     def test_a_group_is_known_by_its_anchor(self):
-        doc = xefml.parse(_doc([
+        doc = xft.parse(_doc([
             {"name": "g (2)", "children": [_leaf("m", "/m"), _leaf("a", "/a", role="anchor")]},
         ]))
         self.assertEqual(doc.root.children[0].anchor_target(), "/a")
-        self.assertEqual(xefml.find_group(doc, "/a"), "g (2)")
+        self.assertEqual(xft.find_group(doc, "/a"), "g (2)")
 
 
 class _Files(unittest.TestCase):
 
     def setUp(self):
-        xefml.forget()
+        xft.forget()
         self.tmp = os.path.realpath(tempfile.mkdtemp())
         self.real = os.path.join(self.tmp, "real")
         os.makedirs(os.path.join(self.real, "deep"))
         for rel in ("one.txt", os.path.join("deep", "two.txt")):
             with open(os.path.join(self.real, rel), "w") as f:
                 f.write("content of " + rel)
-        self.tree = os.path.join(self.tmp, "scan.xefml")
+        self.tree = os.path.join(self.tmp, "scan.xft")
         self._write([
             {"name": "one.txt (1)", "children": [
                 _leaf("one.txt", os.path.join(self.real, "one.txt"), size=123, role="anchor"),
@@ -79,16 +79,16 @@ class _Files(unittest.TestCase):
         ])
 
     def tearDown(self):
-        xefml.forget()
+        xft.forget()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _write(self, nodes, **top):
         with open(self.tree, "w", encoding="utf-8") as f:
             json.dump(_doc(nodes, **top), f)
-        xefml.forget()
+        xft.forget()
 
     def _at(self, key=""):
-        return Path(xefml.uri_for(self.tree) + key)
+        return Path(xft.uri_for(self.tree) + key)
 
 
 class Scheme(_Files):
@@ -96,7 +96,7 @@ class Scheme(_Files):
     def test_browsing(self):
         top = self._at()
         self.assertTrue(top.exists() and top.is_dir())
-        self.assertEqual(top.name, "scan.xefml")
+        self.assertEqual(top.name, "scan.xft")
         self.assertEqual(str(top.parent), str(Path(self.tmp)))
         self.assertEqual(sorted(p.name for p in top.iterdir()), ["a folder", "one.txt (1)"])
         group = self._at("one.txt (1)")
@@ -176,9 +176,22 @@ class InThePane(_Files):
     def _names(self, pane=None):
         return sorted(f.name for f in (pane or self.pane)["files"])
 
+    def test_a_tree_written_under_the_old_name_still_opens(self):
+        """#613 renamed .xefml to .xft; a file an earlier similar-files wrote
+        — old extension, old format name — opens as before."""
+        old = os.path.join(self.tmp, "old.xefml")
+        with open(old, "w", encoding="utf-8") as f:
+            json.dump(_doc([_leaf("one.txt", os.path.join(self.real, "one.txt"))],
+                           format="xefml"), f)
+        self.app._relist(self.pane)
+        self.app._settle_listings()
+        self._enter("old.xefml")
+        self.assertTrue(xft.is_xft_path(self.pane["path"]))
+        self.assertEqual(self._names(), ["one.txt"])
+
     def test_enter_goes_in_and_backspace_lands_on_the_file(self):
-        self._enter("scan.xefml")
-        self.assertTrue(xefml.is_xefml_path(self.pane["path"]))
+        self._enter("scan.xft")
+        self.assertTrue(xft.is_xft_path(self.pane["path"]))
         self.assertEqual(self._names(), ["a folder", "one.txt (1)"])
         self._enter("one.txt (1)")
         self.assertEqual(self._names(), ["one.txt", "two.txt"])
@@ -189,15 +202,15 @@ class InThePane(_Files):
         self.app.dispatch("go_parent")
         self.app._settle_listings()
         self.assertEqual(str(self.pane["path"]), str(Path(self.tmp)))
-        self.assertEqual(self.pane["files"][self.pane["focused_index"]].name, "scan.xefml")
+        self.assertEqual(self.pane["files"][self.pane["focused_index"]].name, "scan.xft")
 
     def test_a_reference_to_a_folder_goes_there(self):
-        self._enter("scan.xefml")
+        self._enter("scan.xft")
         self._enter("a folder")
         self.assertEqual(str(self.pane["path"]), str(Path(self.real)))
 
     def test_shift_o_reveals_the_real_file_in_the_other_pane(self):
-        self._enter("scan.xefml")
+        self._enter("scan.xft")
         self._enter("one.txt (1)")
         self._focus("two.txt")
         self.app.dispatch("sync_other_to_current")
@@ -206,13 +219,13 @@ class InThePane(_Files):
         self.assertEqual(str(other["path"]), str(Path(os.path.join(self.real, "deep"))))
         self.assertEqual(other["files"][other["focused_index"]].name, "two.txt")
         # The tree stays where it was.
-        self.assertTrue(xefml.is_xefml_path(self.pane["path"]))
+        self.assertTrue(xft.is_xft_path(self.pane["path"]))
 
     def test_what_leaves_xefm_gets_the_real_file(self):
         """#612: the OS's open, the editor and a copied path get the file an
-        entry stands for, not its xefml:// address."""
+        entry stands for, not its xft:// address."""
         from unittest.mock import patch
-        self._enter("scan.xefml")
+        self._enter("scan.xft")
         self._enter("one.txt (1)")
         self._focus("two.txt")
         real = os.path.join(self.real, "deep", "two.txt")
@@ -235,7 +248,7 @@ class InThePane(_Files):
         self.assertEqual([str(p) for p in edited[0]], [real])
 
     def test_shift_o_on_a_selection_lists_every_target(self):
-        self._enter("scan.xefml")
+        self._enter("scan.xft")
         self._enter("one.txt (1)")
         for f in self.pane["files"]:
             self.pane["selected_files"].add(str(f))
@@ -253,8 +266,8 @@ class InThePane(_Files):
                 _leaf("two.txt", os.path.join(self.real, "deep", "two.txt")),
             ]},
         ], final=False, progress={"done": 3, "total": 12})
-        self._enter("scan.xefml")
-        text = xefm_app._xefml_header_text(self.pane["path"], 200)
+        self._enter("scan.xft")
+        text = xefm_app._xft_header_text(self.pane["path"], 200)
         self.assertIn("groups may change", text)
         self.assertIn("25%", text)
         self._enter("g (1)")
@@ -272,15 +285,15 @@ class InThePane(_Files):
         self._write([{"name": "one.txt (1)", "children": [
             _leaf("one.txt", anchor, role="anchor"),
             _leaf("two.txt", os.path.join(self.real, "deep", "two.txt"))]}], final=False)
-        self._enter("scan.xefml")
+        self._enter("scan.xft")
         self._enter("one.txt (1)")
         # The producer finds another member: the group's name changes.
         self._write([{"name": "one.txt (2)", "children": [
             _leaf("one.txt", anchor, role="anchor"),
             _leaf("two.txt", os.path.join(self.real, "deep", "two.txt")),
             _leaf("three.txt", "/elsewhere/three.txt")]}], final=False)
-        self.app._xefml_dirty = True
-        self.app._pump_xefml()
+        self.app._xft_dirty = True
+        self.app._pump_xft()
         self.app._settle_listings()
         self.assertTrue(str(self.pane["path"]).endswith("#one.txt (2)"))
         self.assertEqual(self._names(), ["one.txt", "three.txt", "two.txt"])
@@ -288,12 +301,12 @@ class InThePane(_Files):
     def test_a_group_that_is_gone_returns_to_the_top(self):
         self._write([{"name": "g", "children": [
             _leaf("one.txt", os.path.join(self.real, "one.txt"), role="anchor")]}], final=False)
-        self._enter("scan.xefml")
+        self._enter("scan.xft")
         self._enter("g")
         self._write([{"name": "other", "children": [
             _leaf("x", "/x", role="anchor")]}], final=False)
-        self.app._xefml_dirty = True
-        self.app._pump_xefml()
+        self.app._xft_dirty = True
+        self.app._pump_xft()
         self.app._settle_listings()
         self.assertTrue(str(self.pane["path"]).endswith("#"))
         self.assertIn("back at the top", self.app.log.lines[-1][0])

@@ -69,8 +69,8 @@ def test_an_identical_scan_runs_to_the_end_and_writes_its_groups(dirs):
     src, base = dirs
     job = _start(src, base)
     assert _wait(job) == similar_scan.DONE, job.log_path.read_text()
-    from xefm import xefml
-    doc = xefml.load(str(job.result_path))
+    from xefm import xft
+    doc = xft.load(str(job.result_path))
     assert doc.final and doc.complete
     (group,) = doc.root.children
     assert sorted(c.name for c in group.children) == ["a.bin", "b.bin"]
@@ -233,7 +233,7 @@ def test_launching_watching_and_opening_a_scan(app, dirs, monkeypatch):
     app.panel.dispatch_event(_key("enter"))          # the scan
     app._settle_listings()
     pane = app.active_pane()
-    assert str(pane["path"]).startswith("xefml://") and str(pane["path"]).endswith("#")
+    assert str(pane["path"]).startswith("xft://") and str(pane["path"]).endswith("#")
     assert [f.name for f in pane["files"]] == ["a.bin (1)"]
     assert job.seen
     assert app._jobs_parts() == []
@@ -250,7 +250,7 @@ def test_a_running_scan_offers_its_provisional_groups(app, dirs):
     src, base = dirs
     job = _job(base, "20260101-000000-run", status={"state": "running"}, pid=os.getpid())
     job.result_path.write_text(json.dumps({
-        "format": "xefml", "version": 1, "final": False,
+        "format": "xft", "version": 1, "final": False,
         "progress": {"done": 1, "total": 4},
         "nodes": [{"name": "g (1)", "children": [
             {"name": "a.bin", "target": str(src / "a.bin"), "extra": {"role": "anchor"}},
@@ -269,7 +269,7 @@ def test_a_running_scan_offers_its_provisional_groups(app, dirs):
     assert len(app.pm.tabs[side]) == 2
     assert app.pm.tabs[side][0]["path"] == before
     from xefm import app as xefm_app
-    assert "groups may change" in xefm_app._xefml_header_text(pane["path"], 200)
+    assert "groups may change" in xefm_app._xft_header_text(pane["path"], 200)
 
 
 class TestMethods:
@@ -294,3 +294,13 @@ class TestMethods:
         with patch("shutil.which", return_value=None):
             why = similar_scan.unavailable(similar_scan.AUDIO)
         assert why is not None and "fpcalc" in why
+
+
+
+def test_a_scan_from_before_the_rename_keeps_its_result(dirs):
+    """A scan folder an earlier XeFM wrote holds result.xefml (#613)."""
+    _src, base = dirs
+    job = _job(base, "20260101-000000-old", status={"state": "done"})
+    assert job.result_path.name == "result.xft"
+    (job.folder / "result.xefml").write_text("{}")
+    assert job.result_path.name == "result.xefml"

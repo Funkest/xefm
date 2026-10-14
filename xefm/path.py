@@ -515,7 +515,7 @@ class PathImpl(ABC):
 
     def target(self) -> Optional['Path']:
         """The real place this path stands for, when it is a reference to one
-        rather than a place itself — an entry of a ``.xefml`` tree (#573). The
+        rather than a place itself — an entry of an ``.xft`` tree (#573). The
         pane-sync keys reveal it, and bulk work on a selection acts on it.
 
         ``None`` for every path that is itself the place, which is every path

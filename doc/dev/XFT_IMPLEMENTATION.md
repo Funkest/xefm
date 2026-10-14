@@ -1,30 +1,36 @@
-# .xefml Tree Files — Implementation
+# .xft Tree Files — Implementation
 
 [#573](https://github.com/crftwr/xefm/issues/573), from discussion
 [#549](https://github.com/crftwr/xefm/discussions/549) and its "Where this
-landed" comment. The format is [`doc/XEFML_FORMAT.md`](../XEFML_FORMAT.md),
+landed" comment. The format is [`doc/XFT_FORMAT.md`](../XFT_FORMAT.md),
 and user-facing behavior is [`doc/TREE_FILES_FEATURE.md`](../TREE_FILES_FEATURE.md).
+
+Renamed from `.xefml` / `xefml://` / `xefm/xefml.py` by
+[#613](https://github.com/crftwr/xefm/issues/613): an extension of at most four
+characters fits the file list's extension column. `xft.SUFFIXES`,
+`xft.OLD_FORMATS` and `is_tree_file` keep reading the old name, and
+`ScanJob.result_path` falls back to a folder's `result.xefml`.
 
 ## Pieces
 
 | Piece | Where |
 |---|---|
-| Parse, cache, find a group by its anchor | `xefm/xefml.py`: `parse`, `load`, `forget`, `find_group` |
-| The scheme | `XefmlPathImpl` (`ReadOnlyPathImpl`), registered as `xefml` in `path_schemes` |
+| Parse, cache, find a group by its anchor | `xefm/xft.py`: `parse`, `load`, `forget`, `find_group` |
+| The scheme | `XftPathImpl` (`ReadOnlyPathImpl`), registered as `xft` in `path_schemes` |
 | The reference hook | `PathImpl.target()` / `Path.target()`, default `None` |
 | Entering, references to folders | `XeFMApp._enter_file` |
 | Reveal and bulk reveal | `_virtual_focused_entry`, `_reveal_result_other`, `_reveal_selected_targets` |
-| Provisional trees | `_note_xefml_anchor` (from `_list_pane`), `_watch_xefml`, `_pump_xefml`, `_xefml_header_text` |
+| Provisional trees | `_note_xft_anchor` (from `_list_pane`), `_watch_xft`, `_pump_xft`, `_xft_header_text` |
 
 ## The scheme
 
-`xefml://<file>#<group>/<entry>`, the archive's shape. `_parse` keeps the file
-part, and `_root_prefix` is `xefml://<file>#`. At the top, `name` is the
+`xft://<file>#<group>/<entry>`, the archive's shape. `_parse` keeps the file
+part, and `_root_prefix` is `xft://<file>#`. At the top, `name` is the
 file's name and `parent` is the file's directory. That is exactly what
 `_go_parent` needs to land on the file when leaving, with no special case,
 the same way leaving an archive lands on the archive.
 
-`XefmlPathImpl` implements the five methods `UriPathImpl` leaves abstract:
+`XftPathImpl` implements the five methods `UriPathImpl` leaves abstract:
 
 - `exists` / `is_dir`: a node is found by walking names from the root. A group
   (`children`) is a directory. A reference is never one, even when it points
@@ -72,16 +78,16 @@ snapshot never needs an exception.
 
 `final: false` means a producer may rewrite the file.
 
-- **Header.** `_xefml_header_text`: `[scan.xefml]/group  ·  scanning 25% —
+- **Header.** `_xft_header_text`: `[scan.xft]/group  ·  scanning 25% —
   groups may change`. The note has priority over the path.
-- **Watching.** `_list_pane` calls `_note_xefml_anchor` for an `xefml://`
+- **Watching.** `_list_pane` calls `_note_xft_anchor` for an `xft://`
   path. That records the anchor target of the group the pane is in (the old
   document is gone once the file is rewritten, so the anchor has to be known
-  beforehand), and starts `_watch_xefml` when the document is provisional.
+  beforehand), and starts `_watch_xft` when the document is provisional.
   The watcher is a daemon thread polling every 2 s. When a tree's `stamp`
-  changes, it sets `_xefml_dirty` and calls `_wake_pump()`, and it ends when no
+  changes, it sets `_xft_dirty` and calls `_wake_pump()`, and it ends when no
   pane shows a provisional tree.
-- **Re-reading.** `_pump_xefml`, from `_pump_monitoring`, re-lists each pane
+- **Re-reading.** `_pump_xft`, from `_pump_monitoring`, re-lists each pane
   inside a tree. If the pane's path is gone (the group was renamed, for
   example because its member count is in its name), `find_group` finds the
   group with the same anchor and the pane follows it. Otherwise the pane goes
@@ -94,11 +100,11 @@ snapshot never needs an exception.
 
 Line positions on references (#549 question 2), saving search results as a
 tree, flat lists as one-level trees (#549 decision 6), similarity as a list
-column, and a `.xefml` produced by XeFM itself.
+column, and an `.xft` produced by XeFM itself.
 
 ## Tests
 
-`test/test_xefml.py`. Format tests cover unique names, defaults and version
+`test/test_xft.py`. Format tests cover unique names, defaults and version
 refusal, and the anchor lookup. Scheme tests cover browsing, `parent`/`name`
 at the top, recorded attributes winning over the real file, reading through
 to the target, every write refused, a rewrite picked up, and `target()` of an

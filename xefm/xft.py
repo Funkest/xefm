@@ -1,16 +1,16 @@
-"""Tree files of references — ``.xefml`` (#573, discussion #549).
+"""Tree files of references — ``.xft`` (#573, discussion #549).
 
-A ``.xefml`` file is a tree whose interior nodes are groups and whose leaves
+An ``.xft`` file is a tree whose interior nodes are groups and whose leaves
 point at places: a duplicate scan's groups, and later search results or a
 catalogue. XeFM browses it the way it browses an archive, through the
-read-only ``xefml://<file>#<path>`` scheme; ``doc/XEFML_FORMAT.md`` is the
+read-only ``xft://<file>#<path>`` scheme; ``doc/XFT_FORMAT.md`` is the
 format.
 
 Every entry inside is a **proxy**. It is named by the label in the file,
 shows the size and date the producer recorded (no ``stat`` of a remote
 target), and reads its target's bytes, so view, compare and copy-out work.
 It cannot be deleted or renamed — the tree is a snapshot. The real file is
-reached through :meth:`XefmlPathImpl.target`, which the pane-sync keys use.
+reached through :meth:`XftPathImpl.target`, which the pane-sync keys use.
 
 A producer may rewrite the file while it is open (similar-files does, every
 few minutes during a long scan). Documents are cached by the file's size and
@@ -33,12 +33,22 @@ from xefm.log_manager import getLogger
 from xefm.path import Path
 from xefm.path_base import ReadOnlyPathImpl, UriStatResult
 
-logger = getLogger("Xefml")
+logger = getLogger("Xft")
 
-FORMAT = "xefml"
+FORMAT = "xft"
 VERSION = 1
-SUFFIX = ".xefml"
-SCHEME = "xefml"
+SUFFIX = ".xft"
+SCHEME = "xft"
+#: The names the format had before #613 renamed it — ``.xefml`` and
+#: ``"xefml"`` — still read, so a scan written by an earlier similar-files
+#: opens as before.
+OLD_FORMATS = ("xefml",)
+SUFFIXES = (SUFFIX, ".xefml")
+
+
+def is_tree_file(path) -> bool:
+    """Whether ``path`` names a tree file by its extension, old or new."""
+    return str(path).lower().endswith(SUFFIXES)
 
 #: How long a document is trusted before its file is looked at again.
 _RECHECK_S = 1.0
@@ -132,12 +142,12 @@ def _adopt(parent: Node, kids: list) -> None:
 
 
 def parse(data: dict) -> Document:
-    """A document from the JSON object of a ``.xefml`` file. Raises
+    """A document from the JSON object of an ``.xft`` file. Raises
     ``ValueError`` for anything that is not one this version reads."""
-    if not isinstance(data, dict) or data.get("format") != FORMAT:
-        raise ValueError("not a .xefml file")
+    if not isinstance(data, dict) or data.get("format") not in (FORMAT, *OLD_FORMATS):
+        raise ValueError("not an .xft file")
     if data.get("version") != VERSION:
-        raise ValueError(f".xefml version {data.get('version')!r}; this XeFM reads {VERSION}")
+        raise ValueError(f".xft version {data.get('version')!r}; this XeFM reads {VERSION}")
     root = Node(name="", children=[])
     nodes = data.get("nodes")
     _adopt(root, [_build(n) for n in nodes if isinstance(n, dict)] if isinstance(nodes, list) else [])
@@ -193,7 +203,7 @@ def forget(file: Optional[str] = None) -> None:
             _cache.pop(file, None)
 
 
-def is_xefml_path(path) -> bool:
+def is_xft_path(path) -> bool:
     return str(path).startswith(f"{SCHEME}://")
 
 
@@ -203,7 +213,7 @@ def uri_for(file) -> str:
 
 
 def split(path) -> tuple[str, str]:
-    """``(file, key)`` of an ``xefml://`` path."""
+    """``(file, key)`` of an ``xft://`` path."""
     rest = str(path)[len(SCHEME) + 3:]
     file, _sep, key = rest.partition("#")
     return file, key
@@ -218,11 +228,11 @@ def find_group(doc: Document, anchor: str) -> Optional[str]:
     return None
 
 
-class XefmlPathImpl(ReadOnlyPathImpl):
-    """``xefml://<file>#<group>/<entry>`` — a node of a ``.xefml`` tree."""
+class XftPathImpl(ReadOnlyPathImpl):
+    """``xft://<file>#<group>/<entry>`` — a node of an ``.xft`` tree."""
 
     SCHEME = SCHEME
-    READ_ONLY_MESSAGE = ("a .xefml tree is a snapshot — reveal the real file "
+    READ_ONLY_MESSAGE = ("a .xft tree is a snapshot — reveal the real file "
                          "with the pane-sync key (Shift-O) and act on it there")
     CAPABILITIES = frozenset({"extraction_for_reading"})
 
@@ -331,8 +341,8 @@ class XefmlPathImpl(ReadOnlyPathImpl):
             for key, value in sorted(node.extra.items()):
                 if isinstance(value, (str, int, float, bool)):
                     details.append((key.replace("_", " ").capitalize(), str(value)))
-        return {"type": "xefml", "details": details, "format_hint": "standard"}
+        return {"type": "xft", "details": details, "format_hint": "standard"}
 
 
 def _factory(uri: str):
-    return XefmlPathImpl(uri)
+    return XftPathImpl(uri)
