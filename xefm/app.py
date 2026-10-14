@@ -1029,21 +1029,28 @@ class PaneHeader(Widget):
 
     def _draw_tabs(self, ctx, tabs, pad_x, y, avail, active) -> None:
         """The tab strip: one chip per tab, ``1 src  2 docs  3 ⌕ TODO``, with a
-        gap between chips so every tab has an edge. The current tab is filled
-        with the accent — a softer accent on the inactive pane — and bold; the
-        others are a quiet tint of the header with muted text. Every tab gets an
-        equal share when they do not all fit, each label elided to its share.
+        gap between chips so every tab has an edge. The strip's ground is the
+        content surface, set back from the header; the current tab is the
+        header's own colour, so it runs on into the path row below like a
+        browser's tab, and its label is bold — in the accent on the active pane,
+        as the path is. The others sit halfway between ground and header, with
+        muted text. Every tab gets an equal share when they do not all fit, each
+        label elided to its share.
 
-        Each chip carries its own fill rather than drawing on the bar's: a
-        selection colour on the header surface could all but vanish into it,
-        which left neither the tabs' edges nor the current one visible (#563
-        hand check). Text is inked against the chip it sits on."""
+        Three distinct fills — ground, idle tab, current tab — so every tab has
+        an edge and the current one is plain on any theme (#563, #620 hand
+        checks). Text is inked against the chip it sits on."""
         theme = ctx.theme
         base = ctx.background or DEFAULT_BG
-        idle_bg = _mix(base, theme.text, 0.18)
-        current_bg = theme.accent if active else _mix(base, theme.accent, 0.45)
+        ground = theme.surfaces.get("content", DEFAULT_BG)
+        idle_bg = _mix(ground, base, 0.5)
+        current_bg = base
         idle_fg = ctx.ink(theme.muted_text, on=idle_bg, target=LC_LARGE)
-        current_fg = ctx.ink(theme.text, on=current_bg, target=LC_BODY)
+        current_fg = ctx.ink(theme.accent if active else theme.text, on=current_bg,
+                             target=LC_BODY)
+        # The ground runs the bar's whole width and up over its top inset, so
+        # the strip reads as one band above the header.
+        ctx.fill_rect(0.0, 0.0, ctx.size_units[0], y + 1.0, Style(bg=ground))
         current = self.app.pm.tab_index[self.pane_name]
         gap = 1.0
         labels = [_tab_label(t) for t in tabs]
