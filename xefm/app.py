@@ -1027,23 +1027,34 @@ class PaneHeader(Widget):
         self._crumbs = ([] if virtual else
                         _breadcrumbs(text, pane["path"], pad_x, ctx.measure_text))
 
+    #: The rounding of a tab's top corners, in device pixels, where the
+    #: backend draws vector shapes.
+    _TAB_RADIUS_PX = 6.0
+
     def _draw_tabs(self, ctx, tabs, pad_x, y, avail, active) -> None:
         """The tab strip: one chip per tab, ``1 src  2 docs  3 ⌕ TODO``, with a
-        gap between chips so every tab has an edge. The current tab is filled
-        with the accent — a softer accent on the inactive pane — and bold; the
-        others are a quiet tint of the header with muted text. Every tab gets an
-        equal share when they do not all fit, each label elided to its share.
+        gap between chips so every tab has an edge. The strip's ground is the
+        content surface, set back from the header; the current tab is the
+        header's own colour, so it runs on into the path row below like a
+        browser's tab, and its label is bold — in the accent on the active pane,
+        as the path is. The others sit halfway between ground and header, with
+        muted text. Every tab gets an equal share when they do not all fit, each
+        label elided to its share.
 
-        Each chip carries its own fill rather than drawing on the bar's: a
-        selection colour on the header surface could all but vanish into it,
-        which left neither the tabs' edges nor the current one visible (#563
-        hand check). Text is inked against the chip it sits on."""
+        Three distinct fills — ground, idle tab, current tab — so every tab has
+        an edge and the current one is plain on any theme (#563, #620 hand
+        checks). Text is inked against the chip it sits on."""
         theme = ctx.theme
         base = ctx.background or DEFAULT_BG
-        idle_bg = _mix(base, theme.text, 0.18)
-        current_bg = theme.accent if active else _mix(base, theme.accent, 0.45)
+        ground = theme.surfaces.get("content", DEFAULT_BG)
+        idle_bg = _mix(ground, base, 0.5)
+        current_bg = base
         idle_fg = ctx.ink(theme.muted_text, on=idle_bg, target=LC_LARGE)
-        current_fg = ctx.ink(theme.text, on=current_bg, target=LC_BODY)
+        current_fg = ctx.ink(theme.accent if active else theme.text, on=current_bg,
+                             target=LC_BODY)
+        # The ground runs the bar's whole width and up over its top inset, so
+        # the strip reads as one band above the header.
+        ctx.fill_rect(0.0, 0.0, ctx.size_units[0], y + 1.0, Style(bg=ground))
         current = self.app.pm.tab_index[self.pane_name]
         gap = 1.0
         labels = [_tab_label(t) for t in tabs]
@@ -1052,7 +1063,16 @@ class PaneHeader(Widget):
         # floor to nothing on the left and leave the whole padding on the right
         # (#563 hand check).
         inset = 0.5 if ctx.vector_shapes else 1.0
-        widths = [ctx.measure_text(lab) + 2 * inset for lab in labels]
+        # The current tab's label is bold, and bold is wider on a proportional
+        # font: it is measured, and elided, in that style.
+        bold = Style(attr=TextAttribute.BOLD)
+
+        def measure_of(i):
+            if i == current:
+                return lambda text: ctx.measure_text(text, bold)
+            return ctx.measure_text
+
+        widths = [measure_of(i)(lab) + 2 * inset for i, lab in enumerate(labels)]
         share = (avail - gap * (len(tabs) - 1)) / len(tabs)
         if sum(widths) + gap * (len(tabs) - 1) > avail:
             widths = [min(w, max(share, 2.0)) for w in widths]
@@ -1064,9 +1084,17 @@ class PaneHeader(Widget):
                 break
             w = min(w, pad_x + avail - x)
             shown = elide(label, max(0.0, w - 2 * inset), where="end",
-                          measure=ctx.measure_text)
+                          measure=measure_of(i))
             chip = current_bg if i == current else idle_bg
-            ctx.fill_rect(x, y, w, 1.0, Style(bg=chip))
+            if ctx.vector_shapes:
+                # Rounded on top only, the way a tab is: a fully rounded face,
+                # then its lower half filled square. Per-corner rounding is not
+                # something every vector backend draws (Windows' does not).
+                ctx.round_rect(x, y, w, 1.0, Style(bg=chip), radius=self._TAB_RADIUS_PX,
+                               hints={"fill": True})
+                ctx.fill_rect(x, y + 0.5, w, 0.5, Style(bg=chip))
+            else:
+                ctx.fill_rect(x, y, w, 1.0, Style(bg=chip))
             if i == current:
                 style = Style(fg=current_fg, bg=chip, attr=TextAttribute.BOLD)
             else:
@@ -1341,8 +1369,11 @@ class StatusBar(Widget):
             carried_style = Style(fg=ctx.theme.accent, attr=TextAttribute.BOLD)
             ctx.draw_text(x, 0, carried, carried_style)
             # A click on it shows what is held (#577 hand check).
-            self._clip_hit = (x, x + ctx.measure_text(carried, carried_style))
-            used = ctx.measure_text(carried + "  ")
+            carried_w = ctx.measure_text(carried, carried_style)
+            self._clip_hit = (x, x + carried_w)
+            # Measured in its own bold style: bold is wider on a proportional
+            # font, and measuring it plain ate the gap before the hints.
+            used = carried_w + ctx.measure_text("  ")
             x += used
             avail = max(0.0, avail - used)
         # Background jobs (#567) take the right end, ahead of the hints: the
@@ -2012,6 +2043,9 @@ class XeFMApp:
         # it on the monitoring pump. Redirected last, once everything above has
         # initialized, and undone in ``run``'s finally.
         self._log_queue: queue.Queue = queue.Queue()
+        #: The thread that builds the app runs its event loop and is the only
+        #: one that may touch the LogView; ``log_info`` queues from any other.
+        self._ui_thread = threading.current_thread()
         self._orig_stdout = sys.stdout
         self._orig_stderr = sys.stderr
         sys.stdout = _StreamToLog("STDOUT", self._log_queue, on_write=self._wake_pump)
@@ -2408,11 +2442,15 @@ class XeFMApp:
     #: queue and read the same way: diagnostics recessive under XeFM's own
     #: ``log_info`` lines, a warning or error in the same red as stderr. They are
     #: still told apart at a glance by their ``HH:MM:SS [Name] LEVEL:`` prefix.
+    #: ``log_info`` from a worker thread, queued: drawn in the log's own style
+    #: (None), like the lines ``log_info`` appends on the UI thread.
+    _LOG_INFO_SOURCE = "LOG_INFO"
     _LOG_STYLES = {
         "STDERR": _STDERR_STYLE,
         LOG_ERROR_SOURCE: _STDERR_STYLE,
         "STDOUT": _STDOUT_STYLE,
         LOG_SOURCE: _STDOUT_STYLE,
+        _LOG_INFO_SOURCE: None,
     }
 
     def _enqueue_log(self, source: str, line: str) -> None:
@@ -2887,6 +2925,15 @@ class XeFMApp:
         time — the whole log then tracks the active theme (green on a monochrome
         theme, dark on a light one) and recolors on a theme switch, instead of a
         fixed near-white that clashes with monochrome themes like Phosphor."""
+        queue_ = getattr(self, "_log_queue", None)
+        if queue_ is not None and threading.current_thread() is not self._ui_thread:
+            # A file operation logs every file from its worker. LogView is not
+            # thread-safe: an append that trims the buffer while the UI thread
+            # draws it raised in the draw — inside a background job's tick, which
+            # PuiKit then dropped, so the job never released the queue (#620).
+            queue_.put((self._LOG_INFO_SOURCE, message))
+            self._wake_pump()
+            return
         self.log.append(message)
 
     def _log_result(self, result) -> None:
@@ -6694,13 +6741,14 @@ class XeFMApp:
                                                        recursive=recursive,
                                                        keep=keep())
 
+        def rel(s: str) -> str:
+            # os.sep too: a local path on Windows continues with "\".
+            return s[len(root_str):].lstrip("/" + os.sep) if s.startswith(root_str) else s
+
         def to_label(mode, value):
             if mode == "content":
-                s = str(value["path"])
-                rel = s[len(root_str):].lstrip("/") if s.startswith(root_str) else s
-                return f"{rel}:{value['line']}: {value['text']}"
-            s = str(value)
-            return s[len(root_str):].lstrip("/") if s.startswith(root_str) else s
+                return f"{rel(str(value['path']))}:{value['line']}: {value['text']}"
+            return rel(str(value))
 
         def on_accept(mode, value):
             # Feed-by-default: accepting doesn't navigate to the one hit — it
@@ -10085,7 +10133,9 @@ class XeFMApp:
         if path_schemes.is_uri(text):
             return Path(text)
         if text.startswith("~"):
-            target = Path.home() / text[1:].lstrip("/")
+            # os.sep too: "~\Documents" left as "\Documents" is rooted on
+            # Windows, and joining it to home gave C:\Documents.
+            target = Path.home() / text[1:].lstrip("/" + os.sep)
         elif not os.path.isabs(text):
             target = Path(current) / text
         else:

@@ -51,6 +51,13 @@ def test_tilde_expands_to_home():
         os.path.join(os.path.expanduser("~"), "sub"))
 
 
+def test_tilde_with_the_native_separator_stays_under_home():
+    # "~\sub" on Windows: the "\" left after "~" is rooted there, and joined
+    # to home it used to give C:\sub.
+    assert resolve("~" + os.sep + "sub", "/elsewhere") == os.path.normpath(
+        os.path.join(os.path.expanduser("~"), "sub"))
+
+
 def test_surrounding_whitespace_is_stripped():
     assert resolve("  /usr/lib  ", "/home/user") == os.path.normpath("/usr/lib")
 

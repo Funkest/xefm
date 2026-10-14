@@ -37,7 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path as _StdPath
 from typing import Optional
 
-from xefm.external_programs import SUBPROCESS_NO_WINDOW, xefm_python
+from xefm.external_programs import xefm_python
 from xefm.log_manager import getLogger
 
 logger = getLogger("SimilarScan")
@@ -266,10 +266,14 @@ def start(roots: list, method: str, *, base: Optional[_StdPath] = None,
     env["PYTHONIOENCODING"] = "utf-8"
     kwargs: dict = {}
     if sys.platform == "win32":
-        DETACHED_PROCESS = 0x00000008
-        CREATE_NEW_PROCESS_GROUP = 0x00000200
-        kwargs["creationflags"] = (DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-                                   | SUBPROCESS_NO_WINDOW)
+        # A hidden console, not none: a venv's python.exe is a launcher that
+        # starts the real interpreter as its child, and a console program
+        # started with no console to inherit gets a new, visible one — a
+        # window that flashed at every scan (#620). DETACHED_PROCESS gave the
+        # launcher none; CREATE_NO_WINDOW gives it one it lends on, unseen.
+        # Its own process group keeps XeFM's Ctrl-C events away from it.
+        kwargs["creationflags"] = (subprocess.CREATE_NO_WINDOW
+                                   | subprocess.CREATE_NEW_PROCESS_GROUP)
     else:
         # Its own session: not in XeFM's process group, so neither closing the
         # terminal nor quitting XeFM signals it.

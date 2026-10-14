@@ -384,9 +384,13 @@ class AppIntegration(unittest.TestCase):
             dlg._thread.join(timeout=5)
             b.run_animation_ticks()  # drain the queue on the tick
 
-            names = [os.path.basename(dlg.to_label("filename", v)) for v in dlg.results]
+            labels = [dlg.to_label("filename", v) for v in dlg.results]
+            names = [os.path.basename(label) for label in labels]
             self.assertIn("needle_here.txt", names)
             self.assertNotIn("other.txt", names)
+            # Relative to the root with no leading separator — on Windows too,
+            # where the rest of the path starts with "\".
+            self.assertIn(os.path.join("sub", "needle_here.txt"), labels)
         finally:
             app.file_monitor.stop_monitoring()
             b.close()

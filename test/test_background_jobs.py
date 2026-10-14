@@ -459,3 +459,39 @@ def test_the_jobs_list_follows_the_progress(app):
     time.sleep(0.6)
     _pump(app.panel, lambda: not any(isinstance(layer.widget, ChoiceDialog)
                                      for layer in app.panel._layers))
+
+
+def test_a_worker_s_log_lines_reach_the_pane_through_the_ui_thread(app):
+    """A file operation logs every file from its worker (#620). LogView is not
+    thread-safe — an append that trims while the UI thread draws made the draw
+    raise — so a worker's line is queued and appended by the UI thread."""
+    before = len(app.log.lines)
+    worker = threading.Thread(target=lambda: app.log_info("from the worker"))
+    worker.start()
+    worker.join()
+    assert len(app.log.lines) == before
+    app._drain_captured_output()
+    text, style = app.log.lines[-1]
+    assert text == "from the worker"
+    assert style == app.log.style        # the look log_info gives on the UI thread
+
+
+def test_a_repaint_that_raises_does_not_strand_the_queue(panel):
+    """The job's tick is the only thing that tears it down and frees the slot.
+    A repaint raising inside it used to end the tick (the backend drops a
+    raising one), and the next job waited for good (#620)."""
+    manager = TaskManager()
+    first, release1, done1 = _held_task(manager, panel, detached=True, title="One…")
+    second, release2, done2 = _held_task(manager, panel, detached=True, title="Two…")
+    real_render = panel.render
+    panel.render = lambda: (_ for _ in ()).throw(RuntimeError("draw failed"))
+    try:
+        for _ in range(3):
+            time.sleep(manager._BACKGROUND_REPAINT_S)
+            panel.backend.run_animation_ticks()
+    finally:
+        panel.render = real_render
+    release1.set()
+    _pump(panel, lambda: done1)
+    release2.set()
+    _pump(panel, lambda: done2)
