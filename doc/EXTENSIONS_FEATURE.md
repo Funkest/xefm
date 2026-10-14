@@ -32,7 +32,7 @@ xefm ext settings hello-xefm  # its settings class, ready to paste into config.p
 Inside XeFM:
 
 - To install, put the cursor on a package folder or `.zip` and choose
-  **Tools ▸ Install Extension**.
+  **Tools ▸ Install Extension…**.
 - **Tools ▸ Extensions…** shows which packages loaded, and why any did not.
 
 Before installing, XeFM checks the package and shows everything it adds,

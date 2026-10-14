@@ -125,7 +125,7 @@ Add modifiers before the main key, separated by hyphens:
 
 Every key comes from a **preset**, a complete keymap: AFX style (letters) or
 Orthodox (function keys). XeFM asks which one at its first launch, and
-**View → Keymap** (or `KEY_PRESET` in `config.py`) switches it.
+**Tools → Keymap** (or `KEY_PRESET` in `config.py`) switches it.
 `KEY_BINDINGS` holds only your changes, and each entry replaces that action's
 keys under every preset. See [Keymap Presets](KEYMAP_PRESETS_FEATURE.md).
 

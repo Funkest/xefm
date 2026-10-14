@@ -1790,7 +1790,7 @@ class XeFMApp:
         # positions, recent dirs). Injectable so tests can supply a temp-db
         # manager instead of touching ~/.xefm/state.db.
         self.state_manager = state_manager if state_manager is not None else get_state_manager()
-        # The keymap preset (View > Keymap, or KEY_PRESET in config.py) is
+        # The keymap preset (Tools > Keymap, or KEY_PRESET in config.py) is
         # written into KEY_BINDINGS itself, so every surface reads one table.
         self._apply_keymap_preset()
         self._left_provided = left_provided
@@ -4336,6 +4336,7 @@ class XeFMApp:
         sc = self._menu_shortcut
         sort_menu = self._sort_menu()
 
+        tabs_open = lambda: len(self.pm.tabs[self.pm.active_pane]) > 1  # noqa: E731
         file_menu = Menu(
             MenuItem("Open", on_select=lambda: self._menu("open_item"),
                      enabled=has_files, shortcut=sc("open_item")),
@@ -4436,10 +4437,21 @@ class XeFMApp:
             MenuItem("Back", on_select=self.go_back, shortcut=sc("go_back")),
             MenuItem("Forward", on_select=self.go_forward, shortcut=sc("go_forward")),
             SEPARATOR,
-            MenuItem("Flat View", on_select=lambda: self._menu("flat_view"),
-                     checked=lambda: (self.active_pane().get("virtual") or {})
-                     .get("kind") == "flat",
-                     shortcut=sc("flat_view")),
+            # Folder tabs (#563), per pane, all five together. Not in File,
+            # where Finder and the browsers open and close theirs: File is the
+            # longest menu, and three more rows took it past the 23 rows an
+            # 80x24 terminal has under the bar, so its pulldown covered the bar.
+            MenuItem("New Tab", on_select=lambda: self._menu("new_tab"),
+                     shortcut=sc("new_tab")),
+            MenuItem("Open in New Tab", on_select=lambda: self._menu("open_in_new_tab"),
+                     enabled=has_files, shortcut=sc("open_in_new_tab")),
+            MenuItem("Close Tab", on_select=lambda: self._menu("close_tab"),
+                     enabled=tabs_open, shortcut=sc("close_tab")),
+            MenuItem("Next Tab", on_select=lambda: self._menu("next_tab"),
+                     enabled=tabs_open, shortcut=sc("next_tab")),
+            MenuItem("Previous Tab", on_select=lambda: self._menu("prev_tab"),
+                     enabled=tabs_open, shortcut=sc("prev_tab")),
+            SEPARATOR,
             # A list of paths in place of a directory (#453): where the pane
             # goes, like everything above, and left again with Parent
             # Directory. One submenu for the three sources rather than three
@@ -4465,11 +4477,17 @@ class XeFMApp:
             MenuItem("External Programs…", on_select=self.show_programs, shortcut=sc("programs")),
             MenuItem("Subshell Here", on_select=self.subshell, shortcut=sc("subshell")),
             SEPARATOR,
+            # A preset is how the keys work, not how things look, so it sits
+            # with the configuration rather than the theme.
+            MenuItem("Keymap", submenu=Menu(*[
+                MenuItem(label, on_select=lambda n=name: self.set_keymap_preset(n),
+                         checked=lambda n=name: self._keymap_preset == n)
+                for name, label in keymap_presets.LABELS.items()])),
             MenuItem("Edit Configuration…", on_select=self.edit_config,
                      shortcut=sc("edit_config")),
             MenuItem("Extensions…", on_select=self.show_extensions,
                      shortcut=sc("extensions")),
-            MenuItem("Install Extension", on_select=self.install_extension,
+            MenuItem("Install Extension…", on_select=self.install_extension,
                      enabled=has_files, shortcut=sc("install_extension")),
             MenuItem("Reload Configuration", on_select=self.reload_config,
                      shortcut=sc("reload_config")),
@@ -4516,6 +4534,8 @@ class XeFMApp:
                      enabled=lambda: tags.store_for(self.active_pane()["path"]) is not None,
                      shortcut=sc("find_by_tag")),
             SEPARATOR,
+            MenuItem("Reread", on_select=lambda: self._menu("reread"),
+                     shortcut=sc("reread")),
             MenuItem("Show Hidden Files", on_select=lambda: self._menu("toggle_hidden"),
                      checked=lambda: self.flm.show_hidden, shortcut=sc("toggle_hidden")),
             MenuItem("Reverse Sort", on_select=self._toggle_reverse,
@@ -4530,30 +4550,16 @@ class XeFMApp:
             MenuItem("Quick View", on_select=lambda: self._menu("quick_view"),
                      checked=lambda: self._quick_view is not None,
                      shortcut=sc("quick_view")),
+            # How the folder is shown, not where the pane goes: beside Quick
+            # View rather than in Go.
+            MenuItem("Flat View", on_select=lambda: self._menu("flat_view"),
+                     checked=lambda: (self.active_pane().get("virtual") or {})
+                     .get("kind") == "flat",
+                     shortcut=sc("flat_view")),
             SEPARATOR,
             MenuItem("Background Jobs…", on_select=self.show_jobs,
                      enabled=lambda: bool(self.tasks.background_tasks()),
                      shortcut=sc("jobs")),
-            SEPARATOR,
-            MenuItem("Keymap", submenu=Menu(*[
-                MenuItem(label, on_select=lambda n=name: self.set_keymap_preset(n),
-                         checked=lambda n=name: self._keymap_preset == n)
-                for name, label in keymap_presets.LABELS.items()])),
-            SEPARATOR,
-            # Folder tabs (#563): per pane, so every item acts on the active one.
-            MenuItem("New Tab", on_select=lambda: self._menu("new_tab"),
-                     shortcut=sc("new_tab")),
-            MenuItem("Open in New Tab", on_select=lambda: self._menu("open_in_new_tab"),
-                     enabled=has_files, shortcut=sc("open_in_new_tab")),
-            MenuItem("Close Tab", on_select=lambda: self._menu("close_tab"),
-                     enabled=lambda: len(self.pm.tabs[self.pm.active_pane]) > 1,
-                     shortcut=sc("close_tab")),
-            MenuItem("Next Tab", on_select=lambda: self._menu("next_tab"),
-                     enabled=lambda: len(self.pm.tabs[self.pm.active_pane]) > 1,
-                     shortcut=sc("next_tab")),
-            MenuItem("Previous Tab", on_select=lambda: self._menu("prev_tab"),
-                     enabled=lambda: len(self.pm.tabs[self.pm.active_pane]) > 1,
-                     shortcut=sc("prev_tab")),
             title="View",
         )
         help_menu = Menu(
@@ -5034,7 +5040,7 @@ class XeFMApp:
         chosen. Quit before choosing, and the next launch asks again."""
         names = list(keymap_presets.PRESETS)
         labels = [keymap_presets.LABELS[n] for n in names]
-        lines = ["Choose how XeFM's keys work. **View > Keymap** changes it "
+        lines = ["Choose how XeFM's keys work. **Tools > Keymap** changes it "
                  "at any time.", ""]
         for name, label in zip(names, labels):
             lines.append(f"**{label}** — {keymap_presets.PRESETS[name].description}")

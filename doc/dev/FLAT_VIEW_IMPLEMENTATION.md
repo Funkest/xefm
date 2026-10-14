@@ -16,7 +16,7 @@ pane.
 
 | Piece | Where |
 |---|---|
-| The action, and its toggle back | `XeFMApp.flat_view` (action `flat_view`, `Shift-B`, Go → Flat View) |
+| The action, and its toggle back | `XeFMApp.flat_view` (action `flat_view`, `Shift-B`, View → Flat View) |
 | The walk on a task | `XeFMApp._run_flat_walk` |
 | What the walk lists and descends | `_flat_files` (module level in `xefm/app.py`) on `tree_walk.walk` |
 | Entering the pane | `XeFMApp._open_flat` → `_list_virtual(..., entries=…)` |

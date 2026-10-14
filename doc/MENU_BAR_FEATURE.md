@@ -81,12 +81,14 @@ menu.
 | New Folder… | `create_directory` *(when nothing is selected)* |
 | New File… | `create_file` |
 | Rename… | `rename` |
-| Duplicate | *(menu only)* |
+| Rename in Editor… | `rename_in_editor` |
+| Duplicate | `duplicate_files` *(ships unbound in AFX style)* |
 | Copy to Other Pane | `copy_files` |
 | Move to Other Pane | `move_files` *(when files are selected)* |
 | Copy to… | `copy_files_to` |
 | Move to… | `move_files_to` |
-| Delete… | `delete_files` |
+| Move to Trash… / Move to Recycle Bin… | `delete_files` — see [Trash](TRASH_FEATURE.md) |
+| Delete Permanently… | `delete_permanently` |
 | Create Archive… | `create_archive` |
 | Extract Archive… | `extract_archive` |
 | Quit | `quit` |
@@ -100,6 +102,7 @@ Everything that ends up on the clipboard.
 | Copy | `clipboard_copy` — see [File Clipboard](FILE_CLIPBOARD_FEATURE.md) |
 | Cut | `clipboard_cut` |
 | Paste | `clipboard_paste` |
+| Show Clipboard… | `clipboard_show` *(ships unbound)* |
 | Clear Clipboard | `clipboard_clear` *(ships unbound)* |
 | Copy Name(s) | `copy_names` |
 | Copy Full Path(s) | `copy_paths` |
@@ -115,11 +118,20 @@ the mouse for the first, take the whole buffer with the second. See
 | Item | Action |
 |------|--------|
 | Parent Directory | `go_parent` |
+| Root Directory | `go_root` |
 | Go to Favorite… | `favorites` |
+| Add to Favorites… | `add_favorite` |
 | Jump to Path… | `jump_to_path` |
 | Drives… | `drives` |
+| Connect to Server… | `connect_server` |
 | History… | `history` |
-| Flat View | `flat_view` — see [Flat View](FLAT_VIEW_FEATURE.md) |
+| Back | `go_back` |
+| Forward | `go_forward` |
+| New Tab | `new_tab` — see [Folder Tabs](FOLDER_TABS_FEATURE.md) |
+| Open in New Tab | `open_in_new_tab` |
+| Close Tab | `close_tab` |
+| Next Tab | `next_tab` |
+| Previous Tab | `prev_tab` |
 | Open List → From Clipboard | `open_list_from_clipboard` *(ships unbound)* — see [File lists](FILE_LIST_IMPORT_FEATURE.md) |
 | Open List → From Command… | `open_list_from_command` *(ships unbound)* |
 | Open List → From File | `open_list_from_file` *(ships unbound)* — also **Open as List** on a file's right-click menu |
@@ -148,6 +160,8 @@ the mouse for the first, take the whole buffer with the second. See
 | Search Files… | `find_files` |
 | Search Content… | `find_in_files` |
 | Search Spotlight… / Search Windows Search… | `index_search` — see [Searching the OS Index](OS_INDEX_SEARCH_FEATURE.md) |
+| Search Tags… | `find_by_tag` *(ships unbound)* — see [File Tags](FILE_TAGS_FEATURE.md) |
+| Reread | `reread` *(ships unbound in AFX style; F2 in Orthodox)* |
 | Show Hidden Files | `toggle_hidden` |
 | Reverse Sort | *(menu only)* |
 | Sort By ▸ | (submenu: Name / Extension / Size / Date — also the `quick_sort_*` actions) |
@@ -155,13 +169,8 @@ the mouse for the first, take the whole buffer with the second. See
 | Next Theme | `toggle_color_scheme` *(ships unbound)* |
 | Switch Pane | `switch_pane` |
 | Quick View | `quick_view` — see [Quick View](QUICK_VIEW_FEATURE.md) |
+| Flat View | `flat_view` — see [Flat View](FLAT_VIEW_FEATURE.md) |
 | Background Jobs… | `jobs` — see [Background Jobs](BACKGROUND_JOBS_FEATURE.md) |
-| Keymap ▸ | AFX style / Orthodox — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md) |
-| New Tab | `new_tab` — see [Folder Tabs](FOLDER_TABS_FEATURE.md) |
-| Open in New Tab | `open_in_new_tab` |
-| Close Tab | `close_tab` |
-| Next Tab | `next_tab` |
-| Previous Tab | `prev_tab` |
 
 ### Tools Menu
 
@@ -171,7 +180,10 @@ the mouse for the first, take the whole buffer with the second. See
 | Find Similar Files… | `find_similar` *(ships unbound)* — see [Find Similar Files](FIND_SIMILAR_FILES_FEATURE.md) |
 | External Programs… | `programs` |
 | Subshell Here | `subshell` *(desktop mode: in a terminal window)* |
+| Keymap ▸ | AFX style / Orthodox — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md) |
 | Edit Configuration… | `edit_config` *(ships unbound)* |
+| Extensions… | `extensions` *(ships unbound)* — see [Extension Packages](EXTENSIONS_FEATURE.md) |
+| Install Extension… | `install_extension` *(ships unbound)* |
 | Reload Configuration | `reload_config` *(ships unbound)* |
 
 ### Help Menu

@@ -105,6 +105,17 @@ class MenuBarActivation(unittest.TestCase):
         # And the bar never took focus on the way.
         self.assertIsNot(self.app.panel.get_focused(), self.app.menu_bar)
 
+    def test_every_menu_fits_an_80x24_terminal(self):
+        """A pulldown taller than the rows under the bar is nudged up over the
+        bar itself. Tabs moved to File once took it to 27 rows and did that;
+        every menu must stay within the 23 rows a 24-line terminal leaves."""
+        from puikit.widgets.menu import popup_geometry
+        _sw, sh = self.b.size_units
+        self.assertEqual(sh, 24)
+        for top in self.app._build_menu().items:
+            _w, h, _row = popup_geometry(top.submenu, self.b.measure_text, False)
+            self.assertLessEqual(h, sh - 1, f"{top.label} menu is {h} rows")
+
     def test_f10_opens_walks_and_closes_the_menu(self):
         self.app.on_event(_key("f10"))
         self.assertTrue(self._menu_open())

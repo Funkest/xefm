@@ -5,7 +5,7 @@ directory**, in one flat list. Press the key again to go back.
 
 | Action | Key | Menu |
 |--------|-----|------|
-| `flat_view` | `Shift-B` | Go → Flat View |
+| `flat_view` | `Shift-B` | View → Flat View |
 
 It is also in the command palette (`Ctrl-T`).
 
