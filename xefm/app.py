@@ -6697,13 +6697,14 @@ class XeFMApp:
                                                        recursive=recursive,
                                                        keep=keep())
 
+        def rel(s: str) -> str:
+            # os.sep too: a local path on Windows continues with "\".
+            return s[len(root_str):].lstrip("/" + os.sep) if s.startswith(root_str) else s
+
         def to_label(mode, value):
             if mode == "content":
-                s = str(value["path"])
-                rel = s[len(root_str):].lstrip("/") if s.startswith(root_str) else s
-                return f"{rel}:{value['line']}: {value['text']}"
-            s = str(value)
-            return s[len(root_str):].lstrip("/") if s.startswith(root_str) else s
+                return f"{rel(str(value['path']))}:{value['line']}: {value['text']}"
+            return rel(str(value))
 
         def on_accept(mode, value):
             # Feed-by-default: accepting doesn't navigate to the one hit — it
@@ -10088,7 +10089,9 @@ class XeFMApp:
         if path_schemes.is_uri(text):
             return Path(text)
         if text.startswith("~"):
-            target = Path.home() / text[1:].lstrip("/")
+            # os.sep too: "~\Documents" left as "\Documents" is rooted on
+            # Windows, and joining it to home gave C:\Documents.
+            target = Path.home() / text[1:].lstrip("/" + os.sep)
         elif not os.path.isabs(text):
             target = Path(current) / text
         else:
