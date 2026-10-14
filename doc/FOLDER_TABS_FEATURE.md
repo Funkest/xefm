@@ -6,11 +6,11 @@ search result or an imported list while you browse somewhere else.
 
 | Action | Key | Menu |
 |--------|-----|------|
-| `new_tab` | `T` | View → New Tab |
-| `open_in_new_tab` | `Shift-T` | View → Open in New Tab |
-| `close_tab` | `Ctrl-W` | View → Close Tab |
-| `next_tab` | `Ctrl-PageDown` | View → Next Tab |
-| `prev_tab` | `Ctrl-PageUp` | View → Previous Tab |
+| `new_tab` | `T` | Go → New Tab |
+| `open_in_new_tab` | `Shift-T` | Go → Open in New Tab |
+| `close_tab` | `Ctrl-W` | Go → Close Tab |
+| `next_tab` | `Ctrl-PageDown` | Go → Next Tab |
+| `prev_tab` | `Ctrl-PageUp` | Go → Previous Tab |
 
 All of them act on the **active pane**. The left and right panes have separate
 tabs.

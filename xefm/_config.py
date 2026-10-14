@@ -253,15 +253,15 @@ class Config:
     TRANSFER_CONCURRENCY = "auto"
 
     # Keymap preset: the whole keymap, chosen at first launch and changed from
-    # View > Keymap. The presets are peers; neither is the default.
-    #   None        -- whatever you chose at first launch or in View > Keymap
+    # Tools > Keymap. The presets are peers; neither is the default.
+    #   None        -- whatever you chose at first launch or in Tools > Keymap
     #   'afx'       -- letters: C copy, K delete, M move ... The single-key
     #                  style of the X68000 filers and AFX (あふ). 'default' is
     #                  accepted as an old name for it.
     #   'orthodox'  -- function keys: F3 view, F4 edit, F5 copy, F6 move,
     #                  F7 new folder, F8 delete. No bare letter runs anything;
     #                  typing a letter starts incremental search.
-    # Setting this wins over the View > Keymap menu. KEY_BINDINGS below is
+    # Setting this wins over the Tools > Keymap menu. KEY_BINDINGS below is
     # laid over whichever preset is in force. See doc/KEYMAP_PRESETS_FEATURE.md.
     KEY_PRESET = None
 
