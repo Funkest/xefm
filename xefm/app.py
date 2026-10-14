@@ -1063,7 +1063,16 @@ class PaneHeader(Widget):
         # floor to nothing on the left and leave the whole padding on the right
         # (#563 hand check).
         inset = 0.5 if ctx.vector_shapes else 1.0
-        widths = [ctx.measure_text(lab) + 2 * inset for lab in labels]
+        # The current tab's label is bold, and bold is wider on a proportional
+        # font: it is measured, and elided, in that style.
+        bold = Style(attr=TextAttribute.BOLD)
+
+        def measure_of(i):
+            if i == current:
+                return lambda text: ctx.measure_text(text, bold)
+            return ctx.measure_text
+
+        widths = [measure_of(i)(lab) + 2 * inset for i, lab in enumerate(labels)]
         share = (avail - gap * (len(tabs) - 1)) / len(tabs)
         if sum(widths) + gap * (len(tabs) - 1) > avail:
             widths = [min(w, max(share, 2.0)) for w in widths]
@@ -1075,7 +1084,7 @@ class PaneHeader(Widget):
                 break
             w = min(w, pad_x + avail - x)
             shown = elide(label, max(0.0, w - 2 * inset), where="end",
-                          measure=ctx.measure_text)
+                          measure=measure_of(i))
             chip = current_bg if i == current else idle_bg
             if ctx.vector_shapes:
                 # Rounded on top only, the way a tab is: a fully rounded face,
