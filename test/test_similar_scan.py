@@ -259,10 +259,15 @@ def test_a_running_scan_offers_its_provisional_groups(app, dirs):
     app._open_scan(job)
     app.panel.render()
     assert "groups so far" in "\n".join(app.backend.snapshot())
+    side = app.pm.active_pane
+    before = app.active_pane()["path"]
     app.panel.dispatch_event(_key("enter"))          # Look at the groups so far
     app._settle_listings()
     pane = app.active_pane()
     assert [f.name for f in pane["files"]] == ["g (1)"]
+    # In a tab of its own (#612): the folder the pane was in stays put.
+    assert len(app.pm.tabs[side]) == 2
+    assert app.pm.tabs[side][0]["path"] == before
     from xefm import app as xefm_app
     assert "groups may change" in xefm_app._xefml_header_text(pane["path"], 200)
 

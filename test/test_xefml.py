@@ -208,6 +208,32 @@ class InThePane(_Files):
         # The tree stays where it was.
         self.assertTrue(xefml.is_xefml_path(self.pane["path"]))
 
+    def test_what_leaves_xefm_gets_the_real_file(self):
+        """#612: the OS's open, the editor and a copied path get the file an
+        entry stands for, not its xefml:// address."""
+        from unittest.mock import patch
+        self._enter("scan.xefml")
+        self._enter("one.txt (1)")
+        self._focus("two.txt")
+        real = os.path.join(self.real, "deep", "two.txt")
+        opened = []
+        with patch.object(xefm_app.subprocess, "run",
+                          lambda argv, **k: opened.append(argv)), \
+                patch.object(xefm_app.platform, "system", lambda: "Darwin"), \
+                patch.object(xefm_app, "get_program_for_file", lambda *a: None), \
+                patch.object(xefm_app, "has_explicit_association", lambda *a: False):
+            self.app.open_with_os()
+            self.app.reveal_in_os()
+        self.assertEqual(opened, [["open", real], ["open", "-R", real]])
+        copied = []
+        self.app._set_text_clipboard = copied.append
+        self.app.copy_paths_to_clipboard()
+        self.assertEqual(copied, [real])
+        edited = []
+        self.app._edit_entries = edited.append
+        self.app.edit_file()
+        self.assertEqual([str(p) for p in edited[0]], [real])
+
     def test_shift_o_on_a_selection_lists_every_target(self):
         self._enter("scan.xefml")
         self._enter("one.txt (1)")

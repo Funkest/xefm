@@ -37,15 +37,16 @@ and says when it is done:
 
 ## Looking at the results
 
-Click that, or open **View → Background Jobs…** (`Ctrl-G`), and choose the scan. The pane
-goes into its results, a [tree file](TREE_FILES_FEATURE.md) with one folder
-per group. In each group, the file the others were compared with comes
+Click that, or open **View → Background Jobs…** (`Ctrl-G`), and choose the scan. Its
+results open in a **new tab** of the pane, a [tree file](TREE_FILES_FEATURE.md)
+with one folder per group. The folder you were in stays in its own tab, and
+closing the results tab (`Ctrl-W`) takes you back to it. In each group, the file the others were compared with comes
 first.
 
 - `Enter` on a group shows its files. View and compare them there.
 - To delete or move the real files, select them (or whole groups) and press
   `Shift-O`. The other pane shows them as one list, wherever they live.
-- `Backspace` goes back up.
+- `Backspace` goes back up to the list of groups.
 
 **You don't have to wait for the end.** While a scan runs, choosing it in the
 jobs list offers **Look at the groups so far**. The results are rewritten

@@ -1688,6 +1688,17 @@ def _search_rules(show_hidden: bool, recursive: bool):
 
     return shows, descend
 
+def _real_entry(entry):
+    """The file an entry stands for, where that is not the entry itself: a
+    ``.xefml`` tree's entries are references (#573), and anything that leaves
+    XeFM — the OS's open and reveal, an editor, a copied path — needs the real
+    file, not the ``xefml://`` address (#612). None for a reference that
+    points nowhere."""
+    if entry is not None and xefml.is_xefml_path(entry):
+        return entry.target()
+    return entry
+
+
 def _tag_label(tag) -> str:
     """A tag as a picker row names it: its color in words, since a list row
     cannot carry a colored dot."""
@@ -4667,7 +4678,8 @@ class XeFMApp:
     def edit_file(self) -> None:
         """Open the selected files — or the focused file when nothing is
         selected — for editing (#273). See :meth:`_edit_entries`."""
-        self._edit_entries(self._selected_or_focused(self.active_pane()))
+        targets = [_real_entry(t) for t in self._selected_or_focused(self.active_pane())]
+        self._edit_entries([t for t in targets if t is not None])
 
     def _edit_entries(self, targets: list) -> None:
         """Open ``targets`` for editing — the ``edit_file`` machinery, shared
@@ -5354,8 +5366,11 @@ class XeFMApp:
         association set explicitly to ``None`` suppresses the launch entirely,
         which is how you stop a file type from being handed to the OS at all.
         Errors are logged, not raised."""
-        entry = self._focused_entry()
+        focused = self._focused_entry()
+        entry = _real_entry(focused)
         if entry is None:
+            if focused is not None:
+                self.log_info(f"{focused.name} points at no file")
             return
         command = get_program_for_file(entry.name, "open")
         if command:
@@ -5385,8 +5400,11 @@ class XeFMApp:
     def reveal_in_os(self) -> None:
         """Reveal the focused entry in the OS file manager (Finder / Explorer),
         falling back to opening its parent directory elsewhere."""
-        entry = self._focused_entry()
+        focused = self._focused_entry()
+        entry = _real_entry(focused)
         if entry is None:
+            if focused is not None:
+                self.log_info(f"{focused.name} points at no file")
             return
         system = platform.system()
         try:
@@ -5747,13 +5765,11 @@ class XeFMApp:
             self._show_scan_log(job)
 
     def _open_scan_result(self, job) -> None:
-        """Take the active pane into a scan's tree file: its groups are
-        folders, ``Shift-O`` reaches the real files (#573)."""
-        pane = self.active_pane()
-        self._remember_cursor(pane)
-        self._exit_virtual(pane)
-        pane["path"] = Path(xefml.uri_for(job.result_path))
-        self._refresh(pane)
+        """Open a scan's tree file in a **new tab** of the active pane: its
+        groups are folders, ``Shift-O`` reaches the real files (#573). A tab,
+        so the folder the pane was in stays where it was, and closing the tab
+        is the way back (#612)."""
+        self._open_tab(self.pm.active_pane, Path(xefml.uri_for(job.result_path)))
 
     def _show_scan_log(self, job) -> None:
         if job.log_path.exists():
@@ -8045,7 +8061,7 @@ class XeFMApp:
         """Copy the active pane's selected full path(s) — or the cursor entry's
         path when nothing is selected — to the system clipboard, one per
         line."""
-        self._copy_to_clipboard(str, "path")
+        self._copy_to_clipboard(lambda f: str(_real_entry(f) or f), "path")
 
     def open_list_from_clipboard(self) -> None:
         """Show the paths on the clipboard, one per line, as the active pane's

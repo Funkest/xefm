@@ -440,6 +440,9 @@ def test_the_jobs_list_follows_the_progress(app):
     closes once the last job has ended."""
     from xefm.choice_dialog import ChoiceDialog
     from xefm.progress_manager import OperationType
+    # The developer's own similar-file scans (~/.xefm/scans) would be rows too.
+    app._scan_rows = []
+    app._refresh_scans = lambda: False
     task, release, done = _held_task(app.tasks, app.panel, detached=True)
     task.progress.start_operation(OperationType.COPY, 4, description="")
     app.show_jobs()
