@@ -75,9 +75,8 @@ same scan again picks up quickly.
   finished scans are kept.
 - If a scan ends without finishing (its process was killed, for example), the
   jobs list says so, and choosing it shows its log.
-- **similar-files must be installed** in the same Python as XeFM:
-  `pip install 'similar-files>=0.2'`. The desktop apps don't include it yet,
-  so there the menu item says it is missing.
+- **similar-files comes with XeFM** (0.2 or later). Video and audio scans
+  still need ffmpeg and fpcalc, as listed above.
 
 ## See also
 
