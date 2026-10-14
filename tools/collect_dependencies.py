@@ -30,6 +30,15 @@ backend imports) *without* copying PuiKit itself. That flag is required, not
 optional: collected normally, an editable PuiKit contributes its ``.dist-info``
 recording whatever version was current when ``pip install -e`` last ran, so the
 bundle would advertise a version it does not ship.
+
+Any *other* editable install stops the collection with an error: its RECORD
+holds only the ``.dist-info`` and the shim pointing at the checkout, so the
+package itself would silently be missing from the bundle (1.8.0's first DMG
+shipped neither ``doc_files`` nor ``similar_files``). Install the released
+version into the venv before building.
+
+Requirement **extras** are honoured: ``doc-files[pdf]`` brings pypdf, which
+plain ``doc-files`` does not.
 """
 
 import argparse
@@ -70,6 +79,16 @@ def _canonical(name):
     return re.sub(r"[-_.]+", "-", name).strip().lower()
 
 
+def _parse_requirement_extras(req_str):
+    """The extras a requirement asks for — ``{"pdf"}`` for ``doc-files[pdf]``."""
+    try:
+        from packaging.requirements import Requirement
+        return {_canonical(e) for e in Requirement(req_str).extras}
+    except Exception:
+        match = re.search(r"\[([^\]]*)\]", req_str.partition(";")[0])
+        return {_canonical(e) for e in match.group(1).split(",") if e.strip()} if match else set()
+
+
 def _parse_requirement(req_str):
     """
     Parse a requirement string into (canonical_name, marker).
@@ -93,12 +112,14 @@ def _parse_requirement(req_str):
         return _canonical(name), None
 
 
-def _marker_satisfied(marker):
-    """Evaluate an environment marker for the current build machine."""
+def _marker_satisfied(marker, extras=()):
+    """Evaluate an environment marker for the current build machine, with
+    each of *extras* active in turn (none: the base install only)."""
     if marker is None:
         return True
     try:
-        # Evaluated with no active extra, i.e. base install only.
+        if extras:
+            return any(bool(marker.evaluate({"extra": e})) for e in extras)
         return bool(marker.evaluate())
     except Exception as exc:
         log_warning(f"Could not evaluate marker '{marker}' ({exc}); including dependency")
@@ -106,7 +127,9 @@ def _marker_satisfied(marker):
 
 
 def read_seed_requirements(requirements_file):
-    """Read requirements.txt, returning the marker-satisfied top-level names."""
+    """Read requirements.txt, returning the marker-satisfied top-level
+    requirements as ``(name, extras)`` — the extras matter: ``doc-files[pdf]``
+    needs pypdf, which plain ``doc-files`` does not pull in."""
     seeds = []
     if not os.path.exists(requirements_file):
         log_error(f"Requirements file not found: {requirements_file}")
@@ -124,7 +147,7 @@ def read_seed_requirements(requirements_file):
             if not _marker_satisfied(marker):
                 log_info(f"Skipping (marker not satisfied for this platform): {line}")
                 continue
-            seeds.append(name)
+            seeds.append((name, _parse_requirement_extras(line)))
 
     log_info(f"Found {len(seeds)} applicable top-level requirement(s)")
     return seeds
@@ -137,29 +160,55 @@ def resolve_runtime_closure(seed_names):
     Returns a dict of canonical-name -> importlib.metadata.Distribution.
     """
     resolved = {}
-    queue = list(seed_names)
+    #: The extras already expanded for each resolved distribution, so an extra
+    #: asked for later (by another requirement) still pulls in its deps.
+    expanded = {}
+    queue = [(s, set()) if isinstance(s, str) else (s[0], set(s[1])) for s in seed_names]
 
     while queue:
-        cname = _canonical(queue.pop(0))
-        if cname in resolved or cname in _SKIP_DISTRIBUTIONS:
+        name, extras = queue.pop(0)
+        cname = _canonical(name)
+        if cname in _SKIP_DISTRIBUTIONS:
             continue
-
-        try:
-            dist = importlib_metadata.distribution(cname)
-        except PackageNotFoundError:
-            log_warning(f"Required distribution not installed, skipping: {cname}")
-            continue
-
-        resolved[cname] = dist
+        if cname in resolved:
+            new_extras = extras - expanded[cname]
+            if not new_extras:
+                continue
+            dist = resolved[cname]
+            extras = new_extras
+        else:
+            try:
+                dist = importlib_metadata.distribution(cname)
+            except PackageNotFoundError:
+                log_warning(f"Required distribution not installed, skipping: {cname}")
+                continue
+            resolved[cname] = dist
+            expanded[cname] = set()
+        expanded[cname] |= extras
 
         for req_str in (dist.requires or []):
             dep_name, marker = _parse_requirement(req_str)
-            if not dep_name or not _marker_satisfied(marker):
-                continue  # extras and off-platform deps are gated out here
-            if _canonical(dep_name) not in resolved:
-                queue.append(dep_name)
+            if not dep_name:
+                continue
+            # The base install's deps, and those of each extra asked for; an
+            # extra nobody asked for, and an off-platform dep, stay out.
+            if not (_marker_satisfied(marker)
+                    or (extras and _marker_satisfied(marker, extras))):
+                continue
+            queue.append((dep_name, _parse_requirement_extras(req_str)))
 
     return resolved
+
+
+def _is_editable(dist):
+    """Whether *dist* is an editable install (``pip install -e``), per its
+    ``direct_url.json`` (PEP 610)."""
+    try:
+        import json
+        info = json.loads(dist.read_text("direct_url.json") or "{}")
+    except Exception:
+        return False
+    return bool((info.get("dir_info") or {}).get("editable"))
 
 
 def _should_skip_file(rel_path):
@@ -273,6 +322,18 @@ def collect_dependencies(requirements_file, dest_dir, include_deps_of=None):
     log_info("Resolving runtime dependency closure...")
     resolved = resolve_runtime_closure(seeds + sorted(deps_only))
     log_info(f"Runtime closure: {len(resolved)} distribution(s)")
+
+    # An editable install's RECORD holds only its .dist-info and the shim that
+    # points at the developer checkout; the shim is skipped below, so the
+    # package itself would silently not ship (1.8.0's first DMG had neither
+    # doc_files nor similar_files). Refuse rather than build that bundle.
+    editable = sorted(resolved[c].metadata["Name"] for c in resolved
+                      if c not in deps_only and _is_editable(resolved[c]))
+    if editable:
+        log_error(f"Installed editable, so they would not be bundled: {', '.join(editable)}")
+        log_error("Install the released versions into this venv first, e.g. "
+                  f"pip install {' '.join(editable)} (re-run 'pip install -e' afterwards to develop)")
+        return False
 
     total_files = 0
     failed = []

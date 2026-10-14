@@ -228,6 +228,15 @@ decide for you:
 - `gh` is missing or unauthenticated — `make tag` does not need it, but every
   target after it does.
 
+The bundle builds (DMG, Windows zip) go further for the other libraries XeFM
+develops alongside, doc-files and similar-files: `tools/collect_dependencies.py`
+**refuses** to collect an editable install other than PuiKit, because its
+RECORD names only the `.dist-info` and the shim, and the package would
+silently be missing from the bundle. Before building, install their released
+versions into the venv (`pip install doc-files similar-files`), and re-run
+`pip install -e` afterwards to go on developing. The collector also honours
+requirement extras (`doc-files[pdf]` brings pypdf).
+
 ## Target reference
 
 | Target | Publishes | Use |
