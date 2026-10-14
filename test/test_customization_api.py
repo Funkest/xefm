@@ -17,6 +17,7 @@ import sys
 import tempfile
 
 import pytest
+from unittest.mock import patch
 from puikit import Event, EventType
 from puikit.backends import create_backend
 
@@ -789,7 +790,10 @@ def test_a_config_that_uses_none_of_it_says_nothing(app_with):
     lines = []
     app, _ = app_with()
     app.log_info = lines.append
-    app._load_user_entries(app.config)
+    # The developer's installed extension packages are reported here too; this
+    # test is about a config.py that uses none of the API.
+    with patch.object(config_manager, "extension_report", None):
+        app._load_user_entries(app.config)
     assert lines == []
 
 

@@ -44,6 +44,9 @@ because the tree is a record of what was found. To work on the real files:
   spread over many folders.
 - `O` from the other pane goes to the real location of the entry highlighted
   in the tree.
+- Whatever leaves XeFM gets the **real file**: opening an entry in its
+  application (`Cmd-Enter` on macOS, `Ctrl-O`), revealing it in Finder or
+  Explorer, editing it (`E`), and copying its path.
 
 ## Trees that are still being written
 
