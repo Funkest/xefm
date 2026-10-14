@@ -13,7 +13,7 @@ One folder per scan, under :func:`scans_dir`::
       status.json   what similar-files says (its --status file)
       stop          created to stop the scan (its --stop-file)
       scan.log      the scan's stdout and stderr
-      result.xefml  every group, one tree file (its --out, --format tree)
+      result.xft  every group, one tree file (its --out, --format tree)
 
 The tree is rewritten every few minutes while the scan runs, with
 provisional groups (#549, #573), so the groups can be looked at long before a
@@ -150,8 +150,12 @@ class ScanJob:
 
     @property
     def result_path(self) -> _StdPath:
-        """The scan's tree file — written while it runs, final at the end."""
-        return self.folder / "result.xefml"
+        """The scan's tree file — written while it runs, final at the end. A
+        scan from before the format was renamed (#613) wrote ``result.xefml``,
+        which is read where it is the one there."""
+        new = self.folder / "result.xft"
+        old = self.folder / "result.xefml"
+        return old if old.exists() and not new.exists() else new
 
     @property
     def log_path(self) -> _StdPath:

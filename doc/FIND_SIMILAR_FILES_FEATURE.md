@@ -71,7 +71,7 @@ same scan again picks up quickly.
 - **Local folders only.** A mounted network share counts as local. Folders on
   `ssh://` or `s3://` can't be scanned from here yet.
 - **Results are kept in `~/.xefm/scans/`**, one folder per scan, with the
-  results file (`result.xefml`) and the scan's log. Nothing is written beside your files. The ten most recent
+  results file (`result.xft`) and the scan's log. Nothing is written beside your files. The ten most recent
   finished scans are kept.
 - If a scan ends without finishing (its process was killed, for example), the
   jobs list says so, and choosing it shows its log.

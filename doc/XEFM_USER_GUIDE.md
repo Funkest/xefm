@@ -777,7 +777,7 @@ For detailed information about specific features, see these dedicated guides:
 - [Searching the OS Index](OS_INDEX_SEARCH_FEATURE.md) - Spotlight and Windows Search, results as a list
 - [Documents as Text](DOCUMENT_VIEWER_FEATURE.md) - PDF, Office and EPUB files in the viewer and in content search
 - [Quick View](QUICK_VIEW_FEATURE.md) - The other pane previews the item under the cursor
-- [Tree Files](TREE_FILES_FEATURE.md) - Browse .xefml groups of references, act on the real files
+- [Tree Files](TREE_FILES_FEATURE.md) - Browse .xft groups of references, act on the real files
 - [File Monitoring Feature](FILE_MONITORING_FEATURE.md) - Automatic refresh when directories change on disk
 
 ### Remote and Cloud Storage

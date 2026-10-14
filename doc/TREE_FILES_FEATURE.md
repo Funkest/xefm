@@ -1,12 +1,12 @@
-# Tree Files (.xefml)
+# Tree Files (.xft)
 
-A `.xefml` file holds **groups of references to files**: for example, the
+An `.xft` file holds **groups of references to files**: for example, the
 groups of similar videos a scan found. Each group lists files that may live
 in many different folders, on this computer or a server. Press `Enter` on a
-`.xefml` file to browse it like an archive.
+`.xft` file to browse it like an archive.
 
 ```
-scan.xefml/
+scan.xft/
   trip.mp4 (2)/            ← a group
     trip.mp4               ← stands for /Users/me/Movies/trip.mp4
     trip-small.mp4         ← stands for /Volumes/NAS/trip-small.mp4
@@ -17,7 +17,8 @@ scan.xefml/
 
 You don't write these files yourself. Programs write them: XeFM's
 [Find Similar Files](FIND_SIMILAR_FILES_FEATURE.md) does, through
-similar-files. The format is described in [XEFML_FORMAT.md](XEFML_FORMAT.md)
+similar-files. Earlier versions named these files `.xefml`; XeFM still opens
+those. The format is described in [XFT_FORMAT.md](XFT_FORMAT.md)
 for anyone writing such a program.
 
 ## Browsing

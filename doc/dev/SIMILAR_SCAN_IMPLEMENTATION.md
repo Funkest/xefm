@@ -27,7 +27,7 @@ and `--format tree` / `--snapshot-interval`):
 
 | Piece | |
 |---|---|
-| `start(roots, method, base=, python=)` | Makes the job folder, writes `job.json`, starts `python -m similar_files scan … --out result.xefml --format tree --method M --status status.json --stop-file stop`, with stdout and stderr going to `scan.log` |
+| `start(roots, method, base=, python=)` | Makes the job folder, writes `job.json`, starts `python -m similar_files scan … --out result.xft --format tree --method M --status status.json --stop-file stop`, with stdout and stderr going to `scan.log` |
 | `ScanJob` | One folder: `info()`, `status()`, `state()`, `progress_text()`, `summary()`, `seen` / `mark_seen()`, `stop()` |
 | `jobs(base)` | Every scan folder, newest first (ids are `YYYYmmdd-HHMMSS-<hex>`) |
 | `prune(base, keep=10)` | Removes finished scans beyond the newest ten. Never a running one |
@@ -75,16 +75,16 @@ reboot, but a status that stopped changing cannot be mistaken for a live one.
   groups`; `failed`, `⚠`, for stopped, failed or lost) after the in-process
   jobs.
 - `show_jobs` lists in-process jobs and scans together. A running scan offers
-  **Look at the groups so far** (once `result.xefml` exists), **Stop the scan**
+  **Look at the groups so far** (once `result.xft` exists), **Stop the scan**
   (`job.stop()`) and **Show its log**. A finished one is marked seen. For both,
-  the active pane goes into `xefml://<job>/result.xefml#` (#573), and the
+  the active pane goes into `xft://<job>/result.xft#` (#573), and the
   tree's own provisional handling (header, re-read on rewrite, follow by
   anchor) does the rest. A failed or lost one opens its log.
 
 ## Why a tree file, rewritten
 
 The output was first one `.m3u8` per group in a `groups/` folder. It became
-one `.xefml` tree (similar-files `--format tree`, #549) so that a long scan's
+one `.xft` tree (similar-files `--format tree`, #549) so that a long scan's
 groups can be looked at **before it ends**. Appending finished groups works
 for identical files only: similar-files closes a size bucket at a time. For
 similar files, anchors are chosen over all features, largest file first, so a

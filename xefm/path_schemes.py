@@ -174,9 +174,9 @@ def _ssh(uri: str):
     return SSHPathImpl(uri)
 
 
-def _xefml(uri: str):
-    from xefm.xefml import XefmlPathImpl
-    return XefmlPathImpl(uri)
+def _xft(uri: str):
+    from xefm.xft import XftPathImpl
+    return XftPathImpl(uri)
 
 
 def _unsupported(uri: str):
@@ -187,6 +187,6 @@ def _unsupported(uri: str):
 register('archive', _archive)
 register('s3', _s3)
 register('ssh', _ssh)
-register('xefml', _xefml)
+register('xft', _xft)
 register('scp', _unsupported)
 register('ftp', _unsupported)
