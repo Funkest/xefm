@@ -1341,8 +1341,11 @@ class StatusBar(Widget):
             carried_style = Style(fg=ctx.theme.accent, attr=TextAttribute.BOLD)
             ctx.draw_text(x, 0, carried, carried_style)
             # A click on it shows what is held (#577 hand check).
-            self._clip_hit = (x, x + ctx.measure_text(carried, carried_style))
-            used = ctx.measure_text(carried + "  ")
+            carried_w = ctx.measure_text(carried, carried_style)
+            self._clip_hit = (x, x + carried_w)
+            # Measured in its own bold style: bold is wider on a proportional
+            # font, and measuring it plain ate the gap before the hints.
+            used = carried_w + ctx.measure_text("  ")
             x += used
             avail = max(0.0, avail - used)
         # Background jobs (#567) take the right end, ahead of the hints: the
