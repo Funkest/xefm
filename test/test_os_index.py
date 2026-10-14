@@ -176,17 +176,46 @@ class InTheApp(unittest.TestCase):
         self.app.dispatch("index_search")
         self.assertIn("searches local folders", self._last_log())
 
-    def test_the_query_dialog_opens_with_the_history(self):
-        """#607: the query history helper was shadowed by the directory history
-        list, so the action raised before its dialog opened."""
+    def test_the_index_is_a_mode_of_the_search_dialog(self):
+        """#609: the index search is the search dialog in its index mode, its
+        history on the query field rather than in the result list."""
         if os_index.unavailable():
             self.skipTest("no OS index here")
+        from xefm.progressive_search_dialog import ProgressiveSearchDialog
         self.app._record_history(self.app._INDEX_STATE, "kind:pdf")
         self.app.dispatch("index_search")
-        top = self.app.panel._layers[-1].widget
-        labels = [top.to_label(r) for r in getattr(top, "all_items", [])]
-        self.assertIn("kind:pdf", labels)
+        dialog = self.app.panel._layers[-1].widget
+        self.assertIsInstance(dialog, ProgressiveSearchDialog)
+        self.assertEqual(dialog.mode, "index")
+        self.assertEqual(dialog.modes, ("filename", "content", "index"))
+        self.assertEqual(dialog._history("index"), ["kind:pdf"])
+        self.assertEqual(dialog.list.items, [], "no history in the result list")
 
+    def test_index_results_stream_in_and_honour_the_chips(self):
+        """The index's paths are checked against the filter chips, and with an
+        empty field the chips alone are the query."""
+        import threading
+        from xefm import search_filters
+        pdf = os.path.join(self.tmp, "a.pdf")
+        img = os.path.join(self.tmp, "c.png")
+        with open(img, "w") as f:
+            f.write("x")
+        asked = []
+
+        def fake(query, scope, **_kw):
+            asked.append(query)
+            return os_index.Result(paths=[pdf, img])
+
+        original = os_index.search
+        os_index.search = fake
+        try:
+            values = {search_filters.KIND: search_filters.IMAGE}
+            hits = list(self.app._iter_index_matches(self.tmp, "", threading.Event(),
+                                                     values))
+        finally:
+            os_index.search = original
+        self.assertEqual([str(h) for h in hits], [img])
+        self.assertTrue(asked[0], "the chips became the query")
 
 if __name__ == "__main__":
     unittest.main()

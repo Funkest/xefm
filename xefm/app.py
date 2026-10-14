@@ -86,8 +86,9 @@ from xefm import tags
 from xefm import trash
 from xefm import netmount
 from xefm.options import OptionSet
-from xefm.progressive_search_dialog import show_progressive_search
+from xefm.progressive_search_dialog import SearchFailed, show_progressive_search
 from xefm import search_options as search_opts
+from xefm import search_filters
 from xefm.isearch_bar import ISearchBar
 from xefm import filters
 from xefm import name_key
@@ -768,8 +769,14 @@ def _virtual_header_text(virtual: dict, avail: float, measure=len) -> str:
         shown = abbreviate_path(root_str, avail - measure(tag), measure=measure)
         return elide(tag + shown, avail, where="end", measure=measure)
 
-    mode = "content" if virtual["mode"] == "content" else "filename"
-    label = f'⌕ "{virtual["query"]}" ({mode})'
+    mode = {"content": "content", "index": os_index.engine() or "index"}.get(
+        virtual["mode"], "filename")
+    narrowed = virtual.get("filters") or ""
+    query = virtual["query"]
+    if query:
+        label = f'⌕ "{query}" ({mode}{" · " + narrowed if narrowed else ""})'
+    else:
+        label = f'⌕ {narrowed} ({mode})'
     if has_root:
         room = avail - measure(label + _VIRTUAL_ROOT_SEP)
         # Enough for a short leaf; anything less would be a fragment.
@@ -6591,12 +6598,31 @@ class XeFMApp:
         standing on (``_feed_search_results``)."""
         self._open_search("content")
 
+    #: State keys for each search mode's query history (#609). The index's is
+    #: the one #579 already kept.
+    _SEARCH_HISTORY = {"filename": "search.history.filename",
+                       "content": "search.history.content",
+                       "index": "index_search.history"}
+
+    def _index_scope(self, pane: dict) -> str | None:
+        """Why the OS index cannot search ``pane``, or None when it can."""
+        why = os_index.unavailable()
+        if why:
+            return why
+        scope = pane["path"]
+        if pane.get("virtual") or path_schemes.is_uri(str(scope)):
+            return (f"{os_index.engine()} searches local folders; this pane "
+                    f"is showing {scope}")
+        return None
+
     def _open_search(self, initial_mode: str) -> None:
-        """Open the progressive search dialog anchored over the active pane. Both
-        ``find_files`` and ``find_in_files`` land here — they differ only in the
-        starting mode, and Tab toggles between them in place. The dialog runs ``search_iter`` on a
-        worker thread and streams results in, so a huge tree never blocks the UI;
-        each keystroke supersedes the previous search.
+        """Open the progressive search dialog anchored over the active pane.
+        ``find_files``, ``find_in_files`` and ``index_search`` all land here —
+        they differ only in the starting mode, and Tab steps through the modes
+        in place: filenames, content, and the OS index where this pane can use
+        it (#609). The dialog runs ``search_iter`` on a worker thread and
+        streams results in, so a huge tree never blocks the UI; each keystroke
+        supersedes the previous search.
 
         An active pane filter narrows *content* search to the files it matches
         (issue #305) — the same files the user is looking at — and the dialog
@@ -6606,12 +6632,29 @@ class XeFMApp:
         The dialog's live options (issue #312) are read here, in the closure the
         dialog runs, rather than by the dialog itself: it shows them and re-runs
         when one changes, and this is the only place that knows what they mean.
-        Their meaning is :mod:`xefm.search_options`."""
+        Their meaning is :mod:`xefm.search_options`, and the filter chips' —
+        kind, date, size, in every mode — :mod:`xefm.search_filters`."""
         pane = self.active_pane()
         root = pane["path"]
         root_str = str(root)
         name_filter = pane.get("filter_pattern") or ""
         options = self._search_option_set()
+        engine = os_index.engine() or "Index"
+        modes = ("filename", "content")
+        if self._index_scope(pane) is None:
+            modes += ("index",)
+        if initial_mode not in modes:
+            initial_mode = "filename"
+
+        def keep():
+            return search_filters.predicate(options.snapshot())
+
+        def can_search(mode, query):
+            if query:
+                return True
+            # The chips can search on their own — "every image here, changed
+            # this week" — except in content, which needs words to look for.
+            return mode != "content" and search_filters.active(options.snapshot())
 
         def search_iter(mode, query, cancel):
             case = options[search_opts.CASE]
@@ -6624,11 +6667,16 @@ class XeFMApp:
                     regex=options[search_opts.REGEX])
                 yield from self._iter_content_matches(root, pattern, cancel,
                                                       name_filter=name_filter,
-                                                      recursive=recursive)
+                                                      recursive=recursive,
+                                                      keep=keep())
+            elif mode == "index":
+                yield from self._iter_index_matches(root_str, query, cancel,
+                                                    options.snapshot())
             else:
-                yield from self._iter_filename_matches(root, query, cancel,
+                yield from self._iter_filename_matches(root, query or "*", cancel,
                                                        case=case,
-                                                       recursive=recursive)
+                                                       recursive=recursive,
+                                                       keep=keep())
 
         def to_label(mode, value):
             if mode == "content":
@@ -6644,20 +6692,52 @@ class XeFMApp:
             # listing, so every file operation can act on it. Read the dialog's
             # full results + current query; the accepted ``value`` only decides
             # which row the cursor lands on (issue #224).
-            self._feed_search_results(mode, list(dialog.results),
-                                      root, dialog.query_edit.text.strip(),
-                                      focus=value)
+            query = dialog.query_edit.text.strip()
+            if query:
+                self._record_history(self._SEARCH_HISTORY[mode], query)
+            self._feed_search_results(mode, list(dialog.results), root, query,
+                                      focus=value,
+                                      filters=search_filters.describe(options.snapshot()))
 
-        titles = None
+        titles = {"filename": "Search Files", "content": "Search Content",
+                  "index": f"Search {engine}"}
         if name_filter:
-            titles = {"filename": "Search Files",
-                      "content": f"Search Content ({filters.label(name_filter)})"}
+            titles["content"] = f"Search Content ({filters.label(name_filter)})"
         dialog = show_progressive_search(
             self.panel, initial_mode=initial_mode,
             search_iter=search_iter, to_label=to_label, on_accept=on_accept,
             titles=titles, accept_hint="feed", options=options,
-            region=self._active_pane_region())
+            region=self._active_pane_region(), modes=modes,
+            mode_names={"filename": "filenames", "content": "content",
+                        "index": engine},
+            can_search=can_search,
+            history=lambda mode: self._query_history(self._SEARCH_HISTORY[mode]),
+            on_history_remove=lambda mode, query: self._forget_history(
+                self._SEARCH_HISTORY[mode], query))
         self.panel.render()
+
+    def _iter_index_matches(self, root: str, query: str, cancel, values: dict):
+        """The OS index's answer for ``query`` under ``root``, checked against
+        the filter chips (#609). With no words, the chips alone are the query.
+        A failure is said in the dialog's status line."""
+        engine = os_index.engine() or ""
+        text = query or search_filters.index_query(engine, values)
+        if not text:
+            return
+        result = os_index.search(text, root, cancelled=cancel.is_set)
+        if result.cancelled or cancel.is_set():
+            return
+        if result.error:
+            raise SearchFailed(result.error)
+        keep = search_filters.predicate(values)
+        for raw in result.paths:
+            if cancel.is_set():
+                return
+            if keep is not None:
+                attrs = search_filters.stat_attrs(raw)
+                if attrs is None or not keep(os.path.basename(raw), attrs):
+                    continue
+            yield Path(raw)
 
     def _search_option_set(self) -> OptionSet:
         """The search dialog's options, built once and kept for the session.
@@ -6671,12 +6751,13 @@ class XeFMApp:
         (:mod:`xefm.search_options`)."""
         options = getattr(self, "_search_options", None)
         if options is None:
-            options = self._search_options = OptionSet(search_opts.SEARCH_OPTIONS)
+            options = self._search_options = OptionSet(
+                search_opts.SEARCH_OPTIONS + search_filters.SEARCH_FILTERS)
         options.reset_transient()
         return options
 
     def _feed_search_results(self, mode: str, results: list, root, query: str,
-                             focus=None) -> None:
+                             focus=None, filters: str = "") -> None:
         """Turn a search result set into the active pane's flat, virtual listing
         (feed-by-default; see the search dialog's ``on_accept``). Filename results
         are ``Path`` objects; content results are ``{path, line, text}`` hits,
@@ -6708,11 +6789,14 @@ class XeFMApp:
         virtual = {
             "kind": "search", "root": Path(root), "mode": mode,
             "query": query, "results": paths, "meta": meta,
+            # The filter chips in force, in words, for the header (#609).
+            "filters": filters,
         }
+        said = " · ".join(part for part in (f'"{query}"' if query else "", filters) if part)
 
         def landed(p: dict) -> None:
             self._focus_result(p, focus)
-            self.log_info(f'Search results for "{query}": '
+            self.log_info(f'Search results for {said}: '
                           f'{len(virtual["results"])} item(s)  '
                           f'— {self._virtual_keys_hint()}')
 
@@ -6742,7 +6826,8 @@ class XeFMApp:
                 return
 
     def _iter_filename_matches(self, root, pattern, cancel, *,
-                               case: bool = False, recursive: bool = True):
+                               case: bool = False, recursive: bool = True,
+                               keep=None):
         """Walk under ``root`` (:func:`xefm.tree_walk.walk` — several directories
         at once over SSH) yielding entries whose name matches
         ``pattern`` (a glob), checking ``cancel`` between entries so
@@ -6765,7 +6850,8 @@ class XeFMApp:
         # apiece; the walk lists several at once where that pays (SSH).
         shows, descend = _search_rules(self.flm.show_hidden, recursive)
         for e, attrs in tree_walk.walk(root, cancel, descend):
-            if shows(e, attrs) and match(name_key.compare_name(e)):
+            if shows(e, attrs) and match(name_key.compare_name(e)) \
+                    and (keep is None or keep(e.name, attrs)):
                 yield e
 
     def _go_to_result(self, entry) -> None:
@@ -7023,7 +7109,8 @@ class XeFMApp:
         return "utf-8"
 
     def _iter_content_matches(self, root, regex, cancel, max_line: int = 200,
-                              name_filter: str = "", *, recursive: bool = True):
+                              name_filter: str = "", *, recursive: bool = True,
+                              keep=None):
         """Walk under ``root`` (:func:`xefm.tree_walk.walk`) yielding
         ``{path, line, text}`` for each
         line of a text file that matches ``regex`` (compiled), checking ``cancel``
@@ -7050,6 +7137,9 @@ class XeFMApp:
         shows, descend = _search_rules(self.flm.show_hidden, recursive)
         for e, attrs in tree_walk.walk(root, cancel, descend):
             if attrs["is_dir"] or not shows(e, attrs):
+                continue
+            # The filter chips (#609), before a byte is read.
+            if keep is not None and not keep(e.name, attrs):
                 continue
             try:
                 if match is not None and not match(e, attrs):
@@ -8024,37 +8114,19 @@ class XeFMApp:
 
     def index_search(self) -> None:
         """Search the index the OS keeps — Spotlight on macOS, Windows Search
-        on Windows — under the active pane's folder, and show the matches as
-        a list pane (#579). The query is the engine's own language: Spotlight
-        reads it as its search field does (words, ``kind:pdf``, metadata
-        predicates); Windows Search matches words against names and
-        contents, or takes ``where …`` as raw SQL. Earlier queries are
-        offered again, most recent first."""
-        why = os_index.unavailable()
+        on Windows — under the active pane's folder (#579): the search dialog
+        in its index mode (#609), results streaming in as the query is typed,
+        Enter feeding them to the pane. The query is the engine's own language
+        — Spotlight reads it as its search field does (words, ``kind:pdf``,
+        metadata predicates); Windows Search matches words against names and
+        contents, or takes ``where …`` as raw SQL — and the filter chips need
+        none of it."""
+        why = self._index_scope(self.active_pane())
         if why:
             self.log_info(why)
-            return
-        pane = self.active_pane()
-        scope = pane["path"]
-        if pane.get("virtual") or path_schemes.is_uri(str(scope)):
-            self.log_info(f"{os_index.engine()} searches local folders; this pane "
-                          f"is showing {scope}")
-            return
-
-        def run(text: str) -> None:
-            query = text.strip()
-            if query:
-                self._record_history(self._INDEX_STATE, query)
-                self._run_index_search(self.pm.active_pane, query, str(scope))
             self.panel.render()
-
-        show_history_input(
-            self.panel, self._query_history(self._INDEX_STATE),
-            title=f"Search {os_index.engine()}", prompt="Query:",
-            accept_label="search", on_accept=run,
-            on_remove=lambda q: self._forget_history(self._INDEX_STATE, q),
-            on_cancel=self.panel.render, region=self._active_pane_region())
-        self.panel.render()
+            return
+        self._open_search("index")
 
     def _query_history(self, key: str) -> list:
         """The queries stored under state ``key``, most recent first. Not

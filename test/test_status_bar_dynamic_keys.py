@@ -13,17 +13,20 @@ class TestStatusBarDynamicKeys(unittest.TestCase):
     
     def test_status_bar_key_bindings_from_config(self):
         """Verify status bar uses get_keys_for_action and format_key_for_display."""
-        # Test that we can get the keys for the actions shown in status bar
-        help_keys, _ = get_keys_for_action('help')
+        # Test that we can get the keys for the actions shown in status bar.
+        # In the file list's context, as the bar asks: since #597 the flat
+        # table holds only config.py's own entries until a preset is applied,
+        # and the context lookup falls back to the actions' built-in keys.
+        help_keys, _ = get_keys_for_action('help', 'filer')
         self.assertTrue(len(help_keys) > 0, "help action should have key bindings")
         
-        switch_keys, _ = get_keys_for_action('switch_pane')
+        switch_keys, _ = get_keys_for_action('switch_pane', 'filer')
         self.assertTrue(len(switch_keys) > 0, "switch_pane action should have key bindings")
         
-        open_keys, _ = get_keys_for_action('open_item')
+        open_keys, _ = get_keys_for_action('open_item', 'filer')
         self.assertTrue(len(open_keys) > 0, "open_item action should have key bindings")
         
-        quit_keys, _ = get_keys_for_action('quit')
+        quit_keys, _ = get_keys_for_action('quit', 'filer')
         self.assertTrue(len(quit_keys) > 0, "quit action should have key bindings")
     
     def test_format_key_for_display(self):
@@ -43,13 +46,13 @@ class TestStatusBarDynamicKeys(unittest.TestCase):
         help_keys, _ = get_keys_for_action('help')
         help_key = format_key_for_display(help_keys[0]) if help_keys else '?'
         
-        switch_keys, _ = get_keys_for_action('switch_pane')
+        switch_keys, _ = get_keys_for_action('switch_pane', 'filer')
         switch_key = format_key_for_display(switch_keys[0]) if switch_keys else 'Tab'
         
-        open_keys, _ = get_keys_for_action('open_item')
+        open_keys, _ = get_keys_for_action('open_item', 'filer')
         open_key = format_key_for_display(open_keys[0]) if open_keys else 'Enter'
         
-        quit_keys, _ = get_keys_for_action('quit')
+        quit_keys, _ = get_keys_for_action('quit', 'filer')
         quit_key = format_key_for_display(quit_keys[0]) if quit_keys else 'q'
         
         # Construct message

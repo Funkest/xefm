@@ -2,8 +2,8 @@
 
 ## Overview
 
-The search dialog (`find_files` for filenames, `find_in_files` for contents)
-carries four
+The search dialog (`find_files` for filenames, `find_in_files` for contents,
+`index_search` for the OS index; `Tab` steps between them) carries four
 live options: whether capitals are matched exactly, whether only whole words
 count, whether the query is a regular expression, and whether subfolders are
 searched. They change the search you are already looking at — results re-run the
@@ -38,7 +38,8 @@ without opening anything. The search re-runs on the click.
 
 Filename search shows only `Aa` and `Sub`: filenames are matched as glob
 patterns, so whole-word and regular-expression do not apply there and are not
-listed at all.
+listed at all. The OS index shows none of the four: it reads its own query
+language and always searches everything below the folder.
 
 ## The options box
 
@@ -88,6 +89,49 @@ when you mean "these files here".
 
 Subdirectories still *match* by name in filename search when this is off; they
 are just not walked into.
+
+## Filter chips
+
+Three more chips narrow what is found, in every mode, without any query
+syntax:
+
+```
+3 results            [ Aa ] [ .* ] [ Sub ] [ Images ] [ Date ] [ Size ]
+```
+
+| Chip | Values |
+|------|--------|
+| `Kind` | Any kind, Folders, Documents, Images, Videos, Audio, Archives |
+| `Date` | Any date, modified Today, in the Past 7 days, the Past 30 days, This year |
+| `Size` | Any size, 1 MB, 100 MB or 1 GB or more (files only) |
+
+**Click a chip to pick a value** from the list that opens under it, the
+same kind of list a path field's `Tab` completion shows. `↑` / `↓` move,
+`Enter` or a click picks, and `Esc` or another click on the chip closes it. A chip that narrows
+the search shows its value (`Images`) in the accent color; one that does not
+shows its name on grey. In the options box they are rows like the others:
+`k`, `m` and `z` step to the next value, and `←` / `→` step either way.
+
+The chips combine with what you type: `*report*` with **Documents** finds
+documents whose name contains "report". In filename search and in the OS
+index they also **search on their own**, with the field empty. Content search
+needs words to look for.
+
+The kinds are decided by file extension, the same way in every mode:
+Documents are PDF, Office, OpenDocument, iWork, text, Markdown, CSV and EPUB
+files; Archives include `.zip`, `.tar.gz`, `.7z`, `.rar`, `.dmg` and `.iso`.
+
+The chips go back to **Any** every time the dialog opens, for the reason
+Search subfolders does.
+
+## Recent searches
+
+Each mode keeps the queries you searched with. Click `▾` at the right end of
+the query field, or press `Alt-↓`, for the list under the field. `↑` / `↓`
+move, `Enter` or a click puts the query in the field and searches,
+`Shift-Delete` forgets the highlighted one, and `Esc` closes the list. Typing
+closes it too, and types. A query is remembered when you press `Enter` on its
+results.
 
 ## What is remembered
 

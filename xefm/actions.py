@@ -62,6 +62,7 @@ from typing import Callable, Iterable
 
 from xefm.log_manager import getLogger
 from xefm.search_options import SEARCH_OPTIONS
+from xefm.search_filters import SEARCH_FILTERS
 
 
 logger = getLogger("Actions")
@@ -1295,7 +1296,7 @@ _SEARCH_ACTIONS = [
     # the one place that silently fell behind when an option is added.
     _a(f"toggle_{option.name}", SEARCH, f"Change: {option.label}",
        default_keys=())
-    for option in SEARCH_OPTIONS
+    for option in SEARCH_OPTIONS + SEARCH_FILTERS
 ]
 
 _BUILTIN_ACTIONS = (_COMMON_ACTIONS + _FILER_ACTIONS + _TEXT_VIEWER_ACTIONS
