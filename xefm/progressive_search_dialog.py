@@ -38,9 +38,15 @@ kind, date, size) is a chip too; clicking it opens a menu of its values.
 
 The query field has a **history** of its own, when the owner supplies one: the
 ``▾`` at the field's right end, or ``Alt-↓``, opens the current mode's recent
-queries in a menu under the field, and picking one fills the field. History is
-input, so it stays with the input — the result list only ever lists results,
-and is empty while the field is (#609). Enter accepts the selected row via
+queries under the field, and picking one fills the field. History is input, so
+it stays with the input — the result list only ever lists results, and is
+empty while the field is (#609).
+
+The history and a choice chip's values open in the **completion popup**
+(:class:`~xefm.candidate_list.CandidateListOverlay`), not a menu: the same
+look as a field's Tab candidates, on every backend, with the keyboard staying
+here — ``↑``/``↓`` move, Enter picks, Esc closes, the remove key forgets a
+recent query, and any other key closes it and goes on as usual. Enter accepts the selected row via
 ``on_accept(mode, value)``; Esc (or an outside click) cancels and stops the
 worker. A hint band along the bottom, mirroring the title bar, names those keys
 — including which mode Tab would switch *to*, so the status line above the
@@ -64,7 +70,6 @@ from typing import Any, Callable, Iterator
 
 from puikit.backend import Style
 from puikit.event import Event, EventType
-from puikit.menu import Menu, MenuItem, SEPARATOR
 from puikit.focus import FocusContainer, focus_on_click
 from puikit.panel import Rect
 from puikit.text import elide
@@ -72,7 +77,8 @@ from puikit.widgets.base import Widget
 from puikit.widgets.list import ListView
 from puikit.widgets.text_edit import TextEdit
 
-from xefm.actions import SEARCH
+from xefm.actions import FILTER_LIST, SEARCH
+from xefm.candidate_list import ROW_PAD_L, CandidateListOverlay, overlay_geometry
 from xefm.config import (format_key_for_display, get_keys_for_action,
                          is_action_for_event)
 from xefm.dialog_geometry import (animate_open, draw_hint_row, draw_title_bar,
@@ -134,7 +140,7 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
         mode_names: dict[str, str] | None = None,
         can_search: Callable[[str, str], bool] | None = None,
         history: Callable[[str], list[str]] | None = None,
-        on_history_clear: Callable[[str], None] | None = None,
+        on_history_remove: Callable[[str, str], None] | None = None,
     ):
         self._search_iter = search_iter
         self.to_label = to_label
@@ -150,8 +156,16 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
         self._can_search = can_search or (lambda _mode, query: bool(query))
         #: ``mode -> [query, …]``, most recent first, or None for no history.
         self._history = history
-        self._on_history_clear = on_history_clear
+        self._on_history_remove = on_history_remove
         self._history_rect = Rect(0.0, 0.0, 0.0, 0.0)
+        #: The open completion-style popup, if any: what it lists for
+        #: (``"history"`` or an option name), the values behind its rows, and
+        #: the dialog-local rect it hangs from.
+        self._popup: CandidateListOverlay | None = None
+        self._popup_for: str | None = None
+        self._popup_values: list = []
+        self._popup_anchor = Rect(0.0, 0.0, 0.0, 0.0)
+        self._screen_origin = (0.0, 0.0)
         #: What the hint band says Enter does — the owner's knowledge, injected
         #: like ``titles``, because this widget only reports the accepted row.
         self._accept_hint = accept_hint
@@ -329,6 +343,7 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
             self.on_cancel()
 
     def _close(self) -> None:
+        self._close_popup()
         self._closed = True
         if self._cancel is not None:
             self._cancel.set()  # stop the worker; its results are dropped
@@ -345,40 +360,136 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
         self.mode = self._next_mode()
         self._start_search()  # re-run against the same root in the new mode
 
-    # --- history -------------------------------------------------------------
+    # --- the popup: recent queries, a chip's values ------------------------
 
-    def _origin(self) -> tuple[float, float]:
-        """This layer's top-left in the panel, for placing a popup menu under
-        something drawn in local coordinates."""
+    def _popup_slot(self) -> Any:
         panel = self._panel
-        for slot in getattr(panel, "_layers", ()) or ():
-            if slot.widget is self:
-                return slot.rect.x, slot.rect.y
-        return 0.0, 0.0
+        if panel is None or self._popup is None:
+            return None
+        return next((slot for slot in panel._layers if slot.widget is self._popup), None)
+
+    def _own_z(self) -> int:
+        panel = self._panel
+        return next((slot.z for slot in getattr(panel, "_layers", ()) or ()
+                     if slot.widget is self), 70)
+
+    def _open_popup(self, kind: str, labels: list[str], values: list,
+                    focused: int, anchor: Rect) -> None:
+        """Show ``labels`` in the completion popup under ``anchor``. A layer
+        above this dialog that takes no events: the keys stay here
+        (:meth:`_popup_key`), clicks are forwarded (:meth:`_popup_click`)."""
+        self._close_popup()
+        if self._panel is None or not labels:
+            return
+        self._popup = CandidateListOverlay(on_activate=self._popup_pick)
+        self._popup.set_state(labels, focused)
+        self._popup_for = kind
+        self._popup_values = list(values)
+        self._popup_anchor = anchor
+        ox, oy = self._screen_origin
+        self._panel.push_layer(
+            self._popup, z=self._own_z() + 1, interactive=False,
+            hints={"x": ox + anchor.x, "y": oy + anchor.y + anchor.h,
+                   "w": 1.0, "h": 1.0, "shadow": True})
+        self._render()
+
+    def _close_popup(self) -> None:
+        if self._popup is not None and self._panel is not None:
+            self._panel.remove(self._popup)
+        self._popup = None
+        self._popup_for = None
+        self._popup_values = []
+
+    def _popup_pick(self, index: int) -> None:
+        if not 0 <= index < len(self._popup_values):
+            return
+        kind, value = self._popup_for, self._popup_values[index]
+        self._close_popup()
+        if kind == "history":
+            self._use_query(value)
+        elif kind is not None and self.options is not None:
+            self.options.set(kind, value)  # re-runs the search
+        self._render()
+
+    def _popup_key(self, event: Event) -> bool:
+        """Keys while the popup is open. True when the popup took the key; a
+        key it does not use closes it and goes on to the dialog."""
+        popup = self._popup
+        key = event.key
+        n = len(self._popup_values)
+        if key == "escape":
+            self._close_popup()
+        elif key in ("up", "down"):
+            step = -1 if key == "up" else 1
+            i = popup.focused_index
+            i = (i + step) % n if i >= 0 else (n - 1 if step < 0 else 0)
+            popup.set_state(popup.candidates, i)
+        elif key == "enter":
+            self._popup_pick(max(0, popup.focused_index))
+        elif (self._popup_for == "history" and self._on_history_remove is not None
+              and is_action_for_event(event, "remove_list_item", context=FILTER_LIST)):
+            self._forget_focused_query()
+        else:
+            self._close_popup()
+            return False
+        self._render()
+        return True
+
+    def _forget_focused_query(self) -> None:
+        popup = self._popup
+        i = popup.focused_index
+        if not 0 <= i < len(self._popup_values):
+            return
+        self._on_history_remove(self.mode, self._popup_values[i])
+        del self._popup_values[i]
+        labels = popup.candidates[:i] + popup.candidates[i + 1:]
+        if not labels:
+            self._close_popup()
+            return
+        popup.set_state(labels, min(i, len(labels) - 1))
+
+    def _popup_click(self, event: Event) -> bool:
+        """A mouse event over the popup: a click picks the row under it. True
+        when the event was over the popup. Coordinates arrive dialog-local."""
+        slot = self._popup_slot()
+        if slot is None or event.x is None:
+            return False
+        ox, oy = self._screen_origin
+        if not slot.rect.contains(event.x + ox, event.y + oy):
+            return False
+        if event.type is EventType.MOUSE_CLICK:
+            self._popup.handle_event(event.translated(ox - slot.rect.x, oy - slot.rect.y))
+        return True
+
+    def _place_popup(self, ctx) -> None:
+        """Hang the popup from its anchor this frame — it draws after this
+        dialog, so it lands without a flash, on a proportional font too."""
+        slot = self._popup_slot()
+        if slot is None:
+            return
+        ox, oy = self._screen_origin
+        a = self._popup_anchor
+        sw, sh = self._panel.backend.size_units
+        row_h = ctx.line_height()
+        slot.rect = Rect(*overlay_geometry(
+            ox + a.x, oy + a.y, a.h, ox + a.x + ROW_PAD_L, self._popup.candidates,
+            ctx.measure_text, row_h, sw, sh))
 
     def _open_history(self) -> None:
-        """The current mode's recent queries, in a menu hanging from the query
-        field; picking one puts it in the field and searches."""
-        if self._history is None or self._panel is None:
+        """The current mode's recent queries, under the query field; picking
+        one puts it in the field and searches."""
+        if self._history is None:
+            return
+        if self._popup_for == "history":
+            self._close_popup()
+            self._render()
             return
         entries = self._history(self.mode)
-        ox, oy = self._origin()
-        x = ox + self._query_rect.x
-        y = oy + self._query_rect.y + self._query_rect.h
         if not entries:
-            menu = Menu(MenuItem("No recent searches", on_select=lambda: None,
-                                 enabled=lambda: False))
-        else:
-            items = [MenuItem(q, on_select=lambda q=q: self._use_query(q))
-                     for q in entries]
-            if self._on_history_clear is not None:
-                mode = self.mode
-                items += [SEPARATOR, MenuItem(
-                    "Clear Recent Searches",
-                    on_select=lambda: self._on_history_clear(mode))]
-            menu = Menu(*items)
-        self._panel.popup_menu(menu, x, y)
-        self._render()
+            self._error = None
+            self._render()
+            return
+        self._open_popup("history", entries, entries, 0, self._query_rect)
 
     def _use_query(self, query: str) -> None:
         self.query_edit.text = query
@@ -388,21 +499,22 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
     # --- filter chips --------------------------------------------------------
 
     def _open_choice(self, name: str) -> None:
-        """A choice chip's values, in a menu under the chip, the current one
-        checked."""
+        """A choice chip's values under the chip, the current one highlighted;
+        a second click on the chip closes them."""
         option = self.options.option(name) if self.options is not None else None
-        if option is None or self._panel is None:
+        if option is None:
+            return
+        if self._popup_for == name:
+            self._close_popup()
+            self._render()
             return
         rect = next((r for n, r in self._chip_hits if n == name), None)
-        ox, oy = self._origin()
-        x = ox + (rect.x if rect else 0.0)
-        y = oy + (rect.y + rect.h if rect else 0.0)
-        menu = Menu(*[
-            MenuItem(label, on_select=lambda v=value: self.options.set(name, v),
-                     checked=lambda v=value: self.options.get(name) == v)
-            for value, label in option.choices])
-        self._panel.popup_menu(menu, x, y)
-        self._render()
+        values = [v for v, _l in option.choices]
+        labels = [label for _v, label in option.choices]
+        current = self.options.get(name)
+        self._open_popup(name, labels, values,
+                         values.index(current) if current in values else 0,
+                         rect or self._query_rect)
 
     # --- options -------------------------------------------------------------
 
@@ -450,6 +562,8 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
     def draw(self, ctx) -> None:
         self._panel = ctx.panel
         self._size = ctx.size_units
+        sx, sy, _sw, _sh = ctx.screen_rect
+        self._screen_origin = (sx, sy)
         theme = ctx.theme
         wu, _hu = ctx.size_units
         surface_bg = theme.popup_bg if theme is not None else None
@@ -532,6 +646,7 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
         # drop an entry whole instead of handing one over to be cut.
         draw_hint_row(ctx, self.hint(wu - 4.0, ctx.measure_text),
                       surface_bg=surface_bg, border=border)
+        self._place_popup(ctx)
 
     def _draw_status_row(self, ctx, y: float, wu: float, surface_bg, theme) -> None:
         """Draw the status text and, at the right end, one chip per applicable
@@ -689,6 +804,8 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
             return True
         if event.type is EventType.KEY:
             key = event.key
+            if self._popup is not None and self._popup_key(event):
+                return True
             if key == "escape":
                 self._cancel_dialog()
             elif key == "enter":
@@ -710,6 +827,19 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
             EventType.MOUSE_DOWN, EventType.MOUSE_UP, EventType.MOUSE_CLICK,
             EventType.MOUSE_DRAG, EventType.MOUSE_SCROLL,
         ):
+            if self._popup is not None:
+                if self._popup_click(event):
+                    return True
+                if event.type is EventType.MOUSE_CLICK:
+                    # A click anywhere else closes it — and still does its job,
+                    # unless it is on the chip or the ▾ that opened it.
+                    reopen = self._chip_at(event) or (
+                        "history" if self._history_rect.contains(event.x, event.y) else None)
+                    if reopen == self._popup_for:
+                        self._close_popup()
+                        self._render()
+                        return True
+                    self._close_popup()
             chip = self._chip_at(event) if event.type is EventType.MOUSE_CLICK else None
             history = (event.type is EventType.MOUSE_CLICK and event.x is not None
                        and self._history is not None
@@ -762,7 +892,7 @@ def show_progressive_search(
     mode_names: dict[str, str] | None = None,
     can_search: Callable[[str, str], bool] | None = None,
     history: Callable[[str], list[str]] | None = None,
-    on_history_clear: Callable[[str], None] | None = None,
+    on_history_remove: Callable[[str, str], None] | None = None,
 ) -> ProgressiveSearchDialog:
     """Push a modal :class:`ProgressiveSearchDialog` over ``panel`` and return it.
 
@@ -781,7 +911,8 @@ def show_progressive_search(
     ``modes`` are what Tab steps through (``mode_names`` is what the hint
     calls each), ``can_search(mode, query)`` whether there is anything to
     search, and ``history(mode)`` the recent queries the field's ``▾`` offers
-    (``on_history_clear(mode)`` empties them) — see the module docstring.
+    (``on_history_remove(mode, query)`` forgets one) — see the module
+    docstring.
 
     ``region`` anchors the dialog over the active pane (see
     :func:`show_filter_list` for the same convention)."""
@@ -791,7 +922,7 @@ def show_progressive_search(
         initial_mode=initial_mode, result_cap=result_cap, options=options,
         options_title=options_title, ellipsis=ellipsis, elide_where=elide_where,
         modes=modes, mode_names=mode_names, can_search=can_search,
-        history=history, on_history_clear=on_history_clear,
+        history=history, on_history_remove=on_history_remove,
     )
     sw, sh = panel.backend.size_units
     w = max(36.0, min(sw * 0.6, 72.0))

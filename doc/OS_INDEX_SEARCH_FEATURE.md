@@ -56,8 +56,8 @@ The query is written the way that OS's own search reads it.
 | `where System.Kind = 'picture'` | pictures |
 
 Queries you have run before hang from the query field: click `▾` at its
-right end, or press `Alt-↓`, and pick one. **Clear Recent Searches** at the
-bottom of that menu forgets them.
+right end, or press `Alt-↓`, and pick one. `Shift-Delete` forgets the
+highlighted one.
 
 ## The results
 

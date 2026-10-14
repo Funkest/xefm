@@ -71,9 +71,8 @@ first value.
 - The options box shows the value's label, sizes its column to the widest
   label, and takes `←` for the previous value.
 - In the dialog, a set choice chip shows its value (`Images`). A click opens
-  a `popup_menu` of the values, the current one checked, placed under the
-  chip through the layer's origin (`_origin`). A click on an on/off chip
-  still flips it.
+  its values in the popup described below, the current one highlighted. A
+  click on an on/off chip still flips it.
 - `toggle_kind` / `toggle_modified` / `toggle_size` exist as unbound
   `search.` actions, like the other options.
 
@@ -83,23 +82,44 @@ index reads its own query and always descends.
 ## Recent searches
 
 History is input, so it hangs from the input. The dialog takes
-`history(mode)` and `on_history_clear(mode)`:
+`history(mode)` and `on_history_remove(mode, query)`:
 
 - **opening it:** a `▾` at the query field's right end (`_history_rect`),
   or `Alt-↓`;
-- **the menu:** a `popup_menu` under the field of that mode's queries, then
-  *Clear Recent Searches*; picking one fills the field (`_use_query`) and
-  searches;
+- **the list:** that mode's queries in the popup under the field. Picking
+  one fills the field (`_use_query`) and searches; the remove key
+  (`remove_list_item`, the pickers' own) forgets one;
 - **storage:** the app keeps one state key per mode (`_SEARCH_HISTORY`; the
   index keeps #579's `index_search.history`) and records a query when its
   results are fed with Enter;
 - **the result list:** never shows history, and is empty while the field
   is.
 
-`popup_menu` rather than a new PuiKit widget: it is native on macOS and a
-widget popup in a terminal, and needs nothing new. It gives up per-entry
-removal, which *Clear* covers. A history-capable text field, the same in
-every XeFM dialog with a query, would be a PuiKit component.
+## The popup
+
+The history and a choice chip's values open in the completion popup that
+`InputDialog` uses for Tab candidates (`CandidateListOverlay`), not a menu:
+
+- **The same on every backend.** A `popup_menu` is native on macOS and a
+  widget elsewhere, and its widget form opened *under* the dialog in a
+  terminal (z 60 against the dialog's 70). It was unseen, unclosable, and
+  stacked with every click. puikit#159 fixes that for every caller.
+- **It hosts like the completion popup.** It is a layer one above the
+  dialog with `interactive=False`, so the keys stay with the dialog:
+  - `_popup_key`: `↑`/`↓` move, Enter picks, Esc closes, the remove key
+    forgets a query, and any other key closes the popup and goes on as
+    usual, so typing types and Tab switches modes.
+  - `_popup_click`: clicks over the popup pick a row; a click elsewhere
+    closes it and still does its job, unless it is on the chip or `▾` that
+    opened it, which then only closes it.
+- **One at a time.** `_open_popup` closes the previous one.
+- **Placement.** `_place_popup` hangs it from its dialog-local anchor every
+  frame through `overlay_geometry`, from the layer's `screen_rect`. It
+  draws after the dialog, so there is no flash.
+
+The popup is XeFM's own (`xefm/candidate_list.py`). A widget every text
+field shares is PuiKit's by the project's rule, and moving it there is left
+for later.
 
 ## Tests
 
@@ -111,8 +131,9 @@ and in the app:
 - the chips alone searching filenames;
 - the chips narrowing content, and content needing words;
 - `Tab` stepping through every mode;
-- a choice chip's value menu;
-- the history menu from `Alt-↓`;
+- a choice chip's values in the popup, picked by keys and by click, closed
+  by the chip and Esc, one at a time;
+- the history popup from `Alt-↓`, the remove key, and typing closing it;
 - Enter recording the query.
 
 `test/test_os_index.py`: the index as a mode of the dialog, with its history

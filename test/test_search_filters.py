@@ -165,30 +165,95 @@ class InTheApp(unittest.TestCase):
         self.assertEqual(seen[0], seen[-1])
         self.assertEqual(set(seen), set(dialog.modes))
 
-    def test_a_choice_chip_opens_its_values(self):
+    def _popup(self):
+        from xefm.candidate_list import CandidateListOverlay
+        return [slot for slot in self.app.panel._layers
+                if isinstance(slot.widget, CandidateListOverlay)]
+
+    def _click_chip(self, dialog, name):
+        rect = next(r for n, r in dialog._chip_hits if n == name)
+        dialog.handle_event(Event(type=EventType.MOUSE_CLICK, button="left",
+                                  x=rect.x + 0.5, y=rect.y))
+
+    def test_a_choice_chip_opens_its_values_in_the_completion_popup(self):
+        """#609: the completion popup, above the dialog and taking no events
+        of its own — the dialog drives it."""
         dialog = self._dialog()
         self.app.panel.render()
-        rect = next(r for n, r in dialog._chip_hits if n == sf.KIND)
-        menus = []
-        with patch.object(self.app.panel, "popup_menu",
-                          lambda menu, x, y, *a, **k: menus.append(menu)):
-            dialog.handle_event(Event(type=EventType.MOUSE_CLICK, button="left",
-                                      x=rect.x + 0.5, y=rect.y))
-        labels = [item.label for item in menus[0].items]
-        self.assertIn("Images", labels)
-        next(i for i in menus[0].items if i.label == "Images").on_select()
+        self._click_chip(dialog, sf.KIND)
+        slots = self._popup()
+        self.assertEqual(len(slots), 1)
+        self.assertGreater(slots[0].z, self.app.panel._layers[0].z)
+        self.assertFalse(slots[0].interactive)
+        popup = slots[0].widget
+        self.assertIn("Images", popup.candidates)
+        self.assertEqual(popup.focused_index, 0, "the current value")
+        for _ in range(popup.candidates.index("Images")):
+            dialog.handle_event(_key("down"))
+        dialog.handle_event(_key("enter"))
         self.assertEqual(self.app._search_options[sf.KIND], sf.IMAGE)
+        self.assertEqual(self._popup(), [])
+
+    def test_clicking_the_chip_again_closes_it_without_stacking(self):
+        dialog = self._dialog()
+        self.app.panel.render()
+        self._click_chip(dialog, sf.KIND)
+        self.app.panel.render()
+        self._click_chip(dialog, sf.KIND)
+        self.assertEqual(self._popup(), [])
+        self._click_chip(dialog, sf.KIND)
+        self.app.panel.render()
+        self._click_chip(dialog, sf.SIZE)
+        self.assertEqual(len(self._popup()), 1, "one popup at a time")
+        dialog.handle_event(_key("escape"))
+        self.assertEqual(self._popup(), [])
+        self.assertIs(self.app.panel._layers[-1].widget, dialog, "Esc closed the popup only")
+
+    def test_a_click_on_a_value_picks_it(self):
+        dialog = self._dialog()
+        self.app.panel.render()
+        self._click_chip(dialog, sf.SIZE)
+        self.app.panel.render()
+        slot = self._popup()[0]
+        ox, oy = dialog._screen_origin
+        row = slot.widget.candidates.index("1 GB or more")
+        dialog.handle_event(Event(type=EventType.MOUSE_CLICK, button="left",
+                                  x=slot.rect.x + 1 - ox,
+                                  y=slot.rect.y + row * slot.widget._row_h - oy))
+        self.assertEqual(self.app._search_options[sf.SIZE], "1gb")
 
     def test_history_hangs_from_the_field(self):
+        key = self.app._SEARCH_HISTORY["filename"]
+        self.app._record_history(key, "*.txt")
+        self.app._record_history(key, "*.png")
+        dialog = self._dialog()
+        self.app.panel.render()
+        dialog.handle_event(_key("down", mods=("alt",)))
+        popup = self._popup()[0].widget
+        self.assertEqual(popup.candidates, ["*.png", "*.txt"])
+        dialog.handle_event(_key("enter"))
+        self.assertEqual(dialog.query_edit.text, "*.png")
+        self.assertEqual(self._popup(), [])
+
+    def test_the_remove_key_forgets_a_recent_query(self):
+        key = self.app._SEARCH_HISTORY["filename"]
+        self.app._record_history(key, "*.txt")
+        self.app._record_history(key, "*.png")
+        dialog = self._dialog()
+        self.app.panel.render()
+        dialog.handle_event(_key("down", mods=("alt",)))
+        dialog.handle_event(_key("delete", mods=("shift",)))
+        self.assertEqual(self.app._query_history(key), ["*.txt"])
+        self.assertEqual(self._popup()[0].widget.candidates, ["*.txt"])
+
+    def test_typing_closes_the_history_and_types(self):
         self.app._record_history(self.app._SEARCH_HISTORY["filename"], "*.png")
         dialog = self._dialog()
-        menus = []
-        with patch.object(self.app.panel, "popup_menu",
-                          lambda menu, x, y, *a, **k: menus.append(menu)):
-            dialog.handle_event(_key("down", mods=("alt",)))
-        self.assertEqual(menus[0].items[0].label, "*.png")
-        menus[0].items[0].on_select()
-        self.assertEqual(dialog.query_edit.text, "*.png")
+        self.app.panel.render()
+        dialog.handle_event(_key("down", mods=("alt",)))
+        dialog.handle_event(_key("a", "a"))
+        self.assertEqual(self._popup(), [])
+        self.assertEqual(dialog.query_edit.text, "a")
 
     def test_accepting_records_the_query(self):
         dialog = self._dialog()

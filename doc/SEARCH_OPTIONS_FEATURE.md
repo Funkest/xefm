@@ -105,7 +105,9 @@ syntax:
 | `Date` | Any date, modified Today, in the Past 7 days, the Past 30 days, This year |
 | `Size` | Any size, 1 MB, 100 MB or 1 GB or more (files only) |
 
-**Click a chip to pick a value** from a menu under it. A chip that narrows
+**Click a chip to pick a value** from the list that opens under it, the
+same kind of list a path field's `Tab` completion shows. `↑` / `↓` move,
+`Enter` or a click picks, and `Esc` or another click on the chip closes it. A chip that narrows
 the search shows its value (`Images`) in the accent color; one that does not
 shows its name on grey. In the options box they are rows like the others:
 `k`, `m` and `z` step to the next value, and `←` / `→` step either way.
@@ -125,9 +127,11 @@ Search subfolders does.
 ## Recent searches
 
 Each mode keeps the queries you searched with. Click `▾` at the right end of
-the query field, or press `Alt-↓`, for the list. Picking one puts it in the
-field and searches. **Clear Recent Searches** forgets that mode's list. A
-query is remembered when you press `Enter` on its results.
+the query field, or press `Alt-↓`, for the list under the field. `↑` / `↓`
+move, `Enter` or a click puts the query in the field and searches,
+`Shift-Delete` forgets the highlighted one, and `Esc` closes the list. Typing
+closes it too, and types. A query is remembered when you press `Enter` on its
+results.
 
 ## What is remembered
 

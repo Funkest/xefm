@@ -6712,8 +6712,8 @@ class XeFMApp:
                         "index": engine},
             can_search=can_search,
             history=lambda mode: self._query_history(self._SEARCH_HISTORY[mode]),
-            on_history_clear=lambda mode: self.state_manager.set_state(
-                self._SEARCH_HISTORY[mode], []))
+            on_history_remove=lambda mode, query: self._forget_history(
+                self._SEARCH_HISTORY[mode], query))
         self.panel.render()
 
     def _iter_index_matches(self, root: str, query: str, cancel, values: dict):
