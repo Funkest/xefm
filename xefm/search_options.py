@@ -70,9 +70,12 @@ def filename_matcher(pattern: str, *, case: bool) -> Callable[[str], bool]:
 SEARCH_OPTIONS = (
     # Labels first, chips second: the label's initial is the key that toggles it
     # (c, w, r, s here), so the four labels have to start apart.
-    Option(CASE, "Case sensitive", flag="Aa"),
+    # The OS index (#609) reads its own query and always descends, so case and
+    # scope apply to the two walks only.
+    Option(CASE, "Case sensitive", flag="Aa", modes=("filename", "content")),
     Option(WORD, "Whole word", flag="Word", modes=("content",)),
     Option(REGEX, "Regular expression", flag=".*", default=True,
            modes=("content",)),  # filename search speaks glob, not regex
-    Option(SUBDIRS, "Search subfolders", flag="Sub", default=True, persist=False),
+    Option(SUBDIRS, "Search subfolders", flag="Sub", default=True, persist=False,
+           modes=("filename", "content")),
 )

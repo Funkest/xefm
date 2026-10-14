@@ -92,10 +92,18 @@ computer and network scopes, which mean everywhere (no `-onlyin`). Explorer's
 
 ## The app
 
-- `index_search()`: refuses a virtual or URI pane, and otherwise opens
-  `HistoryInputDialog` (state key `index_search.history`, the same picker
-  Open List from Command uses, with the same Enter-takes-the-field rule).
-- `_run_index_search(pane, query, scope, title=, run_search=)`: a `Task`
+- `index_search()`: refuses what `_index_scope` refuses (no index, a
+  virtual or URI pane), and otherwise opens the search dialog in its `index`
+  mode (#609; see [SEARCH_FILTERS_IMPLEMENTATION.md](SEARCH_FILTERS_IMPLEMENTATION.md)).
+  `_iter_index_matches` runs `os_index.search` per query, as a keystroke
+  re-runs any search, and yields its paths through the filter chips. A
+  failure is raised as `SearchFailed`, which the dialog shows on its status
+  line. Until #609 this was a `HistoryInputDialog` of past queries (state
+  key `index_search.history`, still the index mode's history), so results
+  were seen only after Enter, and the list showed input where output
+  belongs.
+- `_run_index_search(pane, query, scope, title=, run_search=)`, now used by
+  saved searches only: a `Task`
   (`busy_label="Searching…"`, counting matches, Esc stops). On completion,
   errors and "nothing found" are logged and the pane is left alone. Matches
   go through `open_path_list` (#453's door), titled `Spotlight: query`, with
@@ -103,12 +111,14 @@ computer and network scopes, which mean everywhere (no `-onlyin`). Explorer's
 - `_enter_file`: a `.savedSearch` on macOS goes to `_open_saved_search`,
   which reads it and runs `search_saved` through the same task, titled with
   the file's stem.
-- The history helpers `_history` / `_record_history` / `_forget_history` are
-  key-generic. The list-command history keeps its own older copies.
+- The history helpers `_query_history` / `_record_history` /
+  `_forget_history` are key-generic. `_query_history` was `_history` until
+  #607: the directory history's `self._history` list shadowed it. The
+  list-command history keeps its own older copies.
 
 ## Not done
 
-Live result panes, Explorer `.search-ms`, AQS, metadata as list columns
+Explorer `.search-ms`, AQS, metadata as list columns
 (#446 §3's `EntryInfo`), Migemo over the index (#507 §5), and an MCP tool
 over this search.
 

@@ -67,10 +67,31 @@ class Option:
     name: str
     label: str
     flag: str
-    default: bool = False
+    default: Any = False
     modes: tuple[str, ...] = ()
     accel: str = ""
     persist: bool = True
+    #: ``((value, label), …)`` for an option with more than two values — a
+    #: search filter's "Any kind / Images / …" (#609). Empty for an on/off
+    #: option. A choice option's default is its first value, and "toggling"
+    #: it steps to the next one.
+    choices: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self):
+        if self.choices and self.default is False:
+            object.__setattr__(self, "default", self.choices[0][0])
+
+    @property
+    def is_choice(self) -> bool:
+        return bool(self.choices)
+
+    def choice_label(self, value: Any) -> str:
+        return next((label for v, label in self.choices if v == value), str(value))
+
+    def is_set(self, value: Any) -> bool:
+        """Whether ``value`` reads as "on": true for an on/off option, anything
+        but the first value for a choice option."""
+        return value != self.default if self.is_choice else bool(value)
 
     @property
     def key(self) -> str:
@@ -83,8 +104,11 @@ class Option:
         return not self.modes or mode is None or mode in self.modes
 
 
-def state_label(value: bool) -> str:
-    """How a value reads in the options dialog's right-hand column."""
+def state_label(value: Any, option: "Option | None" = None) -> str:
+    """How a value reads in the options dialog's right-hand column: on/off,
+    or a choice option's value label."""
+    if option is not None and option.is_choice:
+        return option.choice_label(value)
     return "on" if value else "off"
 
 
@@ -98,15 +122,15 @@ class OptionSet:
     """
 
     def __init__(self, options: Iterable[Option],
-                 values: dict[str, bool] | None = None,
-                 on_change: Callable[[str, bool], None] | None = None):
+                 values: dict[str, Any] | None = None,
+                 on_change: Callable[[str, Any], None] | None = None):
         self.options: tuple[Option, ...] = tuple(options)
         self._by_name = {o.name: o for o in self.options}
-        self.values: dict[str, bool] = {o.name: o.default for o in self.options}
+        self.values: dict[str, Any] = {o.name: o.default for o in self.options}
         if values:
             for name, value in values.items():
                 if name in self._by_name:
-                    self.values[name] = bool(value)
+                    self.values[name] = self._coerce(self._by_name[name], value)
         self.on_change = on_change
 
     # --- reading -------------------------------------------------------------
@@ -134,31 +158,47 @@ class OptionSet:
         The whole option rather than just its ``flag``: a chip is a control, not
         a readout — the surface drawing it needs the name to hand back when one
         is clicked."""
-        return [(o, self.values[o.name]) for o in self.visible(mode)]
+        return [(o, o.is_set(self.values[o.name])) for o in self.visible(mode)]
 
-    def snapshot(self) -> dict[str, bool]:
+    def snapshot(self) -> dict[str, Any]:
         return dict(self.values)
 
     # --- writing -------------------------------------------------------------
 
-    def set(self, name: str, value: bool) -> bool:
+    @staticmethod
+    def _coerce(option: Option, value: Any) -> Any:
+        if option.is_choice:
+            return value if any(v == value for v, _l in option.choices) else option.default
+        return bool(value)
+
+    def set(self, name: str, value: Any) -> bool:
         """Set one value. Returns whether it actually changed — the caller's cue
         to re-run, and what keeps a no-op keystroke from restarting a search."""
         option = self._by_name.get(name)
-        value = bool(value)
-        if option is None or self.values[name] == value:
+        if option is None:
+            return False
+        value = self._coerce(option, value)
+        if self.values[name] == value:
             return False
         self.values[name] = value
         if self.on_change is not None:
             self.on_change(name, value)
         return True
 
-    def toggle(self, name: str) -> bool:
+    def toggle(self, name: str, step: int = 1) -> Any:
         """Flip one option and return its new value (``False`` for a name this
-        set does not know, which is also what an unknown option is worth)."""
-        if name not in self._by_name:
+        set does not know, which is also what an unknown option is worth). A
+        choice option steps to its next value — or its previous one with
+        ``step=-1`` — wrapping round."""
+        option = self._by_name.get(name)
+        if option is None:
             return False
-        self.set(name, not self.values[name])
+        if option.is_choice:
+            values = [v for v, _l in option.choices]
+            i = values.index(self.values[name]) if self.values[name] in values else 0
+            self.set(name, values[(i + step) % len(values)])
+        else:
+            self.set(name, not self.values[name])
         return self.values[name]
 
     def reset_transient(self) -> None:

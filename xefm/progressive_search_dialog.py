@@ -31,8 +31,16 @@ meaning of every option stays with the owner that wrote ``search_iter``, the sam
 division as ``titles`` and ``accept_hint``. Why one key rather than one key per
 option is argued in :mod:`xefm.options`.
 
-``Tab`` switches between ``filename`` and ``content`` search in place and re-runs
-against the same root. Enter accepts the selected row via
+``Tab`` steps through the owner's ``modes`` — ``filename`` and ``content``,
+and ``index`` (the OS's search index) where the owner offers it (#609) — and
+re-runs against the same root. An option with several values (a search filter:
+kind, date, size) is a chip too; clicking it opens a menu of its values.
+
+The query field has a **history** of its own, when the owner supplies one: the
+``▾`` at the field's right end, or ``Alt-↓``, opens the current mode's recent
+queries in a menu under the field, and picking one fills the field. History is
+input, so it stays with the input — the result list only ever lists results,
+and is empty while the field is (#609). Enter accepts the selected row via
 ``on_accept(mode, value)``; Esc (or an outside click) cancels and stops the
 worker. A hint band along the bottom, mirroring the title bar, names those keys
 — including which mode Tab would switch *to*, so the status line above the
@@ -56,6 +64,7 @@ from typing import Any, Callable, Iterator
 
 from puikit.backend import Style
 from puikit.event import Event, EventType
+from puikit.menu import Menu, MenuItem, SEPARATOR
 from puikit.focus import FocusContainer, focus_on_click
 from puikit.panel import Rect
 from puikit.text import elide
@@ -83,7 +92,16 @@ _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 #: Batch cadence: how many hits accumulate before a partial update is published
 #: to the UI thread. Content lines are rarer/heavier, so publish them sooner.
-_BATCH = {"filename": 50, "content": 10}
+_BATCH = {"filename": 50, "content": 10, "index": 50}
+
+class SearchFailed(Exception):
+    """Raised by a ``search_iter`` for a failure the user should read — the
+    OS index could not be queried — shown on the status line like an invalid
+    pattern, rather than swallowed as an empty result."""
+
+
+#: The query field's history affordance, drawn at its right end.
+_HISTORY_GLYPH = "▾"
 
 #: Default cap on results — a huge tree can't grow the list without bound.
 _RESULT_CAP = 1000
@@ -112,12 +130,28 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
         options_title: str = "Search Options",
         ellipsis: str = "…",
         elide_where: str = "end",
+        modes: tuple[str, ...] = ("filename", "content"),
+        mode_names: dict[str, str] | None = None,
+        can_search: Callable[[str, str], bool] | None = None,
+        history: Callable[[str], list[str]] | None = None,
+        on_history_clear: Callable[[str], None] | None = None,
     ):
         self._search_iter = search_iter
         self.to_label = to_label
         self.on_accept = on_accept
         self.on_cancel = on_cancel
         self._titles = titles or {"filename": "Search Files", "content": "Search Content"}
+        #: The modes Tab steps through, in order, and what the hint calls each.
+        self.modes = tuple(modes)
+        self._mode_names = mode_names or {}
+        #: ``(mode, query) -> bool``: whether there is anything to search. By
+        #: default a query; an owner whose filters can search on their own
+        #: (#609: every image changed this week) says so here.
+        self._can_search = can_search or (lambda _mode, query: bool(query))
+        #: ``mode -> [query, …]``, most recent first, or None for no history.
+        self._history = history
+        self._on_history_clear = on_history_clear
+        self._history_rect = Rect(0.0, 0.0, 0.0, 0.0)
         #: What the hint band says Enter does — the owner's knowledge, injected
         #: like ``titles``, because this widget only reports the accepted row.
         self._accept_hint = accept_hint
@@ -182,7 +216,7 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
         self._searching = False
 
         query = self.query_edit.text.strip()
-        if not query:
+        if not self._can_search(self.mode, query):
             self._render()
             return
 
@@ -210,6 +244,8 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
                         break
             except re.error as exc:
                 error = f"Invalid pattern: {exc}"
+            except SearchFailed as exc:
+                error = str(exc)
             except Exception:
                 pass
             finally:
@@ -300,9 +336,73 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
         if panel is not None and panel.has_layers and panel._layers[-1].widget is self:
             panel.pop_layer()
 
+    def _next_mode(self) -> str:
+        modes = self.modes or (self.mode,)
+        i = modes.index(self.mode) if self.mode in modes else -1
+        return modes[(i + 1) % len(modes)]
+
     def _switch_mode(self) -> None:
-        self.mode = "content" if self.mode == "filename" else "filename"
+        self.mode = self._next_mode()
         self._start_search()  # re-run against the same root in the new mode
+
+    # --- history -------------------------------------------------------------
+
+    def _origin(self) -> tuple[float, float]:
+        """This layer's top-left in the panel, for placing a popup menu under
+        something drawn in local coordinates."""
+        panel = self._panel
+        for slot in getattr(panel, "_layers", ()) or ():
+            if slot.widget is self:
+                return slot.rect.x, slot.rect.y
+        return 0.0, 0.0
+
+    def _open_history(self) -> None:
+        """The current mode's recent queries, in a menu hanging from the query
+        field; picking one puts it in the field and searches."""
+        if self._history is None or self._panel is None:
+            return
+        entries = self._history(self.mode)
+        ox, oy = self._origin()
+        x = ox + self._query_rect.x
+        y = oy + self._query_rect.y + self._query_rect.h
+        if not entries:
+            menu = Menu(MenuItem("No recent searches", on_select=lambda: None,
+                                 enabled=lambda: False))
+        else:
+            items = [MenuItem(q, on_select=lambda q=q: self._use_query(q))
+                     for q in entries]
+            if self._on_history_clear is not None:
+                mode = self.mode
+                items += [SEPARATOR, MenuItem(
+                    "Clear Recent Searches",
+                    on_select=lambda: self._on_history_clear(mode))]
+            menu = Menu(*items)
+        self._panel.popup_menu(menu, x, y)
+        self._render()
+
+    def _use_query(self, query: str) -> None:
+        self.query_edit.text = query
+        self.query_edit.cursor = len(query)
+        self._start_search()
+
+    # --- filter chips --------------------------------------------------------
+
+    def _open_choice(self, name: str) -> None:
+        """A choice chip's values, in a menu under the chip, the current one
+        checked."""
+        option = self.options.option(name) if self.options is not None else None
+        if option is None or self._panel is None:
+            return
+        rect = next((r for n, r in self._chip_hits if n == name), None)
+        ox, oy = self._origin()
+        x = ox + (rect.x if rect else 0.0)
+        y = oy + (rect.y + rect.h if rect else 0.0)
+        menu = Menu(*[
+            MenuItem(label, on_select=lambda v=value: self.options.set(name, v),
+                     checked=lambda v=value: self.options.get(name) == v)
+            for value, label in option.choices])
+        self._panel.popup_menu(menu, x, y)
+        self._render()
 
     # --- options -------------------------------------------------------------
 
@@ -374,12 +474,20 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
         else:
             below_gap = 1.0
 
-        self._query_rect = Rect(box_x, y, max(1.0, wu - 2.0 - box_x), field_h)
+        glyph_w = 2.0 if self._history is not None else 0.0
+        self._query_rect = Rect(box_x, y, max(1.0, wu - 2.0 - box_x - glyph_w), field_h)
         self.query_edit.width = int(self._query_rect.w) + 1
         ctx.draw_child(
             self.query_edit, self._query_rect.x, self._query_rect.y,
             self._query_rect.w, self._query_rect.h, hints={"focused": True},
         )
+        if self._history is not None:
+            # The history belongs to the field, so its handle sits on the
+            # field's own row, at its end (#609).
+            hx = self._query_rect.x + self._query_rect.w + 0.5
+            self._history_rect = Rect(hx - 0.5, y, glyph_w, field_h)
+            ctx.draw_text(hx, y + (field_h - 1.0) / 2.0, _HISTORY_GLYPH,
+                          Style(fg=theme.muted_text if theme else None, bg=surface_bg))
         ty = (field_h - 1.0) / 2.0
         ctx.draw_text(
             2.0, self._query_rect.y + ty,
@@ -451,8 +559,9 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
         """
         chips = self.options.chips(self.mode) if self.options is not None else []
         # One space of padding inside each block, one between them: the fill is
-        # the boundary, so the gap only has to keep two fills from touching.
-        labels = [f" {option.flag} " for option, _on in chips]
+        # the boundary, so the gap only has to keep two fills from touching. A
+        # choice chip that is set names its value ("Images"), not its flag.
+        labels = [f" {self._chip_text(option, on)} " for option, on in chips]
         gap = ctx.measure_text(" ") or 1.0
         widths = [ctx.measure_text(label) for label in labels]
         strip_w = sum(widths) + gap * (len(chips) - 1) if chips else 0.0
@@ -479,6 +588,11 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
             # target they get, rather than two columns of it being dead.
             self._chip_hits.append((option.name, Rect(x, y, width, line_h)))
             x += width + gap
+
+    def _chip_text(self, option, on: bool) -> str:
+        if option.is_choice and on:
+            return option.choice_label(self.options.get(option.name))
+        return option.flag
 
     def _chip_at(self, event: Event) -> str | None:
         """The option a mouse event lands on, or ``None``. The strip is drawn
@@ -522,13 +636,17 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
         it is the key every XeFM dialog already answers to. What survives to the
         narrowest box is what a user cannot guess: what Enter does here, which
         mode Tab switches to, and the key that opens the options."""
-        other = "content" if self.mode == "filename" else "filename"
+        other = self._next_mode()
+        other_name = self._mode_names.get(other, other)
         #: (text, how readily it is dropped) — 0 never, then 1, then 2.
         items: list[tuple[str, int]] = [
             ("↑/↓ select", 2),
             (f"Enter {self._accept_hint}", 0),
-            (f"Tab {other}", 0),
         ]
+        if other != self.mode:
+            items.append((f"Tab {other_name}", 0))
+        if self._history is not None:
+            items.append(("Alt-↓ recent", 1))
         key = self._options_key_label() if self.options is not None else ""
         if key:
             # Read back from the keymap so a rebind is what the line says, and
@@ -555,7 +673,7 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
             spin = _SPINNER[self._spin % len(_SPINNER)]
             capped = " (limit)" if n >= self.result_cap else ""
             return f"{spin} Searching…  {n} found{capped}"
-        if not self.query_edit.text.strip():
+        if not self._can_search(self.mode, self.query_edit.text.strip()):
             return "Type to search"
         capped = " (limit reached)" if n >= self.result_cap else ""
         return f"{n} result{'' if n == 1 else 's'}{capped}"
@@ -577,6 +695,9 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
                 self._accept_index(self.list.selected)
             elif key == "tab":
                 self._switch_mode()
+            elif key == "down" and "alt" in (event.modifiers or ()) \
+                    and self._history is not None:
+                self._open_history()
             elif self._handle_option_key(event):
                 pass  # opened the options box, or changed one option in place
             elif key in _LIST_KEYS:
@@ -590,10 +711,20 @@ class ProgressiveSearchDialog(FocusContainer, Widget):
             EventType.MOUSE_DRAG, EventType.MOUSE_SCROLL,
         ):
             chip = self._chip_at(event) if event.type is EventType.MOUSE_CLICK else None
+            history = (event.type is EventType.MOUSE_CLICK and event.x is not None
+                       and self._history is not None
+                       and self._history_rect.contains(event.x, event.y))
             if chip is not None:
-                # A chip is a switch, so clicking one flips it — the same
-                # gesture as a row in the options box, one layer up.
-                self.options.toggle(chip)
+                option = self.options.option(chip)
+                if option is not None and option.is_choice:
+                    # Several values: pick one from a menu under the chip.
+                    self._open_choice(chip)
+                else:
+                    # A chip is a switch, so clicking one flips it — the same
+                    # gesture as a row in the options box, one layer up.
+                    self.options.toggle(chip)
+            elif history:
+                self._open_history()
             elif event.x is not None and self._list_rect.contains(event.x, event.y):
                 local = event.translated(-self._list_rect.x, -self._list_rect.y)
                 self.list.handle_event(local)
@@ -627,6 +758,11 @@ def show_progressive_search(
     ellipsis: str = "…",
     elide_where: str = "end",
     z: int = 70,
+    modes: tuple[str, ...] = ("filename", "content"),
+    mode_names: dict[str, str] | None = None,
+    can_search: Callable[[str, str], bool] | None = None,
+    history: Callable[[str], list[str]] | None = None,
+    on_history_clear: Callable[[str], None] | None = None,
 ) -> ProgressiveSearchDialog:
     """Push a modal :class:`ProgressiveSearchDialog` over ``panel`` and return it.
 
@@ -642,6 +778,11 @@ def show_progressive_search(
     the search when a value changes — but reads no value itself, so ``search_iter``
     is where the owner consults them.
 
+    ``modes`` are what Tab steps through (``mode_names`` is what the hint
+    calls each), ``can_search(mode, query)`` whether there is anything to
+    search, and ``history(mode)`` the recent queries the field's ``▾`` offers
+    (``on_history_clear(mode)`` empties them) — see the module docstring.
+
     ``region`` anchors the dialog over the active pane (see
     :func:`show_filter_list` for the same convention)."""
     dialog = ProgressiveSearchDialog(
@@ -649,6 +790,8 @@ def show_progressive_search(
         on_cancel=on_cancel, titles=titles, accept_hint=accept_hint,
         initial_mode=initial_mode, result_cap=result_cap, options=options,
         options_title=options_title, ellipsis=ellipsis, elide_where=elide_where,
+        modes=modes, mode_names=mode_names, can_search=can_search,
+        history=history, on_history_clear=on_history_clear,
     )
     sw, sh = panel.backend.size_units
     w = max(36.0, min(sw * 0.6, 72.0))

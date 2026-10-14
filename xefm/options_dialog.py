@@ -52,7 +52,7 @@ class OptionsDialog(Widget):
     focusable = True
 
     _TITLE_ROWS = 3.0
-    _HINT = "↑/↓ select · Space or letter toggles · Esc done"
+    _HINT = "↑/↓ select · Space, ←/→ or letter changes · Esc done"
 
     def __init__(self, options: OptionSet, *, title: str = "Options",
                  mode: str | None = None,
@@ -91,6 +91,9 @@ class OptionsDialog(Widget):
         under the cursor would make the list impossible to read.
         """
         widest_state = max(measure(state_label(v)) for v in (False, True))
+        for option in self.rows:
+            for value, _label in option.choices:
+                widest_state = max(widest_state, measure(state_label(value, option)))
         rows = max((measure(o.label) for o in self.rows), default=0.0)
         return max(rows + _VALUE_GAP + widest_state, measure(self._HINT))
 
@@ -116,13 +119,14 @@ class OptionsDialog(Widget):
 
     # --- changing ------------------------------------------------------------
 
-    def toggle_row(self, index: int) -> None:
-        """Flip the option on row ``index``. The change goes through
+    def toggle_row(self, index: int, step: int = 1) -> None:
+        """Flip the option on row ``index`` — or step a choice option to its
+        next value (``step=-1``: its previous one). The change goes through
         :class:`~xefm.options.OptionSet`, which is what notifies the surface —
         this dialog never re-runs anything itself."""
         if 0 <= index < len(self.rows):
             self._index = index
-            self.options.toggle(self.rows[index].name)
+            self.options.toggle(self.rows[index].name, step)
 
     def _accel(self, char: str) -> bool:
         """Act on a plain letter: select that option's row and flip it. Returns
@@ -159,12 +163,13 @@ class OptionsDialog(Widget):
                                Style(bg=theme.selection_active_bg),
                                radius=None, hints={"fill": True})
             row_bg = theme.selection_active_bg if selected else surface_bg
-            on = self.options.get(option.name)
+            value = self.options.get(option.name)
+            on = option.is_set(value)
             ctx.draw_text(3.0, y + row_vy, option.label,
                           Style(fg=theme.text, bg=row_bg))
             # The on/off word carries the same accent/muted reading as the chip
             # strip, so the two surfaces say the same thing about the same option.
-            state = state_label(on)
+            state = state_label(value, option)
             ctx.draw_text(max(3.0, box_w - 3.0 - ctx.measure_text(state)),
                           y + row_vy, state,
                           Style(fg=theme.accent if on else theme.muted_text, bg=row_bg))
@@ -199,7 +204,9 @@ class OptionsDialog(Widget):
             self._index = (self._index - 1) % len(self.rows)
         elif key == "down":
             self._index = (self._index + 1) % len(self.rows)
-        elif key in ("space", "left", "right"):
+        elif key == "left":
+            self.toggle_row(self._index, -1)
+        elif key in ("space", "right"):
             self.toggle_row(self._index)
         elif event.char and len(event.char) == 1 and event.char.isalpha() \
                 and not (event.modifiers - {"shift"}):

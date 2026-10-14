@@ -9,12 +9,27 @@ list you can sort, filter, copy, move and delete in.
 |--------|-----|------|
 | `index_search` | `Ctrl-F` | View → Search Spotlight… (macOS) / Search Windows Search… (Windows) |
 
+It opens the **search dialog** in its index mode, next to Search Files and
+Search Content: `Tab` steps between the three. Results appear **as you type**,
+and `Enter` opens them all in the pane as a list, the cursor on the row you
+were on.
+
 It searches **the active pane's folder and everything below it**. To search
 your whole home folder, run it from there.
 
 This is for macOS and Windows. On Linux, use
 [Open List from Command](FILE_LIST_IMPORT_FEATURE.md) with your indexer's own
 tool (`plocate`, `baloosearch`, `recollq`).
+
+## Without any syntax: the filter chips
+
+The chips at the right of the status row narrow any search: **Kind** (folders,
+documents, images, videos, audio, archives), **Date** (modified today, in the
+past 7 or 30 days, this year) and **Size** (1 MB, 100 MB or 1 GB and more).
+Click one to pick a value. They combine with whatever you type, and with
+nothing typed they search on their own: Kind **Images** and Date **Past 7
+days** finds every picture under this folder changed this week. See
+[Search Options](SEARCH_OPTIONS_FEATURE.md#filter-chips).
 
 ## Writing a query
 
@@ -40,8 +55,9 @@ The query is written the way that OS's own search reads it.
 | `where System.Size > 100000000` | a raw Windows Search SQL condition — here, files over 100 MB |
 | `where System.Kind = 'picture'` | pictures |
 
-Queries you have run before are offered again, most recent first. Type to
-narrow the list, `↓` to pick one, `Shift-Delete` to forget one.
+Queries you have run before hang from the query field: click `▾` at its
+right end, or press `Alt-↓`, and pick one. **Clear Recent Searches** at the
+bottom of that menu forgets them.
 
 ## The results
 
@@ -50,8 +66,7 @@ list feature works there: sort by date or size, filter, select, copy, move,
 view, and `Shift-O` to reveal a file where it really lives. `Backspace`
 returns to the folder.
 
-While the index is being asked, a progress dialog counts the matches, and
-`Esc` stops the search.
+If the index cannot be asked, the reason shows in the dialog's status line.
 
 ## Finder saved searches
 
