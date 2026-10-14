@@ -24,7 +24,18 @@
 # PuiKit is XeFM's UI/rendering framework (the TUI/GUI backend layer), published
 # on PyPI as of 1.0. For co-development against a local checkout, ``make venv``
 # additionally installs it editable from ../puikit, which overrides this pin.
-# 1.8.0 is the floor, and a hard one: the conflict dialog and the compare
+# 1.9.0 is the floor, and a hard one: the first launch asks which keymap
+# preset to use with a message box that Esc must not close (#597), opened with
+# ``show_message_box(..., dismissable=False)`` -- a TypeError on any older
+# PuiKit, so a first launch would fail before the window was usable. It also
+# carries what this XeFM uses where it can: the file clipboard bridge to Finder
+# and Explorer (``clipboard_files``, #577, puikit#155), modifiers on desktop
+# mouse events, side buttons and the drop operation (#589, puikit#156), the
+# drop target answering the cursor badge (``FILE_DRAG_OVER``) and a click on
+# the pane footer reaching it through the splitter's grab band (puikit#157),
+# and a popup menu opening above a modal dialog in a terminal (puikit#159).
+# Those older PuiKits only lack; the message box is what breaks.
+# 1.8.0 was the previous floor, and a hard one: the conflict dialog and the compare
 # dialog size their boxes before they open through ``Panel.layout_context()``,
 # an AttributeError on any older PuiKit, so neither would open -- a copy or
 # move that hits an existing file would stall on a prompt that never appears.
@@ -150,7 +161,7 @@
 # itself from under a covering confirm box -- issue #333), and
 # ``MenuBar.open_menu`` / ``open_menu_mnemonic`` (keyboard menu activation --
 # issue #304).
-puikit>=1.8.0
+puikit>=1.9.0
 pygments
 boto3
 watchdog
