@@ -24,7 +24,11 @@
 # PuiKit is XeFM's UI/rendering framework (the TUI/GUI backend layer), published
 # on PyPI as of 1.0. For co-development against a local checkout, ``make venv``
 # additionally installs it editable from ../puikit, which overrides this pin.
-# 1.9.0 is the floor, and a hard one: the first launch asks which keymap
+# 1.9.1 is the floor, on Windows: 1.9.0's file clipboard raised OverflowError
+# on any 64-bit clipboard handle, so with files on the clipboard (a Copy in
+# Explorer) XeFM died at startup, drawing its paste preview (#620,
+# puikit#160). Elsewhere 1.9.0 behaves the same.
+# 1.9.0 was the previous floor, and a hard one: the first launch asks which keymap
 # preset to use with a message box that Esc must not close (#597), opened with
 # ``show_message_box(..., dismissable=False)`` -- a TypeError on any older
 # PuiKit, so a first launch would fail before the window was usable. It also
@@ -161,7 +165,7 @@
 # itself from under a covering confirm box -- issue #333), and
 # ``MenuBar.open_menu`` / ``open_menu_mnemonic`` (keyboard menu activation --
 # issue #304).
-puikit>=1.9.0
+puikit>=1.9.1
 pygments
 boto3
 watchdog
@@ -190,12 +194,14 @@ pymigemo==0.0.1
 doc-files[pdf]>=0.1.0
 # similar-files finds identical and similar files for Find Similar Files
 # (#571). XeFM runs it as a program of its own (python -m similar_files) and
-# reads the .xft tree it writes; 0.2.0 is the floor because that is where
+# reads the .xft tree it writes; 0.2.1 is the floor because on Windows 0.2.0
+# could lose a scan's final status while XeFM was reading it, so a finished
+# scan showed as running, then lost (#620, similar-files#5). 0.2.0 is where
 # --status, --stop-file and --format tree arrived, and where the tree became
 # .xft (#613). Pure Python; the [image] extra adds only Pillow, which XeFM
 # already requires. Video and audio need ffmpeg / fpcalc on PATH, which the
 # menu names when they are missing.
-similar-files[image]>=0.2.0
+similar-files[image]>=0.2.1
 # comtypes reaches Windows Search (the OS's own file index) over COM, for
 # index_search (#579): OLE DB against Search.CollatorDSO. Pure Python on
 # ctypes, Windows only. macOS needs nothing -- Spotlight is queried through
