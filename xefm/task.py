@@ -377,13 +377,19 @@ class TaskManager:
         if not task.background:
             dialog.pump(panel)
         if not job.finished.is_set():
-            if not task.background:
-                panel.render()
-            else:
-                now = time.monotonic()
-                if now - job.last_render >= self._BACKGROUND_REPAINT_S:
-                    job.last_render = now
+            # A repaint that raises must not end the tick: the backend drops a
+            # raising tick, and this one is the only thing that tears the job
+            # down — a background job would then hold the queue's slot for good.
+            try:
+                if not task.background:
                     panel.render()
+                else:
+                    now = time.monotonic()
+                    if now - job.last_render >= self._BACKGROUND_REPAINT_S:
+                        job.last_render = now
+                        panel.render()
+            except Exception as exc:  # noqa: BLE001 — logged, the job goes on
+                logger.error(f"Repaint during task {task.title!r} failed: {exc}")
             return True
         # Teardown runs exactly once (the tick unregisters below), so it must
         # not be derailed: close first, and keep an on_done failure from

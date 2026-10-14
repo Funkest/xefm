@@ -2015,6 +2015,9 @@ class XeFMApp:
         # it on the monitoring pump. Redirected last, once everything above has
         # initialized, and undone in ``run``'s finally.
         self._log_queue: queue.Queue = queue.Queue()
+        #: The thread that builds the app runs its event loop and is the only
+        #: one that may touch the LogView; ``log_info`` queues from any other.
+        self._ui_thread = threading.current_thread()
         self._orig_stdout = sys.stdout
         self._orig_stderr = sys.stderr
         sys.stdout = _StreamToLog("STDOUT", self._log_queue, on_write=self._wake_pump)
@@ -2411,11 +2414,15 @@ class XeFMApp:
     #: queue and read the same way: diagnostics recessive under XeFM's own
     #: ``log_info`` lines, a warning or error in the same red as stderr. They are
     #: still told apart at a glance by their ``HH:MM:SS [Name] LEVEL:`` prefix.
+    #: ``log_info`` from a worker thread, queued: drawn in the log's own style
+    #: (None), like the lines ``log_info`` appends on the UI thread.
+    _LOG_INFO_SOURCE = "LOG_INFO"
     _LOG_STYLES = {
         "STDERR": _STDERR_STYLE,
         LOG_ERROR_SOURCE: _STDERR_STYLE,
         "STDOUT": _STDOUT_STYLE,
         LOG_SOURCE: _STDOUT_STYLE,
+        _LOG_INFO_SOURCE: None,
     }
 
     def _enqueue_log(self, source: str, line: str) -> None:
@@ -2890,6 +2897,15 @@ class XeFMApp:
         time — the whole log then tracks the active theme (green on a monochrome
         theme, dark on a light one) and recolors on a theme switch, instead of a
         fixed near-white that clashes with monochrome themes like Phosphor."""
+        queue_ = getattr(self, "_log_queue", None)
+        if queue_ is not None and threading.current_thread() is not self._ui_thread:
+            # A file operation logs every file from its worker. LogView is not
+            # thread-safe: an append that trims the buffer while the UI thread
+            # draws it raised in the draw — inside a background job's tick, which
+            # PuiKit then dropped, so the job never released the queue (#620).
+            queue_.put((self._LOG_INFO_SOURCE, message))
+            self._wake_pump()
+            return
         self.log.append(message)
 
     def _log_result(self, result) -> None:
