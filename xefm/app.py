@@ -1027,6 +1027,10 @@ class PaneHeader(Widget):
         self._crumbs = ([] if virtual else
                         _breadcrumbs(text, pane["path"], pad_x, ctx.measure_text))
 
+    #: The rounding of a tab's top corners, in device pixels, where the
+    #: backend draws vector shapes.
+    _TAB_RADIUS_PX = 6.0
+
     def _draw_tabs(self, ctx, tabs, pad_x, y, avail, active) -> None:
         """The tab strip: one chip per tab, ``1 src  2 docs  3 ⌕ TODO``, with a
         gap between chips so every tab has an edge. The strip's ground is the
@@ -1073,7 +1077,15 @@ class PaneHeader(Widget):
             shown = elide(label, max(0.0, w - 2 * inset), where="end",
                           measure=ctx.measure_text)
             chip = current_bg if i == current else idle_bg
-            ctx.fill_rect(x, y, w, 1.0, Style(bg=chip))
+            if ctx.vector_shapes:
+                # Rounded on top only, the way a tab is: a fully rounded face,
+                # then its lower half filled square. Per-corner rounding is not
+                # something every vector backend draws (Windows' does not).
+                ctx.round_rect(x, y, w, 1.0, Style(bg=chip), radius=self._TAB_RADIUS_PX,
+                               hints={"fill": True})
+                ctx.fill_rect(x, y + 0.5, w, 0.5, Style(bg=chip))
+            else:
+                ctx.fill_rect(x, y, w, 1.0, Style(bg=chip))
             if i == current:
                 style = Style(fg=current_fg, bg=chip, attr=TextAttribute.BOLD)
             else:
