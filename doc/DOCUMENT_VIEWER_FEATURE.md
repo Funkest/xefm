@@ -74,6 +74,4 @@ wins. Change the `'view'` of the PDF and Office entries in
 ## Requirements
 
 Reading documents uses [doc-files](https://github.com/crftwr/doc-files),
-which needs nothing but Python, plus [pypdf](https://pypi.org/project/pypdf/)
-for PDF. Without doc-files, these files show the usual "binary file"
-placeholder.
+with [pypdf](https://pypi.org/project/pypdf/) for PDF. Both come with XeFM.
