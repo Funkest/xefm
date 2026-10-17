@@ -369,8 +369,8 @@ Run them with the project's standard invocation
 
 ## Related Documentation
 
-- [Jump Dialog System](JUMP_DIALOG_SYSTEM.md) — the directory-jump picker built on
-  this framework.
+- [Jump to Path Implementation](JUMP_TO_PATH_IMPLEMENTATION.md) — the
+  typed-path prompt, an `InputDialog` call site.
 - [Drives Dialog System](DRIVES_DIALOG_SYSTEM.md) — the storage-location picker
   (a `FilterListDialog` call site).
 - [Menu System](MENU_SYSTEM.md) — the menu-bar / context-menu overlays (also
