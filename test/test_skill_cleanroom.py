@@ -284,3 +284,41 @@ def test_an_interrupted_session_still_leaves_its_transcript(tmp_path, monkeypatc
     with pytest.raises(KeyboardInterrupt):
         run_room.run_session(room, tmp_path, None, 1)
     assert (room / "transcript.jsonl").exists()
+
+
+def test_a_skill_page_that_says_error_is_not_trouble(tmp_path):
+    """A room reads the skill through the shell; the page's own prose is not
+    the command going wrong - even when a long output is cut mid-line."""
+    room = tmp_path / "room"
+    (room / "skills").mkdir(parents=True)
+    (room / "skills" / "config.md").write_text(
+        "A key bound to two actions is not an\n"
+        "  error — one of them silently never fires. A `KEY_BINDINGS` entry\n",
+        encoding="utf-8")
+    _transcript(room / "transcript.jsonl", [
+        ("Bash", {"command": "cat skills/config.md"},
+         "A key bound to two actions is not an\n  error — one of them silently", False),
+        ("Bash", {"command": "xefm ext check ."}, "error: contributes.actions", False)])
+    found = friction.incidents(room / "transcript.jsonl")
+    assert [(i.kind, i.step) for i in found] == [("command trouble", 2)]
+
+
+def test_a_failure_shows_why_and_a_refusal_shows_what(tmp_path):
+    transcript = _transcript(tmp_path / "t.jsonl", [
+        ("Bash", {"command": "cat a.md; echo =====; cat b.md"},
+         "Exit code 1\n# A\nsome text\n(eval):1: ==== not found", True),
+        ("Bash", {"command": "rm log-paths/settings.py"},
+         "Permission to use Bash has been denied because Claude Code is running in "
+         "don't ask mode. IMPORTANT: You *may* attempt…", True)])
+    failed, refused = friction.incidents(transcript)
+    assert failed.evidence == "(eval):1: ==== not found"
+    assert refused.detail == "refused: `rm log-paths/settings.py`"
+    assert refused.evidence == ""
+
+
+def test_writing_up_the_guesses_is_not_doubt(tmp_path):
+    transcript = _transcript(tmp_path / "t.jsonl", [
+        ("Edit", {"file_path": "QUESTIONS.md"}, "updated", False)],
+        texts=["Now recording what I had to guess.",
+               "Next I'll write the guesses into QUESTIONS.md."])
+    assert friction.incidents(transcript) == []

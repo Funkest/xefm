@@ -14,6 +14,18 @@ sends you to. Those files are the whole of what you know about XeFM.
 - Writing an extension package in **this directory**, and installing it with
   `xefm ext install`.
 
+**How the shell is set up here.** Anything else is refused without a prompt,
+and a refusal costs you a step:
+
+- Run one command per Bash call: no `&&`, `;`, `|`, `$(…)` or here-documents.
+  Allowed besides the commands above: `cd`, `ls`, `mkdir`, `cp`.
+- Read and search files with the Read, Grep and Glob tools, not `cat`,
+  `sed` or `grep`.
+- Create and change files with Write and Edit, never with a script or a
+  redirect. That goes for `config.py` and for `QUESTIONS.md` alike.
+- Nothing can be deleted. A file you would delete, such as part of a
+  scaffold you do not need, stays; say so in your final message.
+
 **Forbidden**
 - The XeFM source, anywhere on this machine: a checkout, its `doc/`, its
   tests, its git history, and the installed `xefm` package's files. Do not

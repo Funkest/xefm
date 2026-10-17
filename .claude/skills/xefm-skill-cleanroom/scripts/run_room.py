@@ -305,6 +305,10 @@ def run_session(room: pathlib.Path, bin_dir: pathlib.Path, model: str | None,
     that can read its own log can reconstruct what it was not told)."""
     transcript = pathlib.Path(tempfile.gettempdir()) / f"xefm-cleanroom-{room.parent.name}-{room.name}.jsonl"
     env = dict(os.environ, PATH=f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+    if os.name != "nt":
+        # The operator's login shell is nobody's skill: under zsh, `echo =====`
+        # fails as an `=cmd` expansion, and a room paid a step for it.
+        env["SHELL"] = env["CLAUDE_CODE_SHELL"] = "/bin/bash"
     started = time.monotonic()
     try:
         with subprocess.Popen(session_command(model, max_turns), cwd=room, env=env,
