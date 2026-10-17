@@ -542,7 +542,7 @@ def test_rescan_during_a_slow_compare_does_not_break_the_new_queues(tmp_path, mo
 
     started = threading.Event()
     release = threading.Event()
-    real = DiffEngine.compare_file_content
+    real = DiffEngine.compare_file_bytes
     first = itertools.count()
 
     def slow(left_path, right_path):
@@ -552,7 +552,7 @@ def test_rescan_during_a_slow_compare_does_not_break_the_new_queues(tmp_path, mo
             release.wait(10.0)
         return real(left_path, right_path)
 
-    monkeypatch.setattr(DiffEngine, "compare_file_content", staticmethod(slow))
+    monkeypatch.setattr(DiffEngine, "compare_file_bytes", staticmethod(slow))
 
     errors = []
     monkeypatch.setattr(threading, "excepthook", lambda args: errors.append(args))

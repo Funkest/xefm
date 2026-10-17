@@ -48,8 +48,9 @@ from xefm.external_programs import command_argv, resolve_command
 from xefm.path import Path
 from xefm.str_format import abbreviate_path, format_size, format_timestamp
 from xefm.text_viewer import (MONO, _ScrollBody, _header_bg, draw_status_bar,
-                             footer_key, footer_pair, viewer_layer_hints,
-                             viewer_pad)
+                             footer_key, footer_pair, looks_binary,
+                             viewer_layer_hints, viewer_pad)
+from xefm.binary_compare import ByteComparison, compare_bytes, show_byte_comparison
 from xefm.dialog_geometry import OPEN_MS_VIEWER, animate_open
 from xefm.diff_viewer import show_diff_viewer
 from xefm.text_dialog import keys_markdown, show_markdown
@@ -57,6 +58,7 @@ from xefm.actions import DIR_DIFF as _CONTEXT
 from xefm.config import (KeyBindings, find_action_for_event,
                          format_key_for_display, get_keys_for_action)
 from xefm.file_operations import FileOperationService, compare_mtimes
+from xefm.task import TaskManager
 from xefm import dir_sync
 from xefm import trash as trash_mod
 from xefm.choice_dialog import show_choice_dialog
@@ -128,6 +130,9 @@ class TreeNode:
     #: sync never copies one over the other.
     type_mismatch: bool = False
     dir_side: Optional[str] = None
+    #: The byte compare behind a two-sided file's verdict, kept so Enter on a
+    #: binary file can report it without reading the files again (#631).
+    comparison: Optional[ByteComparison] = None
 
     def is_dir_on(self, side_is_left: bool) -> bool:
         """Whether this node is a directory on that side — which differs from
@@ -302,26 +307,22 @@ class DiffEngine:
             if not node.is_directory:
                 if not self.compare_content:
                     return DifferenceType.PENDING
-                return (DifferenceType.IDENTICAL
-                        if self.compare_file_content(node.left_path, node.right_path)
+                node.comparison = self.compare_file_bytes(node.left_path,
+                                                          node.right_path)
+                return (DifferenceType.IDENTICAL if node.comparison.identical
                         else DifferenceType.CONTENT_DIFFERENT)
         return summarize_directory(node)
 
     @staticmethod
+    def compare_file_bytes(left_path: Path, right_path: Path) -> ByteComparison:
+        """Byte comparison of two files (size check first, then chunks), with
+        the offset of the first difference — see :func:`compare_bytes`."""
+        return compare_bytes(left_path, right_path)
+
+    @staticmethod
     def compare_file_content(left_path: Path, right_path: Path) -> bool:
-        """Byte-equality of two files (size check first, then 8 KB chunks)."""
-        try:
-            if left_path.stat().st_size != right_path.stat().st_size:
-                return False
-            with left_path.open("rb") as lf, right_path.open("rb") as rf:
-                while True:
-                    lc, rc = lf.read(8192), rf.read(8192)
-                    if lc != rc:
-                        return False
-                    if not lc:
-                        return True
-        except (OSError, IOError, PermissionError):
-            return False
+        """Byte-equality of two files; unreadable counts as different."""
+        return compare_bytes(left_path, right_path).identical
 
 
 def _record_sides(node: TreeNode, left: Optional[FileInfo],
@@ -657,11 +658,12 @@ class DirectoryDiffView(Widget):
     def _compare_node(self, node: TreeNode, run: int) -> None:
         if node.left_path is None or node.right_path is None:
             return
-        identical = DiffEngine.compare_file_content(node.left_path, node.right_path)
+        comparison = DiffEngine.compare_file_bytes(node.left_path, node.right_path)
         with self._lock:
             if self._stale(run):
                 return
-            node.difference_type = (DifferenceType.IDENTICAL if identical
+            node.comparison = comparison
+            node.difference_type = (DifferenceType.IDENTICAL if comparison.identical
                                     else DifferenceType.CONTENT_DIFFERENT)
             node.content_compared = True
             self._compared += 1
@@ -1043,7 +1045,9 @@ class DirectoryDiffView(Widget):
                 return
 
     def _open_file_diff(self) -> None:
-        """Enter/`d` on a two-sided differing file opens the per-file diff."""
+        """Enter/`d` on a two-sided differing file opens the per-file diff — or,
+        when either side is binary, reports the byte compare in a message box,
+        from the verdict already held when there is one (#631)."""
         node = self._current()
         if node is not None and node.type_mismatch:
             self._notify("A file on one side, a folder on the other: no diff to show.")
@@ -1051,6 +1055,13 @@ class DirectoryDiffView(Widget):
         if (node is not None and not node.is_directory
                 and node.left_path is not None and node.right_path is not None
                 and self._panel is not None):
+            if looks_binary(node.left_path) or looks_binary(node.right_path):
+                tasks = self._fileops.tasks if self._fileops is not None else TaskManager()
+                show_byte_comparison(self._panel, tasks, node.left_path, node.right_path,
+                                     config=self._config, z=self._child_z,
+                                     background=self._op_background,
+                                     known=node.comparison)
+                return
             show_diff_viewer(self._panel, node.left_path, node.right_path, z=self._child_z,
                              on_edited=self._restart_scan)
 

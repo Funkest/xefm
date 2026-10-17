@@ -16,9 +16,24 @@ same pane or one in each pane — XeFM gathers the selection from both panes:
 3. Press `=` to open the side-by-side diff.
 
 Directories in the selection are ignored; if you don't end up with exactly two
-files, XeFM tells you (`Select exactly 2 files to compare`). A binary file opens
-but shows a `[Binary file — cannot display as text]` placeholder instead of
-content.
+files, XeFM tells you (`Select exactly 2 files to compare`).
+
+### Binary files
+
+When either file is binary (an image, an executable, an archive…), there is no
+text to diff. Instead of the diff viewer, `=` compares the two files byte for
+byte and tells you the answer in a message box: both sizes, then **Identical**,
+**Different (sizes differ)**, or the offset of the first byte that differs.
+
+```
+photo.jpg   2,481,152 bytes
+photo2.jpg  2,481,152 bytes
+
+Identical
+```
+
+Large files, and files on a remote server or inside an archive, are compared
+with a progress dialog you can cancel.
 
 ### Reading the diff
 
@@ -96,7 +111,7 @@ the same rule the copy conflict dialog's **Overwrite older** uses.
 |-----|--------|
 | `↑` `↓` · `PgUp`/`PgDn` · `Home`/`End` | Move the cursor |
 | `→` / `←` | Expand / collapse a directory |
-| `Enter` | Open a directory, or open the per-file diff on a differing file |
+| `Enter` | Open a directory, or open the per-file diff on a differing file (a binary file reports its byte comparison instead) |
 | `n` / `N` | Jump to the next / previous difference |
 | `Tab` | Switch the active side |
 | `[` / `]` | Move the centre split (or drag the gutter) |
@@ -118,8 +133,11 @@ terminal, or `code --diff` in the desktop app).
 ## Notes
 
 - Diffs use Python's `difflib.SequenceMatcher` for a line-by-line comparison.
-- Files are read as UTF-8, falling back to Latin-1 then CP1252; binary content
-  is detected and shown as a placeholder rather than decoded.
+- Files are read as UTF-8, falling back to Latin-1 then CP1252. A file is
+  treated as binary when its first bytes contain a NUL; XeFM keeps no list of
+  binary extensions.
+- `E` still launches your `TEXT_DIFF` tool on any pair, so a binary-capable tool
+  can be used explicitly.
 - The `=` and `Shift+=` keys, and the file-operation keys inside the directory
   diff, are all rebindable in your config's `KEY_BINDINGS`.
 
