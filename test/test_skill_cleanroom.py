@@ -320,5 +320,28 @@ def test_writing_up_the_guesses_is_not_doubt(tmp_path):
     transcript = _transcript(tmp_path / "t.jsonl", [
         ("Edit", {"file_path": "QUESTIONS.md"}, "updated", False)],
         texts=["Now recording what I had to guess.",
-               "Next I'll write the guesses into QUESTIONS.md."])
+               "Next I'll write the guesses into QUESTIONS.md.",
+               "The config already binds the old name, so I edit that entry instead."])
     assert friction.incidents(transcript) == []
+
+
+@pytest.mark.parametrize("answer, error, flagged", [
+    ("507a5ac Merge pull request #647", False, "breach"),
+    ("fatal: not a git repository (or any of the parent directories): .git", True, "refused"),
+])
+def test_the_audit_flags_git_in_the_room(tmp_path, answer, error, flagged):
+    """The room is inside the checkout: `git log` there reads its history."""
+    room = tmp_path / "room"
+    room.mkdir()
+    transcript = room / "transcript.jsonl"
+    transcript.write_text("\n".join(json.dumps(e) for e in [
+        {"type": "system", "subtype": "init", "slash_commands": []},
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "a", "name": "Bash",
+             "input": {"command": "cat RULES.md; ls -la; git log --oneline | head"}}]}},
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "a", "content": answer, "is_error": error}]}},
+        {"type": "result", "result": "done"},
+    ]), encoding="utf-8")
+    breaches, refused = run_room.audit(room, transcript, set())
+    assert any("ran git" in line for line in (breaches if flagged == "breach" else refused))

@@ -70,7 +70,9 @@ UNSURE = re.compile(
     r"not documented|undocumented|doesn't say|does not say|isn't (stated|said|clear)|"
     r"unclear|not sure|no way to|can't tell|cannot tell|couldn't find|could not find|"
     r"\bguess|assum(e|ing)\b|didn't work|did not work|that failed|wrong|mistake|"
-    r"let me (try|retry) again|try again|instead\b", re.IGNORECASE)
+    r"let me (try|retry) again|try again", re.IGNORECASE)
+# Not "instead": "so I edit that entry instead of adding one" is a choice
+# made with the skill's help, and that is most of what the word marks.
 
 #: Where a sentence ends: a stop followed by space, or a line break - not the
 #: "." inside every file name the room mentions.
