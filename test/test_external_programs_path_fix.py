@@ -96,5 +96,23 @@ class TestExternalProgramsPathFix(unittest.TestCase):
             self.assertEqual(env['PATH'], original_path)
 
 
+@_MACOS_ONLY
+def test_main_extends_our_own_path_first(monkeypatch):
+    """#627: XeFM.app from Finder has launchd's bare PATH, and similar-files and
+    the extension checks call ``shutil.which`` against *ours* — not the child
+    env the launchers extend. ``main()`` has to fix ours before any of them
+    run; ``xefm ext`` is the earliest exit, so it is the one probed."""
+    import os
+    import pytest
+    import xefm.app
+    import xefm.extension_cli
+    monkeypatch.setenv('PATH', '/usr/bin:/bin:/usr/sbin:/sbin')
+    monkeypatch.setattr(sys, 'argv', ['xefm', 'ext', 'list'])
+    monkeypatch.setattr(xefm.extension_cli, 'main', lambda argv: 0)
+    with pytest.raises(SystemExit):
+        xefm.app.main()
+    assert '/opt/homebrew/bin' in os.environ['PATH'].split(os.pathsep)
+
+
 if __name__ == '__main__':
     unittest.main()

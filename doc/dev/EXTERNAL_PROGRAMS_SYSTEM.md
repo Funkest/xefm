@@ -68,7 +68,10 @@ run the child process, then restore the renderer and stdio in a `finally` block.
   under the cursor when nothing is selected.
 - `ensure_common_paths_in_env(env)` — on macOS, prepend common binary paths
   (`/usr/local/bin`, `/opt/homebrew/bin`, …) to `PATH`, since an app launched
-  from Finder/Dock does not inherit the user's shell `PATH`.
+  from Finder/Dock does not inherit the user's shell `PATH`. `main()` applies
+  it to `os.environ` once at startup, so lookups in XeFM's own process
+  (similar-files' `ffmpeg`/`fpcalc`, extensions' required programs) see the
+  same `PATH` as launched children (#627).
 - `resolve_command(command, env=None)` — replace the program name with the full
   path `shutil.which` finds for it, searching the launch environment's `PATH`
   (the one `ensure_common_paths_in_env` just extended) rather than ours.

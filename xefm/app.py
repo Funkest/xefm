@@ -11292,6 +11292,13 @@ def _web_access_message(url: str) -> str:
 
 
 def main() -> None:
+    # XeFM.app started from Finder/Dock runs with launchd's bare PATH, not the
+    # login shell's, so Homebrew's ffmpeg/fpcalc were invisible to anything that
+    # searches *our* PATH: similar-files, an extension's required-program check
+    # (#627). Extending the child-process env alone was not enough - extend our
+    # own, once, before anything looks a program up.
+    from xefm.external_programs import ensure_common_paths_in_env
+    ensure_common_paths_in_env(os.environ)
     # `xefm ext …` manages extension packages and never opens a window, so it
     # is dispatched before the UI's own arguments are parsed.
     if len(sys.argv) > 1 and sys.argv[1] == "ext":
