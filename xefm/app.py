@@ -130,6 +130,7 @@ from xefm.tips_dialog import show_tips_dialog
 from xefm import image_decoders
 from xefm.image_viewer import is_image_file, show_image_viewer
 from xefm.text_viewer import looks_binary, show_text_viewer
+from xefm.binary_compare import show_byte_comparison
 from xefm.viewer_registry import rich_renderer_for
 
 #: Share of the content area given to the file panes (vs the log pane) before
@@ -7905,6 +7906,12 @@ class XeFMApp:
                 pass
         if len(files) != 2:
             self.log_info(f"Select exactly 2 files to compare (selected {len(files)})")
+            return
+        if looks_binary(files[0]) or looks_binary(files[1]):
+            # A text diff of two placeholders answers nothing; say whether the
+            # bytes match instead (#631).
+            show_byte_comparison(self.panel, self.tasks, files[0], files[1],
+                                 config=self.config)
             return
         show_diff_viewer(self.panel, files[0], files[1])
         self.panel.render()

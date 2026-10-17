@@ -29,11 +29,29 @@ for pygments syntax colors — so each side keeps its syntax colors with the dif
 tint laid over them. There is no separate file-loading or binary-detection code
 here.
 
+### Binary pairs (`xefm/binary_compare.py`, #631)
+
+A text diff of two binary placeholders answers nothing, so the openers check
+first: when `looks_binary` (the text viewer's NUL sniff of the first 1 KB) holds
+for either file, they call `show_byte_comparison` instead of
+`show_diff_viewer`. It reports `compare_bytes`'s `ByteComparison` (both sizes,
+the 0-based offset of the first differing byte, or an error) in a message box.
+
+- A local pair up to `_INLINE_MAX` (4 MB) is compared on the UI thread; a
+  larger one, or anything behind a URI scheme (`ssh://`, `s3://`,
+  `archive://`), runs on a `Task` with the cancellable progress dialog, the
+  task's `checkpoint` called between 64 KB chunks.
+- Differing sizes are a verdict on their own: nothing is read.
+- The directory diff keeps each file's `ByteComparison` on its `TreeNode`
+  (`comparison`), set wherever the content compare runs, and passes it as
+  `known` so Enter on a binary file reports without reading the files again.
+
 ### Integration with XeFMApp (`xefm/app.py`)
 
 **Method: `diff_files()`** — bound to `=` (the `diff_files` action, `EQUAL` in
 `xefm/_config.py`). It collects the selected files from both panes, validates that
-exactly two non-directory files are selected, and launches the viewer.
+exactly two non-directory files are selected, and launches the viewer — or the
+byte comparison when either file is binary (above).
 
 ## File Selection Logic
 
@@ -165,8 +183,8 @@ themselves are display-only.
 ### File Manager Integration
 
 - **Selection**: reads `pane["selected_files"]` on both panes
-- **Text detection**: none up front — files are read and decoded, with binary
-  content detected from the bytes during the read (see
+- **Text detection**: `looks_binary` on both files before opening, which routes a
+  binary pair to the byte comparison; the read itself also sniffs (see
   [Text Viewer System](TEXT_VIEWER_SYSTEM.md#text-file-detection))
 - **Color scheme**: uses the same theme as the file manager
 
