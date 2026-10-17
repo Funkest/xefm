@@ -75,9 +75,11 @@ def _events(transcript: pathlib.Path) -> list[dict]:
     events = []
     for line in transcript.read_text(encoding="utf-8").splitlines():
         try:
-            events.append(json.loads(line))
+            event = json.loads(line)
         except ValueError:
             continue
+        if isinstance(event, dict):
+            events.append(event)
     return events
 
 
@@ -89,13 +91,20 @@ def _text(content) -> str:
     return str(content or "")
 
 
+def _parts(event: dict) -> list[dict]:
+    """An event's content parts. Not every event has them: a refusal is
+    logged as a system event whose "message" is the refusal's text."""
+    message = event.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    return [part for part in content or [] if isinstance(part, dict)] \
+        if isinstance(content, list) else []
+
+
 def _calls(events: list[dict]) -> list[dict]:
     """Every tool call, in order, with its result and whether it failed."""
     calls, by_id = [], {}
     for event in events:
-        for part in event.get("message", {}).get("content", []) or []:
-            if not isinstance(part, dict):
-                continue
+        for part in _parts(event):
             if event.get("type") == "assistant" and part.get("type") == "tool_use":
                 call = {"name": part.get("name", ""), "input": part.get("input") or {},
                         "result": "", "is_error": False}
@@ -181,7 +190,7 @@ def incidents(transcript: pathlib.Path) -> list[Incident]:
     step = 0
     for event in events:
         if event.get("type") == "assistant":
-            for part in event.get("message", {}).get("content", []) or []:
+            for part in _parts(event):
                 if part.get("type") == "tool_use":
                     step += 1
                 elif part.get("type") == "text":

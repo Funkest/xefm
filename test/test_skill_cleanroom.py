@@ -207,6 +207,20 @@ def test_friction_finds_what_went_wrong(tmp_path):
     assert kinds.count("session") == 1
 
 
+def test_friction_reads_a_refusal_logged_as_a_system_event(tmp_path):
+    """A refused call is also logged as a system event whose "message" is a
+    string, not a dict - every confined room has one."""
+    transcript = _transcript(tmp_path / "t.jsonl", [
+        ("Bash", {"command": "cat /etc/hosts"}, "Permission to use Bash has been denied", True)])
+    lines = transcript.read_text(encoding="utf-8").splitlines()
+    lines.insert(2, json.dumps({"type": "system", "subtype": "permission_denied",
+                                "tool_name": "Bash", "tool_use_id": "t0",
+                                "message": "Permission to use Bash has been denied"}))
+    transcript.write_text("\n".join(lines), encoding="utf-8")
+    kinds = [incident.kind for incident in friction.incidents(transcript)]
+    assert kinds == ["tool error"]
+
+
 def test_a_clean_run_has_no_friction_and_says_so(tmp_path):
     room = tmp_path / "room"
     room.mkdir()
@@ -236,10 +250,14 @@ def test_findings_gather_failures_friction_and_questions(tmp_path):
     assert "Which action name reloads" in text
 
 
-def test_the_audit_flags_the_checkout_in_a_windows_spelling(tmp_path):
+def test_the_audit_flags_the_checkout_in_a_windows_spelling(tmp_path, monkeypatch):
+    # A checkout at a Windows path on every OS: on macOS the real ROOT has no
+    # drive letter, and a backslashed /Users/... is not a path anyone would write.
+    checkout = pathlib.PureWindowsPath("C:/Users/me/xefm")
+    monkeypatch.setattr(run_room, "ROOT", checkout)
     room = tmp_path / "room"
     room.mkdir()
-    windows = str(ROOT / "xefm" / "_config.py").replace("/", "\\")
+    windows = str(checkout / "xefm" / "_config.py")
     transcript = room / "transcript.jsonl"
     transcript.write_text("\n".join(json.dumps(e) for e in [
         {"type": "system", "subtype": "init", "slash_commands": []},
