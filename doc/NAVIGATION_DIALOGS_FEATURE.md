@@ -2,19 +2,21 @@
 
 XeFM's directory navigation dialogs all share one searchable-list picker: a
 scrollable list you filter by typing, with the same keys for moving through it
-and choosing an entry. Five actions open five flavors of that picker (press `F1`
+and choosing an entry. Four actions open four flavors of that picker (press `F1`
 for the keys yours are on, or find them in the **Go** menu):
 
 | Action | Dialog | What it lists |
 |--------|--------|---------------|
 | `favorites` | Favorites | Your favorite directories and files |
-| `jump_to_path` | Jump | Directories found by scanning from the current directory |
 | `history` | History | Directories you have already visited in this pane |
 | `drives` | Drives | Storage locations and volumes (and S3 buckets, if available) |
 | `connect_server` | Connect to Server | Saved servers, plus the ones found on the network (macOS and Windows) |
 
 Whichever one you open, pressing **Enter** navigates the current pane to the
 selected location.
+
+A fifth way to go somewhere, [Jump to Path](#jump-to-path) (`jump_to_path`), is
+not a list: it is a field you type or paste a path into.
 
 ## Shared controls
 
@@ -158,29 +160,30 @@ takes to switch.
 To use different keys, rebind the `favorites` and `add_favorite` actions in
 `KEY_BINDINGS`, e.g. `'favorites': ['f']`.
 
-## Jump dialog
+## Jump to Path
 
-The **Jump** dialog (`jump_to_path`) searches your filesystem for directories and
-jumps to a match.
-This is ideal for reaching a deeply nested directory without navigating the tree
-by hand.
+**Jump to Path** (`jump_to_path`, also **Go ▸ Jump to Path…**) asks for a path
+and takes the current pane there. It is a text prompt, not a list: the
+[shared list controls](#shared-controls) above do not apply to it.
 
-- Scans from the **current directory** downward and lists directory paths
-  relative to that root
-- Scanning runs in the background with a progress indicator, and can be
-  cancelled
-- The scan is bounded by an internal cap (not user-configurable) so the dialog
-  stays responsive
+The field opens with the current directory already in it, ending in a
+separator, so you can type the name of a directory inside it straight away —
+or select the whole field and paste a path from somewhere else. It accepts:
 
-Type to filter as results stream in. You can match a plain directory name
-(`projects`), a path fragment (`work/src`), or a hidden directory (`.config`).
+- an absolute path (`/var/log`, `C:\Users`)
+- a path relative to the current directory (`src/xefm`, `..`)
+- `~` for your home directory (`~/Documents`)
+- a remote address: `ssh://host/path` or `s3://bucket/prefix` (see
+  [SFTP support](SFTP_SUPPORT_FEATURE.md) and [S3 support](S3_SUPPORT_FEATURE.md))
 
-**Tips for large or network filesystems:** narrow the search by starting from a
-more specific directory before opening the dialog (navigate into `~/Documents`
-first rather than scanning all of `~`). Permission-denied directories are
-skipped automatically. If an expected directory does not appear, it may be
-beyond the internal scan cap — start from a closer parent, or use Favorites for
-known locations.
+**Tab** completes the name you are typing, files as well as directories — see
+[Tab completion](TAB_COMPLETION_FEATURE.md).
+
+A path to a **file** opens the directory it is in, with the cursor on the file —
+handy for a full path copied out of a log or an error message.
+
+Press **Enter** to go. A path that does not exist keeps the prompt open and says
+so, and **Esc** closes it without moving the pane.
 
 ## History (H)
 
@@ -264,8 +267,7 @@ rather than forcing it.
 
 - **Favorites (J)** — instant, for a handful of directories you use constantly
 - **History (H)** — instant, for somewhere you were a moment ago
-- **Jump** — slower (scans the disk), for finding a directory you
-  don't have memorized
+- **Jump to Path** — for a location you can type or paste
 - **Drives (D)** — for switching between volumes, drives, or S3 buckets, and
   for disconnecting or ejecting one
 - **Connect to Server** — for mounting a NAS or file server in the
