@@ -14,6 +14,25 @@ sends you to. Those files are the whole of what you know about XeFM.
 - Writing an extension package in **this directory**, and installing it with
   `xefm ext install`.
 
+**How the shell is set up here.** A command that changes anything is
+refused without a prompt unless it is one of those above or `cd`, `ls`,
+`mkdir`, `cp` - and a refusal costs you a step. A plain command that only
+reads (`cat`, `grep`, `ls`) goes through; a loop or a `$(…)` is refused even
+when all it does is read.
+
+- Run a command that changes something on its own in a Bash call: joined to
+  another with `&&`, `;`, `|`, `$(…)` or a here-document, it is refused.
+- Read and search with the Read, Grep and Glob tools where you can; they
+  are what this room is set up for.
+- Create and change files with Write and Edit, never with a script or a
+  redirect. That goes for `config.py` and for `QUESTIONS.md` alike.
+- Nothing can be deleted. A file you would delete, such as part of a
+  scaffold you do not need, stays; say so in your final message.
+- Nothing outside this directory and `~/.xefm/` can be looked at, not
+  even to check the user's machine (whether a program is installed, what is
+  on the PATH). What you would have checked, write down as a question and
+  tell the user to check.
+
 **Forbidden**
 - The XeFM source, anywhere on this machine: a checkout, its `doc/`, its
   tests, its git history, and the installed `xefm` package's files. Do not

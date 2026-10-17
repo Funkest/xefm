@@ -305,9 +305,20 @@ def run_session(room: pathlib.Path, bin_dir: pathlib.Path, model: str | None,
     that can read its own log can reconstruct what it was not told)."""
     transcript = pathlib.Path(tempfile.gettempdir()) / f"xefm-cleanroom-{room.parent.name}-{room.name}.jsonl"
     env = dict(os.environ, PATH=f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
+    if os.name != "nt":
+        # The operator's login shell is nobody's skill: under zsh, `echo =====`
+        # fails as an `=cmd` expansion, and a room paid a step for it.
+        env["SHELL"] = env["CLAUDE_CODE_SHELL"] = "/bin/bash"
+    # The room sits inside the checkout, and `git log` there is read-only, so
+    # nothing refuses it - and the history says what every skill change was
+    # for. Git stops looking for a repository at the room.
+    env["GIT_CEILING_DIRECTORIES"] = str(room.parent)
     started = time.monotonic()
     try:
+        # stdin closed: `claude -p` otherwise waits 3s for piped input, and
+        # says so into the transcript.
         with subprocess.Popen(session_command(model, max_turns), cwd=room, env=env,
+                              stdin=subprocess.DEVNULL,
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               text=True, encoding="utf-8", bufsize=1) as session, \
                 transcript.open("w", encoding="utf-8") as log:
@@ -386,9 +397,11 @@ def audit(room: pathlib.Path, transcript: pathlib.Path,
             breaches.append(f"the checkout's own skills were visible: {leaked}")
     if "without --restricted" in final_reply(transcript):
         breaches.append("the room read its canary: started without --restricted")
-    refused_ids = {part.get("tool_use_id") for e in events if e.get("type") == "user"
-                   for part in e.get("message", {}).get("content", [])
-                   if part.get("type") == "tool_result" and part.get("is_error")}
+    results = {part.get("tool_use_id"): part for e in events if e.get("type") == "user"
+               and isinstance(e.get("message"), dict)
+               for part in e["message"].get("content") or []
+               if isinstance(part, dict) and part.get("type") == "tool_result"}
+    refused_ids = {i for i, part in results.items() if part.get("is_error")}
     # Compared in one spelling (see _norm): on Windows the room's tools are
     # pointed at C:\Users\..., and a check written for /Users/... found none
     # of it - a read of the checkout went unflagged.
@@ -406,6 +419,10 @@ def audit(room: pathlib.Path, transcript: pathlib.Path,
                 continue
             landed = refused if part.get("id") in refused_ids else breaches
             given = part.get("input", {})
+            if part.get("name") == "Bash" and _GIT.search(str(given.get("command", ""))):
+                answer = str(results.get(part.get("id"), {}).get("content", ""))
+                (refused if "not a git repository" in answer else landed).append(
+                    f"Bash ran git, whose history is the checkout's: {given['command'][:80]}")
             for key in ("file_path", "path", "pattern", "command", "glob"):
                 value = given.get(key)
                 if not isinstance(value, str):
@@ -420,6 +437,10 @@ def audit(room: pathlib.Path, transcript: pathlib.Path,
                     if any(_norm(f"/.xefm/extensions/{name}") in spelled for name in foreign):
                         landed.append(f"{part['name']} read another extension: {aimed}")
     return sorted(set(breaches)), sorted(set(refused))
+
+
+#: A git command anywhere in a shell line.
+_GIT = re.compile(r"(?:^|[;&|(`]|\$\()\s*git\s")
 
 
 #: An absolute path in either spelling: /Users/..., C:\Users\... or C:/Users/...

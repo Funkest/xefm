@@ -56,6 +56,12 @@ TROUBLE = re.compile(
     r"Traceback|^\s*(error|ERROR)\b|\berror:|\bFAILED\b|\d+ failed\b|"
     r"\bnot found\b|No such file|refused in the clean room", re.MULTILINE)
 
+#: The room's bookkeeping: saying it is now writing up its guesses is not a
+#: guess.
+BOOKKEEPING = re.compile(
+    r"QUESTIONS|\b(writ\w*|record\w*|not\w*|log\w*) (down |up )?(the |my |what |in )",
+    re.IGNORECASE)
+
 #: The file tools' own "nothing here" answers.
 NOTHING_FOUND = re.compile(r"^(No matches found|No files found)", re.IGNORECASE)
 
@@ -64,7 +70,9 @@ UNSURE = re.compile(
     r"not documented|undocumented|doesn't say|does not say|isn't (stated|said|clear)|"
     r"unclear|not sure|no way to|can't tell|cannot tell|couldn't find|could not find|"
     r"\bguess|assum(e|ing)\b|didn't work|did not work|that failed|wrong|mistake|"
-    r"let me (try|retry) again|try again|instead\b", re.IGNORECASE)
+    r"let me (try|retry) again|try again", re.IGNORECASE)
+# Not "instead": "so I edit that entry instead of adding one" is a choice
+# made with the skill's help, and that is most of what the word marks.
 
 #: Where a sentence ends: a stop followed by space, or a line break - not the
 #: "." inside every file name the room mentions.
@@ -132,6 +140,54 @@ def _first_line(text: str, pattern: re.Pattern | None = None) -> str:
     return (lines[0] if lines else "")[:220]
 
 
+def _command(call: dict, width: int = 100) -> str:
+    command = " ".join(str(call["input"].get("command", "")).split())
+    return command if len(command) <= width else command[:width - 1] + "…"
+
+
+def _skill_lines(room: pathlib.Path) -> set[str]:
+    """Every line of the skill the room was given. A command that shows a
+    skill page prints them, and a page that says "error:" is not an error."""
+    lines = set()
+    for path in (room / "skills").rglob("*"):
+        if path.is_file():
+            try:
+                lines.update(line.strip() for line in
+                             path.read_text(encoding="utf-8").splitlines())
+            except (UnicodeDecodeError, OSError):
+                continue
+    lines.discard("")
+    return lines
+
+
+def _trouble(result: str, quoted: set[str]) -> list[str]:
+    """The lines of a command's output that say it went wrong - not the ones
+    it printed out of a skill page."""
+    return [line.strip() for line in result.splitlines()
+            if TROUBLE.search(line) and not _quoted(line.strip(), quoted)]
+
+
+def _quoted(line: str, quoted: set[str]) -> bool:
+    # A long output is cut short mid-line, so part of a skill line counts too.
+    return line in quoted or (len(line) >= 20 and any(line in q for q in quoted))
+
+
+def _failure(call: dict, quoted: set[str]) -> tuple[str, str]:
+    """What a failed call was, and the line that says why. A refusal names
+    the command and nothing more: its text is the same every time. A failed
+    command's first line is its exit code; the reason is further down."""
+    result = call["result"].replace("<tool_use_error>", "").replace("</tool_use_error>", "")
+    if call["name"] != "Bash":
+        return f"{call['name']} failed", _first_line(result)
+    if "Permission to use" in result or "has been denied" in result:
+        return f"refused: `{_command(call)}`", ""
+    lines = [line.strip() for line in result.splitlines()
+             if line.strip() and not re.fullmatch(r"Exit code \d+", line.strip())]
+    trouble = _trouble(result, quoted)
+    why = trouble[0] if trouble else lines[-1] if lines else ""
+    return f"`{_command(call)}` failed", why[:220]
+
+
 def _written(call: dict) -> str | None:
     """The user-side file a call replaced wholesale, if it did. Edits are
     not counted: several small edits to one file is how editing goes."""
@@ -156,6 +212,7 @@ def incidents(transcript: pathlib.Path) -> list[Incident]:
         return [Incident("session", 0, "no transcript - the room never ran")]
     events = _events(transcript)
     calls = _calls(events)
+    quoted = _skill_lines(transcript.parent)
     found: list[Incident] = []
     writes: dict[str, list[int]] = {}
     installs: dict[str, list[int]] = {}
@@ -163,12 +220,10 @@ def incidents(transcript: pathlib.Path) -> list[Incident]:
     for step, call in enumerate(calls, 1):
         name = call["name"]
         if call["is_error"]:
-            found.append(Incident("tool error", step, f"{name} failed",
-                                  _first_line(call["result"])))
-        elif name == "Bash" and TROUBLE.search(call["result"]):
-            command = " ".join(str(call["input"].get("command", "")).split())[:80]
-            found.append(Incident("command trouble", step, f"`{command}`",
-                                  _first_line(call["result"], TROUBLE)))
+            found.append(Incident("tool error", step, *_failure(call, quoted)))
+        elif name == "Bash" and (trouble := _trouble(call["result"], quoted)):
+            found.append(Incident("command trouble", step, f"`{_command(call)}`",
+                                  trouble[0][:220]))
         elif name in ("Grep", "Glob") and NOTHING_FOUND.match(call["result"].strip()):
             found.append(Incident("searched, found nothing", step,
                                   f"{name} {call['input'].get('pattern', '')!r} came back empty"))
@@ -184,6 +239,8 @@ def incidents(transcript: pathlib.Path) -> list[Incident]:
                                   f"{what} {verb} {len(steps)} times "
                                   f"(steps {', '.join(map(str, steps))})"))
 
+    failed_at = {i.step for i in found if i.kind in ("tool error", "command trouble")}
+
     # The final reply is read on its own below; here it would count twice.
     final = next((e.get("result", "") or "" for e in reversed(events)
                   if e.get("type") == "result"), "")
@@ -197,9 +254,14 @@ def incidents(transcript: pathlib.Path) -> list[Incident]:
                     text = part.get("text", "")
                     if final and text.strip() == final.strip():
                         continue
-                    if match := UNSURE.search(text):
-                        found.append(Incident("said so", step, "while working",
-                                              _sentence(text, match)))
+                    for match in UNSURE.finditer(text):
+                        sentence = _sentence(text, match)
+                        # Writing up its guesses is bookkeeping, and "so I'll
+                        # do it another way" right after a failure is that
+                        # failure again, already listed.
+                        if BOOKKEEPING.search(sentence) or step in failed_at:
+                            continue
+                        found.append(Incident("said so", step, "while working", sentence))
         elif event.get("type") == "result":
             if event.get("subtype") not in (None, "success") or event.get("is_error"):
                 found.append(Incident("session", step,
