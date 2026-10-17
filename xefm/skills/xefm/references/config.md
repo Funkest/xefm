@@ -163,12 +163,13 @@ are appended to it.
   editor for this kind of file". If the user's request is about one file
   type, that is the place; if it is about every file, check no rule overrides
   it for the files they mean.
-- **XeFM waits for `TEXT_EDITOR` to exit**, in the terminal *and* in the
-  desktop app. In the terminal that is what hands the editor the screen. In
-  the desktop app it means XeFM's window does not respond until the editor
-  process ends — so `['code', '--wait']` there keeps XeFM busy until the tab
-  is closed, while plain `'code'` returns at once. If the user asks for
-  `--wait` in the desktop app, make the change and tell them this.
+- **In the terminal XeFM waits for `TEXT_EDITOR` to exit**: that is what
+  hands the editor the screen, and what makes Edit Configuration reload on
+  return. **The desktop app never waits**: the editor is started in a window
+  of its own and XeFM stays responsive, so a wait flag (`code --wait`,
+  `subl -w`) changes nothing there — harmless, but not needed. Edit
+  Configuration then asks the user to run Reload Configuration once saved,
+  and Rename in Editor asks them to press Apply.
 - The desktop app adds `/usr/local/bin` and `/opt/homebrew/bin` to the PATH
   it runs programs with (macOS). A program elsewhere needs its full path.
 

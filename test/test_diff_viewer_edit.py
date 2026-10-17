@@ -52,6 +52,8 @@ def files(tmp_path):
 def _viewer(files, monkeypatch, tool, run=None, on_edited=None):
     """A DiffViewer on ``files`` with the config, subprocess, and panel faked."""
     monkeypatch.setattr(dv, "get_config", lambda: _Config(tool))
+    # is_desktop_mode caches process-global detection; pin terminal mode.
+    monkeypatch.setattr(dv, "is_desktop_mode", lambda: False)
     calls = []
     monkeypatch.setattr(dv.subprocess, "run",
                         run if run is not None else lambda argv: calls.append(argv))
@@ -118,3 +120,19 @@ def test_command_not_found_notifies(files, monkeypatch):
     monkeypatch.setattr(viewer, "_notify", notes.append)
     viewer._edit_in_tool()
     assert notes == ["Command not found: nosuchtool"]
+
+
+def test_desktop_mode_detaches_the_tool(files, monkeypatch):
+    """A tool told to wait (``code --diff --wait``) must not freeze the window:
+    in desktop mode it is started and left running, not waited for (#644)."""
+    edited = []
+    viewer, calls = _viewer(files, monkeypatch, ["difftool", "--wait"],
+                            on_edited=lambda: edited.append(True))
+    monkeypatch.setattr(dv, "is_desktop_mode", lambda: True)
+    spawned = []
+    monkeypatch.setattr(dv.subprocess, "Popen", lambda argv: spawned.append(argv))
+    viewer._edit_in_tool()
+    assert calls == []
+    assert spawned == [["difftool", "--wait", str(files[0]), str(files[1])]]
+    assert viewer._panel.backend.suspend_count == 0
+    assert edited == []

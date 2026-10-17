@@ -25,7 +25,7 @@ SCENARIOS = outcome.load_scenarios()
 FIXTURE = outcome.fixture_config()
 #: A reply that says what a good one would, for the checks that read it.
 REPLY = ("Done. Ctrl-T was the command palette; choose the theme in View ▸ Theme. "
-         "With --wait, XeFM is unresponsive until you close the tab.")
+         "The desktop app does not wait for the editor, so --wait is not needed there.")
 
 
 def _fixture(scenario):

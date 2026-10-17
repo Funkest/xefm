@@ -97,13 +97,31 @@ class EditConfig(ConfigReloadBase):
         """)
         with patch("xefm.app.is_desktop_mode", return_value=True), \
              patch("subprocess.run") as run, \
+             patch("subprocess.Popen") as popen, \
              patch.object(self.app, "reload_config") as reload, \
              patch.object(self.app, "log_info") as log:
             self.app.edit_config()
-        run.assert_called_once()
+        # Detached, never waited for: `code --wait` must not freeze us (#644).
+        run.assert_not_called()
+        popen.assert_called_once()
+        self.assertEqual(popen.call_args.args[0][-1],
+                         str(config_manager.config_file))
         reload.assert_not_called()
         logged = " ".join(str(c.args[0]) for c in log.call_args_list)
         self.assertIn("Reload Configuration", logged)
+
+    def test_gui_mode_editor_not_found_says_so(self):
+        self._write_config("""
+            class Config:
+                pass
+        """)
+        with patch("xefm.app.is_desktop_mode", return_value=True), \
+             patch("subprocess.Popen", side_effect=FileNotFoundError), \
+             patch.object(self.app, "log_info") as log:
+            self.app.edit_config()
+        logged = [str(c.args[0]) for c in log.call_args_list]
+        self.assertTrue(any(m.startswith("Command not found: ") for m in logged))
+        self.assertFalse(any("Reload Configuration" in m for m in logged))
 
     def test_creates_default_config_when_missing(self):
         missing = Path(os.path.join(self.cfgdir, "nope", "config.py"))

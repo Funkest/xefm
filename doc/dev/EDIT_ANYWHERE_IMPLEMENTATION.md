@@ -31,7 +31,8 @@ scope.
    TEXT_EDITOR, batched per program.
 3. When the editor returns, `_poll_edit_sessions(reschedule=False)` runs once.
    A blocking terminal editor's save is uploaded right away, without waiting
-   for a timer.
+   for a timer. In desktop mode the editor is detached (`_run_editor`, #644)
+   and returns at once, so the timer picks up its saves.
 4. `_schedule_edit_poll` keeps one `panel.call_later` timer
    (`_EDIT_POLL_SECONDS`) armed while any session exists. Each poll calls
    `EditSessions.saved()`. That costs one `os.stat` per copy; a hash is taken
@@ -96,10 +97,11 @@ The module is pure:
   A failure in phase 3 names the temporary file in its error.
 
 `XeFMApp.rename_in_editor` writes the list with `tempfile.mkstemp`, and
-`_rename_edit_round` runs the editor through `_run_in_terminal`. If the list is
-unchanged and the editor returned quickly (under `_EDITOR_RETURNED_AT_ONCE`) or
-XeFM is in desktop mode, the editor is assumed to be a window that is still
-open. In that case an Apply/Cancel box waits for the user, which is the
+`_rename_edit_round` runs the editor through `_run_editor`, which hands over
+the terminal and waits in terminal mode and detaches in desktop mode (#644). An
+editor that cannot be started drops the list. If the list is unchanged and the
+editor returned quickly (under `_EDITOR_RETURNED_AT_ONCE`) or XeFM is in
+desktop mode, the editor is assumed to be a window that is still open. In that case an Apply/Cancel box waits for the user, which is the
 explicit apply step the discussion asked for. Otherwise
 `_review_rename_list` shows the errors (Edit Again / Cancel) or the
 `old → new` preview (Rename / Edit Again / Cancel). The preview is capped at

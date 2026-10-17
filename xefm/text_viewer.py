@@ -1310,7 +1310,7 @@ class TextViewer(Widget):
         # So does editing: the viewed file goes to the app's editor machinery
         # (associations + TEXT_EDITOR), then the viewer re-reads it. A terminal
         # editor runs synchronously via suspend/resume, so the reload shows its
-        # result; a GUI editor returns immediately and the reload is a no-op.
+        # result; in desktop mode the editor is detached and the reload is a no-op.
         if self._on_edit is not None and action == "edit_file":
             self._edit_file()
             return True
