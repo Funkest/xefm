@@ -67,7 +67,25 @@ Printed per scenario:
 - **must** — the scenario's `MUST` list, for you to read against the reply
   and the transcript. A miss is a skill defect, not a model defect: fix the
   skill, and re-run every scenario if the change was to a rule.
-- **questions** — read `QUESTIONS.md`. That is the result.
+- **friction** — `FRICTION.md`, from `scripts/friction.py`: where the
+  transcript shows the room stumbling, *whether or not it noticed* — a tool
+  call that failed or was refused, a command that printed an error (`xefm ext
+  check` complaining before it passed, a failing test), a search of the skill
+  that came back empty, config.py written wholesale or an extension installed
+  more than once, a session that ran out of turns, and the sentences where
+  the room said it was unsure or had it wrong. Read off the record, not the
+  room's account of it.
+- **questions** — `QUESTIONS.md`: what the room noticed it had to guess.
+
+`FINDINGS.md`, beside the rooms, gathers every scenario's check failures,
+friction and questions in one place; that is the result. **Friction that no
+question mentions is the most valuable kind** — the gap the room worked
+around without seeing it — and zero questions is still not a pass.
+
+**Not every item is a skill gap.** Sort each one: a *skill gap* (the skill
+should have said it — fix the skill), *out of scope* (true of the task or
+the user's setup, not of XeFM), or *tooling* (the room's own tools or this
+runner). Only the first changes the skill.
 
 ## Scenarios
 

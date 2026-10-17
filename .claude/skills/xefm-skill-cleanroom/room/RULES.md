@@ -33,7 +33,8 @@ sends you to. Those files are the whole of what you know about XeFM.
   on. A run that stops to ask has measured nothing.
 
 **When the skill does not tell you something, write it down and guess.**
-Append to `./QUESTIONS.md`:
+Append to `./QUESTIONS.md` - it already exists, so add to it with an edit and
+never write it from scratch, which would replace what is there:
 
 ```
 ## <what you needed to know>

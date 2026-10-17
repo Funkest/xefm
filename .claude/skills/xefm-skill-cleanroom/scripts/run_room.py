@@ -28,6 +28,7 @@ import datetime
 import json
 import os
 import pathlib
+import re
 import shlex
 import shutil
 import signal
@@ -39,6 +40,7 @@ import zipfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
+import friction  # noqa: E402
 from outcome import (ROOT, SKILL, Outcome, common_failures,  # noqa: E402
                      fixture_config, load_scenarios)
 
@@ -115,9 +117,10 @@ def find_claude() -> str:
         return override
     if found := shutil.which("claude"):
         return found
+    binary = "claude.exe" if os.name == "nt" else "claude"
     candidates = list(pathlib.Path.home().glob(
-        ".vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude"))
-    local = pathlib.Path.home() / ".claude" / "local" / "claude"
+        f".vscode/extensions/anthropic.claude-code-*/resources/native-binary/{binary}"))
+    local = pathlib.Path.home() / ".claude" / "local" / binary
     if local.exists():
         candidates.append(local)
     if not candidates:
@@ -303,15 +306,26 @@ def run_session(room: pathlib.Path, bin_dir: pathlib.Path, model: str | None,
     transcript = pathlib.Path(tempfile.gettempdir()) / f"xefm-cleanroom-{room.parent.name}-{room.name}.jsonl"
     env = dict(os.environ, PATH=f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
     started = time.monotonic()
-    with subprocess.Popen(session_command(model, max_turns), cwd=room, env=env,
-                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                          text=True, bufsize=1) as session, \
-            transcript.open("w", encoding="utf-8") as log:
-        for line in session.stdout:
-            log.write(line)
-            _report(line, room, started)
-        session.wait()
-    shutil.move(transcript, room / "transcript.jsonl")
+    try:
+        with subprocess.Popen(session_command(model, max_turns), cwd=room, env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, encoding="utf-8", bufsize=1) as session, \
+                transcript.open("w", encoding="utf-8") as log:
+            try:
+                for line in session.stdout:
+                    log.write(line)
+                    _report(line, room, started)
+            except BaseException:
+                # Ctrl-C or SIGTERM: the session goes with the run, so nothing
+                # is still writing into ~/.xefm while it is being put back.
+                session.terminate()
+                raise
+            session.wait()
+    finally:
+        # Moved in on the way out whatever ended the run: an interrupted
+        # run's transcript is the record of what it got as far as.
+        if transcript.exists():
+            shutil.move(transcript, room / "transcript.jsonl")
     return room / "transcript.jsonl"
 
 
@@ -375,10 +389,15 @@ def audit(room: pathlib.Path, transcript: pathlib.Path,
     refused_ids = {part.get("tool_use_id") for e in events if e.get("type") == "user"
                    for part in e.get("message", {}).get("content", [])
                    if part.get("type") == "tool_result" and part.get("is_error")}
-    forbidden = {"site-packages/xefm": "the installed xefm package",
-                 "/Applications/XeFM.app": "the installed app",
-                 str(BACKUP): "the user's real config",
-                 str(ROOT.parent / "puikit"): "the PuiKit checkout"}
+    # Compared in one spelling (see _norm): on Windows the room's tools are
+    # pointed at C:\Users\..., and a check written for /Users/... found none
+    # of it - a read of the checkout went unflagged.
+    forbidden = {_norm(path): what for path, what in (
+        ("site-packages/xefm", "the installed xefm package"),
+        ("/Applications/XeFM.app", "the installed app"),
+        (str(BACKUP), "the user's real config"),
+        (str(ROOT.parent / "puikit"), "the PuiKit checkout"))}
+    checkout, inside = _norm(str(ROOT)), _norm(str(room))
     for e in events:
         if e.get("type") != "assistant":
             continue
@@ -392,21 +411,32 @@ def audit(room: pathlib.Path, transcript: pathlib.Path,
                 if not isinstance(value, str):
                     continue
                 for aimed in _absolute_paths(value):
+                    spelled = _norm(aimed)
                     for path, what in forbidden.items():
-                        if path in aimed:
+                        if path in spelled:
                             landed.append(f"{part['name']} reached into {what}: {aimed}")
-                    if aimed.startswith(str(ROOT)) and not aimed.startswith(str(room)):
+                    if spelled.startswith(checkout) and not spelled.startswith(inside):
                         landed.append(f"{part['name']} reached into the checkout: {aimed}")
-                    if any(f"/.xefm/extensions/{name}" in aimed for name in foreign):
+                    if any(_norm(f"/.xefm/extensions/{name}") in spelled for name in foreign):
                         landed.append(f"{part['name']} read another extension: {aimed}")
     return sorted(set(breaches)), sorted(set(refused))
 
 
+#: An absolute path in either spelling: /Users/..., C:\Users\... or C:/Users/...
+_ABSOLUTE = re.compile(r"(?:[A-Za-z]:[\\/]|/)[^\s\"'`;|&)]+")
+
+
 def _absolute_paths(text: str) -> list[str]:
-    import re
     home = str(pathlib.Path.home())
     text = text.replace("~/", home + "/")
-    return re.findall(r"/[^\s\"'`;|&)]+", text)
+    return _ABSOLUTE.findall(text)
+
+
+def _norm(path: str) -> str:
+    """A path in one spelling for comparison: forward slashes, and lowercase
+    on Windows, where C:\\Users and c:/users are the same place."""
+    path = path.replace("\\", "/")
+    return path.lower() if os.name == "nt" else path
 
 
 # --- one scenario, and all of them --------------------------------------------
@@ -433,9 +463,11 @@ def run_scenario(scenario, parent: pathlib.Path, args) -> dict:
     breaches, refused = audit(room, transcript, foreign)
     failures = common_failures(outcome, scenario.KIND) + scenario.check(outcome)
     questions = (room / "QUESTIONS.md").read_text(encoding="utf-8")
-    result = {"name": scenario.NAME, "room": room, "breaches": breaches,
-              "refused": refused, "failures": failures,
-              "questions": questions.count("\n## ")}
+    stumbles = friction.incidents(transcript)
+    (room / "FRICTION.md").write_text(friction.report(room, failures), encoding="utf-8")
+    result = {"name": scenario.NAME, "title": scenario.TITLE, "room": room,
+              "breaches": breaches, "refused": refused, "failures": failures,
+              "friction": stumbles, "questions": questions.count("\n## ")}
 
     for line in refused:
         print(f"  refused (the confinement held): {line}")
@@ -445,6 +477,10 @@ def run_scenario(scenario, parent: pathlib.Path, args) -> dict:
         print(f"  FAIL: {line}")
     if not breaches and not failures:
         print("  checks: pass")
+    print(f"  friction:  {len(stumbles)} (in {room / 'FRICTION.md'})")
+    for incident in stumbles:
+        print(f"    {incident.kind}: {incident.detail}"
+              + (f" - {incident.evidence}" if incident.evidence else ""))
     print(f"  questions: {result['questions']} (in {room / 'QUESTIONS.md'})")
     print("  must (read against the transcript and the reply):")
     for line in scenario.MUST.strip().splitlines():
@@ -453,20 +489,58 @@ def run_scenario(scenario, parent: pathlib.Path, args) -> dict:
     return result
 
 
+def _verdict(r: dict) -> str:
+    if r["breaches"]:
+        return "DISQUALIFIED"
+    return "FAIL" if r["failures"] else "pass"
+
+
+def write_findings(parent: pathlib.Path, results: list[dict]) -> pathlib.Path:
+    """FINDINGS.md: every improvement point of the run, one section per
+    scenario - the checks' failures, the friction read off the transcript,
+    and the questions the room wrote - so they are triaged in one pass rather
+    than collected from a terminal log and a QUESTIONS.md per room. `git add
+    -f` it when it is worth keeping."""
+    lines = [f"# Clean-room findings: {parent.name}", "",
+             "Each scenario's check failures, the friction read off its "
+             "transcript, and the questions it wrote. Triage every item as a "
+             "skill gap, out of scope, or tooling (SKILL.md, Score); only skill "
+             "gaps change the skill. Friction no question mentions is the gap "
+             "nobody noticed.", ""]
+    for r in results:
+        room = r["room"]
+        lines += [f"## {r['name']} - {_verdict(r)}", "", f"{r['title']}. Room: `{room}`", ""]
+        lines += [f"- **disqualified** - {b}" for b in r["breaches"]]
+        lines += [f"- **check** - {f}" for f in r["failures"]]
+        lines += [incident.line() for incident in r["friction"]]
+        questions = room / "QUESTIONS.md"
+        asked = [line[3:].strip() for line in
+                 (questions.read_text(encoding="utf-8") if questions.exists() else "")
+                 .splitlines() if line.startswith("## ")]
+        lines += [f"- **question** - {q}" for q in asked]
+        if not (r["breaches"] or r["failures"] or r["friction"] or asked):
+            lines.append("- nothing recorded - zero is not a pass; read the transcript")
+        lines.append("")
+    findings = parent / "FINDINGS.md"
+    findings.write_text("\n".join(lines), encoding="utf-8")
+    return findings
+
+
 def summary(results: list[dict]) -> int:
     print("== summary")
     worst = 0
     for r in results:
-        if r["breaches"]:
-            verdict, worst = "DISQUALIFIED", 2
-        elif r["failures"]:
-            verdict, worst = "FAIL", max(worst, 1)
-        else:
-            verdict = "pass"
-        print(f"  {verdict:<12} {r['name']:<30} {r['questions']} question(s)  {r['room']}")
+        verdict = _verdict(r)
+        if verdict == "DISQUALIFIED":
+            worst = 2
+        elif verdict == "FAIL":
+            worst = max(worst, 1)
+        print(f"  {verdict:<12} {r['name']:<30} {len(r['friction']):>2} friction "
+              f"{r['questions']:>2} question(s)  {r['room']}")
     print()
-    print("  QUESTIONS.md in each room is the finding: zero questions is not a")
-    print("  pass. A miss of the 'must' list is a skill defect, not a model one.")
+    print("  FINDINGS.md beside the rooms gathers every scenario's failures,")
+    print("  friction and questions: zero questions is not a pass, and a miss of")
+    print("  the 'must' list is a skill defect, not a model one.")
     return worst
 
 
@@ -517,7 +591,17 @@ def main(argv: list[str] | None = None) -> int:
         print("XeFM is running: it reads config.py only at start and on Reload "
               "Configuration, so leave both alone until this finishes.")
     print()
-    results = [run_scenario(s, parent, args) for s in scenarios]
+    results = []
+    try:
+        for s in scenarios:
+            results.append(run_scenario(s, parent, args))
+    except KeyboardInterrupt:
+        # FixtureInPlace has already put the config back on the way out.
+        print("\n  interrupted - the scenario in progress was collected and your "
+              "config.py put back")
+    if not results:
+        return 130
+    print(f"  findings: {write_findings(parent, results)}")
     return summary(results)
 
 

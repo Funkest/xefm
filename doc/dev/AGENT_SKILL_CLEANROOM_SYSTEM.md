@@ -16,14 +16,18 @@ it: `.claude/skills/xefm-skill-cleanroom/SKILL.md`. This page is the map.
 | `.claude/skills/xefm-skill-cleanroom/scenarios/NN_name.py` | One real-world request each: `PROMPT` (intent only), `MUST` (read by a person), `check()` (mechanical), `reference()` (a correct edit). Run in file order. |
 | `…/scripts/run_room.py` | Builds a room per scenario, swaps `~/.xefm/config.py` for the fixture, drives `claude -p --restricted`, audits the transcript, checks, restores. `make cleanroom`. |
 | `…/scripts/outcome.py` | The fixture (the template plus `# keep:` user edits), and the questions checks ask, answered the way XeFM would: `ConfigManager` under a throwaway HOME, keys parsed by `KeyBindings`, presets laid under `KEY_BINDINGS`, associations matched by XeFM's matcher. |
+| `…/scripts/friction.py` | Reads each transcript for where the room stumbled, noticed or not (failed or refused calls, commands that printed an error, empty searches of the skill, rewrites and reinstalls, running out of turns, doubt said out loud). Writes `FRICTION.md` per room; the runner gathers it with the checks and questions into `FINDINGS.md` per run. |
 | `…/room/RULES.md` | What the room may read and run; copied into each room. |
 | `test/test_skill_cleanroom.py` | Every check fails on the untouched fixture and passes on its reference, without starting a session. |
 
 ## Design decisions
 
-- **The finding is `QUESTIONS.md`.** The room records every point where the
-  skill left it guessing; the mechanical checks only say whether the edit
-  landed. Modelled on Keyhac's `keyhac-skill-cleanroom`.
+- **The finding is `QUESTIONS.md`, and what it misses.** The room records
+  every point where the skill left it guessing; the mechanical checks only say
+  whether the edit landed. `friction.py` adds what the room stumbled on
+  without noticing - in Keyhac's runs that was the most-repeated finding of
+  all - and `FINDINGS.md` puts all three in one place. Modelled on Keyhac's
+  `keyhac-skill-cleanroom`.
 - **The real config is swapped, not the HOME.** A session with a different
   HOME cannot use the operator's Claude login (it lives in the keychain), so
   the room runs under the real HOME and `~/.xefm/config.py` is moved to
