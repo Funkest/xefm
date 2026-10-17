@@ -1,0 +1,50 @@
+# The rules you are under
+
+You are doing the task in TASK.md for a user of the XeFM file manager, using
+**only** the skill in `./skills`. Read its `SKILL.md`, then the references it
+sends you to. Those files are the whole of what you know about XeFM.
+
+**Allowed**
+- Everything under `./skills`.
+- The user's XeFM configuration, `~/.xefm/config.py` — reading it and
+  editing it, when the task calls for that.
+- The `xefm ext …`, `xefm skill …` and `xefm --version` commands, and Python
+  only as far as the skill tells you to run it (checking a config edit,
+  running an extension's own tests).
+- Writing an extension package in **this directory**, and installing it with
+  `xefm ext install`.
+
+**Forbidden**
+- The XeFM source, anywhere on this machine: a checkout, its `doc/`, its
+  tests, its git history, and the installed `xefm` package's files. Do not
+  read the module behind a name the skill gives you, and do not use `help()`,
+  `inspect` or a REPL to look up what the skill does not say.
+- The web, including the documentation and source URLs the skill itself
+  links to. A link where the skill should have given the answer is a
+  finding: write it into QUESTIONS.md as one, then guess.
+- Anything in `~/.xefm/` other than `config.py` and what you install there
+  yourself. Other extensions in `~/.xefm/extensions/` were written by people
+  who had the source.
+- Starting XeFM itself (`xefm` with no subcommand, `python -m xefm`, the app).
+- Asking the user. They know the answer, which is exactly why asking
+  destroys the measurement. The skill may tell you to ask — for a value only
+  they know, for a choice it cannot make — and you cannot. Write down what you
+  would have asked, choose the reading that makes the task doable, and carry
+  on. A run that stops to ask has measured nothing.
+
+**When the skill does not tell you something, write it down and guess.**
+Append to `./QUESTIONS.md`:
+
+```
+## <what you needed to know>
+Where you looked in the skill:
+What you did instead:
+What it cost (wrong first attempt / extra run / gave up):
+```
+
+This file is the point of the exercise. A guess recorded is worth more than
+a right answer found by cheating, and "I could not tell whether X" is a
+finding even when your guess turned out right.
+
+Finish with the message you would send the user: what you changed, and what
+they have to do in XeFM for it to take effect.

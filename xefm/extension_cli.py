@@ -48,19 +48,78 @@ def _parser() -> argparse.ArgumentParser:
     new.add_argument("id")
     new.add_argument("--dir", default=".", help="where to create it (default: here)")
 
-    skill = sub.add_parser("skill", help="the AI-agent skill for writing extensions "
-                           "(any Agent Skills client)")
-    where = skill.add_mutually_exclusive_group()
-    where.add_argument("--install", metavar="DIR",
-                       help="copy it into an agent's skills directory, e.g. "
-                       "~/.agents/skills")
-    where.add_argument("--zip", metavar="FILE", help="write it as a zip")
+    # Kept as an alias of the top-level `xefm skill` (#639): the skill grew
+    # beyond extensions, but instructions already out there name this one.
+    _skill_arguments(sub.add_parser(
+        "skill", help="the AI-agent skill for XeFM — same as `xefm skill`"))
 
     sub.add_parser("sync", help="reinstall listed packages whose files are missing")
     settings = sub.add_parser("settings", help="print a package's settings class "
                               "for config.py, with every default")
     settings.add_argument("id")
     return parser
+
+
+def _skill_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    where = parser.add_mutually_exclusive_group()
+    where.add_argument("--install", metavar="DIR",
+                       help="copy it into an agent's skills directory, e.g. "
+                       "~/.agents/skills")
+    where.add_argument("--zip", metavar="FILE", help="write it as a zip")
+    return parser
+
+
+def skill_main(argv: list[str]) -> int:
+    """``xefm skill [--install DIR | --zip FILE]`` — the AI-agent skill for
+    editing XeFM's config and writing extensions (any Agent Skills client)."""
+    parser = _skill_arguments(argparse.ArgumentParser(
+        prog="xefm skill",
+        description="The AI-agent skill for XeFM: editing ~/.xefm/config.py "
+                    "and writing extension packages (any Agent Skills client)."))
+    return _skill(parser.parse_args(argv))
+
+
+def _skill(args: argparse.Namespace) -> int:
+    source = ext.SKILL_DIR
+    if args.zip:
+        print(f"wrote {ext.write_skill_zip(Path(args.zip).expanduser())}")
+        return 0
+    if args.install is None:
+        print(source / "SKILL.md")
+        print("Copy it into your agent's skills directory with "
+              "`xefm skill --install DIR` (~/.agents/skills is read by "
+              "most agents), or see doc/AGENT_SKILL_FEATURE.md")
+        return 0
+    import shutil
+    skills = Path(args.install).expanduser()
+    target = skills / source.name
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.copytree(source, target)
+    print(f"installed the {source.name} skill in {target}")
+    # Only a folder that really is the old skill: this is the user's
+    # directory, and a same-named folder of someone else's stays.
+    legacy = skills / ext.LEGACY_SKILL_NAME
+    if _skill_name(legacy / "SKILL.md") == ext.LEGACY_SKILL_NAME:
+        shutil.rmtree(legacy)
+        print(f"removed the old {ext.LEGACY_SKILL_NAME} skill it replaces")
+    return 0
+
+
+def _skill_name(skill_md: Path) -> str | None:
+    """The ``name:`` in a SKILL.md's frontmatter, or None."""
+    try:
+        text = skill_md.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return None
+    for line in parts[1].splitlines():
+        key, _, value = line.partition(":")
+        if key.strip() == "name":
+            return value.strip()
+    return None
 
 
 def _ask(prompt: str) -> bool:
@@ -177,23 +236,7 @@ def main(argv: list[str] | None = None, layout: ext.Layout | None = None) -> int
         return 0
 
     if args.command == "skill":
-        source = ext.SKILL_DIR
-        if args.zip:
-            print(f"wrote {ext.write_skill_zip(Path(args.zip).expanduser())}")
-            return 0
-        if args.install is None:
-            print(source / "SKILL.md")
-            print("Copy it into your agent's skills directory with "
-                  "`xefm ext skill --install DIR` (~/.agents/skills is read by "
-                  "most agents), or see doc/EXTENSION_AUTHORING_SKILL_FEATURE.md")
-            return 0
-        import shutil
-        target = Path(args.install).expanduser() / source.name
-        if target.exists():
-            shutil.rmtree(target)
-        shutil.copytree(source, target)
-        print(f"installed the {source.name} skill in {target}")
-        return 0
+        return _skill(args)
 
     if args.command == "settings":
         manifest = next((m for m in ext.discover(layout) if m.id == args.id), None)

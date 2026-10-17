@@ -1,9 +1,7 @@
----
-name: xefm-extension-authoring
-description: Write, check and install an extension package for the XeFM file manager — actions, event hooks, themes, sort orders, filters, picture formats, path schemes or syntax highlighting, packaged with an xefm-extension.toml manifest. Use when the user asks for a new XeFM feature that can live outside the core ("add an XeFM action that…", "make an XeFM extension", "turn my config.py action into an extension"), or asks to fix an extension that `xefm ext check` rejects.
----
-
 # Writing an XeFM extension
+
+Read `SKILL.md` first: the ground rules there (never launch XeFM, where its
+files are) apply here too.
 
 An XeFM extension is a folder with a manifest (`xefm-extension.toml`) and,
 when it runs code, a Python package. XeFM reads the manifest, checks it
@@ -112,8 +110,12 @@ Rules the check enforces — each violation is an `error:` naming the field:
   assignment or import). The check reads the file; it does not import it.
 - Contribution kinds: `actions`, `event_hooks`, `sort_keys`, `filters`,
   `image_decoders`, `path_schemes`, `lexers`, `themes`, `key_suggestions`.
-- Action names must not be a built-in action's name. Prefix them with your
-  extension's short name (`hello.greet`); an unprefixed name is a warning.
+- Action names must not be a built-in action's name. Prefix them with a
+  short name for your extension — any lowercase word, usually the id or its
+  first part (`hello.greet` for `hello-xefm`); an unprefixed name is a
+  warning.
+- `[settings]` is optional: leave it (and `settings.py`) out when the package
+  has nothing for the user to set.
 - Events: `startup`, `quit`, `directory_changed`, `file_open`.
 - Keys use `KEY_BINDINGS` spelling: `"G"`, `"Shift-G"`, `"Ctrl-Shift-F12"`,
   `"Alt-Enter"`, `"Cmd-K"`. A key that is already bound is not an error, but
@@ -122,10 +124,10 @@ Rules the check enforces — each violation is an `error:` naming the field:
 
 What each table entry *does* is the same as the `config.py` table it feeds —
 `ACTIONS`, `EVENT_HOOKS`, `SORT_KEYS`, `FILTERS`, `IMAGE_DECODERS`,
-`PATH_SCHEMES`, `LEXERS`, `THEMES`. The user guide for those is
-`doc/CUSTOMIZATION_FEATURE.md` in the XeFM repository; for a `sort_keys`,
-`filters`, `image_decoders` or `path_schemes` entry the referenced object is
-exactly the value that table would hold.
+`PATH_SCHEMES`, `LEXERS`, `THEMES`. Each is documented, with the shape of
+its values, in the comment above it in `references/config-template.md`; for a
+`sort_keys`, `filters`, `image_decoders` or `path_schemes` entry the
+referenced object is exactly the value that table would hold.
 
 ## 3. The code: the public API only
 
@@ -151,7 +153,8 @@ The public names:
 - `ctx.run_program(command, *, terminal=False, cwd=None, env=None)` — run an
   external program; `terminal=True` hands it the terminal (TUI) or opens a
   terminal window (desktop)
-- `ctx.message(text)` — one line in the log pane
+- `ctx.message(text)` — one line in the log pane (XeFM's "log"); call it
+  once per line rather than passing a string with newlines
 - `ctx.input(prompt, default="", *, title="", on_accept=None, on_cancel=None)`
 - `ctx.choose(title, items, *, type="choice", on_result=None)` — `type` is
   `"choice"` or `"filter"`; `on_result` gets the index or `None`
@@ -165,12 +168,20 @@ The public names:
 - `name` (`"left"`/`"right"`), `is_active`, `activate()`
 - `path`, `cd(path, focus_name=None)`, `refresh()`
 - `open_list(paths, *, title)` — show a list of paths as a virtual folder
-- `entries`, `focused`, `selected` — `EntryInfo` objects
+- `entries` — every listed `EntryInfo`, in the pane's order (a property)
+- `focused` — the `EntryInfo` under the cursor (a property). `None` in an
+  empty directory, and it can be the `..` entry: skip an entry named `..`
+  when acting on files.
+- `selected()` — **a method**: the selected entries, in listing order,
+  `[]` when nothing is selected. It never falls back to `focused`; do that
+  yourself: `selected() or [focused]`.
 - `cursor` (read/write index)
 - `select(predicate=None)`, `unselect(predicate=None)` — return the count
 
-`EntryInfo`: `name` (as displayed — use it for matching), `path` (the real
-path — use it for any file operation), `is_dir`, `is_link`, `is_file`,
+`EntryInfo`: `name` (as displayed — use it for matching), `path` (the real,
+absolute path, a `pathlib.Path`-like object; `str(entry.path)` gives the text,
+which for a remote or in-archive entry is a URI such as `ssh://host/dir/f`;
+use `path` for any file operation), `is_dir`, `is_link`, `is_file`,
 `stem`, `suffix`, `size`, `mtime`. `size`/`mtime` cost a `stat` on first
 access; a predicate that only reads names stays fast.
 
@@ -240,6 +251,15 @@ make them guess it.
 - Compiled libraries XeFM does not ship (numpy, scipy…): not supported. Say so
   rather than working around it.
 
+### After installing: how the user runs it
+
+Every action is in XeFM's **command palette** (the `command_palette`
+action — see `references/actions.md` for its key), key or no key, described by
+its docstring. To put it on a key, the user adds it to `KEY_BINDINGS` in
+`config.py` (`'hello.greet': ['Ctrl-Shift-G']`), or the package suggests one
+in `[contributes.key_suggestions]`. Tell the user both; edit their
+`config.py` only if they ask.
+
 ## 6. Testing
 
 `xefm ext check` is static. For behaviour, unit-test what does not need XeFM:
@@ -254,7 +274,12 @@ def test_new_name():
     assert new_name("a.txt", 3) == "a-3.txt"
 ```
 
-For the thin wrapper, a small fake is enough:
+If `python -m pytest` reports that pytest is not installed, say so to the
+user (`python -m pip install pytest` installs it) rather than skipping the
+tests silently.
+
+For the thin wrapper, a small fake is enough — make it match the real API's
+shape, methods as methods (`selected=lambda: [...]`):
 
 ```python
 from types import SimpleNamespace

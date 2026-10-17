@@ -1,6 +1,6 @@
 # XeFM Makefile
 
-.PHONY: skill-zip release-skill help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config keymap-reset venv clean-venv check-venv install-puikit
+.PHONY: skill-zip skill-references release-skill cleanroom help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config keymap-reset venv clean-venv check-venv install-puikit
 
 # Python interpreter selection
 # All Python is run through the project virtual environment (.venv). There is no
@@ -143,7 +143,9 @@ help:
 	@echo "Release (one target per artifact; run in this order):"
 	@echo "  tag VERSION=x.y.z  - Bump __version__, commit, tag, push (no publishing)"
 	@echo "  release-github     - Open the GitHub Release at that tag (attaches the agent skill zip)"
-	@echo "  skill-zip          - Build dist/xefm-extension-authoring.zip (AI-agent skill)"
+	@echo "  skill-zip          - Build dist/xefm-<version>-skill.zip (AI-agent skill)"
+	@echo "  skill-references   - Regenerate the skill's generated references (actions, config template)"
+	@echo "  cleanroom          - Clean-room test that skill on every scenario (SCENARIO=name for one)"
 	@echo "  release-whl        - Upload sdist + wheel to PyPI, and to the Release"
 	@echo "  release-macos-dmg  - (on macOS)   attach XeFM-<ver>-macos.dmg to the Release"
 	@echo "  release-windows-zip- (on Windows) attach XeFM-<ver>-win64.zip to the Release"
@@ -631,17 +633,34 @@ release-github:
 	fi
 	@$(MAKE) --no-print-directory release-skill
 
-# --- The extension-authoring skill for AI agents ------------------------------
-# A plain zip of xefm/skills/xefm-extension-authoring/, for any Agent Skills
-# client (doc/EXTENSION_AUTHORING_SKILL_FEATURE.md). The asset name carries no
-# version so .../releases/latest/download/xefm-extension-authoring.zip is a URL
-# that never changes; each Release still holds the copy matching its own API.
-# Pure Python and platform-independent, so release-github attaches it itself —
-# it is not a fourth artifact to remember.
-SKILL_ZIP := dist/xefm-extension-authoring.zip
+# --- The XeFM skill for AI agents --------------------------------------------
+# A plain zip of xefm/skills/xefm/, for any Agent Skills client
+# (doc/AGENT_SKILL_FEATURE.md). The asset name carries the version, since the
+# skill describes that release's config and API (#639); the install doc has an
+# agent resolve the latest tag first. Pure Python and platform-independent, so
+# release-github attaches it itself — it is not a fourth artifact to remember.
+SKILL_ZIP := dist/xefm-$(XEFM_VERSION)-skill.zip
 
 skill-zip:
 	@$(PYTHON) -c "from xefm.extensions import write_skill_zip; print('wrote', write_skill_zip('$(SKILL_ZIP)'))"
+
+# Clean-room test of the skill: each scenario in .claude/skills/
+# xefm-skill-cleanroom/scenarios/ runs in a room holding the skill and nothing
+# else, driven by `claude -p --restricted`, with ~/.xefm/config.py swapped for
+# a fixture for the length of each run. See that skill's SKILL.md.
+#   make cleanroom                         every scenario, in order
+#   make cleanroom SCENARIO=reload_on_f12  one
+#   make cleanroom ARGS=--restore          put back a config a crashed run left aside
+CLEANROOM := .claude/skills/xefm-skill-cleanroom/scripts/run_room.py
+
+# The skill's generated references: the action/key table (from the registry
+# and the presets) and the config template (test_extension_skill checks both
+# are current).
+skill-references:
+	PYTHONPATH=. $(PYTHON) tools/gen_skill_references.py
+
+cleanroom:
+	$(PYTHON) $(CLEANROOM) $(if $(SCENARIO),--scenario $(SCENARIO)) $(ARGS)
 
 release-skill: skill-zip
 	@$(call check_release_exists)

@@ -81,3 +81,7 @@ test/demo_*_test_*/
 # downloads it into the *copied* package; this covers a developer dropping one
 # into the working tree to test the bundled-lookup path).
 xefm/_bin/
+
+# Clean-room test rooms (make cleanroom): the skill copy, a transcript, the
+# config before and after, QUESTIONS.md. Scratch; `git add -f` a room worth keeping.
+cleanroom/
