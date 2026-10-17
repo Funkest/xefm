@@ -4703,6 +4703,13 @@ class XeFMApp:
         if not is_desktop_mode():
             self._run_in_terminal(argv)
             return True
+        return self._spawn_detached(argv, self._files_label(entries))
+
+    def _spawn_detached(self, argv: list, subject: str) -> bool:
+        """Desktop mode's launch for a program with a window of its own: start
+        it and return at once, never waiting for it to exit — the UI thread is
+        ours, and waiting would freeze the window. Returns False, having logged
+        why, when it could not be started."""
         from xefm.external_programs import resolve_command
         try:
             subprocess.Popen(resolve_command(argv))
@@ -4710,9 +4717,27 @@ class XeFMApp:
             self.log_info(f"Command not found: {argv[0]}")
             return False
         except Exception as exc:
-            self.log_info(f"Failed to open {self._files_label(entries)}: {exc}")
+            self.log_info(f"Failed to open {subject}: {exc}")
             return False
         return True
+
+    def _run_editor(self, argv: list, subject: str) -> bool:
+        """Run ``TEXT_EDITOR`` (``argv`` already carries the paths) the way our
+        backend calls for (#644): in terminal mode it gets the tty and we wait
+        for it, as with any full-screen child; in desktop mode it is detached
+        like a FILE_ASSOCIATIONS launch, so an editor told to wait for the file
+        to close (``code --wait``, ``subl -w``) cannot freeze the window.
+        Nothing in desktop mode relies on the editor having exited — config
+        reload, rename and remote upload all wait for saves instead. Returns
+        whether the editor was started. A desktop launch does not repaint on
+        success: the caller logs what happened first, then repaints, or its
+        line would wait for some later repaint to appear."""
+        if not is_desktop_mode():
+            return self._run_in_terminal(argv) is not None
+        launched = self._spawn_detached(argv, subject)
+        if not launched:
+            self.panel.render()
+        return launched
 
     @staticmethod
     def _files_label(entries) -> str:
@@ -4786,9 +4811,13 @@ class XeFMApp:
                 self.log_info(f"No editor configured for {entry.name}")
             else:
                 fallback.append(entry)
+        # Terminal mode logs once the editor is done; a desktop launch returns
+        # at once, before anything is edited, so it says what it did instead.
+        desktop = is_desktop_mode()
         for command, batch in groups.items():
             if self._launch_associated(batch, list(command)):
-                self.log_info(f"Edited {self._files_label(batch)} with {command[0]}")
+                verb = "Opened" if desktop else "Edited"
+                self.log_info(f"{verb} {self._files_label(batch)} with {command[0]}")
             else:
                 fallback.extend(batch)
         if fallback:
@@ -4796,9 +4825,13 @@ class XeFMApp:
             if not argv:
                 self.log_info("No editor configured: set TEXT_EDITOR in "
                               "~/.xefm/config.py")
+                self.panel.render()
                 return
-            self._run_in_terminal(argv + [str(e) for e in fallback])
-            self.log_info(f"Edited {self._files_label(fallback)}")
+            label = self._files_label(fallback)
+            if self._run_editor(argv + [str(e) for e in fallback], label):
+                self.log_info(f"Opened {label} in {argv[0]}" if desktop
+                              else f"Edited {label}")
+        self.panel.render()
 
     # --- edit anywhere (#581) ---------------------------------------------------
 
@@ -4995,11 +5028,11 @@ class XeFMApp:
         (``TEXT_EDITOR``), creating it from the template on first use.
 
         In terminal mode the editor takes over the terminal and blocks, so we
-        reload on return (see :meth:`reload_config`). In GUI mode ``TEXT_EDITOR``
-        (e.g. VS Code) opens in its own window and ``subprocess.run`` returns
-        immediately — before any edit is saved — so auto-reloading here would be
-        premature. We leave it to the user to apply changes via
-        Tools ▸ Reload Configuration once saved."""
+        reload on return (see :meth:`reload_config`). In GUI mode the editor is
+        detached into a window of its own (:meth:`_run_editor`) and we return
+        before any edit is saved, so auto-reloading here would be premature. We
+        leave it to the user to apply changes via Tools ▸ Reload Configuration
+        once saved."""
         path = config_manager.config_file
         if not path.exists():
             if config_manager.create_default_config():
@@ -5011,7 +5044,8 @@ class XeFMApp:
         if not argv:
             self.log_info(f"No editor configured: set TEXT_EDITOR in {path}")
             return
-        self._run_in_terminal(argv + [str(path)])
+        if not self._run_editor(argv + [str(path)], path.name):
+            return
         if is_desktop_mode():
             self.log_info("Opened config — use Tools ▸ Reload Configuration to "
                           "apply your changes once saved.")
@@ -7628,12 +7662,15 @@ class XeFMApp:
         """One trip to the editor and back for :meth:`rename_in_editor`; the
         review that follows may send the user round again ("Edit Again")."""
         started = time.monotonic()
-        self._run_in_terminal(argv + [list_path])
+        if not self._run_editor(argv + [list_path], "the name list"):
+            self._discard_rename_list(list_path, "Rename cancelled")
+            return
         quick = time.monotonic() - started < self._EDITOR_RETURNED_AT_ONCE
         if self._read_rename_list(list_path) == written and (
                 is_desktop_mode() or quick):
             # The editor came straight back without the list changing: a
-            # window of its own, still open. Wait for the user to say so.
+            # window of its own, still open — always so in desktop mode, where
+            # it is detached. Wait for the user to say so.
             def answered(label: str) -> None:
                 if label == "Apply":
                     self._review_rename_list(pane, files, list_path, argv)

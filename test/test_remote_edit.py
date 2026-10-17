@@ -201,6 +201,12 @@ class AppEditRemote(unittest.TestCase):
         self.app._edit_sessions = EditSessions(LocalPath(self.tmp) / "edit")
         self._saved_editor = self.app.config.TEXT_EDITOR
         self.app.config.TEXT_EDITOR = "fake-editor"
+        # is_desktop_mode() caches process-global detection other tests can
+        # leave True; desktop mode detaches the editor (#644) instead of the
+        # subprocess.run these tests stand in for, so pin terminal mode.
+        desktop = patch("xefm.app.is_desktop_mode", return_value=False)
+        desktop.start()
+        self.addCleanup(desktop.stop)
 
     def tearDown(self):
         self.app.config.TEXT_EDITOR = self._saved_editor

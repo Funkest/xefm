@@ -34,6 +34,7 @@ from puikit.widgets.base import Widget
 from xefm import migemo_search
 from xefm.actions import ISEARCH
 from xefm.actions import FILE_DIFF as _CONTEXT
+from xefm.backend_detector import is_desktop_mode
 from xefm.config import (find_action_for_event, format_key_for_display,
                          get_config, get_keys_for_action)
 from xefm.external_programs import command_argv, resolve_command
@@ -436,8 +437,10 @@ class DiffViewer(Widget):
         """Launch the configured ``TEXT_DIFF`` tool (e.g. ``vimdiff`` / ``code
         --diff``) on the two compared files so the user can edit/merge them (the
         ``edit_file`` binding), handing the terminal over via the backend
-        suspend/resume, then re-read both sides so the diff shows the result. A
-        GUI tool returns immediately and the reload is a no-op. Local files
+        suspend/resume, then re-read both sides so the diff shows the result.
+        In desktop mode there is no terminal to hand over: the tool is detached
+        into a window of its own, so one told to wait (``code --diff --wait``)
+        cannot freeze ours (#644), and the reload is a no-op. Local files
         only."""
         if "://" in str(self.path1) or "://" in str(self.path2):
             self._notify("Editing is only available for local files.")
@@ -450,6 +453,9 @@ class DiffViewer(Widget):
         argv = argv + [str(self.path1), str(self.path2)]
         backend = getattr(self._panel, "backend", None)
         try:
+            if is_desktop_mode():
+                subprocess.Popen(resolve_command(argv))
+                return
             with backend.suspended():
                 subprocess.run(resolve_command(argv))
         except FileNotFoundError:

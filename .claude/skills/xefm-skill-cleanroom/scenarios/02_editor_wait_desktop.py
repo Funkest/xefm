@@ -12,14 +12,14 @@ MUST = """\
 - Keep TEXT_EDITOR's `if is_desktop_mode() else` shape and change only the
   desktop branch, to ['code', '--wait'] (or 'code --wait').
 - The terminal branch stays 'vim'.
-- Warn that XeFM waits for the editor to exit, so with --wait the desktop
-  app's window is unresponsive until the tab is closed.
 - Say a reload applies it.
+Must not: warn that XeFM's window freezes or stops responding while the tab
+is open. The desktop app detaches the editor and never waits for it (#644);
+it may say --wait is not needed there.
 """
 
-#: Words a reply uses when it warns that XeFM itself will wait.
-_WARNED = ("unresponsive", "freeze", "frozen", "block", "busy", "until you close",
-           "until the tab", "won't respond", "will not respond", "can't use")
+#: Words a reply uses when it wrongly warns that XeFM itself will wait.
+_WARNED = ("unresponsive", "freeze", "frozen", "won't respond", "will not respond")
 
 
 def check(o):
@@ -30,8 +30,10 @@ def check(o):
         failures.append(f"desktop TEXT_EDITOR is {gui}, not code --wait")
     if tui != ["vim"]:
         failures.append(f"terminal TEXT_EDITOR became {tui}")
-    if o.reply and not any(w in o.reply.lower() for w in _WARNED):
-        failures.append("the reply does not warn that XeFM waits while the tab is open")
+    warned = [w for w in _WARNED if w in (o.reply or "").lower()]
+    if warned:
+        failures.append(f"the reply warns the window will hang ({warned[0]!r}); "
+                        "the desktop app does not wait for the editor")
     return failures
 
 

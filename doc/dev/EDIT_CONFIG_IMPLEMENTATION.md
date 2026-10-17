@@ -20,15 +20,17 @@ themselves) and exposed as **Tools** menu items in `_build_menu`.
 2. If the file does not exist, creates it from the template via
    `config_manager.create_default_config()`; aborts (with a log message) if that
    fails.
-3. Launches `TEXT_EDITOR` on the path through the existing
-   `_run_in_terminal(...)` helper — the same `backend.suspended()` hand-off used
-   by `edit_file` / `subshell`.
+3. Launches `TEXT_EDITOR` on the path through `_run_editor(...)`, shared with
+   `edit_file` and `rename_in_editor`: in terminal mode the
+   `backend.suspended()` hand-off of `_run_in_terminal`, in desktop mode a
+   detached `subprocess.Popen` that is never waited for (#644), so an editor
+   told to wait (`code --wait`) cannot freeze the window. A launch that fails
+   (logged as `Command not found: …`) stops here.
 4. On return, reloads **only in terminal mode**. Gated on `is_desktop_mode()`
    (`xefm.backend_detector`): a terminal editor (e.g. `vim`) blocks until quit,
-   so reloading on return is correct; a GUI editor (e.g. VS Code, the desktop
-   `TEXT_EDITOR` default) opens in its own window and `subprocess.run` returns
-   immediately — before anything is saved — so an auto-reload would run against
-   the unedited file. In GUI mode we instead log a hint to use
+   so reloading on return is correct; in desktop mode we return before anything
+   is saved, so an auto-reload would run against the unedited file. In GUI mode
+   we instead log a hint to use
    Tools ▸ Reload Configuration and render. `is_desktop_mode()` reads the
    `XEFM_BACKEND` env var published by `main()`, so it's reliable at runtime.
 
@@ -69,7 +71,8 @@ repointing.
 
 ## Tests
 
-`test/test_xefm_app_config_reload.py` (memory backend, `subprocess.run` mocked):
+`test/test_xefm_app_config_reload.py` (memory backend, `subprocess.run` /
+`subprocess.Popen` mocked):
 
 - `edit_config` launches the editor on the config path; in terminal mode it
   reloads on return, in GUI mode (`is_desktop_mode` patched True) it does **not**

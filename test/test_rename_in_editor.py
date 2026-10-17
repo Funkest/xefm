@@ -7,6 +7,7 @@ Run with: python -m pytest test/test_rename_in_editor.py -v
 
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -185,6 +186,12 @@ class AppRoundTrip(unittest.TestCase):
         self.app._settle_listings()
         self._saved_editor = self.app.config.TEXT_EDITOR
         self.app.config.TEXT_EDITOR = "fake-editor"
+        # is_desktop_mode() caches process-global detection other tests can
+        # leave True; desktop mode detaches the editor (#644) instead of the
+        # subprocess.run these tests stand in for, so pin terminal mode.
+        desktop = patch("xefm.app.is_desktop_mode", return_value=False)
+        desktop.start()
+        self.addCleanup(desktop.stop)
         pane = self.app.active_pane()
         pane["selected_files"] = {str(f) for f in pane["files"]}
 
@@ -215,6 +222,7 @@ class AppRoundTrip(unittest.TestCase):
                 text = f.read()
             with open(path, "w", encoding="utf-8") as f:
                 f.write(transform(text))
+            return subprocess.CompletedProcess(argv, 0)
         return patch("subprocess.run", side_effect=run)
 
     def _names(self):
@@ -252,6 +260,7 @@ class AppRoundTrip(unittest.TestCase):
 
         def gui_editor(argv, **kwargs):
             list_paths.append(argv[-1])   # a window opens; nothing saved yet
+            return subprocess.CompletedProcess(argv, 0)
 
         with patch("subprocess.run", side_effect=gui_editor):
             self.app.rename_in_editor()
@@ -262,6 +271,30 @@ class AppRoundTrip(unittest.TestCase):
         self._press("Apply")
         self._press("Rename")
         self.assertEqual(self._names(), ["a.txt", "beta.txt"])
+
+    def test_desktop_mode_detaches_the_editor_and_waits_for_apply(self):
+        """In the desktop app the editor is never waited for (#644), so even
+        ``code --wait`` takes the Apply path."""
+        with patch.object(xefm_app, "is_desktop_mode", return_value=True), \
+             patch("subprocess.run") as run, \
+             patch("subprocess.Popen") as popen:
+            self.app.rename_in_editor()
+        run.assert_not_called()
+        popen.assert_called_once()
+        list_path = popen.call_args.args[0][-1]
+        with open(list_path, "w", encoding="utf-8") as f:
+            f.write("a.txt\nbeta.txt\n")
+        self._press("Apply")
+        self._press("Rename")
+        self.assertEqual(self._names(), ["a.txt", "beta.txt"])
+
+    def test_an_editor_that_cannot_start_cancels_and_removes_the_list(self):
+        with patch.object(xefm_app, "is_desktop_mode", return_value=True), \
+             patch("subprocess.Popen", side_effect=FileNotFoundError) as popen:
+            self.app.rename_in_editor()
+        layers = self.app.panel._layers
+        self.assertFalse(layers and isinstance(layers[-1].widget, MessageBox))
+        self.assertFalse(os.path.exists(popen.call_args.args[0][-1]))
 
     def test_nothing_changed_in_a_blocking_editor_just_says_so(self):
         with patch.object(xefm_app.XeFMApp, "_EDITOR_RETURNED_AT_ONCE", 0.0), \

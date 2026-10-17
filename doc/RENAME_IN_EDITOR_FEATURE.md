@@ -32,7 +32,8 @@ renamed, it stays on that file under its new name.
 ## Editors that open their own window
 
 A GUI editor such as VS Code (without `--wait`) returns right away, before you
-have edited anything. XeFM then shows **Edit the names in your editor and save
+have edited anything. In the desktop app XeFM never waits for the editor, with
+or without `--wait`, so this is always the case there. XeFM then shows **Edit the names in your editor and save
 the file, then choose Apply.** Choose **Apply** once you've saved, or
 **Cancel** to drop the rename.
 

@@ -48,6 +48,12 @@ class EditSubshellBase(unittest.TestCase):
         # runs after it: `TEXT_EDITOR = None` leaked out of EditorSetting and
         # launched nothing in EditSelectedFiles, three tests that pass alone.
         self._saved_editor = self.app.config.TEXT_EDITOR
+        # is_desktop_mode() caches process-global detection other tests can
+        # leave True; desktop mode detaches the editor (#644) instead of the
+        # subprocess.run these tests stand in for, so pin terminal mode.
+        desktop = patch("xefm.app.is_desktop_mode", return_value=False)
+        desktop.start()
+        self.addCleanup(desktop.stop)
 
     def tearDown(self):
         self.app.config.TEXT_EDITOR = self._saved_editor
@@ -88,6 +94,50 @@ class EditFile(EditSubshellBase):
              patch("subprocess.run") as run:
             self.app.edit_file()
         self.assertEqual(run.call_args.args[0][0], r"C:\shims\code.cmd")
+
+    def test_desktop_mode_detaches_the_editor(self):
+        """``code --wait`` stays alive until the tab closes; waiting for it on
+        the UI thread froze the window for the whole edit (#644)."""
+        self._focus("note.txt")
+        entry = self.app._focused_entry()
+        self.app.config.TEXT_EDITOR = "code --wait"
+        with patch("xefm.app.is_desktop_mode", return_value=True), \
+             patch("shutil.which", return_value=None), \
+             patch.object(self.app.backend, "suspended") as suspended, \
+             patch("subprocess.run") as run, \
+             patch("subprocess.Popen") as popen:
+            self.app.edit_file()
+        run.assert_not_called()
+        suspended.assert_not_called()
+        popen.assert_called_once()
+        self.assertEqual(popen.call_args.args[0], ["code", "--wait", str(entry)])
+
+    def test_desktop_mode_says_opened_and_paints_it_at_once(self):
+        """A detached editor has edited nothing yet, so the log says it was
+        opened — and the repaint comes after that line, or the line waits for
+        some later repaint (the editor exiting, say) to show up."""
+        self._focus("note.txt")
+        self.app.config.TEXT_EDITOR = "code --wait"
+        events = []
+        with patch("xefm.app.is_desktop_mode", return_value=True), \
+             patch("shutil.which", return_value=None), \
+             patch("subprocess.Popen"), \
+             patch.object(self.app, "log_info",
+                          side_effect=lambda m: events.append(("log", m))), \
+             patch.object(self.app.panel, "render",
+                          side_effect=lambda *a, **k: events.append(("render",))):
+            self.app.edit_file()
+        self.assertEqual(events, [("log", "Opened note.txt in code"), ("render",)])
+
+    def test_desktop_mode_reports_a_missing_editor(self):
+        self._focus("note.txt")
+        self.app.config.TEXT_EDITOR = "no-such-editor"
+        with patch("xefm.app.is_desktop_mode", return_value=True), \
+             patch("subprocess.Popen", side_effect=FileNotFoundError), \
+             patch.object(self.app, "log_info") as log:
+            self.app.edit_file()
+        logged = [str(c.args[0]) for c in log.call_args_list]
+        self.assertEqual(logged, ["Command not found: no-such-editor"])
 
     def test_hands_terminal_over_via_suspended(self):
         self._focus("note.txt")

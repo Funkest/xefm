@@ -48,6 +48,7 @@ class FakeApp:
         self.ran_in_terminal = argv
 
     launch = xefm_app.XeFMApp._launch_associated
+    _spawn_detached = xefm_app.XeFMApp._spawn_detached
     _files_label = staticmethod(xefm_app.XeFMApp._files_label)
 
 
