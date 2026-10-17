@@ -68,18 +68,25 @@ from xefm.log_manager import getLogger
 logger = getLogger("Extensions")
 
 MANIFEST = "xefm-extension.toml"
-#: The AI-agent skill for writing extensions, shipped inside the package so
-#: every install channel has it (``xefm ext skill``).
-SKILL_DIR = Path(__file__).parent / "skills" / "xefm-extension-authoring"
-#: The release asset's name. Unversioned on purpose, so
-#: ``…/releases/latest/download/<this>`` is a URL that never changes.
-SKILL_ZIP_NAME = "xefm-extension-authoring.zip"
+#: The AI-agent skill for working with XeFM — config edits and extensions —
+#: shipped inside the package so every install channel has it (``xefm skill``).
+SKILL_DIR = Path(__file__).parent / "skills" / "xefm"
+#: The skill's folder name before #639 widened it beyond extensions. An agent
+#: installing the new one removes this one beside it.
+LEGACY_SKILL_NAME = "xefm-extension-authoring"
+
+
+def skill_zip_name(version: str = _XEFM_VERSION) -> str:
+    """The release asset's name, ``xefm-X.Y.Z-skill.zip``. Versioned, because
+    the skill describes one XeFM's config and API (#639); the install doc
+    resolves the latest tag rather than relying on a fixed URL."""
+    return f"xefm-{version}-skill.zip"
 
 
 def write_skill_zip(path: Path) -> Path:
-    """Zip the authoring skill as one top-level folder,
-    ``xefm-extension-authoring/SKILL.md``, so unzipping it into any agent's
-    skills directory gives the layout every Agent Skills client expects."""
+    """Zip the skill as one top-level folder, ``xefm/SKILL.md`` plus its
+    ``references/``, so unzipping it into any agent's skills directory gives
+    the layout every Agent Skills client expects."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:

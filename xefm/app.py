@@ -11243,6 +11243,7 @@ examples:
   xefm --backend web              browser tab
   xefm --left ~/projects --right ~/downloads
   xefm ext --help                 manage extension packages
+  xefm skill --help               the skill that teaches AI agents XeFM
 
 Project home: https://github.com/crftwr/xefm
 """
@@ -11311,6 +11312,10 @@ def main() -> None:
     if len(sys.argv) > 1 and sys.argv[1] == "ext":
         from xefm.extension_cli import main as ext_main
         sys.exit(ext_main(sys.argv[2:]))
+    # `xefm skill` writes or installs the AI-agent skill — no window either.
+    if len(sys.argv) > 1 and sys.argv[1] == "skill":
+        from xefm.extension_cli import skill_main
+        sys.exit(skill_main(sys.argv[2:]))
     args = create_parser().parse_args()
 
     backend_name = _BACKENDS.get(args.backend, args.backend)

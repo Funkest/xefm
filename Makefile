@@ -143,7 +143,7 @@ help:
 	@echo "Release (one target per artifact; run in this order):"
 	@echo "  tag VERSION=x.y.z  - Bump __version__, commit, tag, push (no publishing)"
 	@echo "  release-github     - Open the GitHub Release at that tag (attaches the agent skill zip)"
-	@echo "  skill-zip          - Build dist/xefm-extension-authoring.zip (AI-agent skill)"
+	@echo "  skill-zip          - Build dist/xefm-<version>-skill.zip (AI-agent skill)"
 	@echo "  release-whl        - Upload sdist + wheel to PyPI, and to the Release"
 	@echo "  release-macos-dmg  - (on macOS)   attach XeFM-<ver>-macos.dmg to the Release"
 	@echo "  release-windows-zip- (on Windows) attach XeFM-<ver>-win64.zip to the Release"
@@ -631,14 +631,13 @@ release-github:
 	fi
 	@$(MAKE) --no-print-directory release-skill
 
-# --- The extension-authoring skill for AI agents ------------------------------
-# A plain zip of xefm/skills/xefm-extension-authoring/, for any Agent Skills
-# client (doc/EXTENSION_AUTHORING_SKILL_FEATURE.md). The asset name carries no
-# version so .../releases/latest/download/xefm-extension-authoring.zip is a URL
-# that never changes; each Release still holds the copy matching its own API.
-# Pure Python and platform-independent, so release-github attaches it itself —
-# it is not a fourth artifact to remember.
-SKILL_ZIP := dist/xefm-extension-authoring.zip
+# --- The XeFM skill for AI agents --------------------------------------------
+# A plain zip of xefm/skills/xefm/, for any Agent Skills client
+# (doc/AGENT_SKILL_FEATURE.md). The asset name carries the version, since the
+# skill describes that release's config and API (#639); the install doc has an
+# agent resolve the latest tag first. Pure Python and platform-independent, so
+# release-github attaches it itself — it is not a fourth artifact to remember.
+SKILL_ZIP := dist/xefm-$(XEFM_VERSION)-skill.zip
 
 skill-zip:
 	@$(PYTHON) -c "from xefm.extensions import write_skill_zip; print('wrote', write_skill_zip('$(SKILL_ZIP)'))"

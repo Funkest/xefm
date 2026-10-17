@@ -1,7 +1,8 @@
-"""The extension-authoring skill, the scaffold and the checker agree (#583).
+"""The XeFM agent skill, the scaffold and the checker agree (#583, #639).
 
-The promise is that an agent following ``xefm/skills/xefm-extension-authoring``
-ends up with a package that meets XeFM's requirements. That holds only while
+The promise is that an agent following ``xefm/skills/xefm`` ends up with a
+package that meets XeFM's requirements, and with a ``config.py`` edit that
+names only settings and actions XeFM has. The extension half holds only while
 three things stay in step, so each is pinned here:
 
 - the scaffold ``xefm ext new`` writes passes the check with no findings, and
@@ -29,11 +30,16 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
+import xefm  # noqa: E402
 from xefm import extension_cli  # noqa: E402
 from xefm import extensions as ext  # noqa: E402
 from xefm import user_api  # noqa: E402
 
-SKILL = (ext.SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+#: The router agents load first, and the two references it hands off to.
+#: ``SKILL`` is the extensions reference, which most tests below read.
+ROUTER = (ext.SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+SKILL = (ext.SKILL_DIR / "references" / "extensions.md").read_text(encoding="utf-8")
+CONFIG = (ext.SKILL_DIR / "references" / "config.md").read_text(encoding="utf-8")
 
 
 def _section(title: str) -> str:
@@ -134,9 +140,19 @@ class CodeLint(_Tmp):
 
 class SkillMatchesTheChecker(_Tmp):
     def test_frontmatter(self):
-        head = SKILL.split("---")[1]
-        self.assertIn("name: xefm-extension-authoring", head)
-        self.assertRegex(head, r"description: .{80,}")
+        head = ROUTER.split("---")[1]
+        self.assertIn("name: xefm\n", head)
+        self.assertEqual(ext.SKILL_DIR.name, "xefm")   # the folder is the name
+        description = re.search(r"description: (.*)", head).group(1)
+        # One skill for both jobs: it has to trigger on either.
+        for word in ("config.py", "extension", "xefm ext check"):
+            self.assertIn(word, description)
+
+    def test_the_router_names_references_that_exist(self):
+        cited = set(re.findall(r"`(references/[\w.-]+)`", ROUTER))
+        self.assertEqual(cited, {"references/config.md", "references/extensions.md"})
+        for ref in cited:
+            self.assertTrue((ext.SKILL_DIR / ref).is_file(), ref)
 
     def test_the_example_manifest_passes(self):
         """Every reference the example makes is given a stub, so what is being
@@ -205,9 +221,66 @@ class SkillMatchesTheChecker(_Tmp):
     def test_skill_install_copies_it(self):
         out = io.StringIO()
         with redirect_stdout(out):
+            code = extension_cli.skill_main(["--install", str(self.tmp)])
+        self.assertEqual(code, 0)
+        self.assertTrue((self.tmp / "xefm" / "SKILL.md").is_file())
+        self.assertTrue((self.tmp / "xefm" / "references" / "config.md").is_file())
+
+    def test_ext_skill_is_an_alias(self):
+        with redirect_stdout(io.StringIO()):
             code = extension_cli.main(["skill", "--install", str(self.tmp)])
         self.assertEqual(code, 0)
-        self.assertTrue((self.tmp / "xefm-extension-authoring" / "SKILL.md").is_file())
+        self.assertTrue((self.tmp / "xefm" / "SKILL.md").is_file())
+
+    def _legacy(self, name: str) -> Path:
+        old = self.tmp / ext.LEGACY_SKILL_NAME
+        old.mkdir()
+        (old / "SKILL.md").write_text(f"---\nname: {name}\n---\n", encoding="utf-8")
+        return old
+
+    def test_install_removes_the_old_extension_only_skill(self):
+        old = self._legacy(ext.LEGACY_SKILL_NAME)
+        with redirect_stdout(io.StringIO()):
+            extension_cli.skill_main(["--install", str(self.tmp)])
+        self.assertFalse(old.exists())
+
+    def test_install_keeps_a_same_named_folder_that_is_not_the_old_skill(self):
+        old = self._legacy("someone-elses")
+        with redirect_stdout(io.StringIO()):
+            extension_cli.skill_main(["--install", str(self.tmp)])
+        self.assertTrue(old.exists())
+
+
+class ConfigReferenceMatchesXeFM(unittest.TestCase):
+    """``references/config.md`` names settings and actions; each must be one
+    XeFM has, or an agent writes an attribute XeFM silently ignores."""
+
+    def test_every_setting_it_names_is_in_the_template(self):
+        from xefm import _config
+        names = set(re.findall(r"`([A-Z][A-Z0-9_]{2,})`", CONFIG))
+        names |= set(re.findall(r"^\s+([A-Z][A-Z0-9_]{2,}) = ", CONFIG, re.M))
+        self.assertIn("KEY_BINDINGS", names)       # the pattern found them
+        for name in names:
+            self.assertTrue(hasattr(_config.Config, name), name)
+
+    def test_every_action_in_its_examples_exists(self):
+        from xefm import actions
+        tables = re.findall(r"KEY_BINDINGS = \{(.*?)\}\n", CONFIG, re.S)
+        cited = {name for table in tables
+                 for name in re.findall(r"^\s*'([a-z][\w.-]*)': [\[{]", table, re.M)}
+        cited -= {"select-documents"}               # the example's own action
+        self.assertIn("reload_config", cited)
+        for name in cited:
+            if "." in name:
+                context = name.split(".", 1)[0]
+                self.assertIn(name, actions.registry.names(context), name)
+            else:
+                self.assertIsNotNone(actions.registry.builtin(actions.FILER, name), name)
+
+    def test_the_keymap_presets_it_names_exist(self):
+        from xefm import keymap_presets
+        for name in re.findall(r"`KEY_PRESET = '(\w+)'", CONFIG) + ["afx", "orthodox"]:
+            self.assertEqual(keymap_presets.canonical(name), name)
 
 
 
@@ -219,13 +292,30 @@ class Distribution(_Tmp):
 
     def test_the_zip_holds_one_skill_folder(self):
         import zipfile
-        path = ext.write_skill_zip(self.tmp / ext.SKILL_ZIP_NAME)
+        path = ext.write_skill_zip(self.tmp / ext.skill_zip_name())
         with zipfile.ZipFile(path) as archive:
             names = archive.namelist()
-            self.assertIn("xefm-extension-authoring/SKILL.md", names)
-            self.assertTrue(all(n.startswith("xefm-extension-authoring/") for n in names))
-            text = archive.read("xefm-extension-authoring/SKILL.md").decode()
-        self.assertIn("name: xefm-extension-authoring", text.split("---")[1])
+            for member in ("xefm/SKILL.md", "xefm/references/config.md",
+                           "xefm/references/extensions.md"):
+                self.assertIn(member, names)
+            self.assertTrue(all(n.startswith("xefm/") for n in names))
+            text = archive.read("xefm/SKILL.md").decode()
+        self.assertIn("name: xefm\n", text.split("---")[1])
+
+    def test_the_asset_name_carries_the_version(self):
+        self.assertEqual(ext.skill_zip_name("1.8.1"), "xefm-1.8.1-skill.zip")
+        self.assertEqual(ext.skill_zip_name(), f"xefm-{xefm.__version__}-skill.zip")
+
+    def test_the_wheel_takes_every_skill_file(self):
+        """package-data globs do not recurse: each depth needs its pattern."""
+        text = (self.REPO / "pyproject.toml").read_text(encoding="utf-8")
+        line = re.search(r'^xefm = \[(.*)\]', text, re.M).group(1)
+        patterns = set(re.findall(r'"([^"]+)"', line))
+        package = ext.SKILL_DIR.parent.parent
+        for file in ext.SKILL_DIR.rglob("*"):
+            if file.is_file():
+                depth = len(file.relative_to(package / "skills").parts)
+                self.assertIn("skills" + "/*" * depth, patterns, file)
 
     def test_cli_zip_and_install(self):
         out = io.StringIO()
@@ -240,17 +330,24 @@ class Distribution(_Tmp):
 
     def test_the_names_agree(self):
         """One asset name, spelled the same in the code, the Makefile, and the
-        URLs the install doc gives an agent."""
+        URL and command the install doc gives an agent."""
         makefile = (self.REPO / "Makefile").read_text(encoding="utf-8")
-        self.assertIn(f"SKILL_ZIP := dist/{ext.SKILL_ZIP_NAME}", makefile)
-        doc = (self.REPO / "doc" / "EXTENSION_AUTHORING_SKILL_FEATURE.md").read_text(
-            encoding="utf-8")
+        self.assertIn("SKILL_ZIP := dist/" + ext.skill_zip_name("$(XEFM_VERSION)"),
+                      makefile)
+        doc = (self.REPO / "doc" / "AGENT_SKILL_FEATURE.md").read_text(encoding="utf-8")
         urls = re.findall(r"https://github\.com/crftwr/xefm/releases/\S+?\.zip", doc)
-        self.assertEqual(len(urls), 2)
-        for url in urls:
-            self.assertTrue(url.endswith("/" + ext.SKILL_ZIP_NAME), url)
-        self.assertIn("name: xefm-extension-authoring", doc)
+        self.assertEqual(urls, ["https://github.com/crftwr/xefm/releases/download/"
+                                "vX.Y.Z/" + ext.skill_zip_name("X.Y.Z")])
+        self.assertIn("xefm skill --zip <temp>/" + ext.skill_zip_name("X.Y.Z"), doc)
+        self.assertIn("name: xefm`", doc)
         self.assertIn(ext.SKILL_DIR.name + "/SKILL.md", doc)
+        self.assertIn(ext.LEGACY_SKILL_NAME, doc)   # and says to remove the old one
+
+    def test_the_old_page_points_at_the_new_one(self):
+        """Agents were handed the old URL before the rename."""
+        old = (self.REPO / "doc" / "EXTENSION_AUTHORING_SKILL_FEATURE.md").read_text(
+            encoding="utf-8")
+        self.assertIn("AGENT_SKILL_FEATURE.md#instructions-for-ai-agents", old)
 
 
 if __name__ == "__main__":

@@ -106,17 +106,17 @@ xefm ext new hello-xefm
 
 ### With an AI assistant
 
-XeFM provides a skill for AI coding agents, `xefm-extension-authoring`, that
-walks through writing, checking and installing a package. It covers the
-manifest, the API your code may use, settings, dependencies and testing, and it
-has the agent run `xefm ext check` until the package is clean. It works with
-any agent that reads [Agent Skills](https://agentskills.io).
+XeFM provides a skill for AI agents, `xefm`, that walks through writing,
+checking and installing a package (it also covers editing your `config.py`).
+It covers the manifest, the API your code may use, settings, dependencies and
+testing, and it has the agent run `xefm ext check` until the package is clean.
+It works with any agent that reads [Agent Skills](https://agentskills.io).
 
 You can let the agent install the skill itself. Give it the page
-[The Extension Authoring Skill](EXTENSION_AUTHORING_SKILL_FEATURE.md)
-(https://crftwr.github.io/xefm/doc/EXTENSION_AUTHORING_SKILL_FEATURE.html)
+[The XeFM Skill for AI Agents](AGENT_SKILL_FEATURE.md)
+(https://crftwr.github.io/xefm/doc/AGENT_SKILL_FEATURE.html)
 and ask it to install the skill. You can also download
-`xefm-extension-authoring.zip` from the releases page and unzip it into your
+`xefm-X.Y.Z-skill.zip` from the releases page and unzip it into your
 agent's skills folder yourself; that page explains both.
 
 Then ask for the feature ("make an XeFM extension that…"). If the agent follows

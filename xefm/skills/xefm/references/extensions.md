@@ -1,9 +1,7 @@
----
-name: xefm-extension-authoring
-description: Write, check and install an extension package for the XeFM file manager — actions, event hooks, themes, sort orders, filters, picture formats, path schemes or syntax highlighting, packaged with an xefm-extension.toml manifest. Use when the user asks for a new XeFM feature that can live outside the core ("add an XeFM action that…", "make an XeFM extension", "turn my config.py action into an extension"), or asks to fix an extension that `xefm ext check` rejects.
----
-
 # Writing an XeFM extension
+
+Read `SKILL.md` first: the ground rules there (never launch XeFM, where its
+files are) apply here too.
 
 An XeFM extension is a folder with a manifest (`xefm-extension.toml`) and,
 when it runs code, a Python package. XeFM reads the manifest, checks it

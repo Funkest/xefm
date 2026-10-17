@@ -176,15 +176,14 @@ invent a tag GitHub does not have, which is why `tag` pushes it), then
 exists it says so and changes nothing, so re-running the pipeline is free.
 
 It then runs `make release-skill`, which builds
-`dist/xefm-extension-authoring.zip` (`make skill-zip`) and uploads it with
-`--clobber`. That zip is the AI-agent skill for writing extensions. Its name
-carries no version, so
-`https://github.com/crftwr/xefm/releases/latest/download/xefm-extension-authoring.zip`
-always resolves to the latest copy. Each Release still keeps the copy that
-matches its own API, and
-`doc/EXTENSION_AUTHORING_SKILL_FEATURE.md` points agents at these URLs. The zip
-is pure Python and builds on any machine, so it rides along with the Release
-instead of being a fourth artifact to remember.
+`dist/xefm-X.Y.Z-skill.zip` (`make skill-zip`) and uploads it with
+`--clobber`. That zip is the AI-agent skill for XeFM (config edits and
+extensions). Its name carries the version, since it describes that release's
+config and API; `doc/AGENT_SKILL_FEATURE.md` tells agents how to find the
+latest tag and build the URL. Releases up to 1.8.0 carry the older
+`xefm-extension-authoring.zip` instead. The zip is pure Python and builds on
+any machine, so it rides along with the Release instead of being a fourth
+artifact to remember.
 
 ### `make release-whl`
 

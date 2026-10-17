@@ -69,26 +69,34 @@ prints them without the manifest prefix.
 The user asked for an AI-agent skill whose instructions, followed as written,
 satisfy every extension requirement. Three pieces make that hold.
 
-- **The skill:** `xefm/skills/xefm-extension-authoring/SKILL.md`. It ships as
-  package data (`pyproject.toml`, `MANIFEST.in`). The macOS and Windows bundle
-  scripts copy the whole `xefm/` tree, so the skill reaches every channel.
+- **The skill:** `xefm/skills/xefm/` — a short `SKILL.md` that routes, plus
+  `references/extensions.md` (this system) and `references/config.md`
+  (editing `~/.xefm/config.py`). It was `xefm-extension-authoring`, covering
+  extensions only, until #639 widened and renamed it. It ships as package data
+  (`pyproject.toml` takes `skills/*/*` and `skills/*/*/*`; `MANIFEST.in`). The
+  macOS and Windows bundle scripts copy the whole `xefm/` tree, so the skill
+  reaches every channel.
 
   **Distribution is client-neutral.** `release-github` attaches
-  `xefm-extension-authoring.zip` to every GitHub Release (`make skill-zip` /
-  `release-skill`). The asset name is unversioned, so
-  `releases/latest/download/...` is a stable URL. `write_skill_zip` puts the
-  skill under one top-level folder, so unzipping it into any skills directory
-  gives the right layout.
+  `xefm-X.Y.Z-skill.zip` (`skill_zip_name()`) to every GitHub Release
+  (`make skill-zip` / `release-skill`). The name is versioned because the
+  skill describes one release's config and API, so there is no fixed
+  `releases/latest/download/...` URL: the install instructions have the agent
+  resolve the latest tag (GitHub API or `gh`) when no `xefm` is on PATH.
+  `write_skill_zip` puts the skill under one top-level folder, so unzipping it
+  into any skills directory gives the right layout.
 
-  `doc/EXTENSION_AUTHORING_SKILL_FEATURE.md` (published on GitHub Pages) has a
-  section written as instructions to an agent: pick the version, download,
-  verify, choose the directory (its own, preferring `~/.agents/skills/`; ask
-  if unsure), replace, report. A user can hand the agent that URL and have it
-  install the skill.
+  `doc/AGENT_SKILL_FEATURE.md` (published on GitHub Pages) has a section
+  written as instructions to an agent: pick the version, get the zip, verify,
+  choose the directory (its own, preferring `~/.agents/skills/`; ask if
+  unsure), replace, remove the old `xefm-extension-authoring/` (only when its
+  frontmatter says so), report. `EXTENSION_AUTHORING_SKILL_FEATURE.md` stays
+  as a pointer, since that URL was handed to agents before the rename.
 
-  `xefm ext skill` prints the path, `--install DIR` copies the skill (`DIR`
-  is required: no client's directory is assumed), and `--zip FILE` writes the
-  same zip offline.
+  `xefm skill` prints the path, `--install DIR` copies the skill (`DIR` is
+  required: no client's directory is assumed) and removes the legacy folder
+  beside it, and `--zip FILE` writes the same zip offline. `xefm ext skill`
+  is the same command, kept as an alias.
 - **The scaffold:** `scaffold(id, parent)`, behind `xefm ext new`, writes a
   package with zero findings. It has a manifest, a thin `actions.py` over a
   plain `logic.py`, `settings.py`, `tests/`, and a `pytest.ini` with
