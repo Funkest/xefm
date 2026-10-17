@@ -150,7 +150,9 @@ class SkillMatchesTheChecker(_Tmp):
 
     def test_the_router_names_references_that_exist(self):
         cited = set(re.findall(r"`(references/[\w.-]+)`", ROUTER))
-        self.assertEqual(cited, {"references/config.md", "references/extensions.md"})
+        self.assertEqual(cited, {"references/config.md", "references/extensions.md",
+                                 "references/actions.md",
+                                 "references/config-template.md"})
         for ref in cited:
             self.assertTrue((ext.SKILL_DIR / ref).is_file(), ref)
 
@@ -276,6 +278,33 @@ class ConfigReferenceMatchesXeFM(unittest.TestCase):
                 self.assertIn(name, actions.registry.names(context), name)
             else:
                 self.assertIsNotNone(actions.registry.builtin(actions.FILER, name), name)
+
+    def test_the_action_table_is_current(self):
+        """references/actions.md is generated; a stale one teaches an agent
+        names or keys XeFM no longer has."""
+        done = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve().parent.parent / "tools"
+                                 / "gen_skill_references.py"), "--check"],
+            capture_output=True, text=True,
+            env=dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parent.parent)))
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_every_old_action_name_is_in_the_table(self):
+        """An older config.py binds old names; an agent that cannot tell one
+        from a typo either deletes it or binds the action twice."""
+        from xefm import actions
+        table = (ext.SKILL_DIR / "references" / "actions.md").read_text(encoding="utf-8")
+        for context in actions.CONTEXTS:
+            for action in actions.registry.actions(context):
+                for alias in action.aliases:
+                    row = f"| `{alias}` | `{action.name}` |"
+                    self.assertEqual(table.count(row), 1, row)
+
+    def test_the_skill_no_longer_sends_agents_to_the_docs_for_names(self):
+        """The clean room could not follow those links, and neither can an
+        agent with no web access: the names have to be in the skill."""
+        self.assertNotIn("KEY_BINDINGS_FEATURE.html", CONFIG)
+        self.assertIn("references/actions.md", CONFIG)
 
     def test_the_keymap_presets_it_names_exist(self):
         from xefm import keymap_presets

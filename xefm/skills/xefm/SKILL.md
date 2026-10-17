@@ -36,6 +36,8 @@ On Windows `~` is the user's profile folder (`C:\Users\<name>`).
 |---|---|
 | a setting changed: keys, editor, diff tool, favorites, file associations, external programs, themes, confirmations, fonts, the keymap preset | `references/config.md` |
 | a small function of their own bound to a key, in their config | `references/config.md` (*Actions*) |
+| an action's exact name, or which keys a preset already uses | `references/actions.md` (generated from XeFM) |
+| what a setting is called, its default, what it does | `references/config-template.md` (XeFM's template, generated) |
 | a feature to package, share, or keep apart from their config; anything with settings of its own, tests, or several files | `references/extensions.md` |
 | an extension fixed that `xefm ext check` rejects | `references/extensions.md` |
 

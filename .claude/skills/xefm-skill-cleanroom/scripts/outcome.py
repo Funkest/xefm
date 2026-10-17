@@ -55,9 +55,38 @@ _USER_EDITS = (
 )
 
 
-def fixture_config() -> str:
-    """The template with the user's edits on it — what the room finds in
-    ``~/.xefm/config.py``."""
+#: A user who wrote their own short config, or deleted the template's
+#: comments: the same edits, and nothing else. A skill that leans on the
+#: comments in the user's file (the commented examples, the explanations next
+#: to each setting) has nothing to lean on here.
+BARE = """\
+class Config:
+    KEY_PRESET = 'afx'  # keep: I use the letter keys
+
+    KEY_BINDINGS = {
+        'quit': ['Shift-Q'],  # keep: no accidental quits
+    }
+
+    CONFIRM_DELETE = False  # keep: I know what I'm doing
+
+    FAVORITES = [
+        {'name': 'Home', 'path': '~'},
+        {'name': 'Notes', 'path': '~/notes'},  # keep: my notes
+    ]
+# keep: a note of mine at the very end
+"""
+
+
+def fixture_config(kind: str = "template") -> str:
+    """What the room finds in ``~/.xefm/config.py``: ``"template"`` is the
+    template with the user's edits on it, ``"bare"`` the same edits with no
+    template text at all (:data:`BARE`)."""
+    if "\n" in kind:          # a scenario's own fixture, written out in full
+        return kind
+    if kind == "bare":
+        return BARE
+    if kind != "template":
+        raise ValueError(f"unknown fixture {kind!r}")
     text = TEMPLATE.read_text(encoding="utf-8")
     lines = text.split("\n")
     for anchor, replacement in _USER_EDITS:
@@ -66,6 +95,36 @@ def fixture_config() -> str:
             raise RuntimeError(f"fixture anchor not found once in {TEMPLATE}: {anchor!r}")
         lines[hits[0]] = replacement
     return "\n".join(lines) + "\n# keep: a note of mine at the very end\n"
+
+
+def template_source(name: str) -> str:
+    """``Config.<name>``'s assignment in the template, verbatim — for a
+    reference edit that has to copy a default the way a correct run would."""
+    import ast
+    text = TEMPLATE.read_text(encoding="utf-8")
+    for node in ast.walk(ast.parse(text)):
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and getattr(node.targets[0], "id", None) == name):
+            return "    " + ast.get_source_segment(text, node)
+    raise KeyError(name)
+
+
+def terminal_safe(key: str) -> bool:
+    """Whether a terminal on every platform delivers ``key`` as itself:
+    not a Command chord, not Ctrl-Shift-<letter> (a POSIX terminal sends that
+    as Ctrl-<letter>), not Shift on a printable key, not Ctrl/Alt-ENTER."""
+    parts = [p.lower() for p in key.split("-")]
+    mods, base = set(parts[:-1]), parts[-1]
+    ctrl = bool(mods & {"ctrl", "control"})
+    if mods & {"cmd", "command"}:
+        return False
+    if ctrl and "shift" in mods and len(base) == 1 and base.isalpha():
+        return False
+    if mods == {"shift"} and (base == "space" or (len(base) == 1 and not base.isalpha())):
+        return False
+    if base in ("enter", "return") and mods:
+        return False
+    return True
 
 
 def load_scenarios(names: list[str] | None = None) -> list:
@@ -148,9 +207,10 @@ def effective_keymap(values: dict, preset: str | None = None,
                      backend: str = "tui") -> dict:
     """The keymap XeFM would run: the preset in force, ``KEY_BINDINGS`` laid
     over it. ``preset`` defaults to the config's ``KEY_PRESET``."""
-    from xefm import keymap_presets
+    from xefm import backend_detector, keymap_presets
     saved = os.environ.get("XEFM_BACKEND")
     os.environ["XEFM_BACKEND"] = backend
+    backend_detector._cached_backend = None      # it caches the first answer
     try:
         config = SimpleNamespace(KEY_BINDINGS=dict(values.get("KEY_BINDINGS") or {}))
         keymap_presets.apply(config, preset or values.get("KEY_PRESET") or "afx")
@@ -160,6 +220,7 @@ def effective_keymap(values: dict, preset: str | None = None,
             os.environ.pop("XEFM_BACKEND", None)
         else:
             os.environ["XEFM_BACKEND"] = saved
+        backend_detector._cached_backend = None
 
 
 def actions_on(keymap: dict, key: str) -> list[str]:
@@ -244,7 +305,10 @@ def preserved_failures(o: Outcome) -> list[str]:
             failures.append(f"lost the user's line: {line.strip()}")
     before_lines = o.before.splitlines()
     kept = sum(1 for line in before_lines if line in after_lines)
-    if kept < 0.97 * len(before_lines):
+    # A real edit changes a line or two of the original; a rewrite changes
+    # many. Two lines or 3%, whichever is more, so a short file is not held
+    # to a ratio one edited line already breaks.
+    if kept < len(before_lines) - max(2, 0.03 * len(before_lines)):
         failures.append(f"rewrote the file: only {kept} of {len(before_lines)} "
                         f"original lines are still there")
     values = o.config()

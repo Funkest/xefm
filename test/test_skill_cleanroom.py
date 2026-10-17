@@ -24,11 +24,16 @@ import run_room  # noqa: E402
 SCENARIOS = outcome.load_scenarios()
 FIXTURE = outcome.fixture_config()
 #: A reply that says what a good one would, for the checks that read it.
-REPLY = "Done. Ctrl-T was the command palette; choose the theme in View ▸ Theme."
+REPLY = ("Done. Ctrl-T was the command palette; choose the theme in View ▸ Theme. "
+         "With --wait, XeFM is unresponsive until you close the tab.")
+
+
+def _fixture(scenario):
+    return outcome.fixture_config(getattr(scenario, "FIXTURE", "template"))
 
 
 def _failures(scenario, after, reply=REPLY):
-    o = outcome.Outcome(before=FIXTURE, after=after, reply=reply)
+    o = outcome.Outcome(before=_fixture(scenario), after=after, reply=reply)
     return outcome.common_failures(o, scenario.KIND) + scenario.check(o)
 
 
@@ -53,7 +58,7 @@ def test_the_fixture_loads_cleanly_and_carries_the_user_s_edits():
 
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda s: s.NAME)
 def test_doing_nothing_fails(scenario):
-    failures = _failures(scenario, FIXTURE)
+    failures = _failures(scenario, _fixture(scenario))
     if getattr(scenario, "UNTOUCHED_PASSES", False):
         assert failures == []
     else:
@@ -63,11 +68,11 @@ def test_doing_nothing_fails(scenario):
 @pytest.mark.parametrize("scenario", [s for s in SCENARIOS if s.reference],
                          ids=lambda s: s.NAME)
 def test_the_reference_edit_passes(scenario):
-    assert _failures(scenario, scenario.reference(FIXTURE)) == []
+    assert _failures(scenario, scenario.reference(_fixture(scenario))) == []
 
 
 def test_losing_a_user_line_fails():
-    edited = SCENARIOS[0].reference(FIXTURE).replace("  # keep: my notes", "")
+    edited = SCENARIOS[0].reference(_fixture(SCENARIOS[0])).replace("  # keep: my notes", "")
     assert any("lost the user's line" in f for f in _failures(SCENARIOS[0], edited))
 
 
@@ -123,3 +128,35 @@ def test_the_room_holds_the_skill_and_nothing_else(tmp_path):
     task = (room / "TASK.md").read_text(encoding="utf-8")
     assert SCENARIOS[0].PROMPT.strip() in task
     assert "Must" not in task          # the scoring key stays out of the room
+
+
+def test_the_bare_fixture_has_no_template_text_but_the_same_edits():
+    bare = outcome.fixture_config("bare")
+    loaded = outcome.inspect_config(bare)
+    assert loaded["errors"] == []
+    assert loaded["values"]["KEY_BINDINGS"] == {"quit": ["Shift-Q"]}
+    assert loaded["values"]["CONFIRM_DELETE"] is False
+    assert "reload_config" not in bare and "FILE_ASSOCIATIONS" not in bare
+    assert outcome.common_failures(outcome.Outcome(bare, bare), "config") == []
+
+
+def test_some_scenarios_run_on_the_bare_fixture():
+    assert {"template", "bare"} <= {getattr(s, "FIXTURE", "template") for s in SCENARIOS}
+
+
+def test_dropping_the_default_associations_fails():
+    """04's trap: a FILE_ASSOCIATIONS holding only the new rule."""
+    scenario = next(s for s in SCENARIOS if s.NAME.startswith("04"))
+    bare = _fixture(scenario)
+    only_new = bare.replace("    CONFIRM_DELETE = False",
+                            "    FILE_ASSOCIATIONS = [{'pattern': '*.log', 'view': ['less']}]\n"
+                            "    CONFIRM_DELETE = False", 1)
+    assert any(".jpg" in f for f in _failures(scenario, only_new))
+
+
+@pytest.mark.parametrize("key,safe", [
+    ("F2", True), ("Ctrl-UP", True), ("Ctrl-T", True), ("Shift-F", True),
+    ("Ctrl-Shift-P", False), ("Cmd-K", False), ("Command-ENTER", False),
+    ("Shift-SPACE", False), ("Ctrl-ENTER", False)])
+def test_terminal_safe_keys(key, safe):
+    assert outcome.terminal_safe(key) is safe

@@ -8,7 +8,7 @@ Switch XeFM to the Dracula theme.
 """
 MUST = """\
 - Leave config.py unchanged: Dracula is built in, and the theme in use is
-  chosen in XeFM (View ▸ Theme, or the theme key) and remembered there.
+  chosen in XeFM (View ▸ Theme, or View ▸ Next Theme) and remembered there.
 - Tell the user how to pick it.
 Must not: add a 'Dracula' entry to THEMES, or invent a THEME = 'Dracula'
 setting.

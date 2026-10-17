@@ -4,6 +4,10 @@ from outcome import actions_on, effective_keymap, keys_of, same_key
 
 TITLE = "Put Reload Configuration on F12"
 KIND = "config"
+#: No template comments to copy from: no commented example of this very
+#: entry, no "a key no preset uses" note. The name and the free key have to
+#: come from the skill.
+FIXTURE = "bare"
 PROMPT = """\
 I edit my XeFM config in another editor window all the time. Can you put
 Reload Configuration on F12 so I don't have to go through the menu?

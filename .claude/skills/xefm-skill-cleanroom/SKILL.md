@@ -26,8 +26,11 @@ nothing else) and an empty `QUESTIONS.md`. A `claude -p` session runs in it
 with `--restricted`, told only "Read RULES.md, then do TASK.md."
 
 **Your `~/.xefm/config.py` is moved aside for each run** (to
-`config.py.cleanroom-backup`) and a fixture stands in: the template plus
-the edits a real user makes, each marked `# keep:`. It is put back on any
+`config.py.cleanroom-backup`) and a fixture stands in. A scenario picks it
+with `FIXTURE`: `"template"` (the default) is the template plus the edits a
+real user makes, each marked `# keep:`; `"bare"` is the same edits with no
+template text at all — a user who deleted the comments, so the skill cannot
+lean on them; or the scenario's own text. It is put back on any
 exit; a backup found at start-up means a run died, and the script refuses
 until `ARGS=--restore` puts it back. Do not reload the config in a running
 XeFM while a run is going. Extensions a room installs are copied into the
@@ -59,8 +62,8 @@ Printed per scenario:
 - **checks** — mechanical, from the scenario's `check()`: the config loads
   in XeFM's own `ConfigManager`, the requested change is in force (keys as
   XeFM parses them, the preset laid under `KEY_BINDINGS`, associations
-  matched as XeFM matches them), and every `# keep:` line and 97% of the
-  file survived.
+  matched as XeFM matches them), every `# keep:` line survived, and no more
+  than two lines (or 3%) of the original were changed.
 - **must** — the scenario's `MUST` list, for you to read against the reply
   and the transcript. A miss is a skill defect, not a model defect: fix the
   skill, and re-run every scenario if the change was to a rule.
@@ -69,7 +72,8 @@ Printed per scenario:
 ## Scenarios
 
 One file each in `scenarios/`, run in file order. A scenario module has
-`TITLE`, `KIND` (`"config"` or `"extension"`), `PROMPT` (intent only, the way
+`TITLE`, `KIND` (`"config"` or `"extension"`), optionally `FIXTURE`,
+`PROMPT` (intent only, the way
 a user would ask — never an action or attribute name the skill should
 supply), `MUST`, `check(outcome) -> list[str]` and `reference(text)`, the
 edit a correct run would make (`None` when there is no single one).

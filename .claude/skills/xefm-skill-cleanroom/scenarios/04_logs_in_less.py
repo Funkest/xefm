@@ -4,13 +4,18 @@ from outcome import argv, association
 
 TITLE = "View .log files in less (terminal)"
 KIND = "config"
+#: The user's file has no FILE_ASSOCIATIONS. Writing one with just the new
+#: rule replaces every default rule (PDFs, images, …); the default entries
+#: have to be carried over.
+FIXTURE = "bare"
 PROMPT = """\
 In XeFM's terminal mode, pressing V on a .log file should show it in less
 instead of the built-in viewer.
 """
 MUST = """\
-- Add one FILE_ASSOCIATIONS rule: pattern '*.log', 'view': ['less'] (or
-  'less'); leave the existing rules as they are.
+- Add FILE_ASSOCIATIONS with XeFM's default rules carried over and one new
+  rule: pattern '*.log', 'view': ['less'] (or 'less'). The file had none, so
+  a list holding only the new rule would drop every default.
 - Say that it applies in the terminal; in the desktop app less has no
   terminal to run in (a conditional on is_desktop_mode(), or a note, both do).
 Must not: mark it with a terminal option (associations have none).
@@ -38,6 +43,10 @@ def _rules(text):
 
 
 def reference(text):
-    anchor = "        # Add your own file associations here:\n"
-    rule = "        {'pattern': '*.log', 'view': ['less']},\n"
-    return text.replace(anchor, rule + anchor, 1)
+    from outcome import template_source
+    default = template_source("FILE_ASSOCIATIONS")
+    rule = "        {'pattern': '*.log', 'view': ['less']},\n    ]"
+    assert default.endswith("\n    ]")
+    addition = default[:-len("\n    ]")] + "\n" + rule + "\n"
+    anchor = "    CONFIRM_DELETE = False"
+    return text.replace(anchor, addition + anchor, 1)

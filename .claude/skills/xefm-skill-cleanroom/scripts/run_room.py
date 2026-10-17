@@ -196,10 +196,11 @@ class FixtureInPlace:
     by exception, Ctrl-C or SIGTERM alike. Extensions the room installs are
     copied into the room as evidence and then removed."""
 
-    def __init__(self, room: pathlib.Path, keep_extensions: bool = False):
+    def __init__(self, room: pathlib.Path, keep_extensions: bool = False,
+                 fixture: str = "template"):
         self.room = room
         self.keep = keep_extensions
-        self.fixture = fixture_config()
+        self.fixture = fixture_config(fixture)
         self.after: str | None = None
         self.installed: list[pathlib.Path] = []
 
@@ -417,7 +418,8 @@ def run_scenario(scenario, parent: pathlib.Path, args) -> dict:
     bin_dir = make_shim(calls_log)
     foreign = _entries(XEFM_HOME / "extensions")
     try:
-        with FixtureInPlace(room, args.keep_extensions) as stand_in:
+        with FixtureInPlace(room, args.keep_extensions,
+                            getattr(scenario, "FIXTURE", "template")) as stand_in:
             transcript = run_session(room, bin_dir, args.model, args.max_turns)
     finally:
         shutil.rmtree(bin_dir, ignore_errors=True)
