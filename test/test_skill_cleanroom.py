@@ -160,3 +160,127 @@ def test_dropping_the_default_associations_fails():
     ("Shift-SPACE", False), ("Ctrl-ENTER", False)])
 def test_terminal_safe_keys(key, safe):
     assert outcome.terminal_safe(key) is safe
+
+
+# --- friction: what the room stumbled on, noticed or not ---------------------------
+
+import friction  # noqa: E402
+
+
+def _transcript(path, calls, texts=(), result="Done.", subtype="success"):
+    """A stream-json transcript: ``calls`` are (name, input, result, is_error)."""
+    events = [{"type": "system", "subtype": "init", "slash_commands": []}]
+    for n, (name, given, answer, error) in enumerate(calls):
+        events.append({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": f"t{n}", "name": name, "input": given}]}})
+        events.append({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": f"t{n}", "content": answer,
+             "is_error": error}]}})
+    for text in texts:
+        events.append({"type": "assistant", "message": {"content": [
+            {"type": "text", "text": text}]}})
+    events.append({"type": "result", "subtype": subtype, "result": result})
+    path.write_text("\n".join(json.dumps(e) for e in events), encoding="utf-8")
+    return path
+
+
+def test_friction_finds_what_went_wrong(tmp_path):
+    config = str(pathlib.Path.home() / ".xefm" / "config.py")
+    transcript = _transcript(tmp_path / "t.jsonl", [
+        ("Bash", {"command": "rm -rf /"}, "Permission to use Bash has been denied", True),
+        ("Bash", {"command": "xefm ext check ."}, "error: contributes.actions: entry missing", False),
+        ("Bash", {"command": "python -m pytest"}, "1 failed, 3 passed in 0.2s", False),
+        ("Bash", {"command": "xefm ext check ."}, "ok", False),
+        ("Grep", {"pattern": "reload_config"}, "No matches found", False),
+        ("Write", {"file_path": config}, "File created", False),
+        ("Write", {"file_path": config}, "File created", False),
+        ("Bash", {"command": "xefm ext install ./logpaths"}, "installed", False),
+        ("Bash", {"command": "xefm ext install ./logpaths"}, "installed", False),
+    ], texts=["The skill does not say which key is free, so I guessed F12."],
+        result="Stopped.", subtype="error_max_turns")
+    kinds = [incident.kind for incident in friction.incidents(transcript)]
+    assert kinds.count("tool error") == 1
+    assert kinds.count("command trouble") == 2
+    assert kinds.count("searched, found nothing") == 1
+    assert kinds.count("rework") == 2          # config.py written twice, installed twice
+    assert kinds.count("said so") == 1
+    assert kinds.count("session") == 1
+
+
+def test_friction_reads_a_refusal_logged_as_a_system_event(tmp_path):
+    """A refused call is also logged as a system event whose "message" is a
+    string, not a dict - every confined room has one."""
+    transcript = _transcript(tmp_path / "t.jsonl", [
+        ("Bash", {"command": "cat /etc/hosts"}, "Permission to use Bash has been denied", True)])
+    lines = transcript.read_text(encoding="utf-8").splitlines()
+    lines.insert(2, json.dumps({"type": "system", "subtype": "permission_denied",
+                                "tool_name": "Bash", "tool_use_id": "t0",
+                                "message": "Permission to use Bash has been denied"}))
+    transcript.write_text("\n".join(lines), encoding="utf-8")
+    kinds = [incident.kind for incident in friction.incidents(transcript)]
+    assert kinds == ["tool error"]
+
+
+def test_a_clean_run_has_no_friction_and_says_so(tmp_path):
+    room = tmp_path / "room"
+    room.mkdir()
+    _transcript(room / "transcript.jsonl", [
+        ("Edit", {"file_path": "x"}, "updated", False),
+        ("Edit", {"file_path": "x"}, "updated", False),          # edits are not rework
+        ("Bash", {"command": "xefm ext check ."}, "ok - no problems", False)],
+        result="Put Reload Configuration on F12. Reload once to pick it up.")
+    assert friction.incidents(room / "transcript.jsonl") == []
+    assert "Nothing:" in friction.report(room)
+
+
+def test_findings_gather_failures_friction_and_questions(tmp_path):
+    room = tmp_path / "01_reload_on_f12"
+    room.mkdir()
+    (room / "QUESTIONS.md").write_text("# What\n\n## Which action name reloads\n",
+                                       encoding="utf-8")
+    result = {"name": room.name, "title": "Put Reload on F12", "room": room,
+              "breaches": [], "refused": [], "failures": ["F12 is also bound to quit"],
+              "questions": 1,
+              "friction": [friction.Incident("command trouble", 4, "`xefm ext check .`",
+                                             "error: entry missing")]}
+    text = run_room.write_findings(tmp_path, [result]).read_text(encoding="utf-8")
+    assert "## 01_reload_on_f12 - FAIL" in text
+    assert "F12 is also bound to quit" in text
+    assert "error: entry missing" in text
+    assert "Which action name reloads" in text
+
+
+def test_the_audit_flags_the_checkout_in_a_windows_spelling(tmp_path, monkeypatch):
+    # A checkout at a Windows path on every OS: on macOS the real ROOT has no
+    # drive letter, and a backslashed /Users/... is not a path anyone would write.
+    checkout = pathlib.PureWindowsPath("C:/Users/me/xefm")
+    monkeypatch.setattr(run_room, "ROOT", checkout)
+    room = tmp_path / "room"
+    room.mkdir()
+    windows = str(checkout / "xefm" / "_config.py")
+    transcript = room / "transcript.jsonl"
+    transcript.write_text("\n".join(json.dumps(e) for e in [
+        {"type": "system", "subtype": "init", "slash_commands": []},
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "a", "name": "Grep",
+             "input": {"path": windows, "pattern": "KEY_"}}]}},
+        {"type": "result", "result": "done"},
+    ]), encoding="utf-8")
+    breaches, _refused = run_room.audit(room, transcript, set())
+    assert any("reached into the checkout" in b for b in breaches)
+
+
+def test_an_interrupted_session_still_leaves_its_transcript(tmp_path, monkeypatch):
+    """Ctrl-C mid-run: the session is stopped and what it wrote is kept."""
+    room = tmp_path / "room"
+    room.mkdir()
+    script = tmp_path / "fake_claude.py"
+    script.write_text("import sys, time\nprint('{\"type\": \"system\"}', flush=True)\n"
+                      "time.sleep(30)\n", encoding="utf-8")
+    monkeypatch.setattr(run_room, "session_command",
+                        lambda *a, **k: [sys.executable, str(script)])
+    monkeypatch.setattr(run_room, "_report",
+                        lambda *a, **k: (_ for _ in ()).throw(KeyboardInterrupt()))
+    with pytest.raises(KeyboardInterrupt):
+        run_room.run_session(room, tmp_path, None, 1)
+    assert (room / "transcript.jsonl").exists()
