@@ -346,3 +346,38 @@ def test_the_desktop_backend_is_read_as_the_desktop_app(tmp_path):
     for name in ("gui", "desktop"):
         gui = _evidence("config", room, "--backend", name)["values"]["TEXT_EDITOR"]
         assert gui != tui and "code" in str(gui), name
+
+
+# --- the live check: XeFM itself, in the terminal -----------------------------------
+
+@pytest.mark.skipif(os.name == "nt", reason="terminal apps are driven in a POSIX pty")
+@pytest.mark.timeout(90)
+def test_the_live_check_s_xefm_starts_in_the_run_s_home_and_takes_keys(tmp_path):
+    """What a Live check does first: start XeFM under the run's home, see the
+    panes, press a key. The Tip of the Day used to open first and take it."""
+    pytest.importorskip("pyte")
+    from quality_loop import drive
+    product = _adapter()
+    try:
+        home = product.home
+        (home.xefm / "config.py").write_text(outcome.fixture_config("bare"), encoding="utf-8")
+        apps = drive.manifest_entries(product.apps)
+        assert apps["xefm"]["env"]["HOME"] == str(home.root)
+        driver = drive.Driver(apps, tmp_path / "record")
+        try:
+            started = driver.start("xefm", "open XeFM on the work directory")
+            assert "a" in started["screen"] and ".txt" in started["screen"]
+            assert "Tip of the Day" not in started["screen"]
+            helped = driver.keys(started["id"], ["F1"], "open the help")
+            assert "Esc close" in helped["screen"]
+        finally:
+            driver.stop_all()
+        steps = (tmp_path / "record" / "steps.jsonl").read_text().splitlines()
+        assert len(steps) == 3
+    finally:
+        product.home.remove()
+
+
+def test_only_scenarios_with_a_live_check_drive_the_app():
+    live = [c.name for c in CASES if c.section("Live check").strip()]
+    assert live == ["01_reload_on_f12", "07_extension_log_paths"]

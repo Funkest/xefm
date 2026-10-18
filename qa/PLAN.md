@@ -26,9 +26,11 @@ the scenario's mechanical check (XeFM's own `ConfigManager`, key parser and
 association matcher), `friction` reads the transcript, `calls` lists the
 `xefm` commands, `config` and `keys` say what XeFM would load and run.
 
-No live check yet. XeFM has a terminal backend, so a `drive.TerminalApp`
-running `xefm` under the run's HOME could check an extension's command on the
-real app - the first target quality-loop's app driving was designed for.
+**A live check** on 01 and 07: after the room, the operator drives XeFM in
+the terminal under the run's home - F12 reloading, the extension's command
+logging the paths - and the steps and screens are in `evidence/live/`. The
+desktop app (GUI) is not driven yet; quality-loop's `drive.DesktopApp` would,
+once its macOS backend has been run for real.
 
 ## Priorities
 
@@ -39,7 +41,9 @@ real app - the first target quality-loop's app driving was designed for.
 
 ## Open questions for the person
 
-- Whether to add a live check for the extension scenario (above).
+- Whether to drive the desktop app too (above), and whether XeFM should
+  write a level-1 event log (`QUALITY_LOOP_EVENTS`): today a live check reads
+  the log pane off the screen, where noisier lines can push a message out.
 - Where the policy lives: a tracking Issue (`quality-loop:loop`) or
   `qa/LOOP.md`.
 
@@ -47,13 +51,13 @@ real app - the first target quality-loop's app driving was designed for.
 
 | Scenario | Surface | Fixture | Last run | Open findings | Notes |
 |---|---|---|---|---|---|
-| 01 reload on F12 | config, key | bare | 1.8.0-20261018-204618 | `fn-keys-macos-media-keys`, `template-points-outside-bundle` | |
+| 01 reload on F12 | config, key | bare | 1.8.0-20261019-002554 | `reload-no-distinct-confirmation`, `fn-keys-macos-media-keys` | live check |
 | 02 editor --wait, desktop only | config, external program | template | 1.8.0-20261018-204618 | `editor-wait-example-contradicts-desktop` | |
 | 03 favorite (Japanese) | config, favorites | template | 1.8.0-20261018-204618 | none | |
 | 04 .log in less (terminal) | config, associations | bare | 1.8.0-20261018-204618 | `view-file-description-ignores-associations` | |
 | 05 Dracula is chosen in XeFM | not a config edit | template | 1.8.0-20261018-204618 | none | |
 | 06 Ctrl-T is taken | config, key conflict | template | 1.8.0-20261018-204618 | `moved-action-has-no-other-key`, `template-comment-palette-ctrl-t`, `punctuation-key-spelling-unclear` | |
-| 07 extension logs paths | extension | template | 1.8.0-20261018-204618 | `ext-install-copy-or-link-unstated` | |
+| 07 extension logs paths | extension | template | 1.8.0-20261019-002554 | `help-extension-actions-labelled-config-py`, `skill-selected-dotdot-unspecified`, `statusbar-truncates-palette-key`, `afx-m-key-three-actions`, `ext-new-scaffolds-unneeded-settings` | live check |
 | 08 old action name | config, key | custom | 1.8.0-20261018-204618 | `old-name-keep-or-rename-unstated` | |
 
 Open findings are the run's `skill gap` and `product` ids, not yet filed.

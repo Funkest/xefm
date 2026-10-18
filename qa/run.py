@@ -12,6 +12,8 @@ Each scenario gets a room holding the skill exactly as `xefm skill --zip`
 ships it and nothing else, and an operator agent that afterwards reports
 what it finds, citing qa/evidence.py: the scenario's mechanical check (its
 module in qa/checks/), the friction read off the transcript, the `xefm` calls.
+A scenario with a Live check has the operator drive XeFM itself afterwards,
+in the terminal, with what the room made still in place.
 
 **Nothing of yours is touched.** The run has a home of its own, a temporary
 directory: the room's `xefm` command runs with HOME pointing there, so its
@@ -27,6 +29,7 @@ The design is crftwr/keyhac#205; the harness is quality-loop
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 import os
 import pathlib
@@ -43,7 +46,7 @@ sys.path.insert(0, str(HERE / "checks"))
 
 import outcome  # noqa: E402
 import xefm  # noqa: E402
-from quality_loop import adapter, audit, session, standin  # noqa: E402
+from quality_loop import adapter, audit, drive, session, standin  # noqa: E402
 
 #: Tools the session has. `--restricted` removes Bash unless it is named, and
 #: the extension scenario cannot be done without `xefm ext …` - so Bash is
@@ -99,6 +102,19 @@ class Home:
         #: The `xefm` calls' log, collected into each room's evidence.
         self.calls = self.root / "calls"
         self.calls.mkdir()
+        #: The live check's panes: a directory with two files to select.
+        self.work = self.root / "work"
+        self.work.mkdir()
+        for name in ("a.txt", "b.txt"):
+            (self.work / name).write_text(f"{name}\n", encoding="utf-8")
+        # The Tip of the Day dialog opens on a first launch and takes the
+        # first keys a live check sends; a person who has used XeFM has long
+        # since turned it off.
+        from xefm.state_manager import StateManager
+        StateManager(self.xefm / "state.db").set_state("tips.enabled", False)
+        # Gone at exit even when no run's product() took it down - a home made
+        # only to list the apps for `quality-loop check`.
+        atexit.register(self.remove)
         self.bin = self.root / "bin"
         self.bin.mkdir()
         shim = self.bin / "xefm"
@@ -117,6 +133,11 @@ class Home:
             wrapper.write_text(f"#!/bin/sh\nexec {shlex.quote(sys.executable)} \"$@\"\n",
                                encoding="utf-8")
             wrapper.chmod(0o755)
+
+    def environment(self) -> dict:
+        """For a process that should see this home as ~ - XeFM itself."""
+        return {"HOME": str(self.root), "USERPROFILE": str(self.root),
+                "PYTHONPATH": str(ROOT)}
 
     def remove(self) -> None:
         shutil.rmtree(self.root, ignore_errors=True)
@@ -148,6 +169,18 @@ class XeFM(adapter.Adapter):
     def __init__(self):
         self._home: Home | None = None
         self._foreign: set[str] = set()
+
+    @property
+    def apps(self) -> dict:
+        """XeFM in the terminal, for a scenario's live check: under the run's
+        home, so it loads the config and the extensions the room left, with
+        the left pane on a directory of two files. The operator drives it;
+        the room never does - its surface is the skill."""
+        return {"xefm": drive.TerminalApp(
+            [sys.executable, "-c", "import sys; sys.argv[0] = 'xefm'; "
+             "from xefm.app import main; main()", "--backend", "tui",
+             "--left", str(self.home.work), "--right", str(self.home.root)],
+            rows=40, cols=120, env=self.home.environment(), cwd=str(self.home.root))}
 
     @property
     def home(self) -> Home:
@@ -216,7 +249,8 @@ class XeFM(adapter.Adapter):
             watch=[standin.Watch(home.xefm / "extensions", "extensions"),
                    standin.Watch(home.xefm / "extension-data", "extension-data"),
                    standin.Watch(home.xefm, "xefm",
-                                 skip=("extensions", "extension-data", "tools")),
+                                 skip=("extensions", "extension-data", "tools",
+                                       "state.db")),
                    standin.Watch(home.calls, "calls")])
 
     def restore(self) -> list[str]:

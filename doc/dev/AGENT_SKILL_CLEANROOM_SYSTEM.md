@@ -28,7 +28,7 @@ skill (`.claude/skills/quality-loop/`, installed and upgraded only by
 | `qa/checks/outcome.py` | The fixtures (the template plus `# keep:` user edits, or the same edits "bare"), and the questions checks ask, answered the way XeFM would: `ConfigManager` under a throwaway HOME, keys parsed by `KeyBindings`, presets laid under `KEY_BINDINGS`, associations matched by XeFM's matcher. |
 | `qa/checks/friction.py` | Reads a transcript for where the room stumbled, noticed or not. |
 | `qa/evidence.py` | The operator's evidence tool: `check`, `friction`, `calls`, `config`, `keys`, each answering JSON from the room's record. |
-| `qa/run.py` | The adapter: the bundle, the run's home, the room's `xefm`, what the room may run and reach. |
+| `qa/run.py` | The adapter: the bundle, the run's home, the room's `xefm`, what the room may run and reach, and XeFM's TUI for a live check. |
 | `qa/RULES.md` | What the room may read and run; formatted with the run's home. |
 | `qa/PLAN.md` | The plan the conductor reads and keeps current: the product as a room meets it, priorities, coverage. |
 | `test/test_qa.py` | Every check fails on the untouched fixture and passes on its reference; the evidence tool, the room's `xefm` and the adapter - all without starting a session. |
@@ -43,6 +43,23 @@ transcript. An operator agent then reads the record, checks the Must lines
 with `qa/evidence.py`, and writes `REPORT.md`: problems, each with a severity,
 a kind, an id and its evidence. No pass/fail. `FINDINGS.md` and
 `findings.json` beside the rooms (`cleanroom/<version>-<time>/`) gather them.
+
+## The live check: XeFM itself, in the terminal
+
+A scenario with a **Live check** section (01, 07) gets one more step after
+the room has finished and before its files are collected: the operator
+starts XeFM in a pseudo-terminal (quality-loop's `drive.TerminalApp`, which
+needs `quality-loop[tui]`), under the run's home - so it loads the config and
+the extensions the room left - and drives it with keys, reading the screen as
+text. The left pane is a directory of two files to select. Every key, the
+operator's reason for it and the screen afterwards are recorded in the
+room's `evidence/live/`, which the report cites.
+
+Two things a first launch would otherwise do are set up in the run's home:
+the Tip of the Day is turned off in `state.db`, since it opens over the panes
+and takes the first keys; and the room still never starts XeFM - only the
+operator does, after the room is done. Quit is `app_stop`: the user's
+`Shift-Q` arrives in a terminal as a plain `Q`.
 
 ## Design decisions
 
