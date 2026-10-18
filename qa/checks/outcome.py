@@ -1,16 +1,17 @@
-"""What a clean-room run left behind, and the checks every scenario shares.
+"""What a quality-loop room left behind, and the checks every scenario shares.
 
-A scenario (``../scenarios/NN_name.py``) receives an :class:`Outcome` and
-returns the list of things that went wrong — empty means it passed. The
-helpers here answer the questions a scenario asks the way XeFM itself would:
-the config is loaded by XeFM's own ``ConfigManager`` (in a subprocess, under a
-throwaway HOME), keys are compared as XeFM parses them, and file associations
-are matched with XeFM's own matcher.
+A scenario's check (``NN_name.py`` beside this file, named like its Markdown
+scenario in ``qa/scenarios/``) receives an :class:`Outcome` and returns the
+list of things that went wrong - empty means none. The helpers here answer the
+questions a check asks the way XeFM itself would: the config is loaded by
+XeFM's own ``ConfigManager`` (in a subprocess, under a throwaway HOME), keys
+are compared as XeFM parses them, and file associations are matched with
+XeFM's own matcher.
 
-Also imported by ``test/test_skill_cleanroom.py``, which runs every
-scenario's check against the untouched fixture and against its reference
-edit, so a check that cannot fail — or cannot pass — is caught without
-spending a run.
+The operator reaches them through ``qa/evidence.py check <room>``; a check
+answers facts, the operator judges. ``test/test_qa.py`` runs every check
+against the untouched fixture and against its reference edit, so a check that
+cannot fail - or cannot pass - is caught without spending a run.
 """
 
 from __future__ import annotations
@@ -25,9 +26,8 @@ import tempfile
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 
-SKILL = pathlib.Path(__file__).resolve().parents[1]
-ROOT = SKILL.parents[2]
-SCENARIOS = SKILL / "scenarios"
+CHECKS = pathlib.Path(__file__).resolve().parent
+ROOT = CHECKS.parents[1]
 TEMPLATE = ROOT / "xefm" / "_config.py"
 
 if str(ROOT) not in sys.path:
@@ -127,11 +127,11 @@ def terminal_safe(key: str) -> bool:
     return True
 
 
-def load_scenarios(names: list[str] | None = None) -> list:
-    """Every scenario module, in file order, or the ones ``names`` picks
-    (by file stem, or by the part after the number: ``reload_on_f12``)."""
+def load_checks(names: list[str] | None = None) -> list:
+    """Every scenario's check module, in file order, or the ones ``names``
+    picks (by file stem, or by the part after the number: ``reload_on_f12``)."""
     found = []
-    for path in sorted(SCENARIOS.glob("[0-9][0-9]_*.py")):
+    for path in sorted(CHECKS.glob("[0-9][0-9]_*.py")):
         spec = importlib.util.spec_from_file_location(f"scenario_{path.stem}", path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
@@ -143,7 +143,7 @@ def load_scenarios(names: list[str] | None = None) -> list:
     for name in names:
         match = [m for m in found if name in (m.NAME, m.NAME.split("_", 1)[1])]
         if not match:
-            raise SystemExit(f"no scenario {name!r}; have: "
+            raise SystemExit(f"no check {name!r}; have: "
                              + ", ".join(m.NAME for m in found))
         wanted += match
     return wanted

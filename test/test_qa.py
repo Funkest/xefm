@@ -1,27 +1,37 @@
-"""The clean-room scenarios' checks can fail, and can pass (#639).
+"""XeFM's quality-loop half: scenarios, their checks, the adapter, the evidence.
 
-A clean-room run costs minutes and money, so a check that is wrong has to be
-caught here instead: every scenario's ``check`` is run against the untouched
-fixture (a run that did nothing must fail, unless doing nothing is the right
-answer) and against its ``reference`` edit (a correct run must pass). The
-session itself is not started here.
+A run costs minutes and money, so what can be checked without one is checked
+here: every scenario parses and has a check module; every check fails on the
+untouched fixture (a run that did nothing must fail, unless doing nothing is
+the right answer) and passes on its reference edit; the evidence tool answers
+from a room's record; the room's `xefm` refuses to open the file manager; and
+the friction reader finds what went wrong in a transcript. No session is
+started here.
 
-Run with: python -m pytest test/test_skill_cleanroom.py -v
+Run with: python -m pytest test/test_qa.py -v
 """
 
 import json
+import os
 import pathlib
+import subprocess
 import sys
 
 import pytest
 
+pytest.importorskip("quality_loop", reason="quality-loop is not installed in this venv")
+
+from quality_loop import cli, config, room as rooms, scenario  # noqa: E402
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / ".claude" / "skills" / "xefm-skill-cleanroom" / "scripts"))
+QA = ROOT / "qa"
+sys.path.insert(0, str(QA / "checks"))
+sys.path.insert(0, str(QA))
 
 import outcome  # noqa: E402
-import run_room  # noqa: E402
 
-SCENARIOS = outcome.load_scenarios()
+SCENARIOS = outcome.load_checks()
+CASES = scenario.load(QA / "scenarios")
 FIXTURE = outcome.fixture_config()
 #: A reply that says what a good one would, for the checks that read it.
 REPLY = ("Done. Ctrl-T was the command palette; choose the theme in View ▸ Theme. "
@@ -37,12 +47,19 @@ def _failures(scenario, after, reply=REPLY):
     return outcome.common_failures(o, scenario.KIND) + scenario.check(o)
 
 
-def test_there_are_scenarios_in_order():
+def _adapter():
+    sys.modules.pop("run", None)
+    return config.load_adapter(config.find(QA))
+
+
+def test_every_scenario_has_its_check_and_they_are_in_order():
     names = [s.NAME for s in SCENARIOS]
     assert len(names) >= 7 and names == sorted(names)
+    assert [c.name for c in CASES] == names, "a Markdown scenario per check module"
+    assert [c.number for c in CASES] == list(range(1, len(CASES) + 1))
     for s in SCENARIOS:
         assert s.KIND in ("config", "extension")
-        assert s.PROMPT.strip() and s.MUST.strip() and s.TITLE
+        assert not hasattr(s, "PROMPT"), "the prompt lives in the Markdown only"
 
 
 def test_the_fixture_loads_cleanly_and_carries_the_user_s_edits():
@@ -84,50 +101,6 @@ def test_regenerating_the_file_from_the_template_fails():
 def test_launching_xefm_fails():
     o = outcome.Outcome(FIXTURE, FIXTURE, xefm_calls=["ext check .", "--backend gui"])
     assert any("launch XeFM" in f for f in outcome.common_failures(o, "config"))
-
-
-def test_the_session_is_restricted_and_never_bypasses(monkeypatch):
-    monkeypatch.setattr(run_room, "find_claude", lambda: "claude")
-    command = run_room.session_command()
-    assert "--restricted" in command and "--strict-mcp-config" in command
-    assert command[command.index("--permission-mode") + 1] == "dontAsk"
-    assert command[command.index("-p") + 1] == run_room.PROMPT
-    assert "bypassPermissions" not in " ".join(command)
-    allow = json.loads(command[command.index("--settings") + 1])["permissions"]["allow"]
-    # Bash is there for `xefm ext …`, never unrestricted.
-    assert "Bash" not in allow and "Bash(*)" not in allow
-    assert "Bash(xefm ext *)" in allow
-
-
-def test_the_audit_flags_a_read_of_the_checkout(tmp_path):
-    room = tmp_path / "room"
-    room.mkdir()
-    events = [
-        {"type": "system", "subtype": "init", "slash_commands": []},
-        {"type": "assistant", "message": {"content": [
-            {"type": "tool_use", "id": "a", "name": "Read",
-             "input": {"file_path": str(ROOT / "xefm" / "_config.py")}},
-            {"type": "tool_use", "id": "b", "name": "Read",
-             "input": {"file_path": str(room / "skills" / "xefm" / "SKILL.md")}},
-        ]}},
-        {"type": "result", "result": "done"},
-    ]
-    transcript = room / "transcript.jsonl"
-    transcript.write_text("\n".join(json.dumps(e) for e in events))
-    breaches, refused = run_room.audit(room, transcript, set())
-    assert any("reached into the checkout" in b for b in breaches)
-    assert refused == []
-    assert not any("SKILL.md" in b for b in breaches)
-
-
-def test_the_room_holds_the_skill_and_nothing_else(tmp_path):
-    room = run_room.build_room(SCENARIOS[0], tmp_path)
-    assert sorted(p.name for p in room.iterdir()) == [
-        "CLAUDE.md", "QUESTIONS.md", "RULES.md", "TASK.md", "skills"]
-    assert (room / "skills" / "xefm" / "SKILL.md").is_file()
-    task = (room / "TASK.md").read_text(encoding="utf-8")
-    assert SCENARIOS[0].PROMPT.strip() in task
-    assert "Must" not in task          # the scoring key stays out of the room
 
 
 def test_the_bare_fixture_has_no_template_text_but_the_same_edits():
@@ -233,59 +206,6 @@ def test_a_clean_run_has_no_friction_and_says_so(tmp_path):
     assert "Nothing:" in friction.report(room)
 
 
-def test_findings_gather_failures_friction_and_questions(tmp_path):
-    room = tmp_path / "01_reload_on_f12"
-    room.mkdir()
-    (room / "QUESTIONS.md").write_text("# What\n\n## Which action name reloads\n",
-                                       encoding="utf-8")
-    result = {"name": room.name, "title": "Put Reload on F12", "room": room,
-              "breaches": [], "refused": [], "failures": ["F12 is also bound to quit"],
-              "questions": 1,
-              "friction": [friction.Incident("command trouble", 4, "`xefm ext check .`",
-                                             "error: entry missing")]}
-    text = run_room.write_findings(tmp_path, [result]).read_text(encoding="utf-8")
-    assert "## 01_reload_on_f12 - FAIL" in text
-    assert "F12 is also bound to quit" in text
-    assert "error: entry missing" in text
-    assert "Which action name reloads" in text
-
-
-def test_the_audit_flags_the_checkout_in_a_windows_spelling(tmp_path, monkeypatch):
-    # A checkout at a Windows path on every OS: on macOS the real ROOT has no
-    # drive letter, and a backslashed /Users/... is not a path anyone would write.
-    checkout = pathlib.PureWindowsPath("C:/Users/me/xefm")
-    monkeypatch.setattr(run_room, "ROOT", checkout)
-    room = tmp_path / "room"
-    room.mkdir()
-    windows = str(checkout / "xefm" / "_config.py")
-    transcript = room / "transcript.jsonl"
-    transcript.write_text("\n".join(json.dumps(e) for e in [
-        {"type": "system", "subtype": "init", "slash_commands": []},
-        {"type": "assistant", "message": {"content": [
-            {"type": "tool_use", "id": "a", "name": "Grep",
-             "input": {"path": windows, "pattern": "KEY_"}}]}},
-        {"type": "result", "result": "done"},
-    ]), encoding="utf-8")
-    breaches, _refused = run_room.audit(room, transcript, set())
-    assert any("reached into the checkout" in b for b in breaches)
-
-
-def test_an_interrupted_session_still_leaves_its_transcript(tmp_path, monkeypatch):
-    """Ctrl-C mid-run: the session is stopped and what it wrote is kept."""
-    room = tmp_path / "room"
-    room.mkdir()
-    script = tmp_path / "fake_claude.py"
-    script.write_text("import sys, time\nprint('{\"type\": \"system\"}', flush=True)\n"
-                      "time.sleep(30)\n", encoding="utf-8")
-    monkeypatch.setattr(run_room, "session_command",
-                        lambda *a, **k: [sys.executable, str(script)])
-    monkeypatch.setattr(run_room, "_report",
-                        lambda *a, **k: (_ for _ in ()).throw(KeyboardInterrupt()))
-    with pytest.raises(KeyboardInterrupt):
-        run_room.run_session(room, tmp_path, None, 1)
-    assert (room / "transcript.jsonl").exists()
-
-
 def test_a_skill_page_that_says_error_is_not_trouble(tmp_path):
     """A room reads the skill through the shell; the page's own prose is not
     the command going wrong - even when a long output is cut mid-line."""
@@ -325,23 +245,93 @@ def test_writing_up_the_guesses_is_not_doubt(tmp_path):
     assert friction.incidents(transcript) == []
 
 
-@pytest.mark.parametrize("answer, error, flagged", [
-    ("507a5ac Merge pull request #647", False, "breach"),
-    ("fatal: not a git repository (or any of the parent directories): .git", True, "refused"),
-])
-def test_the_audit_flags_git_in_the_room(tmp_path, answer, error, flagged):
-    """The room is inside the checkout: `git log` there reads its history."""
-    room = tmp_path / "room"
-    room.mkdir()
-    transcript = room / "transcript.jsonl"
-    transcript.write_text("\n".join(json.dumps(e) for e in [
-        {"type": "system", "subtype": "init", "slash_commands": []},
-        {"type": "assistant", "message": {"content": [
-            {"type": "tool_use", "id": "a", "name": "Bash",
-             "input": {"command": "cat RULES.md; ls -la; git log --oneline | head"}}]}},
-        {"type": "user", "message": {"content": [
-            {"type": "tool_result", "tool_use_id": "a", "content": answer, "is_error": error}]}},
-        {"type": "result", "result": "done"},
-    ]), encoding="utf-8")
-    breaches, refused = run_room.audit(room, transcript, set())
-    assert any("ran git" in line for line in (breaches if flagged == "breach" else refused))
+# --- the adapter: what a room gets, and what it may do -------------------------------
+
+def test_the_command_line_finds_the_adapter_and_its_scenarios_check():
+    settings = config.find(QA)
+    assert settings.root == ROOT and settings.rooms() == (ROOT / "cleanroom").resolve()
+    product = config.load_adapter(settings)
+    assert product.name == "xefm"
+    errors, _warnings = cli.check(product)
+    assert errors == []
+
+
+def test_bash_is_narrowed_and_the_room_reaches_only_the_run_s_home():
+    product = _adapter()
+    try:
+        session = product.session(ROOT / "cleanroom" / "x")
+        assert "Bash" in session.tools
+        assert "Bash" not in session.allow and "Bash(*)" not in session.allow
+        assert "Bash(xefm ext *)" in session.allow
+        assert session.add_dirs == [product.home.xefm]
+        assert pathlib.Path.home() not in product.home.root.parents
+        assert ROOT not in product.home.root.parents, "a room must not reach the checkout"
+        assert session.env["PATH"].startswith(str(product.home.bin))
+        policy = product.policy(ROOT / "cleanroom" / "x")
+        assert policy.bash and any("puikit" in path for path in policy.forbidden)
+        assert policy.leaked_skill("xefm-release") and policy.leaked_skill("quality-loop")
+        rules = product.rules()
+        assert f"{product.home.xefm}/config.py" in rules and "{" not in rules
+    finally:
+        product.home.remove()
+
+
+def test_the_room_holds_the_skill_as_shipped_and_the_prompt_alone(tmp_path):
+    product = _adapter()
+    try:
+        built = rooms.build(tmp_path / "rooms" / CASES[0].name, prompt=CASES[0].prompt,
+                            rules=product.rules(), bundle=product.bundle(),
+                            skill_name=product.skill_name, rooms=tmp_path / "rooms")
+    finally:
+        product.home.remove()
+    assert (built / "skills" / "xefm" / "SKILL.md").is_file()
+    task = (built / "TASK.md").read_text(encoding="utf-8")
+    assert "Reload Configuration on F12" in task and "Must" not in task
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the room's xefm is a POSIX shell script")
+def test_the_room_s_xefm_runs_the_cli_in_the_run_s_home_and_refuses_the_app():
+    product = _adapter()
+    home = product.home
+    try:
+        shim = str(home.bin / "xefm")
+        refused = subprocess.run([shim, "--backend", "gui"], capture_output=True, text=True)
+        assert refused.returncode == 64 and "refused" in refused.stderr
+        listed = subprocess.run([shim, "ext", "list"], capture_output=True, text=True,
+                                timeout=120)
+        assert listed.returncode == 0, listed.stderr
+        calls = (home.calls / "xefm-calls.log").read_text().splitlines()
+        assert calls == ["--backend gui", "ext list"]
+    finally:
+        home.remove()
+
+
+def _room(tmp_path, scenario, after, reply="Reload XeFM once to pick it up.", calls=()):
+    room = tmp_path / scenario.NAME
+    for part in ("before", "after", "calls"):
+        (room / "evidence" / part).mkdir(parents=True)
+    (room / "evidence" / "before" / "config.py").write_text(_fixture(scenario))
+    (room / "evidence" / "after" / "config.py").write_text(after)
+    (room / "evidence" / "calls" / "xefm-calls.log").write_text("".join(c + "\n" for c in calls))
+    (room / "transcript.jsonl").write_text(json.dumps({"type": "result", "result": reply}))
+    return room
+
+
+def _evidence(*args):
+    done = subprocess.run([sys.executable, str(QA / "evidence.py"), *map(str, args)],
+                          capture_output=True, text=True, timeout=180)
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout)
+
+
+def test_check_answers_from_the_room_s_record(tmp_path):
+    first = SCENARIOS[0]
+    good = _room(tmp_path / "good", first, first.reference(_fixture(first)))
+    assert _evidence("check", good)["failures"] == []
+    untouched = _room(tmp_path / "bad", first, _fixture(first), calls=["--backend gui"])
+    failures = _evidence("check", untouched)["failures"]
+    assert any("F12" in f for f in failures) and any("launch XeFM" in f for f in failures)
+    assert _evidence("calls", untouched) == ["--backend gui"]
+    assert "reload_config" in _evidence("keys", good, "F12")["actions"]
+    assert _evidence("keys", good, "F12", "--before")["actions"] == []
+    assert _evidence("config", good)["values"]["KEY_PRESET"] == "afx"

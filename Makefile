@@ -1,6 +1,6 @@
 # XeFM Makefile
 
-.PHONY: skill-zip skill-references release-skill cleanroom help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config keymap-reset venv clean-venv check-venv install-puikit
+.PHONY: skill-zip skill-references release-skill qa help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config keymap-reset venv clean-venv check-venv install-puikit
 
 # Python interpreter selection
 # All Python is run through the project virtual environment (.venv). There is no
@@ -145,7 +145,7 @@ help:
 	@echo "  release-github     - Open the GitHub Release at that tag (attaches the agent skill zip)"
 	@echo "  skill-zip          - Build dist/xefm-<version>-skill.zip (AI-agent skill)"
 	@echo "  skill-references   - Regenerate the skill's generated references (actions, config template)"
-	@echo "  cleanroom          - Clean-room test that skill on every scenario (SCENARIO=name for one)"
+	@echo "  qa                 - quality-loop: every scenario against the skill (SCENARIO=name for one)"
 	@echo "  release-whl        - Upload sdist + wheel to PyPI, and to the Release"
 	@echo "  release-macos-dmg  - (on macOS)   attach XeFM-<ver>-macos.dmg to the Release"
 	@echo "  release-windows-zip- (on Windows) attach XeFM-<ver>-win64.zip to the Release"
@@ -644,14 +644,14 @@ SKILL_ZIP := dist/xefm-$(XEFM_VERSION)-skill.zip
 skill-zip:
 	@$(PYTHON) -c "from xefm.extensions import write_skill_zip; print('wrote', write_skill_zip('$(SKILL_ZIP)'))"
 
-# Clean-room test of the skill: each scenario in .claude/skills/
-# xefm-skill-cleanroom/scenarios/ runs in a room holding the skill and nothing
-# else, driven by `claude -p --restricted`, with ~/.xefm/config.py swapped for
-# a fixture for the length of each run. See that skill's SKILL.md.
-#   make cleanroom                         every scenario, in order
-#   make cleanroom SCENARIO=reload_on_f12  one
-#   make cleanroom ARGS=--restore          put back a config a crashed run left aside
-CLEANROOM := .claude/skills/xefm-skill-cleanroom/scripts/run_room.py
+# quality-loop: the scenarios in qa/scenarios, run against the skill. Each
+# runs in a room holding the skill and nothing else, driven by
+# `claude -p --restricted`, and an operator agent reports what it finds, citing
+# qa/evidence.py. The run's `xefm` uses a home of its own (a temp directory):
+# your ~/.xefm is never touched. See qa/run.py and doc/dev/AGENT_SKILL_CLEANROOM_SYSTEM.md.
+#   make qa                            every scenario
+#   make qa SCENARIO=reload_on_f12     one (SCENARIO="01 07" for several)
+# In the background instead: .venv/bin/quality-loop run 01, then quality-loop watch.
 
 # The skill's generated references: the action/key table (from the registry
 # and the presets) and the config template (test_extension_skill checks both
@@ -659,8 +659,8 @@ CLEANROOM := .claude/skills/xefm-skill-cleanroom/scripts/run_room.py
 skill-references:
 	PYTHONPATH=. $(PYTHON) tools/gen_skill_references.py
 
-cleanroom:
-	$(PYTHON) $(CLEANROOM) $(if $(SCENARIO),--scenario $(SCENARIO)) $(ARGS)
+qa:
+	$(PYTHON) -m quality_loop run --foreground $(SCENARIO) $(ARGS)
 
 release-skill: skill-zip
 	@$(call check_release_exists)

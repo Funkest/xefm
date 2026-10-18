@@ -2,24 +2,11 @@
 
 from outcome import actions_on, effective_keymap, keys_of, same_key
 
-TITLE = "Put Reload Configuration on F12"
 KIND = "config"
 #: No template comments to copy from: no commented example of this very
 #: entry, no "a key no preset uses" note. The name and the free key have to
 #: come from the skill.
 FIXTURE = "bare"
-PROMPT = """\
-I edit my XeFM config in another editor window all the time. Can you put
-Reload Configuration on F12 so I don't have to go through the menu?
-"""
-MUST = """\
-- Add 'reload_config': ['F12'] to the existing KEY_BINDINGS, not a second
-  KEY_BINDINGS block.
-- Leave every other line of config.py as it was.
-- Tell the user to reload (or restart) once, since this edit is what makes
-  the key exist.
-Must not: guess the action name from the menu label (e.g. 'reload').
-"""
 
 
 def check(o):

@@ -1,6 +1,6 @@
 """Where a room stumbled, read off its transcript - including what it never wrote down.
 
-    PYTHONPATH=. python .claude/skills/xefm-skill-cleanroom/scripts/friction.py <room>
+    python qa/evidence.py friction <room>
 
 QUESTIONS.md is what the room *noticed* it had to guess. It is not everything
 that went wrong: a command that failed and was quietly fixed, `xefm ext check`
@@ -12,10 +12,10 @@ first runs showed every room meeting one blank tool answer that only one of
 them mentioned (crftwr/keyhac#196).
 
 So this reads the record, not the room's account of it, and lists each such
-moment as an incident with the line that shows it. run_room.py writes them to
-the room's FRICTION.md and into the run's FINDINGS.md beside the questions;
-triage both the same way (SKILL.md, Score). An incident no question mentions
-is the more valuable kind - it is the gap nobody noticed.
+moment as an incident with the line that shows it. The operator gets it as
+`friction <room>` from qa/evidence.py, and judges which are problems a
+product change would remove. An incident no question mentions is the more
+valuable kind - it is the gap nobody noticed.
 """
 
 from __future__ import annotations
@@ -283,7 +283,7 @@ def report(room: pathlib.Path, failures: list[str] | None = None) -> str:
     grouped by kind."""
     found = incidents(room / "transcript.jsonl")
     lines = [f"# Where {room.name} stumbled", "",
-             "Read off the transcript by scripts/friction.py, after the run. "
+             "Read off the transcript by qa/checks/friction.py, after the run. "
              "QUESTIONS.md is what the room noticed; this is what the record "
              "shows, noticed or not. Triage both the same way: skill gap, out "
              "of scope, or tooling.", ""]

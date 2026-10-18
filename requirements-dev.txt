@@ -23,3 +23,8 @@
 pytest
 pytest-xdist
 pytest-timeout
+
+# quality-loop runs qa/ (`make qa`): the skill tried by an isolated agent and
+# reported on by an operator agent. test/test_qa.py checks qa/ without a run,
+# and is skipped where quality-loop is missing. Pure Python, no dependencies.
+quality-loop>=0.2.0

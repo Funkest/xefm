@@ -1,18 +1,7 @@
 """The right answer is not an edit: THEMES defines themes, it does not pick one."""
 
-TITLE = "Switch to Dracula (not a config edit)"
 KIND = "config"
 UNTOUCHED_PASSES = True
-PROMPT = """\
-Switch XeFM to the Dracula theme.
-"""
-MUST = """\
-- Leave config.py unchanged: Dracula is built in, and the theme in use is
-  chosen in XeFM (View ▸ Theme, or View ▸ Next Theme) and remembered there.
-- Tell the user how to pick it.
-Must not: add a 'Dracula' entry to THEMES, or invent a THEME = 'Dracula'
-setting.
-"""
 
 
 def check(o):

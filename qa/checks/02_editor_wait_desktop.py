@@ -2,21 +2,7 @@
 
 from outcome import argv
 
-TITLE = "VS Code with --wait in the desktop app only"
 KIND = "config"
-PROMPT = """\
-When I edit a file from the XeFM desktop app, open it in VS Code and wait
-until I close the tab. In the terminal version I still want vim.
-"""
-MUST = """\
-- Keep TEXT_EDITOR's `if is_desktop_mode() else` shape and change only the
-  desktop branch, to ['code', '--wait'] (or 'code --wait').
-- The terminal branch stays 'vim'.
-- Say a reload applies it.
-Must not: warn that XeFM's window freezes or stops responding while the tab
-is open. The desktop app detaches the editor and never waits for it (#644);
-it may say --wait is not needed there.
-"""
 
 #: Words a reply uses when it wrongly warns that XeFM itself will wait.
 _WARNED = ("unresponsive", "freeze", "frozen", "won't respond", "will not respond")

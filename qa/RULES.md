@@ -4,9 +4,15 @@ You are doing the task in TASK.md for a user of the XeFM file manager, using
 **only** the skill in `./skills`. Read its `SKILL.md`, then the references it
 sends you to. Those files are the whole of what you know about XeFM.
 
+**Where things are.** On this machine, for this task, the user's home
+directory is `{home}`, and XeFM runs with that home: their XeFM folder is
+`{xefm}`, so their config is `{xefm}/config.py`. Use those full paths with
+your file tools and in the shell - `~` there means a different directory,
+which you may not read.
+
 **Allowed**
 - Everything under `./skills`.
-- The user's XeFM configuration, `~/.xefm/config.py` — reading it and
+- The user's XeFM configuration, `{xefm}/config.py` — reading it and
   editing it, when the task calls for that.
 - The `xefm ext …`, `xefm skill …` and `xefm --version` commands, and Python
   only as far as the skill tells you to run it (checking a config edit,
@@ -28,7 +34,7 @@ when all it does is read.
   redirect. That goes for `config.py` and for `QUESTIONS.md` alike.
 - Nothing can be deleted. A file you would delete, such as part of a
   scaffold you do not need, stays; say so in your final message.
-- Nothing outside this directory and `~/.xefm/` can be looked at, not
+- Nothing outside this directory and `{xefm}` can be looked at, not
   even to check the user's machine (whether a program is installed, what is
   on the PATH). What you would have checked, write down as a question and
   tell the user to check.
@@ -41,8 +47,8 @@ when all it does is read.
 - The web, including the documentation and source URLs the skill itself
   links to. A link where the skill should have given the answer is a
   finding: write it into QUESTIONS.md as one, then guess.
-- Anything in `~/.xefm/` other than `config.py` and what you install there
-  yourself. Other extensions in `~/.xefm/extensions/` were written by people
+- Anything in `{xefm}` other than `config.py` and what you install there
+  yourself. Other extensions in `{xefm}/extensions/` were written by people
   who had the source.
 - Starting XeFM itself (`xefm` with no subcommand, `python -m xefm`, the app).
 - Asking the user. They know the answer, which is exactly why asking

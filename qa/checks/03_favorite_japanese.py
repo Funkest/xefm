@@ -1,16 +1,6 @@
 """A request in Japanese, appending to a list the user has already extended."""
 
-TITLE = "Add a favorite (asked in Japanese)"
 KIND = "config"
-PROMPT = """\
-XeFMのお気に入りに ~/work/projects を「Projects」という名前で追加して。
-"""
-MUST = """\
-- Append {'name': 'Projects', 'path': '~/work/projects'} to FAVORITES,
-  after the existing entries (the user's 'Notes' included), in their order.
-- Do not create the directory or check that it exists.
-- Reply in Japanese; say a reload applies it.
-"""
 
 _BEFORE = ["Home", "Documents", "Downloads", "Desktop", "Notes"]
 
