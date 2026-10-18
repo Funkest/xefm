@@ -47,14 +47,16 @@ real app - the first target quality-loop's app driving was designed for.
 
 | Scenario | Surface | Fixture | Last run | Open findings | Notes |
 |---|---|---|---|---|---|
-| 01 reload on F12 | config, key | bare | | | |
-| 02 editor --wait, desktop only | config, external program | template | | | |
-| 03 favorite (Japanese) | config, favorites | template | | | |
-| 04 .log in less (terminal) | config, associations | bare | | | |
-| 05 Dracula is chosen in XeFM | not a config edit | template | | | |
-| 06 Ctrl-T is taken | config, key conflict | template | | | |
-| 07 extension logs paths | extension | template | | | |
-| 08 old action name | config, key | custom | | | |
+| 01 reload on F12 | config, key | bare | 1.8.0-20261018-204618 | `fn-keys-macos-media-keys`, `template-points-outside-bundle` | |
+| 02 editor --wait, desktop only | config, external program | template | 1.8.0-20261018-204618 | `editor-wait-example-contradicts-desktop` | |
+| 03 favorite (Japanese) | config, favorites | template | 1.8.0-20261018-204618 | none | |
+| 04 .log in less (terminal) | config, associations | bare | 1.8.0-20261018-204618 | `view-file-description-ignores-associations` | |
+| 05 Dracula is chosen in XeFM | not a config edit | template | 1.8.0-20261018-204618 | none | |
+| 06 Ctrl-T is taken | config, key conflict | template | 1.8.0-20261018-204618 | `moved-action-has-no-other-key`, `template-comment-palette-ctrl-t`, `punctuation-key-spelling-unclear` | |
+| 07 extension logs paths | extension | template | 1.8.0-20261018-204618 | `ext-install-copy-or-link-unstated` | |
+| 08 old action name | config, key | custom | 1.8.0-20261018-204618 | `old-name-keep-or-rename-unstated` | |
 
-The clean room these scenarios came from last ran on 1.8.0 (2026-10-17,
-`cleanroom/1.8.0-*`); "Last run" is filled in from the first quality-loop run.
+Open findings are the run's `skill gap` and `product` ids, not yet filed.
+The first run also reported three `harness` findings against qa/: the
+evidence tool read `--backend desktop` as the terminal (fixed), and
+`friction` does not count a check run twice as rework (open).

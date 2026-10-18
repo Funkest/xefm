@@ -335,3 +335,14 @@ def test_check_answers_from_the_room_s_record(tmp_path):
     assert "reload_config" in _evidence("keys", good, "F12")["actions"]
     assert _evidence("keys", good, "F12", "--before")["actions"] == []
     assert _evidence("config", good)["values"]["KEY_PRESET"] == "afx"
+
+
+def test_the_desktop_backend_is_read_as_the_desktop_app(tmp_path):
+    """`--backend desktop` once loaded the terminal config (the first run's
+    operator caught it): XeFM's name for the desktop backend is `gui`."""
+    second = next(s for s in SCENARIOS if s.NAME.startswith("02"))
+    room = _room(tmp_path, second, second.reference(_fixture(second)))
+    tui = _evidence("config", room)["values"]["TEXT_EDITOR"]
+    for name in ("gui", "desktop"):
+        gui = _evidence("config", room, "--backend", name)["values"]["TEXT_EDITOR"]
+        assert gui != tui and "code" in str(gui), name

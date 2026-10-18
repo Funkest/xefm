@@ -3,8 +3,8 @@
     python qa/evidence.py check <room>                 the scenario's mechanical check
     python qa/evidence.py friction <room>              where the transcript shows it stumbling
     python qa/evidence.py calls <room>                 every `xefm` command it ran
-    python qa/evidence.py config <room> [--before] [--backend desktop]
-    python qa/evidence.py keys <room> <key> [--before] [--backend desktop]
+    python qa/evidence.py config <room> [--before] [--backend gui]
+    python qa/evidence.py keys <room> <key> [--before] [--backend gui]
 
 Every answer is JSON, read from the room's own record - its evidence/ and
 transcript - never from the live machine. The checks are the clean room's,
@@ -91,7 +91,11 @@ def main(argv: list[str] | None = None) -> int:
             command.add_argument("key")
         command.add_argument("--before", action="store_true",
                              help="the fixture the room started from")
-        command.add_argument("--backend", default="tui", choices=["tui", "desktop"])
+        # XeFM names its desktop backend "gui" (XEFM_BACKEND, --backend);
+        # "desktop" was accepted here once and silently loaded the terminal
+        # config, which the first run's operator caught.
+        command.add_argument("--backend", default="tui", choices=["tui", "gui", "desktop"],
+                             help="tui (the terminal) or gui (the desktop app)")
     args = parser.parse_args(argv)
     room = pathlib.Path(args.room)
     if args.command == "check":
@@ -101,13 +105,14 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "calls":
         answer = _calls(room)
     else:
+        backend = "gui" if args.backend == "desktop" else args.backend
         found = read_outcome(room)
         text = found.before if args.before else (found.after or "")
-        loaded = outcome.inspect_config(text, args.backend)
+        loaded = outcome.inspect_config(text, backend)
         if args.command == "config":
             answer = loaded
         else:
-            keymap = outcome.effective_keymap(loaded["values"], backend=args.backend)
+            keymap = outcome.effective_keymap(loaded["values"], backend=backend)
             answer = {"key": args.key, "actions": outcome.actions_on(keymap, args.key)}
     print(json.dumps(answer, indent=2, ensure_ascii=False, default=str))
     return 0

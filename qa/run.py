@@ -140,7 +140,7 @@ class XeFM(adapter.Adapter):
         "them, the user's `# keep:` lines, how much was rewritten - and answers "
         "the failures, empty when there are none. `friction <room>` lists where "
         "the transcript shows the room stumbling. `calls <room>` is every `xefm` "
-        "command it ran. `config <room> [--before] [--backend desktop]` is the "
+        "command it ran. `config <room> [--before] [--backend gui]` is the "
         "config's values as XeFM loads them; `keys <room> <key>` the actions a "
         "key runs. Hold every room to "
         f"{HERE / 'scenarios' / '_always.md'} as well as to its scenario.")
