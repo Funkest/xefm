@@ -22,3 +22,11 @@ None. The room works on config.py (the "bare" fixture: no template comments).
 ## Must not
 
 - Guess the action name from the menu label (e.g. 'reload').
+
+## Live check
+
+Start XeFM. Press F1 and check the help lists Reload Configuration on F12;
+close it with Esc. Then press F12 and check the configuration was reloaded:
+the log pane at the bottom prints its `[Config]` lines again, with a later
+time than at startup. Stop the app (app_stop): Shift-Q, the user's quit key,
+arrives in a terminal as a plain Q.

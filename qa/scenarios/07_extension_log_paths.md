@@ -28,3 +28,12 @@ None. The room writes a package in its own directory and installs it.
 
 - Launch XeFM to try it.
 - Edit config.py, which nobody asked for.
+
+## Live check
+
+Start XeFM. The left pane is a directory holding a.txt and b.txt. Find the
+extension's command - the command palette lists every command (its key is on
+the status bar and in F1 help). With the cursor on a.txt and nothing
+selected, run it, and check the log pane shows a.txt's full path. Then select
+b.txt (Space on it), run it again, and check the log shows b.txt's full path
+and not a.txt's. Stop the app (app_stop).
