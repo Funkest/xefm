@@ -1,0 +1,224 @@
+"""XeFM's quality-loop adapter: the scenarios in qa/scenarios against the skill.
+
+    make qa                          # every scenario
+    make qa SCENARIO=reload_on_f12   # one (SCENARIO="01 07" for several)
+
+`make qa` is `quality-loop run --foreground`; qa/quality-loop.toml names this
+file as the adapter, so `quality-loop run 01` (in the background),
+`quality-loop watch`, `quality-loop findings` and the conductor skill in
+.claude/skills/quality-loop all reach it the same way.
+
+Each scenario gets a room holding the skill exactly as `xefm skill --zip`
+ships it and nothing else, and an operator agent that afterwards reports
+what it finds, citing qa/evidence.py: the scenario's mechanical check (its
+module in qa/checks/), the friction read off the transcript, the `xefm` calls.
+
+**Nothing of yours is touched.** The run has a home of its own, a temporary
+directory: the room's `xefm` command runs with HOME pointing there, so its
+`~/.xefm` (config.py, extensions/) is the run's, and a fixture config stands
+in for config.py there. Your ~/.xefm is never set aside, so there is nothing
+to put back after a run that died, and a running XeFM of yours is unaffected.
+The room's own session keeps your HOME - Claude Code's login lives there -
+and RULES.md tells it where the run's home is.
+
+The design is crftwr/keyhac#205; the harness is quality-loop
+(crftwr/quality-loop). Before it, this was .claude/skills/xefm-skill-cleanroom.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import os
+import pathlib
+import shlex
+import shutil
+import sys
+import tempfile
+import zipfile
+
+HERE = pathlib.Path(__file__).resolve().parent
+ROOT = HERE.parent
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(HERE / "checks"))
+
+import outcome  # noqa: E402
+import xefm  # noqa: E402
+from quality_loop import adapter, audit, session, standin  # noqa: E402
+
+#: Tools the session has. `--restricted` removes Bash unless it is named, and
+#: the extension scenario cannot be done without `xefm ext …` - so Bash is
+#: named, and narrowed by ALLOW below instead.
+TOOLS = ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "TodoWrite"]
+
+#: What the room may run without asking - and, in a `-p` session under
+#: dontAsk, everything else is refused. A shell can reach past the file tools'
+#: confinement, so it gets the commands the skill tells an agent to run and no
+#: more; a refusal is a finding (the skill named a command the room could not
+#: run).
+ALLOW = [
+    "Read", "Glob", "Grep", "Write", "Edit", "TodoWrite",
+    "Bash(xefm ext *)", "Bash(xefm skill *)", "Bash(xefm --version)",
+    "Bash(python3 -c \"import ast*)", "Bash(python -c \"import ast*)",
+    "Bash(python3 -m pytest*)", "Bash(python -m pytest*)",
+    "Bash(cd *)", "Bash(ls *)", "Bash(mkdir *)",
+    # The skill says to copy config.py before a larger edit.
+    "Bash(cp *)",
+]
+
+#: Skills of this checkout that a clean room must not be able to see.
+CHECKOUT_SKILLS = ("xefm-release", "puikit-release", "quality-loop")
+
+#: The room's `xefm`: the subcommands the skill may run, nothing that opens a
+#: window, with the run's home as HOME. Every call is logged, which is how
+#: "never launch XeFM" is checked.
+SHIM = """\
+#!/bin/sh
+printf '%s\\n' "$*" >> {log}
+case "$1" in
+  ext|skill|--version|-v)
+    HOME={home} USERPROFILE={home} PYTHONPATH={root} exec {python} -c 'import sys; sys.argv[0] = "xefm"; from xefm.app import main; main()' "$@" ;;
+  *)
+    echo "xefm: refused in the clean room - this would open the file manager" >&2
+    exit 64 ;;
+esac
+"""
+
+
+class Home:
+    """The run's own home, and the room's `xefm` that uses it. A temporary
+    directory: outside the checkout and the run's directory, which a room
+    must not reach."""
+
+    def __init__(self):
+        self.root = pathlib.Path(tempfile.mkdtemp(prefix="xefm-qa-home-")).resolve()
+        self.xefm = self.root / ".xefm"
+        self.xefm.mkdir()
+        #: Where the stand-in keeps the previous fixture: out of the room's
+        #: reach, which is ~/.xefm only.
+        self.stand_in = self.root / "stand-in"
+        #: The `xefm` calls' log, collected into each room's evidence.
+        self.calls = self.root / "calls"
+        self.calls.mkdir()
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        shim = self.bin / "xefm"
+        shim.write_text(SHIM.format(log=shlex.quote(str(self.calls / "xefm-calls.log")),
+                                    home=shlex.quote(str(self.root)),
+                                    root=shlex.quote(str(ROOT)),
+                                    python=shlex.quote(sys.executable)), encoding="utf-8")
+        shim.chmod(0o755)
+        # The extension scenario runs its package's tests, which need pytest;
+        # the system python3 may not have it. This interpreter does, and it
+        # cannot import xefm on its own (no PYTHONPATH), so it gives nothing
+        # away. A wrapper, not a symlink: a venv is found next to the path a
+        # Python was *started* by, so a symlinked venv python is the bare base.
+        for name in ("python3", "python"):
+            wrapper = self.bin / name
+            wrapper.write_text(f"#!/bin/sh\nexec {shlex.quote(sys.executable)} \"$@\"\n",
+                               encoding="utf-8")
+            wrapper.chmod(0o755)
+
+    def remove(self) -> None:
+        shutil.rmtree(self.root, ignore_errors=True)
+
+
+class XeFM(adapter.Adapter):
+    name = "xefm"
+    version = xefm.__version__
+    checkout = ROOT
+    rooms = ROOT / "cleanroom"
+    scenarios = HERE / "scenarios"
+    skill_name = "xefm"
+    python = sys.executable
+    evidence = {"xefm": {
+        "argv": [sys.executable, str(HERE / "evidence.py")],
+        "help": "check | friction | calls | config | keys"}}
+    evidence_help = (
+        "`xefm` is qa/evidence.py. `check <room>` runs the scenario's mechanical "
+        "check on what the room left - the config loaded by XeFM's own "
+        "ConfigManager, keys as XeFM parses them, associations as XeFM matches "
+        "them, the user's `# keep:` lines, how much was rewritten - and answers "
+        "the failures, empty when there are none. `friction <room>` lists where "
+        "the transcript shows the room stumbling. `calls <room>` is every `xefm` "
+        "command it ran. `config <room> [--before] [--backend gui]` is the "
+        "config's values as XeFM loads them; `keys <room> <key>` the actions a "
+        "key runs. Hold every room to "
+        f"{HERE / 'scenarios' / '_always.md'} as well as to its scenario.")
+
+    def __init__(self):
+        self._home: Home | None = None
+        self._foreign: set[str] = set()
+
+    @property
+    def home(self) -> Home:
+        """The run's home, made when a run first needs it - not when the
+        adapter is merely loaded to list or check scenarios."""
+        if self._home is None:
+            self._home = Home()
+        return self._home
+
+    def bundle(self) -> pathlib.Path:
+        """The skill as `xefm skill --zip` ships it, unpacked: the zip holds
+        one folder, xefm/, which becomes the room's skills/xefm."""
+        from xefm import extensions as ext
+        where = pathlib.Path(tempfile.mkdtemp(prefix="xefm-qa-skill-"))
+        bundle = ext.write_skill_zip(where / ext.skill_zip_name())
+        with zipfile.ZipFile(bundle) as archive:
+            archive.extractall(where / "unpacked")
+        return where / "unpacked" / "xefm"
+
+    def rules(self) -> str:
+        return (HERE / "RULES.md").read_text(encoding="utf-8").format(
+            home=self.home.root, xefm=self.home.xefm)
+
+    def session(self, room) -> session.Session:
+        env = {"PATH": f"{self.home.bin}{os.pathsep}{os.environ.get('PATH', '')}"}
+        if os.name != "nt":
+            # The operator's login shell is nobody's skill: under zsh,
+            # `echo =====` fails as an `=cmd` expansion, and a room paid a
+            # step for it.
+            env["SHELL"] = env["CLAUDE_CODE_SHELL"] = "/bin/bash"
+        return session.Session(allow=ALLOW, tools=TOOLS, add_dirs=[self.home.xefm],
+                               env=env, max_turns=80)
+
+    def policy(self, room) -> audit.Policy:
+        return audit.Policy(
+            checkout=ROOT, bash=True, foreign=self._foreign,
+            forbidden={"site-packages/xefm": "the installed xefm package",
+                       "/Applications/XeFM.app": "the installed app",
+                       str(ROOT.parent / "puikit"): "the PuiKit checkout",
+                       str(self.home.stand_in): "the previous fixture, set aside"},
+            leaked_skill=lambda command: any(s in command for s in CHECKOUT_SKILLS))
+
+    @contextlib.contextmanager
+    def product(self):
+        """Nothing runs for the length of a run; the home goes at the end."""
+        try:
+            yield
+        finally:
+            if self._home is not None:
+                self._home.remove()
+                self._home = None
+
+    def stand_in(self, case, variant, room):
+        home = self.home
+        check = outcome.load_checks([case.name])[0]
+        self._foreign = {p.name for p in (home.xefm / "extensions").glob("*")}
+        # Nothing here is yours: the stand-in swaps one fixture for the next
+        # inside the run's home, and collects what the room made - the
+        # extension it installed, the backup the skill tells it to make, its
+        # `xefm` calls.
+        return standin.StandIn(
+            home=home.xefm, marker=home.stand_in,
+            fixtures={"config.py": outcome.fixture_config(getattr(check, "FIXTURE",
+                                                                  "template"))},
+            evidence=room / "evidence",
+            watch=[standin.Watch(home.xefm / "extensions", "extensions"),
+                   standin.Watch(home.xefm / "extension-data", "extension-data"),
+                   standin.Watch(home.xefm, "xefm",
+                                 skip=("extensions", "extension-data", "tools")),
+                   standin.Watch(home.calls, "calls")])
+
+    def restore(self) -> list[str]:
+        return ["Nothing to restore: runs use a home of their own, and your ~/.xefm "
+                "is never set aside."]

@@ -2,19 +2,7 @@
 
 from outcome import actions_on, effective_keymap, keys_of, same_key, terminal_safe
 
-TITLE = "Ctrl-T for hidden files (Ctrl-T is the command palette)"
 KIND = "config"
-PROMPT = """\
-I want Ctrl-T to show and hide hidden files in XeFM.
-"""
-MUST = """\
-- Bind toggle_hidden to Ctrl-T (keeping '.' is fine).
-- Notice Ctrl-T is the command palette under the AFX preset, say so, and
-  leave no key bound twice: give command_palette its other key(s) or [],
-  explicitly, and tell the user where the palette went.
-- The palette's new key works in a terminal too — not Ctrl-Shift-<letter>
-  (Ctrl-Shift-P arrives as Ctrl-P, which is copy_paths) and not Cmd-….
-"""
 
 
 def check(o):

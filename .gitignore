@@ -82,6 +82,7 @@ test/demo_*_test_*/
 # into the working tree to test the bundled-lookup path).
 xefm/_bin/
 
-# Clean-room test rooms (make cleanroom): the skill copy, a transcript, the
-# config before and after, QUESTIONS.md. Scratch; `git add -f` a room worth keeping.
+# quality-loop's rooms and run records (make qa): the skill copy, a transcript,
+# the config before and after, QUESTIONS.md, REPORT.md, FINDINGS.md. Scratch;
+# `git add -f` a room worth keeping.
 cleanroom/
