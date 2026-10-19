@@ -27,13 +27,12 @@ from puikit.backend import DEFAULT_STYLE, Style
 from puikit.event import Event, EventType
 from puikit.focus import FocusContainer
 from puikit.panel import Rect
-from puikit.text import display_width
 from puikit.widgets.base import Widget
 from puikit.widgets.list import ListView
 from puikit.widgets.markdown_view import MarkdownView
 
-from xefm.dialog_geometry import (animate_open, draw_hint_row, draw_title_bar,
-                                  hint_content_bottom)
+from xefm.dialog_geometry import (HINT_ROWS, animate_open, draw_hint_row, draw_title_bar,
+                                  hint_content_bottom, title_content_top)
 
 #: Keys the body widget consumes for scrolling while the dialog is open. (Backend
 #: key names are unsuffixed: "pageup"/"pagedown", matching ListView / MarkdownView.)
@@ -295,8 +294,14 @@ def show_markdown(
     w = _box_width(panel)
     if below is not None:
         w = max(36.0, min(w, below.rect.w - 2 * _NESTED_INSET))
-    _push(panel, dialog, rows=_wrapped_rows(source, w - 4.0),
-          z=below.z + 10 if below is not None else z, w=w, over=below)
+    # Measured, not estimated: the view's own layout of the document at the
+    # body's width, so a table's borders and a heading's spacing are counted —
+    # a source-line count came up short of them and opened the Details dialog
+    # already needing a scroll (#651).
+    lc = panel.layout_context()
+    body_h = dialog.md.measure(lc, "y", w - 4.0).preferred
+    _push(panel, dialog, rows=0, z=below.z + 10 if below is not None else z,
+          w=w, over=below, height=title_content_top(lc) + body_h + HINT_ROWS)
     return dialog
 
 
@@ -315,25 +320,6 @@ def _layer_of(panel: Any, widget: Any) -> Any:
     return None
 
 
-def _wrapped_rows(source: str, width: float) -> int:
-    """A rough count of the rows ``source`` lays out to at ``width``.
-
-    Counting source lines alone sizes a page of prose — a handful of long
-    paragraphs, like a command palette help page — far too short, so it opens
-    already needing a scroll. Each line is counted as the rows its text wraps
-    to; a table row stays one row, since its cells lay out as columns rather
-    than one long line. Still an estimate: the body scrolls, so close is
-    enough."""
-    width = max(1.0, width)
-    rows = 0
-    for line in source.split("\n"):
-        if line.lstrip().startswith("|"):
-            rows += 1
-        else:
-            rows += max(1, -(-display_width(line) // int(width)))
-    return rows
-
-
 def _box_width(panel: Any) -> float:
     """The width a scroll-modal opens at: a comfortable fraction of the window."""
     sw, _sh = panel.backend.size_units
@@ -341,18 +327,19 @@ def _box_width(panel: Any) -> float:
 
 
 def _push(panel: Any, dialog: _ScrollModal, *, rows: int, z: int,
-          w: float | None = None, over: Any = None) -> None:
+          w: float | None = None, over: Any = None,
+          height: float | None = None) -> None:
     """Size, center, and push a scroll-modal, with the shared modal intent. Height
-    is a rough estimate from the source ``rows`` (Markdown may wrap/expand, but the
-    body scrolls, so an approximate reserve is fine). ``over`` is the layer slot
-    of a dialog this one is stacked on (see :func:`show_markdown`): the height is
-    then kept inside it too."""
+    is ``height`` when the caller measured the whole box, else ``rows`` of body
+    plus the chrome. ``over`` is the layer slot of a dialog this one is stacked
+    on (see :func:`show_markdown`): the height is then kept inside it too."""
     _sw, sh = panel.backend.size_units
     if w is None:
         w = _box_width(panel)
-    # rows + chrome: top border, title, rule, body, rule, hint, bottom border.
-    # The body scrolls, so an approximate reserve is fine.
-    h = max(10.0, min(sh * 0.8, float(rows + 6)))
+    if height is None:
+        # rows + chrome: top border, title, rule, body, rule, hint, bottom border.
+        height = float(rows + 6)
+    h = max(10.0, min(sh * 0.8, height))
     hints: dict[str, Any] = {"shadow": True, "w": w, "h": h}
     if over is not None:
         h = max(8.0, min(h, over.rect.h - 2.0))
