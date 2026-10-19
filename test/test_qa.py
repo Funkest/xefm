@@ -34,8 +34,7 @@ SCENARIOS = outcome.load_checks()
 CASES = scenario.load(QA / "scenarios")
 FIXTURE = outcome.fixture_config()
 #: A reply that says what a good one would, for the checks that read it.
-REPLY = ("Done. Ctrl-T was the command palette; choose the theme in View ▸ Theme. "
-         "The desktop app does not wait for the editor, so --wait is not needed there.")
+REPLY = "Done. Ctrl-T was the command palette; choose the theme in View ▸ Theme."
 
 
 def _fixture(scenario):

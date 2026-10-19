@@ -52,7 +52,7 @@ once its macOS backend has been run for real.
 | Scenario | Surface | Fixture | Last run | Open findings | Notes |
 |---|---|---|---|---|---|
 | 01 reload on F12 | config, key | bare | 1.8.0-20261019-002554 | `reload-no-distinct-confirmation`, `fn-keys-macos-media-keys` | live check |
-| 02 editor --wait, desktop only | config, external program | template | 1.8.0-20261018-204618 | `editor-wait-example-contradicts-desktop` | |
+| 02 editor in a new window, desktop only | config, external program | template | not yet run | `editor-wait-example-contradicts-desktop` (from the --wait version) | rewritten: the desktop app never waits for the editor, so --wait changed nothing |
 | 03 favorite (Japanese) | config, favorites | template | 1.8.0-20261018-204618 | none | |
 | 04 .log in less (terminal) | config, associations | bare | 1.8.0-20261018-204618 | `view-file-description-ignores-associations` | |
 | 05 Dracula is chosen in XeFM | not a config edit | template | 1.8.0-20261018-204618 | none | |
