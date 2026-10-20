@@ -47,6 +47,27 @@ version_gt() {
     [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]
 }
 
+# Compile every .py under $2 to bytecode with interpreter $1, or stop the build.
+#
+# The bundle is signed, so whatever Python has to compile at run time it writes
+# into the signed bundle and breaks the seal: an installed 1.8.0 fails
+# `codesign --verify` with ~700 rewritten .pyc files. The default timestamp mode
+# validates a .pyc against its source's mtime, and the copies that carry the
+# bundle from here to /Applications - create_dmg.sh's and
+# `make install-macos-dmg`'s `cp -R` - do not keep mtimes, so bytecode that was
+# complete at build time was stale once installed. unchecked-hash bytecode is
+# used without looking at the source at all, which is right for files nobody
+# may edit without breaking the signature anyway; -f replaces whatever
+# timestamp-mode .pyc a copied tree brought along. A failed compile used to be
+# a warning, which is how a bundle with no stdlib bytecode could ship.
+compile_bytecode() {
+    if ! "$1" -m compileall -q -f --invalidation-mode unchecked-hash "$2"; then
+        log_error "Bytecode compilation failed under $2"
+        exit 1
+    fi
+    log_info "  Compiled $(find "$2" -name "*.pyc" | wc -l | tr -d ' ') .pyc files under ${2#${APP_BUNDLE}/}"
+}
+
 # ============================================================================
 # Build Configuration
 # ============================================================================
@@ -273,14 +294,12 @@ log_info "Copying XeFM Python source"
 XEFM_PKG_DEST="${RESOURCES_DIR_BUNDLE}/xefm"
 rm -rf "${XEFM_PKG_DEST}"
 cp -R "${PROJECT_ROOT}/xefm" "${XEFM_PKG_DEST}"
+# The working tree's caches hold bytecode for whatever Pythons ran the tests;
+# compiled fresh below.
+find "${XEFM_PKG_DEST}" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
-# Pre-compile XeFM Python files
 log_info "Pre-compiling XeFM Python files..."
-if "${VENV_PYTHON}" -m compileall -q "${XEFM_PKG_DEST}"; then
-    log_info "  Compiled XeFM Python files"
-else
-    log_info "  Warning: Compilation failed"
-fi
+compile_bytecode "${VENV_PYTHON}" "${XEFM_PKG_DEST}"
 
 # Copy PuiKit library.
 # PuiKit is a pure-Python package (its macOS
@@ -352,13 +371,8 @@ if [ -n "${MISSING_FONTS}" ]; then
 fi
 log_info "  Bundled Noto fonts present in ${FONTS_DEST}"
 
-# Pre-compile PuiKit Python files
 log_info "Pre-compiling PuiKit Python files..."
-if "${VENV_PYTHON}" -m compileall -q "${PUIKIT_DEST}"; then
-    log_info "  Compiled PuiKit Python files"
-else
-    log_info "  Warning: Compilation failed"
-fi
+compile_bytecode "${VENV_PYTHON}" "${PUIKIT_DEST}"
 
 # Collect Python dependencies
 log_info "Collecting Python dependencies..."
@@ -396,6 +410,11 @@ else
     log_warning "Dependency collection script not found at ${COLLECT_SCRIPT}"
     log_warning "Python packages will need to be added manually"
 fi
+
+# These were never compiled before, so their bytecode was written into the
+# installed bundle on first launch.
+log_info "Pre-compiling Python dependencies..."
+compile_bytecode "${VENV_PYTHON}" "${PACKAGES_DEST}"
 
 # Copy application icon if it exists
 ICON_SOURCE="${RESOURCES_DIR}/XeFM.icns"
@@ -649,33 +668,17 @@ if [ "$USE_FRAMEWORK" = true ]; then
     fi
     log_success "Bundled interpreter is self-contained"
 
-    # Pre-compile Python standard library
+    # Pre-compile Python standard library, with the bundled interpreter so the
+    # bytecode matches the runtime exactly. See compile_bytecode for why a
+    # failure here stops the build.
     log_info "Pre-compiling Python standard library..."
     STDLIB_PATH="${PYTHON_DEST}/lib/python${PYTHON_VERSION}"
-    if [ -d "${STDLIB_PATH}" ]; then
-        # Use the bundled Python to compile the standard library
-        # This ensures compatibility and uses the correct Python version
-        BUNDLE_PYTHON="${PYTHON_DEST}/bin/python3"
-        if [ -f "${BUNDLE_PYTHON}" ]; then
-            # Compile all .py files in the standard library
-            # -q: quiet mode (only show errors)
-            # -f: force recompilation even if .pyc files exist
-            if "${BUNDLE_PYTHON}" -m compileall -q -f "${STDLIB_PATH}"; then
-                log_info "  Compiled Python standard library"
-                
-                # Count compiled files for verification
-                PYC_COUNT=$(find "${STDLIB_PATH}" -name "*.pyc" | wc -l | tr -d ' ')
-                PY_COUNT=$(find "${STDLIB_PATH}" -name "*.py" | wc -l | tr -d ' ')
-                log_info "  Created ${PYC_COUNT} .pyc files from ${PY_COUNT} .py files"
-            else
-                log_warning "Standard library compilation had errors (non-critical)"
-            fi
-        else
-            log_warning "Bundled Python not found, skipping standard library pre-compilation"
-        fi
-    else
-        log_warning "Standard library path not found: ${STDLIB_PATH}"
+    BUNDLE_PYTHON="${PYTHON_DEST}/bin/python3"
+    if [ ! -d "${STDLIB_PATH}" ] || [ ! -f "${BUNDLE_PYTHON}" ]; then
+        log_error "No standard library or interpreter to compile it with under ${PYTHON_DEST}"
+        exit 1
     fi
+    compile_bytecode "${BUNDLE_PYTHON}" "${STDLIB_PATH}"
     
     # Update install names to use embedded framework
     log_info "Updating install names to use embedded framework..."
@@ -778,33 +781,17 @@ else
     
     log_success "Unnecessary files removed"
     
-    # Pre-compile Python standard library
+    # Pre-compile Python standard library, with the bundled interpreter so the
+    # bytecode matches the runtime exactly. See compile_bytecode for why a
+    # failure here stops the build.
     log_info "Pre-compiling Python standard library..."
     STDLIB_PATH="${PYTHON_DEST}/lib/python${PYTHON_VERSION}"
-    if [ -d "${STDLIB_PATH}" ]; then
-        # Use the bundled Python to compile the standard library
-        # This ensures compatibility and uses the correct Python version
-        BUNDLE_PYTHON="${PYTHON_DEST}/bin/python3"
-        if [ -f "${BUNDLE_PYTHON}" ]; then
-            # Compile all .py files in the standard library
-            # -q: quiet mode (only show errors)
-            # -f: force recompilation even if .pyc files exist
-            if "${BUNDLE_PYTHON}" -m compileall -q -f "${STDLIB_PATH}"; then
-                log_info "  Compiled Python standard library"
-                
-                # Count compiled files for verification
-                PYC_COUNT=$(find "${STDLIB_PATH}" -name "*.pyc" | wc -l | tr -d ' ')
-                PY_COUNT=$(find "${STDLIB_PATH}" -name "*.py" | wc -l | tr -d ' ')
-                log_info "  Created ${PYC_COUNT} .pyc files from ${PY_COUNT} .py files"
-            else
-                log_warning "Standard library compilation had errors (non-critical)"
-            fi
-        else
-            log_warning "Bundled Python not found, skipping standard library pre-compilation"
-        fi
-    else
-        log_warning "Standard library path not found: ${STDLIB_PATH}"
+    BUNDLE_PYTHON="${PYTHON_DEST}/bin/python3"
+    if [ ! -d "${STDLIB_PATH}" ] || [ ! -f "${BUNDLE_PYTHON}" ]; then
+        log_error "No standard library or interpreter to compile it with under ${PYTHON_DEST}"
+        exit 1
     fi
+    compile_bytecode "${BUNDLE_PYTHON}" "${STDLIB_PATH}"
     
     # Update install names for Python shared library
     log_info "Updating install names to use embedded Python..."
