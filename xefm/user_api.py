@@ -121,8 +121,6 @@ logger = getLogger("UserAPI")
 __all__ = [
     # versioning
     "API_VERSION", "PREVIEW",
-    # what the tables accept
-    "EVENTS", "MENUS", "MENU_WHEN",
     # what an action is handed
     "ActionContext", "PaneApi", "EntryInfo",
     # background work

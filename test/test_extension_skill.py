@@ -119,7 +119,7 @@ class CodeLint(_Tmp):
         problems = self.lint('''
             import xefm.app
             from xefm.config import config_manager
-            from xefm.user_api import EVENTS
+            from xefm.user_api import API_VERSION
             from xefm.path_base import ReadOnlyPathImpl
             from . import sibling
         ''')
@@ -249,7 +249,10 @@ class SkillMatchesTheChecker(_Tmp):
     def test_the_skill_names_the_public_lists(self):
         section = _section("## 3. The code")
         for module in ext.PUBLIC_MODULES:
-            self.assertIn(f"`{module}.__all__`", section)
+            listed = re.search(rf"- `{re.escape(module)}\.__all__` — (.*?)\n(?!  )",
+                               section, re.S).group(1)
+            self.assertEqual(set(re.findall(r"`(\w+)`", listed)),
+                             set(ext.public_names(module)), module)
 
     def test_every_ctx_name_the_skill_cites_exists(self):
         # Lower-case names only: the skill also quotes ``ctx._app`` — as the

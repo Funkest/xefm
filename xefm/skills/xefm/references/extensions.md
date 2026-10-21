@@ -150,9 +150,9 @@ The function's docstring is its help text (first line = one-line summary).
 **What is public is declared, not guessed.** From XeFM you may import two
 modules, and from each only the names in its `__all__`:
 
-- `xefm.user_api.__all__` — `API_VERSION`, `PREVIEW`, `EVENTS`, `MENUS`,
-  `MENU_WHEN`, `ActionContext`, `PaneApi`, `EntryInfo`, `TaskJob`,
-  `TaskOutcome`, `md_code_block`, `md_escape`
+- `xefm.user_api.__all__` — `API_VERSION`, `PREVIEW`, `ActionContext`,
+  `PaneApi`, `EntryInfo`, `TaskJob`, `TaskOutcome`, `md_code_block`,
+  `md_escape`
 - `xefm.path_base.__all__` — `ReadOnlyPathImpl`, `UriStatResult`
 
 Anything else those modules happen to contain (`run_guarded`,
