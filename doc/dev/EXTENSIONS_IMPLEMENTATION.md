@@ -138,7 +138,10 @@ For each package directory (sorted; dot-directories skipped), `load` does:
    promotion path in G).
 2. Run `check_manifest(machine=False)`. On errors, skip the package and report
    the first error, with a count and a pointer to `xefm ext check`.
-3. Apply the backend, platform and `host_packages` gates.
+3. Apply the backend, platform, `host_packages` and `python_packages` gates.
+   The last one is `python_packages.synced_for`: the stamp of
+   `~/.xefm/site-packages/X.Y` must record exactly this extension's list,
+   for this platform. See `PYTHON_PACKAGES_IMPLEMENTATION.md`.
 4. `_apply`:
    - Resolve every contribution first: `_import_ref` appends the package root
      to `sys.path` and imports.
@@ -228,8 +231,9 @@ missing.
 
 ## Decisions on the discussion's open questions
 
-1. **Native wheels XeFM doesn't ship:** out of scope for v1. `host_packages`
-   covers what the build already has.
+1. **Native wheels XeFM doesn't ship:** out of scope for v1, then covered by
+   `requires.python_packages`, which feeds the `requirements.txt` sync (#664).
+   `host_packages` still covers what the build already has.
 2. **Name:** "extension". Packages live in the existing `~/.xefm/extensions/`,
    as G proposes.
 3. **Catalog:** none in v1. Install is from a source only.

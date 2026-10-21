@@ -165,8 +165,24 @@ def _host_digest(host: dict[str, str]) -> str:
     return _sha256("\n".join(f"{n}=={v}" for n, v in sorted(host.items())))
 
 
-def make_stamp(requirements: str, host: dict[str, str]) -> dict:
+Extensions = dict[str, list[str]]
+
+
+def extension_requirements(layout: Layout) -> Extensions:
+    """``{extension id: [requirement, …]}`` from the enabled extension
+    packages' ``requires.python_packages`` — synced with requirements.txt."""
+    from xefm import extensions
+    try:
+        return extensions.python_requirements(extensions.Layout(layout.home))
+    except Exception as e:
+        logger.error(f"Could not read the extensions' Python packages: {e}")
+        return {}
+
+
+def make_stamp(requirements: str, host: dict[str, str],
+               extensions: Extensions | None = None) -> dict:
     return {"requirements": _sha256(requirements), "host": _host_digest(host),
+            "extensions": dict(sorted((extensions or {}).items())),
             "python": python_version(), "platform": platform_tag()}
 
 
@@ -206,33 +222,60 @@ class Status:
         return ""
 
 
-def check(layout: Layout, host: dict[str, str] | None = None) -> Status:
-    """Compare the stamp with the file, this Python and XeFM's own packages.
-    Offline and cheap; says what is out of date, and never fixes it."""
+def _changed_extensions(stamp: dict, extensions: Extensions) -> list[str]:
+    synced = stamp.get("extensions") or {}
+    return sorted(i for i in set(synced) | set(extensions)
+                  if synced.get(i) != extensions.get(i))
+
+
+def check(layout: Layout, host: dict[str, str] | None = None,
+          extensions: Extensions | None = None) -> Status:
+    """Compare the stamp with the file, the extensions' requirements, this
+    Python and XeFM's own packages. Offline and cheap; says what is out of
+    date, and never fixes it."""
     text = read_requirements(layout)
+    if extensions is None:
+        extensions = extension_requirements(layout)
     stamp = read_stamp(layout.target) if layout.target.is_dir() else None
     if stamp is None:
         if layout.target.is_dir():
             return Status(NEEDS_SYNC, f"{layout.target} has no {STAMP}", loaded=True)
-        if not declares_anything(text):
+        if not declares_anything(text) and not extensions:
             return Status(UNUSED)
         others = sorted(p.name for p in layout.root.glob("[0-9]*.[0-9]*") if p.is_dir())
         if others:
             return Status(NEEDS_SYNC, f"{layout.requirements} was synced for Python "
                           f"{', '.join(others)}, and XeFM now runs on {layout.version}")
-        return Status(NEEDS_SYNC, f"{layout.requirements} has not been synced yet")
+        if declares_anything(text):
+            return Status(NEEDS_SYNC, f"{layout.requirements} has not been synced yet")
+        return Status(NEEDS_SYNC, "the extensions' Python packages have not been "
+                      "synced yet")
     if stamp.get("platform") != platform_tag():
         return Status(FOREIGN, f"{layout.target} was synced for "
                       f"{stamp.get('platform')}, not {platform_tag()}")
     if stamp.get("requirements") != _sha256(text):
         return Status(NEEDS_SYNC, f"{layout.requirements} changed since the last sync",
                       loaded=True)
+    changed = _changed_extensions(stamp, extensions)
+    if changed:
+        return Status(NEEDS_SYNC, "the Python packages of extension "
+                      f"{', '.join(changed)} changed since the last sync", loaded=True)
     if host is None:
         host = host_distributions(layout)
     if stamp.get("host") != _host_digest(host):
         return Status(NEEDS_SYNC, "XeFM's own packages changed since the last sync "
                       "(an upgrade, or another XeFM install sharing ~/.xefm)", loaded=True)
     return Status(IN_SYNC, loaded=True)
+
+
+def synced_for(layout: Layout, ext_id: str, wanted: list[str]) -> bool:
+    """Whether the last sync installed exactly ``wanted`` for this extension,
+    on this platform — so its imports will find them. Offline: the stamp is
+    the record. A package the host already had counts too: the sync pruned it
+    because XeFM's own copy is what gets imported."""
+    stamp = read_stamp(layout.target) if layout.target.is_dir() else None
+    return (stamp is not None and stamp.get("platform") == platform_tag()
+            and (stamp.get("extensions") or {}).get(ext_id) == list(wanted))
 
 
 # --- loading ----------------------------------------------------------------------
@@ -404,10 +447,9 @@ def _prune(directory: Path, host: dict[str, str]) -> list[str]:
     return sorted(pruned, key=str.lower)
 
 
-def _conflict_lines(output: list[str]) -> list[str]:
-    """pip's own account of a requirement that clashes with a pinned host
-    package — the indented lines under "The conflict is caused by:" — or
-    nothing when no pinned host package is among them."""
+def _conflict_block(output: list[str]) -> list[str]:
+    """pip's own account of a failed resolution: the indented lines under
+    "The conflict is caused by:"."""
     lines, inside = [], False
     for line in output:
         if line.strip().startswith("The conflict is caused by"):
@@ -416,21 +458,39 @@ def _conflict_lines(output: list[str]) -> list[str]:
             lines.append(line.strip())
         else:
             inside = False
-    return lines if any("(constraint)" in line for line in lines) else []
+    return lines
+
+
+def _attribute(line: str, extensions: Extensions) -> str:
+    """``line`` with the extensions that asked for the project it names, so a
+    conflict says whose requirement it is."""
+    match = re.search(r"requested\s+(?:\(constraint\)\s+)?([A-Za-z0-9._-]+)", line)
+    if not match or "(constraint)" in line:
+        return line
+    name = normalize(match.group(1))
+    owners = [i for i, reqs in sorted(extensions.items())
+              if any(normalize(re.match(r"\s*([A-Za-z0-9._-]+)", r).group(1)) == name
+                     for r in reqs)]
+    return f"{line} (extension {', '.join(owners)})" if owners else line
 
 
 def sync(layout: Layout | None = None, python: str | None = None,
          log: Callable[[str], None] = lambda line: None,
          run: Runner = subprocess.run, popen=subprocess.Popen,
-         opener: Opener = _urlopen) -> SyncResult:
-    """Bring the directory to match ``requirements.txt``. pip's output goes
-    to ``log`` a line at a time. Raises :class:`SyncError` and leaves the
+         opener: Opener = _urlopen,
+         extensions: Extensions | None = None) -> SyncResult:
+    """Bring the directory to match ``requirements.txt`` plus the enabled
+    extensions' ``requires.python_packages``, resolved together so a clash
+    between any two of them fails here rather than at import. pip's output
+    goes to ``log`` a line at a time. Raises :class:`SyncError` and leaves the
     current directory as it was when anything fails."""
     layout = layout or Layout()
     if python is None:
         from xefm.external_programs import xefm_python as python
     text = read_requirements(layout)
-    declared = declares_anything(text)
+    if extensions is None:
+        extensions = extension_requirements(layout)
+    declared = declares_anything(text) or any(extensions.values())
     if not declared and not layout.target.exists():
         return SyncResult([], [])
     host = host_distributions(layout)
@@ -438,12 +498,12 @@ def sync(layout: Layout | None = None, python: str | None = None,
     layout.staging.mkdir(parents=True)
     try:
         if declared:
-            _pip_install(layout, python, host, log, run, popen, opener)
+            _pip_install(layout, python, host, extensions, log, run, popen, opener)
             pruned = _prune(layout.staging, host)
         else:
             pruned = []
         (layout.staging / STAMP).write_text(
-            json.dumps(make_stamp(text, host), indent=2), encoding="utf-8")
+            json.dumps(make_stamp(text, host, extensions), indent=2), encoding="utf-8")
     except BaseException:
         shutil.rmtree(layout.staging, ignore_errors=True)
         raise
@@ -465,15 +525,25 @@ def sync(layout: Layout | None = None, python: str | None = None,
     return SyncResult(installed, pruned, pending_restart=not swapped)
 
 
-def _pip_install(layout, python, host, log, run, popen, opener) -> None:
+def _pip_install(layout, python, host, extensions, log, run, popen, opener) -> None:
     pip = pip_command(python, layout, run=run, opener=opener)
     with tempfile.TemporaryDirectory(prefix="xefm-deps-") as tmp:
         constraints = Path(tmp) / "host-constraints.txt"
         constraints.write_text("".join(f"{n}=={v}\n" for n, v in sorted(host.items())),
                                encoding="utf-8")
+        # One file, one resolution: the user's own (by reference, so its
+        # relative -r and paths keep meaning what they say) and every
+        # extension's lines under a comment naming it.
+        wanted = Path(tmp) / "requirements.txt"
+        parts = []
+        if declares_anything(read_requirements(layout)):
+            parts.append(f"-r {layout.requirements}\n")
+        for ext_id, reqs in sorted(extensions.items()):
+            parts.append(f"# extension {ext_id}\n" + "".join(f"{r}\n" for r in reqs))
+        wanted.write_text("".join(parts), encoding="utf-8")
         argv = pip + ["install", "--target", str(layout.staging),
                       "--no-input", "--disable-pip-version-check",
-                      "-r", str(layout.requirements), "-c", str(constraints)]
+                      "-r", str(wanted), "-c", str(constraints)]
         env = dict(os.environ)
         # The user's own pip settings must not redirect this install.
         for name in ("PIP_TARGET", "PIP_PREFIX", "PIP_USER", "PIP_REQUIRE_VIRTUALENV"):
@@ -496,8 +566,11 @@ def _pip_install(layout, python, host, log, run, popen, opener) -> None:
         proc.stdout.close()
         code = proc.wait()
     if code != 0:
-        conflicts = _conflict_lines(output)
-        if conflicts:
+        conflicts = [_attribute(line, extensions) for line in _conflict_block(output)]
+        if any("(constraint)" in line for line in conflicts):
             raise SyncError("a requirement conflicts with a package XeFM itself "
                             "runs on, whose version wins: " + "; ".join(conflicts))
+        if conflicts:
+            raise SyncError("requirements conflict with each other: "
+                            + "; ".join(conflicts))
         raise SyncError(f"pip exited with code {code}")

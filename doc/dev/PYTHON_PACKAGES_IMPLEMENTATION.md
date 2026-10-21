@@ -90,11 +90,39 @@ bundles. In order:
 logs it and calls `reload_config()` so a `config.py` import that failed for a
 missing package gets another try. The menu item is disabled while a sync runs.
 
+## Extensions: `requires.python_packages`
+
+An extension's manifest may list PyPI requirements. They go into the same sync,
+because every extension shares one process: there is no per-extension
+environment to give them, and one resolution is what finds a clash between two
+extensions before anything imports.
+
+- **Validation** (`extensions.requirement_problem`): name, `[extras]`,
+  specifiers, `; marker`. No pip options, direct references or paths. A line
+  like `--index-url` in one package would otherwise steer pip for all of them.
+- **Input** (`extensions.python_requirements`): every discovered, enabled
+  package whose list passes validation, as `{id: [lines]}`.
+- **Sync**: pip gets one generated file, `-r <requirements.txt>` (by
+  reference, so its relative paths keep their meaning) followed by each
+  extension's lines under `# extension <id>`. The user's options (`--index-url`,
+  `--find-links`) are global in pip and so apply to the extensions' lines too.
+  A failed resolution is reported with each "requested" line tagged with the
+  extensions that asked for that project (`_attribute`).
+- **Stamp**: `extensions` holds the synced `{id: [lines]}`. `check()` reports
+  `NEEDS_SYNC` naming any id whose list differs, including one that was
+  uninstalled or disabled.
+- **Load gate** (`synced_for`): an extension loads only when the stamp records
+  exactly its current list on this platform. Offline, and exact: a package
+  pruned because the host has it still counts, since the stamp lists the
+  requirement, not what is on disk.
+- **Install**: `xefm ext install` asks to sync (`-y` syncs). The app's Install
+  Extension says in its dialog that packages come from PyPI and starts
+  `sync_python_packages` after installing. Uninstall, enable and disable only
+  print that a sync is due.
+
 ## Open checks
 
 - Windows app and Store package: route 3 (PyPI download) and loading an
   unsigned `.pyd` from `~/.xefm` have not been run there.
 - macOS app: XeFM.app carries `disable-library-validation`, so an unsigned
   `.so` from pip should load; not yet confirmed in a signed build.
-- Extensions: a `requires.python_packages` in `xefm-extension.toml` could feed
-  the same sync later. `requires.host_packages` is unchanged.

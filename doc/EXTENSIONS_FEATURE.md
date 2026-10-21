@@ -162,6 +162,7 @@ defaults = "hello_xefm.settings:Settings"
 [requires]
 programs = ["ffmpeg"]                 # missing → its actions say so when run
 host_packages = ["PIL"]               # must already be in this XeFM build
+python_packages = ["PyYAML>=6"]       # installed from PyPI by the sync
 ```
 
 ```python
@@ -247,15 +248,37 @@ check and installs nothing if it finds an error.
 
 ### Dependencies
 
-- **Pure Python libraries:** vendor them inside your own package
-  (`hello_xefm/_vendor/`) and import them through it. Every loaded package
-  shares one Python process, so a top-level module name may belong to only one
-  package. Two packages providing `foo` are refused, and so is a name that
-  would hide a standard-library module.
+- **Libraries from PyPI** (PyYAML, numpy, rawpy, compiled or not): list them
+  in `python_packages` and import them normally. They are installed by the
+  same sync as `~/.xefm/requirements.txt`
+  ([Extra Python Libraries](PYTHON_PACKAGES_FEATURE.md)), into one shared
+  directory, resolved together with every other extension's and your own.
 - **Libraries XeFM already ships** (Pillow, for example): list them in
   `host_packages`.
+- **Small pure-Python helpers:** you can also vendor them inside your own
+  package (`hello_xefm/_vendor/`) and import them through it. A vendored
+  library needs no sync and no network. Every loaded package shares one Python
+  process, so a top-level module name may belong to only one package. Two
+  packages providing `foo` are refused, and so is a name that would hide a
+  standard-library module.
 - **External programs:** list them in `programs`.
-- **Compiled libraries that XeFM doesn't ship:** not supported in this version.
+
+`python_packages` entries are plain requirements: a project name, optional
+`[extras]`, version specifiers and a `;` marker. Pip options (`--index-url`),
+URLs and paths are refused by the check, so no extension can redirect where
+pip downloads from.
+
+What the user sees:
+
+- Installing shows each package under "installs Python package from PyPI".
+  `xefm ext install` then asks to sync (with `-y` it just does). Install
+  Extension in XeFM syncs right after installing.
+- Until a sync has installed exactly the listed packages, the extension is not
+  loaded, and the log says it needs Sync Python Packages.
+- If two extensions (or an extension and XeFM itself) need versions that can't
+  both be installed, the sync fails and the log names the extensions.
+- Uninstalling or disabling an extension leaves its packages in place until
+  the next sync, and `xefm ext` says a sync is due.
 
 ## Things to know
 
