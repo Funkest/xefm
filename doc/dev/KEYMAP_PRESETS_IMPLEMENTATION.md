@@ -182,7 +182,7 @@ surfaces that cache key names: the status bar's hint line, and the menu
 refuses, with a log line, when `KEY_PRESET` in the config names a different
 preset.
 
-The menu is **Tools → Keymap ▸**, one checked item per preset. A preset is
+The menu is **Tools → Advanced → Keymap ▸**, one checked item per preset. A preset is
 not an action, so the command palette does not offer the switch.
 
 ## Type-ahead

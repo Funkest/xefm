@@ -1795,7 +1795,7 @@ class XeFMApp:
         # positions, recent dirs). Injectable so tests can supply a temp-db
         # manager instead of touching ~/.xefm/state.db.
         self.state_manager = state_manager if state_manager is not None else get_state_manager()
-        # The keymap preset (Tools > Keymap, or KEY_PRESET in config.py) is
+        # The keymap preset (Tools > Advanced > Keymap, or KEY_PRESET in config.py) is
         # written into KEY_BINDINGS itself, so every surface reads one table.
         self._apply_keymap_preset()
         self._left_provided = left_provided
@@ -4562,23 +4562,30 @@ class XeFMApp:
             MenuItem("External Programs…", on_select=self.show_programs, shortcut=sc("programs")),
             MenuItem("Subshell Here", on_select=self.subshell, shortcut=sc("subshell")),
             SEPARATOR,
-            # A preset is how the keys work, not how things look, so it sits
-            # with the configuration rather than the theme.
-            MenuItem("Keymap", submenu=Menu(*[
-                MenuItem(label, on_select=lambda n=name: self.set_keymap_preset(n),
-                         checked=lambda n=name: self._keymap_preset == n)
-                for name, label in keymap_presets.LABELS.items()])),
+            # Editing the config and reloading it are the loop a user tuning
+            # XeFM goes round, so they stay at the top. What is set up once or
+            # now and then — the keymap, extensions, Python packages — waits
+            # one level down.
             MenuItem("Edit Configuration…", on_select=self.edit_config,
                      shortcut=sc("edit_config")),
-            MenuItem("Extensions…", on_select=self.show_extensions,
-                     shortcut=sc("extensions")),
-            MenuItem("Install Extension…", on_select=self.install_extension,
-                     enabled=has_files, shortcut=sc("install_extension")),
-            MenuItem("Sync Python Packages", on_select=self.sync_python_packages,
-                     enabled=lambda: not self._python_packages_syncing,
-                     shortcut=sc("sync_python_packages")),
             MenuItem("Reload Configuration", on_select=self.reload_config,
                      shortcut=sc("reload_config")),
+            MenuItem("Advanced", submenu=Menu(
+                # A preset is how the keys work, not how things look, so it
+                # sits with the configuration rather than the theme.
+                MenuItem("Keymap", submenu=Menu(*[
+                    MenuItem(label, on_select=lambda n=name: self.set_keymap_preset(n),
+                             checked=lambda n=name: self._keymap_preset == n)
+                    for name, label in keymap_presets.LABELS.items()])),
+                SEPARATOR,
+                MenuItem("Extensions…", on_select=self.show_extensions,
+                         shortcut=sc("extensions")),
+                MenuItem("Install Extension…", on_select=self.install_extension,
+                         enabled=has_files, shortcut=sc("install_extension")),
+                MenuItem("Sync Python Packages", on_select=self.sync_python_packages,
+                         enabled=lambda: not self._python_packages_syncing,
+                         shortcut=sc("sync_python_packages")),
+            )),
             title="Tools",
         )
         select_menu = Menu(
@@ -5172,7 +5179,7 @@ class XeFMApp:
         chosen. Quit before choosing, and the next launch asks again."""
         names = list(keymap_presets.PRESETS)
         labels = [keymap_presets.LABELS[n] for n in names]
-        lines = ["Choose how XeFM's keys work. **Tools > Keymap** changes it "
+        lines = ["Choose how XeFM's keys work. **Tools > Advanced > Keymap** changes it "
                  "at any time.", ""]
         for name, label in zip(names, labels):
             lines.append(f"**{label}** — {keymap_presets.PRESETS[name].description}")
@@ -10635,9 +10642,9 @@ class XeFMApp:
             ("command_palette", "Search every action by name and run it"),
             ("edit_config", "Edit ~/.xefm/config.py, then reload (Tools menu)"),
             ("reload_config", "Reload ~/.xefm/config.py (Tools menu)"),
-            ("install_extension", "Install the extension package under the cursor (Tools menu)"),
-            ("extensions", "List extension packages (Tools menu)"),
-            ("sync_python_packages", "Install what ~/.xefm/requirements.txt lists (Tools menu)"),
+            ("install_extension", "Install the extension package under the cursor (Tools ▸ Advanced menu)"),
+            ("extensions", "List extension packages (Tools ▸ Advanced menu)"),
+            ("sync_python_packages", "Install what ~/.xefm/requirements.txt lists (Tools ▸ Advanced menu)"),
             ("help", "Show this help"),
             ("quit", "Quit XeFM"),
         )),

@@ -15,7 +15,7 @@ rawpy
 xefm deps sync
 ```
 
-Or, inside XeFM: **Tools → Sync Python Packages** (also in the command palette
+Or, inside XeFM: **Tools → Advanced → Sync Python Packages** (also in the command palette
 as `sync_python_packages`). The sync runs in the background, pip's output goes
 to the log pane, and the configuration reloads when it finishes.
 

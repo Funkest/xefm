@@ -248,7 +248,7 @@ make them guess it.
   resolution, and a pin is what makes two of them clash. Do not list what
   XeFM already ships; that goes in `host_packages`.
 - The package is not loaded until the user has synced (`xefm deps sync`, or
-  Tools > Sync Python Packages). `xefm ext install` offers it; tell the user
+  Tools > Advanced > Sync Python Packages). `xefm ext install` offers it; tell the user
   to accept, or to run it afterwards.
 - Libraries XeFM itself ships (Pillow, Pygments): list them in
   `requires.host_packages` and import them normally.

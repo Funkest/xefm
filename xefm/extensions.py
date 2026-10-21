@@ -1421,7 +1421,7 @@ def load(config, layout: Layout | None = None, *,
         if wanted and not _python_packages.synced_for(
                 _python_packages.Layout(layout.home), manifest.id, wanted):
             report.skipped.append((label, "its Python packages are not installed "
-                                   "yet — run Sync Python Packages (Tools menu), "
+                                   "yet — run Sync Python Packages (Tools ▸ Advanced), "
                                    "or `xefm deps sync`"))
             continue
         try:

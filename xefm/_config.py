@@ -253,16 +253,18 @@ class Config:
     TRANSFER_CONCURRENCY = "auto"
 
     # Keymap preset: the whole keymap, chosen at first launch and changed from
-    # Tools > Keymap. The presets are peers; neither is the default.
-    #   None        -- whatever you chose at first launch or in Tools > Keymap
+    # Tools > Advanced > Keymap. The presets are peers; neither is the default.
+    #   None        -- whatever you chose at first launch or in
+    #                  Tools > Advanced > Keymap
     #   'afx'       -- letters: C copy, K delete, M move ... The single-key
     #                  style of the X68000 filers and AFX (あふ). 'default' is
     #                  accepted as an old name for it.
     #   'orthodox'  -- function keys: F3 view, F4 edit, F5 copy, F6 move,
     #                  F7 new folder, F8 delete. No bare letter runs anything;
     #                  typing a letter starts incremental search.
-    # Setting this wins over the Tools > Keymap menu. KEY_BINDINGS below is
-    # laid over whichever preset is in force. See doc/KEYMAP_PRESETS_FEATURE.md.
+    # Setting this wins over the Tools > Advanced > Keymap menu. KEY_BINDINGS
+    # below is laid over whichever preset is in force. See
+    # doc/KEYMAP_PRESETS_FEATURE.md.
     KEY_PRESET = None
 
     # Key bindings - your changes to the keymap preset above
@@ -545,9 +547,9 @@ class Config:
     # codecs are installed (the HEIF and AV1 extensions from the Store, if you
     # have them); in a terminal through Pillow, including any Pillow plugin you
     # installed. Installing pillow-heif is enough to add HEIC anywhere: add a
-    # line to ~/.xefm/requirements.txt, then Tools > Sync Python Packages (or
-    # `xefm deps sync` from a shell). The same goes for rawpy, cairosvg and any
-    # other library a decoder below imports.
+    # line to ~/.xefm/requirements.txt, then Tools > Advanced > Sync Python
+    # Packages (or `xefm deps sync` from a shell). The same goes for rawpy,
+    # cairosvg and any other library a decoder below imports.
     #
     #     pillow-heif
     #

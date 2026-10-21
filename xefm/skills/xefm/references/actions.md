@@ -7,7 +7,7 @@ Use these names exactly in `KEY_BINDINGS` (and with `ctx.invoke`). The
 key columns are each preset's defaults *before* the user's
 `KEY_BINDINGS` is laid over them: to know whether a key is free, look
 for it in the column of the preset in force (`KEY_PRESET`, or the one
-the user picked in **Tools ▸ Keymap**; ask which if `KEY_PRESET` is
+the user picked in **Tools ▸ Advanced ▸ Keymap**; ask which if `KEY_PRESET` is
 `None` and you cannot tell) *and* in the user's own `KEY_BINDINGS`.
 — means the action has no key by default.
 

@@ -725,7 +725,7 @@ if __name__ == "__main__":
 
 
 class AppInstall(_Home):
-    """Tools ▸ Install Extension on the focused package folder."""
+    """Tools ▸ Advanced ▸ Install Extension on the focused package folder."""
 
     def setUp(self):
         super().setUp()
