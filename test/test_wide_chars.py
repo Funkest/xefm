@@ -18,6 +18,9 @@ from xefm import config as xefm_config
 
 @pytest.fixture(autouse=True)
 def _restore():
+    # Start clean too: any app test earlier on this worker applied the
+    # developer's own ~/.xefm/config.py, WIDE_CHARS included, process-wide.
+    set_wide_chars("")
     yield
     set_wide_chars("")
 
