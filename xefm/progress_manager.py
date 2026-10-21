@@ -24,6 +24,9 @@ class OperationType(Enum):
     DELETE = "delete"
     ARCHIVE_CREATE = "archive_create"
     ARCHIVE_EXTRACT = "archive_extract"
+    #: A task an action started through ``ctx.run_task`` (#632): the action's
+    #: own title says what it is, so no verb of XeFM's names it.
+    TASK = "task"
 
 
 #: A file's fixed per-item cost in the progress percentage, in byte-equivalents.

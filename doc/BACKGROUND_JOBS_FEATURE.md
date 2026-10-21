@@ -52,6 +52,9 @@ it stopped.
 
 An operation you watch in front never waits for the queue.
 
+A job that only reads — an extension's checksum, say — never waits either: it
+runs beside whatever is running in the background.
+
 ## When a job needs an answer
 
 If a background job reaches a question, such as a file that already exists at

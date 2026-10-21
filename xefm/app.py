@@ -108,8 +108,8 @@ from xefm import sort_keys
 from xefm.state_manager import get_state_manager
 from xefm.str_format import abbreviate_path, format_size
 from xefm.user_api import (ActionContext, PaneApi, hooks as _hooks,
-                           load_user_entries, preview_notice,
-                           report_user_failure, run_guarded)
+                           load_user_entries, menu_items as user_menu_items,
+                           preview_notice, report_user_failure, run_guarded)
 from xefm.batch_rename_dialog import show_batch_rename
 from xefm.remote_edit import EditSessions, RemoteChanged, can_write_back
 from xefm.rename_in_editor import (UnlistableName, apply_plan, names_text,
@@ -2688,7 +2688,8 @@ class XeFMApp:
         if str(old_path) == str(new_path) or not _hooks.get("directory_changed"):
             return
         _hooks.fire("directory_changed", self._user_ctx,
-                    PaneApi(self, pane_name), old_path, new_path)
+                    pane=PaneApi(self, pane_name), old_path=old_path,
+                    new_path=new_path)
 
     @staticmethod
     def _listing_unchanged(pane: dict, result: dict) -> bool:
@@ -4059,7 +4060,7 @@ class XeFMApp:
         # Directories are excluded: entering one is navigation, not opening.
         try:
             if _hooks.get("file_open") and not entry.is_dir():
-                if _hooks.fire("file_open", self._user_ctx, entry):
+                if _hooks.fire("file_open", self._user_ctx, path=entry):
                     return
         except Exception as exc:
             self.log_info(f"Cannot open {entry.name}: {exc}")
@@ -4460,6 +4461,7 @@ class XeFMApp:
                      enabled=has_files, shortcut=sc("create_archive")),
             MenuItem("Extract Archive…", on_select=self.extract_archive,
                      enabled=has_files, shortcut=sc("extract_archive")),
+            *self._user_menu_items("file"),
             SEPARATOR,
             MenuItem("Quit", on_select=self.confirm_quit, shortcut=sc("quit")),
             title="File",
@@ -4678,6 +4680,28 @@ class XeFMApp:
         """Run a keymap action from a menu/context-menu selection and redraw."""
         if self.dispatch(action):
             self.panel.render()
+
+    def _user_menu_items(self, menu: str) -> list:
+        """The config's and the extensions' ``MENU_ITEMS`` for ``menu``
+        (#632), as a group of their own behind a separator — nothing when
+        there are none. Each runs its action as a key bound to it would, and
+        shows the key when one is."""
+        items = []
+        for entry in user_menu_items(menu):
+            items.append(MenuItem(
+                entry.label, on_select=lambda name=entry.action: self._menu(name),
+                enabled=self._menu_condition(entry.when),
+                shortcut=self._menu_shortcut(entry.action)))
+        return [SEPARATOR, *items] if items else []
+
+    def _menu_condition(self, when: str):
+        """A ``MENU_ITEMS`` ``when`` as the predicate a MenuItem re-evaluates
+        on open (see :data:`xefm.user_api.MENU_WHEN`)."""
+        if when == "entry":
+            return lambda: self._focused_entry() is not None
+        if when == "selection":
+            return lambda: bool(self.active_pane()["selected_files"])
+        return True
 
     def _menu_shortcut(self, action: str) -> str | None:
         """The display-formatted first key bound to ``action`` for a MenuItem
@@ -11040,6 +11064,7 @@ class XeFMApp:
                      enabled=entry is not None),
             MenuItem("Open as List", on_select=lambda: self._menu("open_list_from_file"),
                      enabled=entry is not None),
+            *self._user_menu_items("context"),
             SEPARATOR,
             MenuItem("Add to Favorites…", on_select=self._add_cursor_favorite,
                      enabled=entry is not None),

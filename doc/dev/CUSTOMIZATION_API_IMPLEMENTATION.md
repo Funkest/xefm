@@ -336,6 +336,86 @@ falls back to XeFM's own when the pane is not on the local disk, since an
 `s3://` path is no working directory. `_run_in_terminal` now returns the exit
 code so `terminal=True` can hand it back.
 
+### `run_task`: a function and a handle, not a `Task` subclass (#632)
+
+`ctx.run_task(title, work, *, on_done=None, read_only=False)` is
+`TaskManager.submit` with the façade's two types put where the internal ones
+would have leaked. Internally a job is already a function plus a `Task`
+(`submit(task, panel, run=..., on_done=...)`), and nothing subclasses `Task`;
+making `Task` public would have published all of it — `progress` (a
+`ProgressManager`), `status`, `background`, `paused`, and `ask(show_fn(panel,
+deliver))`, whose signature carries a PuiKit panel. So the worker is handed a
+`TaskJob` that starts small — `progress(done, total, detail=)`, `checkpoint()`,
+`cancelled()` — and grows by addition; a worker-side `confirm` / `choose` can
+come later by wrapping `Task.ask`.
+
+- **Threading rule.** The worker may touch only the `TaskJob`. `on_done` gets a
+  *new* `ActionContext`, carrying the same `ctx.extension`, because the one the
+  action held belongs to a moment that has passed.
+- **One outcome object.** `TaskOutcome(status, value, error)` with `status` in
+  `done` / `cancelled` / `failed`, rather than a callback per ending: a result
+  dialog usually wants the same code path for all three (show what there is,
+  say what happened). The status is read off the `Task` on the UI thread, not
+  off the result dict: the cancel flag wins over an exception (`Cancelled`
+  raised by `checkpoint()` is recorded in `task.error` like any other), and an
+  exception that is not a cancel is logged with its traceback —
+  `_report_exception` formats it from `exc.__traceback__`, since it was caught
+  on another thread and `sys.exc_info()` is long gone.
+- **`read_only`, not a scheduling flag.** The extension states a fact and XeFM
+  picks the policy: `Task.exclusive = not read_only`, and a non-exclusive task
+  never takes the background queue's slot (#567/#599). Detached, it starts at
+  once; sent back with *Run in background*, it is neither suspended nor queued.
+  `TaskManager.background_tasks()` lists such jobs after the slot's, and
+  `running_task()` falls back to one when the slot is free, so the status bar
+  and the jobs list see them. The policy can change — a cap on concurrent
+  readers, say — without an API change.
+- **Progress.** `TaskJob.progress` drives the task's `ProgressManager` under a
+  new `OperationType.TASK`: the first call starts the operation, a changed
+  total updates it, and the dialog shows its spinner until a nonzero total
+  arrives. The progress dialog itself is unchanged.
+
+### `show_markdown`, `copy_text` and the Markdown helpers (#632)
+
+`ctx.show_markdown(title, source)` is `text_dialog.show_markdown` — the Help
+and File Details dialog — with no other parameter: `on_link` stays private
+until there is a design for which link schemes an extension may handle. The
+dialog now builds its `MarkdownView` with `selectable=True` and PuiKit's
+`code_copy=True` (a Copy button above each fenced code block, a Tab stop beside
+the links), and the modal forwards Ctrl/Cmd-A and -C to it, so Help and Details
+gained selection and copy buttons along with the API.
+
+`md_code_block(text, lang="")` fences with one backtick more than the longest
+run in `text` (three at least). That relies on PuiKit closing a fence the
+CommonMark way — same character, at least as long, nothing after — which the
+same change fixed: the parser used to close on any line starting with three
+fence characters. `md_escape(text)` backslash-escapes the inline specials
+everywhere and the block starters (`#`, `>`, `-`, `+`, `=`, `1.`) at a line's
+start; it leaves `.` and `-` inside a name alone, so `v1.2-3.txt` stays
+readable in the source.
+
+`ctx.copy_text(text)` is `XeFMApp._set_text_clipboard` — one clipboard, so a
+text copy clears the files XeFM was holding, as Copy Name(s) does.
+
+### `MENU_ITEMS`: XeFM places the item (#632)
+
+Keyed by action name, `{"menus": [...], "label": ..., "when": ...}`, loaded by
+`_process_user_entries` after `ACTIONS` into `user_api.menu_entries`
+(validation without loading takes the config's own action names from its
+`ACTIONS` table, since they are not registered then). `XeFMApp._user_menu_items`
+turns them into a separator-led group: in the File menu after the archive
+items, in a row's context menu after Open as List. There is deliberately no
+position field: a menu XeFM rearranges later cannot strand a config pointing at
+a slot that moved. `when` is a closed vocabulary (`always`, `entry`,
+`selection`) turned into the `enabled` predicates the built-in items already
+use; an item that does not apply is greyed out, not hidden, like theirs. Only
+the two menus (`MENUS`) for now — the directory context menu and the other
+menu-bar menus can be added by name.
+
+The manifest kind `[contributes.menus]` feeds this table like every other kind
+(`CONTRIBUTION_TABLES`), is checked by `_check_menu` (own actions only, as
+`key_suggestions` is), and is data: a package with only menus and themes runs
+no code.
+
 ### Failure isolation
 
 `run_guarded` is the single crossing into user code — actions, hooks and dialog
@@ -446,9 +526,29 @@ Four, all deliberate:
 
 ## 8. Preview status
 
-`API_VERSION = 0` and `PREVIEW = True` in `xefm/user_api.py`. The gate is a
-notice, not a switch: a config using either variable gets one line in the log
-pane at load and at every reload —
+Preview is per API, not per module (#632). `xefm/preview.py` holds the
+`@preview` decorator and the registry: a marked function, method, property
+getter or class is recorded by its qualified name and its docstring opens with
+"Preview — may change in any release."; a `config.py` table (`config.ACTIONS`)
+or a manifest section (`manifest.contributes.menus`) is listed by name there,
+having no object to decorate. A class's entry covers its members, which is why
+`ActionContext` itself is not marked but each of its members is — so one can be
+declared stable (`api_version` already is) while `run_task` stays Preview. The
+set is published as `user_api.PREVIEW_APIS`, frozen at the foot of the module
+once every decorator has run (`xefm.path_base` is imported there for its own).
+`API_VERSION` promises only what is not in it, and stays `0` while everything
+is. The module-wide `PREVIEW = True` it replaced could not say "this part is
+stable, that part is not"; marking every API now means stabilizing one later is
+deleting its mark, with no change of meaning in between.
+
+`test_user_task_api.py` holds the other half: every public name is either
+Preview or in the test's `STABLE` set, so a new API has to be one or the other
+on purpose. `xefm ext check` does not warn on Preview use yet — with almost
+everything Preview, every package would carry the warning and it would say
+nothing; it becomes worth emitting once the stable part is real.
+
+The log notice is unchanged: a config using any of the tables gets one line in
+the log pane at load and at every reload —
 
 ```
 Customization API (Preview, API_VERSION 0): 2 action(s), 1 event hook(s) loaded
@@ -706,4 +806,4 @@ on top, but it is a feature, not part of this API.
 - Design: [`CUSTOMIZATION_API_DESIGN.md`](CUSTOMIZATION_API_DESIGN.md)
 - Key bindings: [`KEY_BINDINGS_IMPLEMENTATION.md`](KEY_BINDINGS_IMPLEMENTATION.md)
 - Config system: [`CONFIGURATION_SYSTEM.md`](CONFIGURATION_SYSTEM.md)
-- Tests: `test/test_customization_api.py`
+- Tests: `test/test_customization_api.py`, `test/test_user_task_api.py`

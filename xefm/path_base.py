@@ -84,8 +84,16 @@ from pathlib import PurePosixPath
 from typing import Iterator, List, Optional
 
 from xefm.path import Path, PathImpl
+from xefm.preview import preview
+
+#: The public API of this module: what a ``PATH_SCHEMES`` backend may import
+#: from it. ``xefm ext check`` refuses any other name — ``UriPathImpl`` and
+#: ``UnsupportedPathImpl`` included, which are XeFM's own building blocks
+#: rather than something a backend is promised.
+__all__ = ["ReadOnlyPathImpl", "UriStatResult"]
 
 
+@preview
 class UriStatResult:
     """An ``os.stat_result`` stand-in built from the three facts a listing
     actually needs.
@@ -427,6 +435,7 @@ class UriPathImpl(PathImpl):
         return str(self) == str(other_path)
 
 
+@preview
 class ReadOnlyPathImpl(UriPathImpl):
     """A :class:`UriPathImpl` that refuses every write.
 

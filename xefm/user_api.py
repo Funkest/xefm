@@ -22,6 +22,12 @@ that is not a directory at all — a class, named by its scheme, that XeFM then
 treats as a place. ``LEXERS`` names the Pygments lexer that colors a file in
 the text viewer (:mod:`xefm.lexer_registry`).
 
+An action can also be put in a menu — the File menu, a row's context menu —
+with ``MENU_ITEMS``, keyed by the action's name:
+
+    class Config:
+        MENU_ITEMS = {"select-docs": {"menus": ["context"], "label": "Select Documents"}}
+
     class Config:
         IMAGE_DECODERS = {".dcm": open_dicom}
         PATH_SCHEMES = {"reg": RegistryPathImpl}
@@ -31,6 +37,17 @@ The class to inherit is :class:`xefm.path_base.ReadOnlyPathImpl`, never
 :class:`~xefm.path.PathImpl`: the intermediate class is where a method added to
 the storage interface later arrives carrying a default, so a config written
 against today's XeFM keeps loading. See ``doc/VIRTUAL_FOLDERS_FEATURE.md``.
+
+The public names
+----------------
+
+**What an extension or a config may use is exactly** ``__all__`` **below** —
+``xefm ext check`` refuses any other name taken from this module, and
+``help(xefm.user_api)`` lists only these. Everything else here (the loader,
+the registries, ``run_guarded``, the names imported from elsewhere such as
+``Path``) is XeFM's own and moves without notice, however public it looks.
+On the objects, the same line runs through the leading underscore:
+``ctx.pane`` is the API, ``ctx._app`` is not.
 
 Preview status
 --------------
@@ -56,11 +73,13 @@ Threading
 ---------
 
 Actions and hooks run **on the UI thread**, synchronously, while XeFM waits.
-Long work will freeze the window; there is deliberately no background-work
-helper in this version. Prompts are the same story from the other side: the app
-never blocks on a modal, so :meth:`ActionContext.input`, :meth:`~ActionContext.choose`
-and :meth:`~ActionContext.confirm` hand their answer to a callback rather than
-returning it.
+Long work belongs in :meth:`ActionContext.run_task`, which runs a function on a
+worker thread behind XeFM's progress dialog — Cancel, *Run in background* and
+all — and hands its outcome back on the UI thread. The worker touches only the
+:class:`TaskJob` it is given, never ``ctx``. Prompts are the same story from the
+other side: the app never blocks on a modal, so :meth:`ActionContext.input`,
+:meth:`~ActionContext.choose` and :meth:`~ActionContext.confirm` hand their
+answer to a callback rather than returning it.
 
 Failure isolation
 -----------------
@@ -72,6 +91,7 @@ warning that skips that entry, never a load failure.
 """
 
 import inspect
+import re
 import traceback
 from typing import Any, Callable, Iterable, Mapping, NamedTuple
 
@@ -84,6 +104,7 @@ from xefm import path_schemes as _path_schemes
 from xefm import sort_keys as _sort_keys
 from xefm.log_manager import getLogger
 from xefm.path import Path, PathImpl
+from xefm.preview import PREVIEW_APIS as _PREVIEW_APIS, preview
 
 
 class _SeededStat(NamedTuple):
@@ -96,22 +117,47 @@ class _SeededStat(NamedTuple):
 
 logger = getLogger("UserAPI")
 
+#: The public API: the only names an extension or a config may take from this
+#: module (see *The public names* above). ``xefm ext check`` reads this list.
+__all__ = [
+    # versioning: what is promised, and what is not yet
+    "API_VERSION", "PREVIEW_APIS",
+    # what an action or a hook is handed
+    "ActionContext", "PaneApi", "EntryInfo", "HookEvent",
+    # background work
+    "TaskJob", "TaskOutcome",
+    # building Markdown for ctx.show_markdown
+    "md_code_block", "md_escape",
+]
 
-#: Bumped only on a breaking change to the façade below or to the ``ACTIONS`` /
-#: ``EVENT_HOOKS`` formats. ``0`` means Preview: it may change in any release.
+
+#: Bumped only on a breaking change to an API that is not Preview. Each API is
+#: Preview on its own (:data:`PREVIEW_APIS`); while every one of them still is,
+#: as today, this stays ``0``.
 API_VERSION = 0
 
-#: Whether this API is still a preview. Kept as a name so a config can branch on
-#: it (``if user_api.PREVIEW: ...``) rather than on a version number.
-PREVIEW = True
+#: ``PREVIEW_APIS`` — which APIs are Preview — is set at the foot of this
+#: module, once every ``@preview`` below has run.
+
+#: The menus ``MENU_ITEMS`` can put an action in: the menu bar's File menu, and
+#: the context menu of a file-list row.
+MENUS = ("file", "context")
+
+#: When a ``MENU_ITEMS`` entry is enabled, mapped to what that means. An item
+#: whose condition fails is greyed out, as the built-in items are, not hidden.
+MENU_WHEN = {
+    "always": "always",
+    "entry": "there is an entry under the cursor",
+    "selection": "at least one entry is selected",
+}
 
 #: The events ``EVENT_HOOKS`` understands, mapped to the extra arguments each
 #: passes after ``ctx``. Used for validation messages and for the docs.
 EVENTS: dict[str, str] = {
-    "startup": "fn(ctx) — after the app is up, before the first key",
-    "quit": "fn(ctx) — before XeFM shuts down",
-    "directory_changed": "fn(ctx, pane, old_path, new_path)",
-    "file_open": "fn(ctx, path) -> True to claim the open",
+    "startup": "after the app is up, before the first key",
+    "quit": "before XeFM shuts down",
+    "directory_changed": "a pane moved — event.pane, event.old_path, event.new_path",
+    "file_open": "Enter on a file — event.path; return True to claim the open",
 }
 
 
@@ -119,6 +165,7 @@ EVENTS: dict[str, str] = {
 # Entries
 # --------------------------------------------------------------------------- #
 
+@preview
 class EntryInfo:
     """One item in a pane — a file, a directory or a symlink.
 
@@ -229,6 +276,7 @@ class EntryInfo:
 # Panes
 # --------------------------------------------------------------------------- #
 
+@preview
 class PaneApi:
     """One file pane, at the model level.
 
@@ -407,6 +455,168 @@ def _match(predicate: Callable[[EntryInfo], bool], entry: EntryInfo) -> bool:
 
 
 # --------------------------------------------------------------------------- #
+# Markdown
+# --------------------------------------------------------------------------- #
+
+@preview
+def md_code_block(text: str, lang: str = "") -> str:
+    """``text`` as a fenced Markdown code block, shown exactly as written.
+
+    The fence is one backtick longer than the longest run of backticks in
+    ``text``, and never shorter than three, so no line of ``text`` can close
+    the block early — a file name with backticks in it, or text that is itself
+    Markdown. ``lang`` names the language for syntax coloring (``"python"``).
+
+    In :meth:`ActionContext.show_markdown` the block gets a Copy button, which
+    is how a result meant to be pasted elsewhere is best shown::
+
+        ctx.show_markdown("Compute Hash",
+                          "**SHA-256**\\n\\n" + md_code_block("\\n".join(lines)))
+    """
+    text = str(text)
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return f"{fence}{lang}\n{text}\n{fence}"
+
+
+#: Characters that mean something to Markdown anywhere in a line.
+_MD_INLINE = re.compile(r"([\\`*_{}\[\]()<>!|~])")
+#: What makes a line a block — a heading, quote, list item or rule — once the
+#: inline characters are escaped: ``#``, ``>``, ``-``, ``+``, ``=``, or a number
+#: followed by ``.`` or ``)``, after any indentation.
+_MD_LINE_START = re.compile(r"^(\s*)(?:([#>+=-])|(\d+)([.)]))")
+
+
+@preview
+def md_escape(text: str) -> str:
+    """``text`` with its Markdown-special characters backslash-escaped, so it
+    reads literally in prose: ``md_escape("a_b*.txt")`` shows ``a_b*.txt``,
+    not an italic ``b``, and a name that starts ``# `` or ``1.`` stays a
+    name rather than becoming a heading or a list. For a file name in a
+    sentence; a name in a code block (:func:`md_code_block`) needs no
+    escaping, and a URL should not be escaped at all."""
+    def line(text: str) -> str:
+        text = _MD_INLINE.sub(r"\\\1", text)
+        return _MD_LINE_START.sub(
+            lambda m: m.group(1) + (f"\\{m.group(2)}" if m.group(2)
+                                    else f"{m.group(3)}\\{m.group(4)}"), text)
+    return "\n".join(line(part) for part in str(text).split("\n"))
+
+
+# --------------------------------------------------------------------------- #
+# Background tasks
+# --------------------------------------------------------------------------- #
+
+@preview
+class TaskJob:
+    """The handle a :meth:`ActionContext.run_task` worker is given — the one
+    thing it may touch, on its own thread.
+
+    It is small on purpose and grows by addition: report progress, and stop
+    when asked to."""
+
+    def __init__(self, task):
+        self._task = task
+
+    def progress(self, done: int, total: int, *, detail: str = "") -> None:
+        """Say how far the work is: ``done`` of ``total`` units, and ``detail``
+        (what it is on now — a file name, say) under the title. Until the first
+        call, or while ``total`` is 0, the dialog shows a spinner instead of a
+        bar. Cheap enough to call once per item."""
+        from xefm.progress_manager import OperationType
+        pm = self._task.progress
+        total = max(0, int(total))
+        op = pm.get_current_operation()
+        if op is None:
+            pm.start_operation(OperationType.TASK, total)
+            op = pm.get_current_operation()
+        if total <= 0:
+            return
+        if op["counting"] or op["total_items"] != total:
+            pm.update_operation_total(total)
+        pm.update_progress(str(detail), processed_items=max(0, int(done)))
+
+    def checkpoint(self) -> None:
+        """Stop here if the user cancelled: raises an exception that unwinds
+        the worker, and the outcome says ``"cancelled"``. Call it between
+        units of work. Let it propagate — a broad ``except Exception`` around
+        it would swallow it (the outcome still says cancelled, but the work
+        goes on for nothing)."""
+        self._task.checkpoint()
+
+    def cancelled(self) -> bool:
+        """Whether the user cancelled — for a worker that would rather wind
+        down on its own than be unwound by :meth:`checkpoint`."""
+        return self._task.cancelled()
+
+
+@preview
+class TaskOutcome:
+    """How a :meth:`ActionContext.run_task` ended, handed to its ``on_done``.
+
+    ``status`` is ``"done"`` (``value`` is what the work returned),
+    ``"cancelled"`` or ``"failed"`` (``error`` is the exception, whose
+    traceback XeFM has already logged)."""
+
+    __slots__ = ("status", "value", "error")
+
+    def __init__(self, status: str, value: Any = None,
+                 error: BaseException | None = None):
+        self.status = status
+        self.value = value
+        self.error = error
+
+    @property
+    def ok(self) -> bool:
+        return self.status == "done"
+
+    def __repr__(self) -> str:
+        return f"<TaskOutcome {self.status}>"
+
+
+# --------------------------------------------------------------------------- #
+# Events
+# --------------------------------------------------------------------------- #
+
+@preview
+class HookEvent:
+    """What an ``EVENT_HOOKS`` function is handed after ``ctx``: every hook is
+    ``fn(ctx, event)``, whatever the event.
+
+    ``event.name`` is the event's name; the rest is what happened, as
+    attributes — ``pane``, ``old_path`` and ``new_path`` for
+    ``directory_changed``, ``path`` for ``file_open`` (see ``EVENTS``).
+
+    One object rather than one argument per fact is what lets an event say
+    more later: a new fact is a new attribute, and a hook that does not read
+    it never notices. A hook written ``fn(ctx, pane, old, new)`` would break
+    the day a fifth argument arrived."""
+
+    def __init__(self, name: str, **facts: Any):
+        self.name = name
+        for key, value in facts.items():
+            setattr(self, key, value)
+
+    def __repr__(self) -> str:
+        facts = ", ".join(f"{k}={v!r}" for k, v in vars(self).items() if k != "name")
+        return f"<HookEvent {self.name}{': ' + facts if facts else ''}>"
+
+
+def _call_problem(func: Callable, n_args: int, shape: str) -> str | None:
+    """Why ``func`` cannot be called with ``n_args`` positional arguments — the
+    way XeFM calls the callback documented as ``shape`` — or None. A function
+    whose signature cannot be read is given the benefit of the doubt."""
+    try:
+        inspect.signature(func).bind(*range(n_args))
+    except TypeError:
+        name = getattr(func, "__name__", repr(func))
+        return f"{name} cannot be called as {shape}"
+    except ValueError:
+        return None
+    return None
+
+
+# --------------------------------------------------------------------------- #
 # Action context
 # --------------------------------------------------------------------------- #
 
@@ -427,6 +637,7 @@ class ActionContext:
     # --- the running extension ------------------------------------------- #
 
     @property
+    @preview
     def extension(self):
         """While an extension package's action or hook runs, its handle:
         ``id``, ``version``, ``settings`` (the extension's defaults overlaid
@@ -440,25 +651,30 @@ class ActionContext:
     # --- panes -------------------------------------------------------------- #
 
     @property
+    @preview
     def pane(self) -> PaneApi:
         """The active pane — the one the cursor is in."""
         return PaneApi(self._app, self._app.pm.active_pane)
 
     @property
+    @preview
     def other(self) -> PaneApi:
         """The inactive pane."""
         return PaneApi(self._app, "right" if self._app.pm.active_pane == "left" else "left")
 
     @property
+    @preview
     def left(self) -> PaneApi:
         return PaneApi(self._app, "left")
 
     @property
+    @preview
     def right(self) -> PaneApi:
         return PaneApi(self._app, "right")
 
     # --- running other actions ---------------------------------------------- #
 
+    @preview
     def invoke(self, action_name: str) -> None:
         """Run another action by name, in the file-list context.
 
@@ -471,6 +687,7 @@ class ActionContext:
 
     # --- running external programs ------------------------------------------ #
 
+    @preview
     def run_program(self, command, *, terminal: bool = False,
                     cwd: str | None = None,
                     env: Mapping[str, str] | None = None) -> int | None:
@@ -515,12 +732,85 @@ class ActionContext:
                                    cwd=str(cwd) if cwd is not None else None,
                                    env=full_env, terminal=terminal)
 
+    # --- background work ---------------------------------------------------- #
+
+    @preview
+    def run_task(self, title: str, work: Callable[[TaskJob], Any], *,
+                 on_done: Callable[["ActionContext", TaskOutcome], None] | None = None,
+                 read_only: bool = False) -> None:
+        """Run ``work(job)`` on a worker thread, the way XeFM runs a copy: a
+        progress dialog headed ``title``, with Cancel and *Run in background*.
+        Returns at once.
+
+        ``work`` may touch only ``job`` (:class:`TaskJob`) — never ``ctx``, a
+        pane, or anything else of XeFM's, which belong to the UI thread. What
+        it reads (an ``EntryInfo.path``, a setting) it should take from the
+        action before the task starts.
+
+        ``on_done(ctx, outcome)`` runs on the UI thread when the work ends, with
+        a new ``ctx`` — the one the action held is stale by then — and a
+        :class:`TaskOutcome`. It runs whether the work finished, was cancelled
+        or raised; a raised exception is logged with its traceback first.
+
+        ``read_only=True`` states that the work changes nothing on disk. XeFM
+        then lets it run beside a background copy rather than queue behind one;
+        how such tasks are scheduled is XeFM's to decide, and may change.
+        """
+        from xefm.task import Task
+        app = self._app
+        extension = self.extension
+        task = Task(str(title), config=app.config, kind="user",
+                    busy_label="Working…")
+        task.exclusive = not read_only
+        job = TaskJob(task)
+
+        def run(_task) -> dict:
+            return {"value": work(job)}
+
+        def done(result: dict) -> None:
+            if task.error is not None and not task.cancelled():
+                _report_exception(f"Task '{task.title}'", task.error)
+                outcome = TaskOutcome("failed", error=task.error)
+            elif task.cancelled():
+                outcome = TaskOutcome("cancelled")
+            else:
+                outcome = TaskOutcome("done", result.get("value"))
+            if on_done is not None:
+                ctx = ActionContext(app)
+                ctx._extension = extension
+                run_guarded(f"'{task.title}' completion", on_done, ctx, outcome)
+            app.panel.render()
+
+        app.tasks.submit(task, app.panel, run=run, on_done=done)
+
     # --- talking to the user ------------------------------------------------ #
 
+    @preview
     def message(self, text: str) -> None:
         """Write one line to the log pane."""
         self._app.log_info(str(text))
 
+    @preview
+    def show_markdown(self, title: str, source: str) -> None:
+        """Show ``source``, Markdown, in a scrollable dialog headed ``title`` —
+        the one Help and File Details use. Returns at once; the user closes it
+        with Esc or Enter.
+
+        Every fenced code block in it gets a Copy button (a Tab stop, so Enter
+        copies it from the keyboard too), and any part of the text can be
+        selected and copied. Build the source with :func:`md_code_block` for
+        text to be copied and :func:`md_escape` for names in prose."""
+        from xefm.text_dialog import show_markdown
+        show_markdown(self._app.panel, str(source), title=str(title))
+        self._app.panel.render()
+
+    @preview
+    def copy_text(self, text: str) -> None:
+        """Put ``text`` on the clipboard — the system one where XeFM can reach
+        it. Like any copy, it replaces files XeFM's clipboard was holding."""
+        self._app._set_text_clipboard(str(text))
+
+    @preview
     def input(self, prompt: str, default: str = "", *,
               title: str = "", on_accept: Callable[[str], None] | None = None,
               on_cancel: Callable[[], None] | None = None) -> None:
@@ -537,6 +827,7 @@ class ActionContext:
                    on_cancel=_guard("input callback", on_cancel, arity=0))
         self._app.panel.render()
 
+    @preview
     def choose(self, title: str, items: Iterable[Any], *, type: str = "choice",
                on_result: Callable[[int | None], None] | None = None) -> None:
         """Offer a list to pick from. The chosen item's **index** — or ``None``
@@ -580,6 +871,7 @@ class ActionContext:
                 f"choose(type={type!r}): expected 'choice' or 'filter'")
         self._app.panel.render()
 
+    @preview
     def confirm(self, prompt: str, *, title: str = "Confirm",
                 on_result: Callable[[bool], None] | None = None) -> None:
         """Ask a yes/no question. ``on_result`` receives ``True`` for OK."""
@@ -598,6 +890,7 @@ class ActionContext:
     def api_version(self) -> int:
         return API_VERSION
 
+    @preview
     def action_names(self, context: str = _actions.FILER) -> list[str]:
         """Every action name ``context`` understands — what ``invoke()`` accepts."""
         return _actions.registry.names(context)
@@ -628,6 +921,15 @@ def report_user_failure(what: str, exc: BaseException) -> None:
     logger.error(f"{what} failed: {exc.__class__.__name__}: {exc}")
     for line in traceback.format_exc().rstrip().splitlines():
         logger.error(f"  {line}")
+
+
+def _report_exception(what: str, exc: BaseException) -> None:
+    """:func:`report_user_failure` for an exception caught somewhere else — on
+    a worker thread — and reported later, from its own traceback."""
+    logger.error(f"{what} failed: {exc.__class__.__name__}: {exc}")
+    for chunk in traceback.format_exception(type(exc), exc, exc.__traceback__):
+        for line in chunk.rstrip().splitlines():
+            logger.error(f"  {line}")
 
 
 def run_guarded(what: str, func: Callable, *args) -> Any:
@@ -665,19 +967,40 @@ class EventHooks:
     def count(self) -> int:
         return sum(len(v) for v in self._hooks.values())
 
-    def fire(self, event: str, ctx: "ActionContext", *args) -> bool:
-        """Run every hook for ``event`` in order. Returns ``True`` as soon as one
-        claims the event by returning ``True`` — the remaining hooks still run,
-        so a claim never silently disables another hook's side effect."""
+    def fire(self, event: str, ctx: "ActionContext", **facts) -> bool:
+        """Run every hook for ``event`` in order, as ``fn(ctx, HookEvent)``
+        carrying ``facts``. Returns ``True`` as soon as one claims the event by
+        returning ``True`` — the remaining hooks still run, so a claim never
+        silently disables another hook's side effect."""
         claimed = False
+        info = HookEvent(event, **facts)
         for func in self.get(event):
-            if run_guarded(f"'{event}' hook", func, ctx, *args) is True:
+            if run_guarded(f"'{event}' hook", func, ctx, info) is True:
                 claimed = True
         return claimed
 
 
 #: The process-wide hook table, populated from the config alongside the actions.
 hooks = EventHooks()
+
+
+class MenuEntry(NamedTuple):
+    """One loaded ``MENU_ITEMS`` entry: put ``action`` in each of ``menus``,
+    labeled ``label``, enabled per ``when`` (a :data:`MENU_WHEN` key)."""
+
+    action: str
+    label: str
+    menus: tuple[str, ...]
+    when: str
+
+
+#: The loaded ``MENU_ITEMS``, in the config's order. Rebuilt on reload.
+menu_entries: list[MenuEntry] = []
+
+
+def menu_items(menu: str) -> list[MenuEntry]:
+    """The loaded entries that go in ``menu`` (one of :data:`MENUS`)."""
+    return [entry for entry in menu_entries if menu in entry.menus]
 
 
 def load_user_entries(config, registry=None) -> tuple[list[str], int, int, int, int, int, int, int]:
@@ -712,6 +1035,7 @@ def _process_user_entries(config, registry, apply: bool) -> tuple[list[str], int
         _image_decoders.clear()
         _path_schemes.unregister_source("user")
         _lexers.clear()
+        menu_entries.clear()
 
     warnings: list[str] = []
     count = 0
@@ -751,6 +1075,17 @@ def _process_user_entries(config, registry, apply: bool) -> tuple[list[str], int
                 f"EVENT_HOOKS['{event}'] contains "
                 f"{len(funcs) - len(good)} entr(y/ies) that are not callable; "
                 f"they were ignored")
+        # Every hook is fn(ctx, event). One written for the old per-event
+        # arguments (fn(ctx, pane, old_path, new_path)) would fail on every
+        # firing; say so once, here, and leave it out.
+        for func in list(good):
+            problem = _call_problem(func, 2, "fn(ctx, event)")
+            if problem:
+                warnings.append(
+                    f"EVENT_HOOKS['{event}']: {problem} and was ignored — every "
+                    f"hook takes (ctx, event) and reads what happened from "
+                    f"the event's attributes")
+                good.remove(func)
         if good:
             if apply:
                 hooks.set(event, good)
@@ -821,6 +1156,19 @@ def _process_user_entries(config, registry, apply: bool) -> tuple[list[str], int
             _lexers.register(pattern, spec)
         lexer_count += 1
 
+    # After ACTIONS, so an item can name an action the same config defines.
+    # Without applying, those are not registered: take their names from the
+    # table instead.
+    table = getattr(config, "ACTIONS", None)
+    own = set(table) if isinstance(table, dict) and not apply else set()
+    for name, spec in _items(getattr(config, "MENU_ITEMS", None), "MENU_ITEMS", warnings):
+        entry, problem = _build_menu_entry(name, spec, registry, own)
+        if problem:
+            warnings.append(problem)
+            continue
+        if apply:
+            menu_entries.append(entry)
+
     return (warnings, count, hook_count, sort_count, filter_count,
             decoder_count, scheme_count, lexer_count)
 
@@ -833,6 +1181,42 @@ def _items(value, label: str, warnings: list[str]):
         warnings.append(f"{label} must be a dictionary, not {type(value).__name__}")
         return []
     return list(value.items())
+
+
+def _build_menu_entry(name, spec, registry, own: set) -> tuple[MenuEntry | None, str | None]:
+    """Validate one ``MENU_ITEMS`` entry, or explain why it cannot be one.
+
+    Where an item goes is a fact XeFM places, not a position the config
+    picks: an action's items gather in a group of their own near the foot of
+    each menu, in table order, so a menu XeFM later rearranges cannot leave a
+    config pointing at a slot that moved."""
+    if not isinstance(name, str) or not name:
+        return None, f"MENU_ITEMS keys must be action names; ignored {name!r}"
+    if not isinstance(spec, dict):
+        return None, (f"MENU_ITEMS['{name}'] must be a dict with 'menus' and "
+                      f"'label', not {type(spec).__name__}")
+    if name not in own and registry.resolve(_actions.FILER, name) is None:
+        return None, (f"MENU_ITEMS['{name}'] names no action — define it in "
+                      f"ACTIONS, or name a built-in one")
+    unknown = sorted(set(spec) - {"menus", "label", "when"})
+    if unknown:
+        return None, (f"MENU_ITEMS['{name}'] has unknown keys "
+                      f"{', '.join(unknown)} — known: label, menus, when")
+    menus = spec.get("menus")
+    if isinstance(menus, str):
+        menus = [menus]
+    if not isinstance(menus, (list, tuple)) or not menus \
+            or not all(m in MENUS for m in menus):
+        return None, (f"MENU_ITEMS['{name}'] needs 'menus', a list of "
+                      f"{', '.join(MENUS)}")
+    label = spec.get("label")
+    if not isinstance(label, str) or not label.strip():
+        return None, f"MENU_ITEMS['{name}'] needs a 'label', the text the menu shows"
+    when = spec.get("when", "always")
+    if when not in MENU_WHEN:
+        return None, (f"MENU_ITEMS['{name}'] has 'when' {when!r} — known: "
+                      f"{', '.join(MENU_WHEN)}")
+    return MenuEntry(name, label.strip(), tuple(dict.fromkeys(menus)), when), None
 
 
 def _build_sort_key(name, spec) -> tuple[dict | None, str | None]:
@@ -980,6 +1364,9 @@ def _build_action(name, spec) -> tuple[_actions.Action | None, str | None]:
     func = spec.get("func")
     if not callable(func):
         return None, f"ACTIONS['{name}'] has no callable 'func'"
+    problem = _call_problem(func, 1, "fn(ctx)")
+    if problem:
+        return None, f"ACTIONS['{name}']: {problem} — an action takes ctx alone"
     context = spec.get("context", _actions.FILER)
     if context not in _actions.CONTEXTS:
         return None, (f"ACTIONS['{name}'] names unknown context '{context}' — "
@@ -1093,3 +1480,13 @@ def preview_notice(action_count: int, hook_count: int,
         parts.append(f"{lexer_count} lexer(s)")
     return (f"Customization API (Preview, API_VERSION {API_VERSION}): "
             f"{', '.join(parts)} loaded — this API may change without notice.")
+
+
+#: The names of the APIs that are Preview — free to change in any release —
+#: such as ``xefm.user_api.ActionContext.run_task``, ``config.MENU_ITEMS`` or
+#: ``manifest.contributes.menus``. A class's entry covers its members. Each
+#: Preview function, method and class also opens its docstring saying so. Set
+#: last, so every ``@preview`` in this module is in it; ``xefm.path_base`` is
+#: imported first for its own.
+import xefm.path_base  # noqa: E402,F401 — registers its @preview classes
+PREVIEW_APIS = frozenset(_PREVIEW_APIS)

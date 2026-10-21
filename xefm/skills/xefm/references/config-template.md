@@ -348,11 +348,11 @@ class Config:
     # write the order the file list is sorted in, FILTERS lets you write what
     # it shows, IMAGE_DECODERS lets you add picture formats the image viewer
     # does not read yet, PATH_SCHEMES lets you add a browsable folder that
-    # is not a folder, and LEXERS lets you color a language the text viewer
-    # does not know.
+    # is not a folder, LEXERS lets you color a language the text viewer
+    # does not know, and MENU_ITEMS puts an action in a menu.
     #
     # PREVIEW: this is not a stable API yet. The objects passed to your functions
-    # and the shape of these seven variables may change in any release until
+    # and the shape of these eight variables may change in any release until
     # xefm.user_api.API_VERSION reaches 1. XeFM logs one line saying so when a
     # config uses either variable. Everything else in this file is unaffected.
     #
@@ -432,24 +432,26 @@ class Config:
     # --- EVENT_HOOKS ------------------------------------------------------
     # Functions run at set moments. Each event maps to a list, run in order.
     #
-    #   'startup'           fn(ctx)            once the app is up
-    #   'quit'              fn(ctx)            before XeFM shuts down
-    #   'directory_changed' fn(ctx, pane, old_path, new_path)
-    #   'file_open'         fn(ctx, path)      return True to claim the open
+    # Every hook is fn(ctx, event); what happened is on the event:
+    #
+    #   'startup'           (nothing more)     once the app is up
+    #   'quit'              (nothing more)     before XeFM shuts down
+    #   'directory_changed' event.pane, event.old_path, event.new_path
+    #   'file_open'         event.path         return True to claim the open
     #
     # 'file_open' fires before XeFM decides what to do with a file, so returning
     # True is how you route one file type somewhere of your own without touching
     # FILE_ASSOCIATIONS. It does not fire for directories -- entering one is
     # navigation, not opening.
     #
-    # def log_visit(ctx, pane, old_path, new_path):
+    # def log_visit(ctx, event):
     #     with open(Path.home() / '.xefm' / 'visited.log', 'a') as f:
-    #         f.write(f"{new_path}\n")
+    #         f.write(f"{event.new_path}\n")
     #
-    # def open_psd_in_gimp(ctx, path):
-    #     if path.suffix.lower() != '.psd':
+    # def open_psd_in_gimp(ctx, event):
+    #     if event.path.suffix.lower() != '.psd':
     #         return False
-    #     subprocess.Popen(['gimp', str(path)])
+    #     subprocess.Popen(['gimp', str(event.path)])
     #     return True                 # claimed -- XeFM does nothing further
     #
     # EVENT_HOOKS = {
@@ -695,6 +697,25 @@ class Config:
     # entry naming a lexer that does not exist is skipped with a line in the
     # log pane.
     LEXERS = {}
+
+    # --- MENU_ITEMS -------------------------------------------------------
+    # Put an action in a menu: the File menu ('file') and/or the menu a row
+    # opens with a right-click or the Menu key ('context'). The key is the
+    # action's name -- one of your ACTIONS, or a built-in one:
+    #
+    #     MENU_ITEMS = {
+    #         'select-docs': {
+    #             'menus': ['context'],
+    #             'label': 'Select Documents',
+    #             'when': 'entry',      # optional
+    #         },
+    #     }
+    #
+    # 'when' greys the item out unless it applies: 'entry' needs an entry under
+    # the cursor, 'selection' needs at least one selected; the default is
+    # 'always'. Your items gather in a group of their own near the foot of
+    # each menu, in the order written here.
+    MENU_ITEMS = {}
 
 
     # Favorites (J) - the places and files you jump to by name.

@@ -113,10 +113,11 @@ CONTRIBUTION_TABLES = {
     "path_schemes": "PATH_SCHEMES",
     "lexers": "LEXERS",
     "themes": "THEMES",
+    "menus": "MENU_ITEMS",
 }
 #: Kinds whose entries may be plain data rather than a code reference — the
 #: tier that runs no code at all.
-_DATA_KINDS = {"themes", "filters", "lexers"}
+_DATA_KINDS = {"themes", "filters", "lexers", "menus"}
 
 _KNOWN_SECTIONS = {"extension", "contributes", "requires", "settings"}
 _KNOWN_EXTENSION_KEYS = {"id", "version", "api_version", "min_xefm", "name",
@@ -308,9 +309,22 @@ def _top_level_names(tree: ast.Module) -> set[str]:
     return names
 
 
-def _check_reference(root: Path, ref: str) -> Optional[str]:
+#: How XeFM calls the code a contribution kind references, as
+#: ``(positional argument count, the shape to name)``. A callback's arguments
+#: never grow — a new fact arrives as an attribute of ``ctx`` or ``event`` — so
+#: this is a contract, and checking it catches a hook still written for the
+#: old per-event arguments.
+_CALL_SHAPES = {
+    "actions": (1, "fn(ctx)"),
+    "event_hooks": (2, "fn(ctx, event)"),
+}
+
+
+def _check_reference(root: Path, ref: str, call: Optional[tuple[int, str]] = None
+                     ) -> Optional[str]:
     """Why ``module:name`` does not resolve inside ``root``, or None — read
-    from the module's source, never by importing it."""
+    from the module's source, never by importing it. With ``call``, a
+    top-level ``def`` must also accept that many positional arguments."""
     if not _REF_RE.match(ref):
         return f"{ref!r} is not a reference — write it as 'package.module:name'"
     module, name = ref.split(":")
@@ -326,7 +340,24 @@ def _check_reference(root: Path, ref: str) -> Optional[str]:
         return f"cannot read {path.relative_to(root)}: {exc}"
     if name not in _top_level_names(tree):
         return f"module {module} has no top-level '{name}'"
+    if call is not None:
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                    and node.name == name and not _accepts(node.args, call[0]):
+                return (f"{name} cannot be called as {call[1]} — XeFM passes "
+                        f"exactly that, and anything more it has to say is an "
+                        f"attribute of ctx or event")
     return None
+
+
+def _accepts(args: ast.arguments, n: int) -> bool:
+    """Whether a ``def`` with ``args`` can be called with ``n`` positional
+    arguments and nothing else."""
+    positional = len(args.posonlyargs) + len(args.args)
+    required = positional - len(args.defaults)
+    needs_keyword = any(d is None for d in args.kw_defaults)
+    return required <= n and (n <= positional or args.vararg is not None) \
+        and not needs_keyword
 
 
 def _check_key(expr) -> Optional[str]:
@@ -458,7 +489,8 @@ def check_manifest(manifest: Manifest, *, others: Iterable[Manifest] = (),
                      "with another extension's or a future built-in action")
 
     for where, ref in manifest.references():
-        problem = _check_reference(manifest.root, ref)
+        kind = where.split(".")[1] if where.startswith("contributes.") else ""
+        problem = _check_reference(manifest.root, ref, _CALL_SHAPES.get(kind))
         if problem:
             err(where, problem)
 
@@ -533,8 +565,51 @@ def check_manifest(manifest: Manifest, *, others: Iterable[Manifest] = (),
 
 #: The XeFM modules an extension may import: the customization API itself and
 #: the published base classes for storage backends. Everything else in the
-#: ``xefm`` package is internal and moves without notice.
+#: ``xefm`` package is internal and moves without notice — and within these
+#: two, only the names in their ``__all__`` (:func:`public_names`).
 PUBLIC_MODULES = ("xefm.user_api", "xefm.path_base")
+
+
+def public_names(module: str) -> tuple[str, ...]:
+    """The names an extension may take from ``module``, one of
+    :data:`PUBLIC_MODULES`: its ``__all__``, read from the module itself so
+    the list has one home."""
+    return tuple(importlib.import_module(module).__all__)
+
+
+def _public_modules_bound(tree: ast.AST) -> dict[str, str]:
+    """Each local name a file binds to a public module — ``ua`` for
+    ``import xefm.user_api as ua``, ``user_api`` for ``from xefm import
+    user_api``, ``xefm.user_api`` itself for a bare ``import xefm.user_api`` —
+    so an attribute read through it can be checked against the module's
+    ``__all__``."""
+    bound = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in PUBLIC_MODULES:
+                    bound[alias.asname or alias.name] = alias.name
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 \
+                and node.module == "xefm":
+            for alias in node.names:
+                if f"xefm.{alias.name}" in PUBLIC_MODULES:
+                    bound[alias.asname or alias.name] = f"xefm.{alias.name}"
+    return bound
+
+
+def _dotted(node: ast.AST) -> Optional[str]:
+    """``a.b.c`` for a chain of names and attributes, else None."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        base = _dotted(node.value)
+        return f"{base}.{node.attr}" if base else None
+    return None
+
+
+def _not_public(module: str, name: str) -> str:
+    return (f"'{name}' is not part of {module}'s public API — use only: "
+            f"{', '.join(public_names(module))}")
 
 
 def lint_code(root: Path) -> list[Problem]:
@@ -558,7 +633,21 @@ def lint_code(root: Path) -> list[Problem]:
         except (SyntaxError, OSError, UnicodeDecodeError):
             continue  # the reference check reports unreadable referenced modules
         where = lambda node: f"{_CODE}{rel.as_posix()}:{node.lineno}"  # noqa: E731
+        bound = _public_modules_bound(tree)
         for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and not node.attr.startswith("_"):
+                module = bound.get(_dotted(node.value) or "")
+                if module and node.attr not in public_names(module):
+                    problems.append(Problem("error", where(node),
+                                            _not_public(module, node.attr)))
+                    continue
+            if isinstance(node, ast.ImportFrom) and node.level == 0 \
+                    and node.module in PUBLIC_MODULES:
+                for alias in node.names:
+                    if alias.name != "*" and alias.name not in public_names(node.module):
+                        problems.append(Problem("error", where(node),
+                                                _not_public(node.module, alias.name)))
+                continue
             if isinstance(node, ast.Attribute) and node.attr.startswith("_") \
                     and not node.attr.startswith("__") \
                     and not (isinstance(node.value, ast.Name)
@@ -568,8 +657,15 @@ def lint_code(root: Path) -> list[Problem]:
                     f"'.{node.attr}' is private — use only the public API "
                     "(ctx.pane, ctx.invoke, ctx.run_program, ctx.message, …)"))
             elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                names = ([a.name for a in node.names] if isinstance(node, ast.Import)
-                         else [node.module or ""] if node.level == 0 else [])
+                if isinstance(node, ast.Import):
+                    names = [a.name for a in node.names]
+                elif node.level:
+                    names = []
+                elif node.module == "xefm":
+                    # ``from xefm import user_api`` names a module per alias.
+                    names = [f"xefm.{a.name}" for a in node.names]
+                else:
+                    names = [node.module or ""]
                 for name in names:
                     if (name == "xefm" or name.startswith("xefm.")) \
                             and not any(name == m or name.startswith(m + ".")
@@ -618,6 +714,8 @@ def _check_contribution(kind: str, key: str, value, action_names: set) -> Option
                 return f"unknown keys {', '.join(sorted(extra))} — known: description, entry"
             return None
         return "must be 'module:function' or { entry = ..., description = ... }"
+    if kind == "menus":
+        return _check_menu(key, value, action_names)
     if kind == "event_hooks":
         from xefm.user_api import EVENTS
         if key not in EVENTS:
@@ -639,6 +737,32 @@ def _check_contribution(kind: str, key: str, value, action_names: set) -> Option
             return "must be a table (or 'module:name')"
         return None
     return "must be 'module:name'"
+
+
+def _check_menu(key: str, value, action_names: set) -> Optional[str]:
+    """One ``[contributes.menus]`` entry: keyed by one of this package's own
+    actions, a table of ``menus``, ``label`` and an optional ``when`` — the
+    shape ``MENU_ITEMS`` takes in config.py."""
+    from xefm.user_api import MENU_WHEN, MENUS
+    if key not in action_names:
+        return (f"puts '{key}' in a menu, but this extension does not "
+                "contribute it in [contributes.actions]")
+    if not isinstance(value, dict):
+        return ('must be a table, e.g. { menus = ["file", "context"], '
+                'label = "Compute Hash…" }')
+    unknown = sorted(set(value) - {"menus", "label", "when"})
+    if unknown:
+        return f"unknown keys {', '.join(unknown)} — known: label, menus, when"
+    menus = value.get("menus")
+    if not isinstance(menus, list) or not menus or not all(m in MENUS for m in menus):
+        return f"needs menus = a list of {', '.join(MENUS)}"
+    label = value.get("label")
+    if not isinstance(label, str) or not label.strip():
+        return "needs label = the text the menu shows"
+    when = value.get("when", "always")
+    if when not in MENU_WHEN:
+        return f"when must be one of {', '.join(MENU_WHEN)}"
+    return None
 
 
 #: The keys ``[requires]`` understands.
