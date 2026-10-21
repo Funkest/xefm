@@ -83,6 +83,31 @@ FONT_SIZE      = 12    # point size applied to BOTH faces (8-72)
 glyph box. In desktop mode you can also change `FONT_SIZE` live with `Cmd-+` /
 `Cmd--`.
 
+### Symbols your terminal font draws full-width (advanced)
+
+Some terminal fonts (HackGen, for one) draw symbols such as `○ □ ★ ●` at full
+width. Unicode leaves their width "ambiguous", and the terminal still moves on
+one column after each, so the symbol overlaps the next character. Name those
+characters in `WIDE_CHARS` and XeFM gives each one two columns:
+
+```python
+WIDE_CHARS = '○□★●'   # a string, or a list of single characters
+```
+
+- Leave the terminal's ambiguous width at **narrow**, its default. Setting it to
+  wide breaks XeFM's frames, scrollbars and shadows, which are drawn with
+  ambiguous characters too.
+- Name only the symbols your font actually draws wide. A character named here
+  that the font draws narrow is followed by a blank column.
+- Don't name box-drawing characters (`─ │ ┌` …): frames would come apart.
+- ASCII, and characters that are already two columns (kanji, kana), are left
+  as they are, and the log says which ones were skipped.
+- It is read at startup. After changing it, restart XeFM; a configuration
+  reload does not apply it.
+
+The setting is not in the generated `config.py`; add the line yourself. It
+needs PuiKit 1.12 or later; an older PuiKit logs a warning and ignores it.
+
 ### Themes / colors
 
 XeFM ships with built-in themes (Dark+, Monokai, Dracula, Nord, Solarized, Gruvbox
