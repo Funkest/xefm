@@ -294,9 +294,11 @@ findings:
   `NSTextField` with a default `CIColorControls`, in a window with no Metal at
   all, while an offscreen `CIContext` renders the same filters fine. Shinagawa
   works, because its `drop_shadow` is drawn with the text and no filter is
-  attached. This is treated as a limitation of the VM's paravirtualized GPU,
-  not of macOS 12, until a macOS 27 VM or a real macOS 12 machine says
-  otherwise.
+  attached. The same test in a macOS 27 VM on the same host draws all three
+  views, CIBloom halo included, so this is not Tart VMs in general: it is
+  macOS 12 itself or macOS 12's paravirtualized GPU driver, and only a real
+  macOS 12 Mac can tell those apart. Until one does, it stays an open risk
+  for macOS 12 users of those three themes, not a confirmed bug.
 
 ---
 
