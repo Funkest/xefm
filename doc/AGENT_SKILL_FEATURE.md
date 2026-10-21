@@ -59,8 +59,8 @@ the few settings that need it).
    and two skills for the same job confuse an agent.
 4. Start a new session with the agent.
 
-If `xefm` is on your PATH (a pip or pipx install), the skill is already on your
-machine. `xefm skill` prints where it is, and this command copies it into a
+If `xefm` is on your PATH (a pip, pipx, uv or Homebrew install), the skill is
+already on your machine. `xefm skill` prints where it is, and this command copies it into a
 skills folder — and removes the old `xefm-extension-authoring/` if it is there:
 
 ```bash

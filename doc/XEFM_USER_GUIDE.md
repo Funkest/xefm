@@ -40,7 +40,8 @@ XeFM (*Xenolith File Manager*) is a powerful dual-pane file manager that runs bo
 **Desktop app (Windows, macOS).** Install from the
 [Microsoft Store](https://apps.microsoft.com/detail/9PK2X44W810V) on Windows, or
 download the `-macos.dmg` from the
-[latest release](https://github.com/crftwr/xefm/releases/latest) on macOS —
+[latest release](https://github.com/crftwr/xefm/releases/latest) on macOS, or
+run `brew install --cask crftwr/tap/xefm` —
 Python is bundled in. This is the recommended way to run XeFM on the desktop;
 see the [Desktop Mode Guide](DESKTOP_MODE_GUIDE.md#installing-the-desktop-app-package).
 
@@ -57,6 +58,19 @@ shape for an application. Or run `uvx xefm` to try it once without installing
 anything. Python 3.10 or later is all you need; every dependency, including the
 platform-specific ones, comes with it.
 
+**Terminal app with Homebrew (macOS, Linux).**
+
+```bash
+brew install crftwr/tap/xefm
+```
+
+Homebrew brings its own Python and rebuilds XeFM's environment on every
+upgrade, so nothing you add to that environment survives. If your `config.py`
+imports a library XeFM doesn't ship, or you want a Pillow plugin such as
+`pillow-heif`, use uv or pipx instead: `uv tool install xefm --with pillow-heif`,
+or `pipx install xefm` followed by `pipx inject xefm pillow-heif`. Both keep
+what you added across upgrades.
+
 The two installs coexist and share `~/.xefm/`; installing both is a perfectly
 normal setup. The **[README](../README.md#from-source)** covers working from a
 source checkout.
@@ -70,6 +84,8 @@ source checkout.
 | `pipx install xefm` | `pipx upgrade xefm` | `pipx uninstall xefm` |
 | `uv tool install xefm` | `uv tool upgrade xefm` | `uv tool uninstall xefm` |
 | `pip install xefm` | `pip install --upgrade xefm` | `pip uninstall xefm` |
+| `brew install crftwr/tap/xefm` | `brew upgrade xefm` | `brew uninstall xefm` |
+| `brew install --cask crftwr/tap/xefm` | `brew upgrade --cask xefm` | `brew uninstall --cask xefm` |
 
 These are not interchangeable: each tool only knows about what it installed
 itself. `uv tool upgrade xefm` on a pipx- or pip-installed copy fails with
@@ -77,7 +93,10 @@ itself. `uv tool upgrade xefm` on a pipx- or pip-installed copy fails with
 is never anything for it to upgrade.
 
 The desktop packages upgrade through their own channel: the Microsoft Store
-updates automatically, and on macOS you install the new DMG over the old app.
+updates automatically, and on macOS you install the new DMG over the old app
+(or, if Homebrew installed it, run `brew upgrade --cask xefm`). A DMG copy
+already in *Applications* can be handed over to Homebrew with
+`brew install --cask --adopt crftwr/tap/xefm`.
 
 ### Installation troubleshooting
 

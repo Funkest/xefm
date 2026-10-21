@@ -42,8 +42,9 @@ Pick the install that matches how you want to run XeFM:
 | | Get it from | Gives you |
 |---|---|---|
 | **Desktop app** — Windows | the **[Microsoft Store](https://apps.microsoft.com/detail/9PK2X44W810V)** | A real installed application, signed by Microsoft: one click, automatic updates, no SmartScreen prompt. No Python needed. |
-| **Desktop app** — macOS | the [latest release](https://github.com/crftwr/xefm/releases/latest) | A real installed application: own icon, Dock entry, own file permissions. No Python needed. |
+| **Desktop app** — macOS | the [latest release](https://github.com/crftwr/xefm/releases/latest), or Homebrew: `brew install --cask crftwr/tap/xefm` | A real installed application: own icon, Dock entry, own file permissions. No Python needed. |
 | **Terminal app** — Windows, macOS, Linux | [PyPI](https://pypi.org/project/xefm/) | The `xefm` command in any terminal, including over SSH. Needs Python 3.10+. |
+| **Terminal app** — macOS, Linux | Homebrew: `brew install crftwr/tap/xefm` | The same `xefm` command, managed by Homebrew. Use PyPI instead if you want to add Python libraries of your own. |
 
 The desktop and terminal apps coexist and share their settings in `~/.xefm/` —
 installing both is a perfectly normal setup.
@@ -63,8 +64,14 @@ menu, updates automatically, and uninstalls from *Settings → Apps*. An unsigne
 **macOS** — download `XeFM-<version>-macos.dmg` from the
 **[latest release](https://github.com/crftwr/xefm/releases/latest)**, drag
 **XeFM** to *Applications*, and launch it from Launchpad or Spotlight. It is
-signed with the author's Apple Developer ID; full install details, including
-Gatekeeper notes, are in the
+signed with the author's Apple Developer ID. Or let Homebrew install and
+upgrade it:
+
+```bash
+brew install --cask crftwr/tap/xefm
+```
+
+Full install details, including Gatekeeper notes, are in the
 **[Desktop Mode Guide](doc/DESKTOP_MODE_GUIDE.md#installing-the-desktop-app-package)**.
 
 > **Use the package, not `xefm --backend gui`** — that path is for developing
@@ -85,11 +92,26 @@ xefm
 [pipx](https://pipx.pypa.io) and [uv](https://docs.astral.sh/uv/) keep XeFM in
 its own environment while putting the `xefm` command on your PATH; `uvx xefm`
 tries it once without installing anything. Python 3.10+ is the only
-prerequisite, and this is the only install available on Linux — the one for
-SSH sessions, remote servers, and terminal-centric workflows.
+prerequisite — the install for SSH sessions, remote servers, and
+terminal-centric workflows.
+
+On macOS and Linux, Homebrew can install the terminal app instead:
+
+```bash
+brew install crftwr/tap/xefm
+```
+
+Homebrew owns that environment and rebuilds it on every upgrade, so Python
+libraries you add to it are lost. If your `config.py` imports a library XeFM
+doesn't ship, or you want a Pillow plugin such as `pillow-heif`, install with
+uv or pipx, which keep what you add:
+
+```bash
+uv tool install xefm --with pillow-heif     # or:  pipx install xefm && pipx inject xefm pillow-heif
+```
 
 **Upgrade with the same tool you installed with** (`pipx upgrade xefm`,
-`uv tool upgrade xefm`, or `pip install --upgrade xefm`) — they are not
+`uv tool upgrade xefm`, `pip install --upgrade xefm`, or `brew upgrade xefm`) — they are not
 interchangeable. Details and fixes for common install errors are in the
 [User Guide](doc/XEFM_USER_GUIDE.md#upgrading-and-uninstalling).
 

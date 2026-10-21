@@ -1,6 +1,6 @@
 ---
 name: xefm-release
-description: Release a new version of XeFM — confirm the version bump, run the pre-tag checks, cut the tag, publish the GitHub Release with a hand-written note, attach the PyPI sdist + wheel, macOS DMG, and Windows zip, and submit the MSIX to the Microsoft Store. Use when the user says "release XeFM", "release a patch/minor/major version of XeFM", or "ship xefm X.Y.Z" — and also on the Windows machine afterwards, when they say "finish the XeFM release on Windows" or "attach the Windows artifacts" (step 6: no new tag — the Windows zip and the Store MSIX at the existing tag).
+description: Release a new version of XeFM — confirm the version bump, run the pre-tag checks, cut the tag, publish the GitHub Release with a hand-written note, attach the PyPI sdist + wheel, macOS DMG, and Windows zip, bump the Homebrew tap (crftwr/homebrew-tap), and submit the MSIX to the Microsoft Store. Use when the user says "release XeFM", "release a patch/minor/major version of XeFM", or "ship xefm X.Y.Z" — and also on the Windows machine afterwards, when they say "finish the XeFM release on Windows" or "attach the Windows artifacts" (step 6: no new tag — the Windows zip and the Store MSIX at the existing tag).
 ---
 
 # Releasing XeFM
@@ -126,6 +126,19 @@ gh release edit vX.Y.Z --notes-file <scratch>/release-note-x.y.z.md
 
 ## 5. After the release
 
+- Bump the Homebrew tap once the sdist is on PyPI and the DMG is attached.
+  Doing it earlier points the tap at a file that does not exist yet:
+  ```
+  brew bump-formula-pr --no-fork --url <PyPI sdist URL> crftwr/tap/xefm
+  brew bump-cask-pr --no-fork --version X.Y.Z crftwr/tap/xefm   # only if this release has a DMG
+  ```
+  Each opens a PR on crftwr/homebrew-tap. Merge the cask PR when its CI
+  passes. For the formula PR, run the tap's **brew pr-pull** workflow with the
+  PR number once CI passes (`gh workflow run publish.yml -R crftwr/homebrew-tap
+  -f pull_request=<n>`): it publishes the bottles and merges. If PuiKit raised
+  its PyObjC floor in this release, bump the hand-kept `pyobjc-core` /
+  `pyobjc-framework-cocoa` resources under `on_macos` too. See
+  `doc/dev/RELEASE_SYSTEM.md`, "The Homebrew tap".
 - `make release-status` must show all of it: `XeFM-<ver>-macos.dmg`,
   `XeFM-<ver>-win64.zip`, the sdist + wheel, and "PyPI: published".
 - The Store submission never appears there — it is not a Release asset. Its

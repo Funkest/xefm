@@ -70,6 +70,10 @@ Four artifacts that all name the same version and cannot drift apart:
 4. **The desktop bundles** — `XeFM-<ver>-macos.dmg` and `XeFM-<ver>-win64.zip`
    attached to the GitHub Release — `release-macos-dmg` / `release-windows-zip`.
 
+Downstream of those, the Homebrew tap's cask and formula point at the DMG and
+the sdist. They are bumped by hand, so they *can* drift; see
+[The Homebrew tap](#the-homebrew-tap-not-in-the-makefile).
+
 All three artifact targets pass `--clobber`, so re-uploading a rebuilt artifact
 supersedes the previous one instead of erroring, and all three share one guard
 (`check_release_exists` in the Makefile) so they cannot drift into checking
@@ -203,6 +207,35 @@ On their own platform. Each builds its artifact if missing (an existing one is
 never rebuilt — that would re-run notarization), checks the Release exists, and
 uploads with `--clobber`. To force a fresh artifact first, run `make macos-dmg`
 or `make windows-zip`.
+
+### The Homebrew tap (not in the Makefile)
+
+[crftwr/homebrew-tap](https://github.com/crftwr/homebrew-tap) carries two
+`xefm` entries, each built from an artifact the steps above publish:
+
+| Entry | Built from | Bump with |
+|---|---|---|
+| `Casks/xefm.rb` — desktop app, macOS arm64 | the DMG on the Release | `brew bump-cask-pr --no-fork --version X.Y.Z crftwr/tap/xefm` |
+| `Formula/xefm.rb` — terminal app, macOS + Linux | the sdist on PyPI | `brew bump-formula-pr --no-fork --url <PyPI sdist URL> crftwr/tap/xefm` |
+
+So the tap is bumped last, once `release-whl` and `release-macos-dmg` are
+done; bumping either earlier points it at a file that does not exist yet. A
+release that ships no DMG (one that fixes only Windows) bumps the formula and
+leaves the cask on the older tag, as the DMG table above already does.
+
+`bump-formula-pr` regenerates the formula's Python resources. Its
+`pypi_packages exclude_packages:` stanza keeps Pillow (taken from Homebrew's
+formula), PuiKit's desktop-only PyObjC frameworks and the Windows-only packages
+out. PyObjC Core and Cocoa are kept by hand under `on_macos`, which
+regeneration leaves alone; the terminal app needs them for the Trash, Connect to
+Server and the OS image decoder. Bump those two by hand when PuiKit raises
+its PyObjC floor.
+
+Each bump opens a PR on the tap. Its CI (`brew test-bot`, macOS and Ubuntu)
+builds the formula's bottles. Once it is green, run the tap's **brew pr-pull**
+workflow with the PR number: it publishes the bottles and merges. A cask-only
+PR has no bottles, so it can be merged directly. The tap has no autobump
+workflow on purpose, so the release is the only thing that moves it.
 
 ## Preflight checks
 
