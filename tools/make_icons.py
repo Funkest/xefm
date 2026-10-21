@@ -11,7 +11,8 @@ Two masters are kept, and the right one is picked per output size:
 
 Outputs (all committed, so neither platform's build needs a rasterizer):
 
-  ``macos_app/resources/XeFM.icns``           macOS bundle icon (all 10 iconset slots)
+  ``macos_app/resources/XeFM.icns``           macOS bundle icon (all 10 iconset slots,
+                                              on the 824/1024 icon grid)
   ``windows_app/resources/XeFM.ico``          Windows launcher icon (7 sizes, per-size art)
   ``windows_app/resources/XeFM-1024.png``     detailed master for the large MSIX tiles
   ``windows_app/resources/XeFM-small-256.png`` simplified master for the small MSIX tiles
@@ -67,15 +68,25 @@ ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 MASTER_PNG_PX = 1024
 MASTER_SMALL_PNG_PX = 256
 
+# The macOS icon grid: an 824px tile centred in the 1024px canvas. macOS 11-15 draw
+# an .icns as it is, so the full-bleed art sat visibly larger than every other icon in
+# the Dock and Launchpad (seen on macOS 12). macOS 26 and later fit a legacy icon
+# into their own shape and draw the inset and full-bleed versions identically, so the
+# inset costs nothing there. Windows icons are full-bleed and stay so.
+MACOS_TILE_FRACTION = 824 / 1024
+
 
 def _master_for(size: int) -> Path:
     """Pick the SVG master appropriate for a given pixel size."""
     return SVG_SIMPLE if size <= SIMPLE_MAX_PX else SVG_DETAILED
 
 
-def _render_png(svg: Path, size: int) -> bytes:
+def _render_png(svg: Path, size: int, tile: int | None = None) -> bytes:
     """
     Rasterize ``svg`` to a ``size`` x ``size`` PNG and return the encoded bytes.
+
+    ``tile`` draws the art at that size, centred, leaving the margin transparent;
+    ``None`` fills the canvas.
 
     Drawn through a CoreGraphics bitmap context tagged sRGB with a premultiplied
     alpha channel, so the artwork's rounded corners stay transparent and the colors
@@ -102,8 +113,10 @@ def _render_png(svg: Path, size: int) -> bytes:
     try:
         AppKit.NSGraphicsContext.setCurrentContext_(ns_ctx)
         ns_ctx.setImageInterpolation_(AppKit.NSImageInterpolationHigh)
+        tile = size if tile is None else tile
+        offset = (size - tile) / 2
         image.drawInRect_fromRect_operation_fraction_(
-            ((0, 0), (size, size)),
+            ((offset, offset), (tile, tile)),
             AppKit.NSZeroRect,
             AppKit.NSCompositingOperationSourceOver,
             1.0,
@@ -124,6 +137,11 @@ def _render(size: int) -> bytes:
     return _render_png(_master_for(size), size)
 
 
+def _render_macos(size: int) -> bytes:
+    """Render a ``size`` px .icns slot: the art on the macOS icon grid's tile."""
+    return _render_png(_master_for(size), size, round(size * MACOS_TILE_FRACTION))
+
+
 def _build_icns() -> bytes:
     """Render every iconset slot and run ``iconutil`` to produce the .icns bytes."""
     if not shutil.which("iconutil"):
@@ -137,7 +155,7 @@ def _build_icns() -> bytes:
         rendered: dict[int, bytes] = {}
         for name, size in ICONSET_SLOTS.items():
             if size not in rendered:
-                rendered[size] = _render(size)
+                rendered[size] = _render_macos(size)
             (iconset / name).write_bytes(rendered[size])
 
         out = Path(tmp) / "XeFM.icns"

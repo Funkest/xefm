@@ -30,7 +30,7 @@ Outputs:
 
 | File | Contents |
 |------|----------|
-| `macos_app/resources/XeFM.icns` | all 10 iconset slots, 16px → 1024px |
+| `macos_app/resources/XeFM.icns` | all 10 iconset slots, 16px → 1024px, on the 824/1024 icon grid |
 | `windows_app/resources/XeFM.ico` | 16, 24, 32, 48, 64, 128, 256 — each rendered natively, not downscaled |
 | `windows_app/resources/XeFM-1024.png` | detailed raster master for MSIX Store tiles >64px |
 | `windows_app/resources/XeFM-small-256.png` | simplified raster master for MSIX Store tiles ≤64px |
@@ -48,7 +48,7 @@ make macos-refresh-icon
 ## Design notes
 
 The artwork draws its own rounded tile (a 200×200 viewBox with `rx="40"`, i.e. a 20%
-corner radius) and is rendered **full-bleed**: the tile fills the whole canvas, with
+corner radius). Windows renders it **full-bleed**: the tile fills the whole canvas, with
 transparency only outside the corners.
 
 That matters downstream. `windows_app/make_icon.py` applies a rounded-corner mask when
@@ -58,11 +58,12 @@ wider 22.5% radius would shave a sliver off the artwork. `render_tile()` there m
 that call by probing a corner pixel's alpha, and `make_store_assets.py` shares it so the
 launcher icon and the Store tiles match exactly.
 
-If you want the icon to sit at the size Apple's Human Interface Guidelines specify for
-macOS (an 824×824 tile centered in a 1024×1024 canvas, so it lines up with system icons
-in the Dock rather than reading slightly oversized), that inset would go in
-`tools/make_icons.py` — and only on the macOS path, since Windows icons are expected to
-be full-bleed.
+The `.icns` instead puts the tile on the macOS icon grid: an 824×824 tile centred in the
+1024×1024 canvas (`MACOS_TILE_FRACTION` in `tools/make_icons.py`, applied at every
+slot). macOS 11–15 draw an `.icns` as it is, and full-bleed art sat visibly larger than
+the system's own icons in the Dock and Launchpad (seen on macOS 12). macOS 26 and later
+fit a legacy icon into their own shape and draw the inset and the full-bleed version
+identically, so the inset costs nothing there.
 
 ## Verifying
 
