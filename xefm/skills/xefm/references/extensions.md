@@ -150,9 +150,9 @@ The function's docstring is its help text (first line = one-line summary).
 **What is public is declared, not guessed.** From XeFM you may import two
 modules, and from each only the names in its `__all__`:
 
-- `xefm.user_api.__all__` — `API_VERSION`, `PREVIEW`, `ActionContext`,
-  `PaneApi`, `EntryInfo`, `TaskJob`, `TaskOutcome`, `md_code_block`,
-  `md_escape`
+- `xefm.user_api.__all__` — `API_VERSION`, `PREVIEW_APIS`,
+  `ActionContext`, `PaneApi`, `EntryInfo`, `TaskJob`, `TaskOutcome`,
+  `md_code_block`, `md_escape`
 - `xefm.path_base.__all__` — `ReadOnlyPathImpl`, `UriStatResult`
 
 Anything else those modules happen to contain (`run_guarded`,
@@ -161,6 +161,15 @@ public its name looks. On the objects you are handed, the line is the leading
 underscore: `ctx.pane` is the API, `ctx._app` is not. To see the lists in the
 installed XeFM: `python -c "import xefm.user_api as u, xefm.path_base as p;
 print(u.__all__, p.__all__)"`.
+
+**Preview is marked per API.** A public API that may still change carries
+`@preview` in its source, opens its docstring with "Preview — may change in
+any release.", and is named in `xefm.user_api.PREVIEW_APIS` — code as
+`xefm.user_api.ActionContext.run_task`, a `config.py` table as
+`config.MENU_ITEMS`, a manifest section as `manifest.contributes.menus`; a
+class's entry covers its members. `API_VERSION` promises only what is not in
+it. Today almost everything is Preview, so use it, but tell the user when the
+package rests on Preview APIs, and set `api_version` and `min_xefm` honestly.
 
 `xefm ext check` enforces this on your code, and each error names what to use
 instead:

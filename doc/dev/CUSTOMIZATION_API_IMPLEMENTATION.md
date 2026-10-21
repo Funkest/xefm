@@ -526,9 +526,29 @@ Four, all deliberate:
 
 ## 8. Preview status
 
-`API_VERSION = 0` and `PREVIEW = True` in `xefm/user_api.py`. The gate is a
-notice, not a switch: a config using either variable gets one line in the log
-pane at load and at every reload —
+Preview is per API, not per module (#632). `xefm/preview.py` holds the
+`@preview` decorator and the registry: a marked function, method, property
+getter or class is recorded by its qualified name and its docstring opens with
+"Preview — may change in any release."; a `config.py` table (`config.ACTIONS`)
+or a manifest section (`manifest.contributes.menus`) is listed by name there,
+having no object to decorate. A class's entry covers its members, which is why
+`ActionContext` itself is not marked but each of its members is — so one can be
+declared stable (`api_version` already is) while `run_task` stays Preview. The
+set is published as `user_api.PREVIEW_APIS`, frozen at the foot of the module
+once every decorator has run (`xefm.path_base` is imported there for its own).
+`API_VERSION` promises only what is not in it, and stays `0` while everything
+is. The module-wide `PREVIEW = True` it replaced could not say "this part is
+stable, that part is not"; marking every API now means stabilizing one later is
+deleting its mark, with no change of meaning in between.
+
+`test_user_task_api.py` holds the other half: every public name is either
+Preview or in the test's `STABLE` set, so a new API has to be one or the other
+on purpose. `xefm ext check` does not warn on Preview use yet — with almost
+everything Preview, every package would carry the warning and it would say
+nothing; it becomes worth emitting once the stable part is real.
+
+The log notice is unchanged: a config using any of the tables gets one line in
+the log pane at load and at every reload —
 
 ```
 Customization API (Preview, API_VERSION 0): 2 action(s), 1 event hook(s) loaded

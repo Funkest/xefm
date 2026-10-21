@@ -104,6 +104,7 @@ from xefm import path_schemes as _path_schemes
 from xefm import sort_keys as _sort_keys
 from xefm.log_manager import getLogger
 from xefm.path import Path, PathImpl
+from xefm.preview import PREVIEW_APIS as _PREVIEW_APIS, preview
 
 
 class _SeededStat(NamedTuple):
@@ -119,8 +120,8 @@ logger = getLogger("UserAPI")
 #: The public API: the only names an extension or a config may take from this
 #: module (see *The public names* above). ``xefm ext check`` reads this list.
 __all__ = [
-    # versioning
-    "API_VERSION", "PREVIEW",
+    # versioning: what is promised, and what is not yet
+    "API_VERSION", "PREVIEW_APIS",
     # what an action is handed
     "ActionContext", "PaneApi", "EntryInfo",
     # background work
@@ -130,13 +131,13 @@ __all__ = [
 ]
 
 
-#: Bumped only on a breaking change to the façade below or to the ``ACTIONS`` /
-#: ``EVENT_HOOKS`` formats. ``0`` means Preview: it may change in any release.
+#: Bumped only on a breaking change to an API that is not Preview. Each API is
+#: Preview on its own (:data:`PREVIEW_APIS`); while every one of them still is,
+#: as today, this stays ``0``.
 API_VERSION = 0
 
-#: Whether this API is still a preview. Kept as a name so a config can branch on
-#: it (``if user_api.PREVIEW: ...``) rather than on a version number.
-PREVIEW = True
+#: ``PREVIEW_APIS`` — which APIs are Preview — is set at the foot of this
+#: module, once every ``@preview`` below has run.
 
 #: The menus ``MENU_ITEMS`` can put an action in: the menu bar's File menu, and
 #: the context menu of a file-list row.
@@ -164,6 +165,7 @@ EVENTS: dict[str, str] = {
 # Entries
 # --------------------------------------------------------------------------- #
 
+@preview
 class EntryInfo:
     """One item in a pane — a file, a directory or a symlink.
 
@@ -274,6 +276,7 @@ class EntryInfo:
 # Panes
 # --------------------------------------------------------------------------- #
 
+@preview
 class PaneApi:
     """One file pane, at the model level.
 
@@ -455,6 +458,7 @@ def _match(predicate: Callable[[EntryInfo], bool], entry: EntryInfo) -> bool:
 # Markdown
 # --------------------------------------------------------------------------- #
 
+@preview
 def md_code_block(text: str, lang: str = "") -> str:
     """``text`` as a fenced Markdown code block, shown exactly as written.
 
@@ -483,6 +487,7 @@ _MD_INLINE = re.compile(r"([\\`*_{}\[\]()<>!|~])")
 _MD_LINE_START = re.compile(r"^(\s*)(?:([#>+=-])|(\d+)([.)]))")
 
 
+@preview
 def md_escape(text: str) -> str:
     """``text`` with its Markdown-special characters backslash-escaped, so it
     reads literally in prose: ``md_escape("a_b*.txt")`` shows ``a_b*.txt``,
@@ -502,6 +507,7 @@ def md_escape(text: str) -> str:
 # Background tasks
 # --------------------------------------------------------------------------- #
 
+@preview
 class TaskJob:
     """The handle a :meth:`ActionContext.run_task` worker is given — the one
     thing it may touch, on its own thread.
@@ -544,6 +550,7 @@ class TaskJob:
         return self._task.cancelled()
 
 
+@preview
 class TaskOutcome:
     """How a :meth:`ActionContext.run_task` ended, handed to its ``on_done``.
 
@@ -588,6 +595,7 @@ class ActionContext:
     # --- the running extension ------------------------------------------- #
 
     @property
+    @preview
     def extension(self):
         """While an extension package's action or hook runs, its handle:
         ``id``, ``version``, ``settings`` (the extension's defaults overlaid
@@ -601,25 +609,30 @@ class ActionContext:
     # --- panes -------------------------------------------------------------- #
 
     @property
+    @preview
     def pane(self) -> PaneApi:
         """The active pane — the one the cursor is in."""
         return PaneApi(self._app, self._app.pm.active_pane)
 
     @property
+    @preview
     def other(self) -> PaneApi:
         """The inactive pane."""
         return PaneApi(self._app, "right" if self._app.pm.active_pane == "left" else "left")
 
     @property
+    @preview
     def left(self) -> PaneApi:
         return PaneApi(self._app, "left")
 
     @property
+    @preview
     def right(self) -> PaneApi:
         return PaneApi(self._app, "right")
 
     # --- running other actions ---------------------------------------------- #
 
+    @preview
     def invoke(self, action_name: str) -> None:
         """Run another action by name, in the file-list context.
 
@@ -632,6 +645,7 @@ class ActionContext:
 
     # --- running external programs ------------------------------------------ #
 
+    @preview
     def run_program(self, command, *, terminal: bool = False,
                     cwd: str | None = None,
                     env: Mapping[str, str] | None = None) -> int | None:
@@ -678,6 +692,7 @@ class ActionContext:
 
     # --- background work ---------------------------------------------------- #
 
+    @preview
     def run_task(self, title: str, work: Callable[[TaskJob], Any], *,
                  on_done: Callable[["ActionContext", TaskOutcome], None] | None = None,
                  read_only: bool = False) -> None:
@@ -728,10 +743,12 @@ class ActionContext:
 
     # --- talking to the user ------------------------------------------------ #
 
+    @preview
     def message(self, text: str) -> None:
         """Write one line to the log pane."""
         self._app.log_info(str(text))
 
+    @preview
     def show_markdown(self, title: str, source: str) -> None:
         """Show ``source``, Markdown, in a scrollable dialog headed ``title`` —
         the one Help and File Details use. Returns at once; the user closes it
@@ -745,11 +762,13 @@ class ActionContext:
         show_markdown(self._app.panel, str(source), title=str(title))
         self._app.panel.render()
 
+    @preview
     def copy_text(self, text: str) -> None:
         """Put ``text`` on the clipboard — the system one where XeFM can reach
         it. Like any copy, it replaces files XeFM's clipboard was holding."""
         self._app._set_text_clipboard(str(text))
 
+    @preview
     def input(self, prompt: str, default: str = "", *,
               title: str = "", on_accept: Callable[[str], None] | None = None,
               on_cancel: Callable[[], None] | None = None) -> None:
@@ -766,6 +785,7 @@ class ActionContext:
                    on_cancel=_guard("input callback", on_cancel, arity=0))
         self._app.panel.render()
 
+    @preview
     def choose(self, title: str, items: Iterable[Any], *, type: str = "choice",
                on_result: Callable[[int | None], None] | None = None) -> None:
         """Offer a list to pick from. The chosen item's **index** — or ``None``
@@ -809,6 +829,7 @@ class ActionContext:
                 f"choose(type={type!r}): expected 'choice' or 'filter'")
         self._app.panel.render()
 
+    @preview
     def confirm(self, prompt: str, *, title: str = "Confirm",
                 on_result: Callable[[bool], None] | None = None) -> None:
         """Ask a yes/no question. ``on_result`` receives ``True`` for OK."""
@@ -827,6 +848,7 @@ class ActionContext:
     def api_version(self) -> int:
         return API_VERSION
 
+    @preview
     def action_names(self, context: str = _actions.FILER) -> list[str]:
         """Every action name ``context`` understands — what ``invoke()`` accepts."""
         return _actions.registry.names(context)
@@ -1400,3 +1422,13 @@ def preview_notice(action_count: int, hook_count: int,
         parts.append(f"{lexer_count} lexer(s)")
     return (f"Customization API (Preview, API_VERSION {API_VERSION}): "
             f"{', '.join(parts)} loaded — this API may change without notice.")
+
+
+#: The names of the APIs that are Preview — free to change in any release —
+#: such as ``xefm.user_api.ActionContext.run_task``, ``config.MENU_ITEMS`` or
+#: ``manifest.contributes.menus``. A class's entry covers its members. Each
+#: Preview function, method and class also opens its docstring saying so. Set
+#: last, so every ``@preview`` in this module is in it; ``xefm.path_base`` is
+#: imported first for its own.
+import xefm.path_base  # noqa: E402,F401 — registers its @preview classes
+PREVIEW_APIS = frozenset(_PREVIEW_APIS)

@@ -2,9 +2,11 @@
 
 > **Preview.** Everything on this page is subject to change. The objects your
 > functions receive and the shape of the `ACTIONS`, `EVENT_HOOKS`, `SORT_KEYS`,
-> `FILTERS`, `IMAGE_DECODERS`, `PATH_SCHEMES`, `LEXERS` and `MENU_ITEMS` variables may change in any release until `xefm.user_api.API_VERSION` reaches `1` (it is
-> `0` today). XeFM writes one line to the log pane saying so whenever a config
-> uses them. Nothing else in `config.py` is affected.
+> `FILTERS`, `IMAGE_DECODERS`, `PATH_SCHEMES`, `LEXERS` and `MENU_ITEMS` variables may change in any release. Preview is
+> marked per API: each one that may still change says "Preview" at the top of
+> its docstring and is listed in `xefm.user_api.PREVIEW_APIS`, and today that
+> is nearly all of them. XeFM writes one line to the log pane saying so
+> whenever a config uses them. Nothing else in `config.py` is affected.
 
 `~/.xefm/config.py` is real Python that XeFM executes at startup, so it has
 always been able to hold logic — `if sys.platform == 'win32':` blocks, computed
