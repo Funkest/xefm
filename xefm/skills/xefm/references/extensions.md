@@ -142,7 +142,13 @@ referenced object is exactly the value that table would hold.
 
 ## 3. The code: the public API only
 
-An action is `def name(ctx): ...`; a hook is `def name(ctx, *event_args)`.
+An action is `def name(ctx): ...`; a hook is `def name(ctx, event): ...`,
+whatever the event — `event.name`, and the facts as attributes
+(`directory_changed`: `event.pane`, `event.old_path`, `event.new_path`;
+`file_open`: `event.path`, return `True` to claim the open). XeFM calls
+callbacks with exactly these arguments and never adds one: anything new
+arrives as an attribute of `ctx`, `event`, `job` or `outcome`. `xefm ext
+check` refuses an action or hook whose `def` cannot be called that way.
 The function's docstring is its help text (first line = one-line summary).
 
 `ctx` is an `xefm.user_api.ActionContext`. Use **only** the names below.
@@ -151,8 +157,8 @@ The function's docstring is its help text (first line = one-line summary).
 modules, and from each only the names in its `__all__`:
 
 - `xefm.user_api.__all__` — `API_VERSION`, `PREVIEW_APIS`,
-  `ActionContext`, `PaneApi`, `EntryInfo`, `TaskJob`, `TaskOutcome`,
-  `md_code_block`, `md_escape`
+  `ActionContext`, `PaneApi`, `EntryInfo`, `HookEvent`, `TaskJob`,
+  `TaskOutcome`, `md_code_block`, `md_escape`
 - `xefm.path_base.__all__` — `ReadOnlyPathImpl`, `UriStatResult`
 
 Anything else those modules happen to contain (`run_guarded`,

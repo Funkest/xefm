@@ -2688,7 +2688,8 @@ class XeFMApp:
         if str(old_path) == str(new_path) or not _hooks.get("directory_changed"):
             return
         _hooks.fire("directory_changed", self._user_ctx,
-                    PaneApi(self, pane_name), old_path, new_path)
+                    pane=PaneApi(self, pane_name), old_path=old_path,
+                    new_path=new_path)
 
     @staticmethod
     def _listing_unchanged(pane: dict, result: dict) -> bool:
@@ -4059,7 +4060,7 @@ class XeFMApp:
         # Directories are excluded: entering one is navigation, not opening.
         try:
             if _hooks.get("file_open") and not entry.is_dir():
-                if _hooks.fire("file_open", self._user_ctx, entry):
+                if _hooks.fire("file_open", self._user_ctx, path=entry):
                     return
         except Exception as exc:
             self.log_info(f"Cannot open {entry.name}: {exc}")

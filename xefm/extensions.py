@@ -309,9 +309,22 @@ def _top_level_names(tree: ast.Module) -> set[str]:
     return names
 
 
-def _check_reference(root: Path, ref: str) -> Optional[str]:
+#: How XeFM calls the code a contribution kind references, as
+#: ``(positional argument count, the shape to name)``. A callback's arguments
+#: never grow — a new fact arrives as an attribute of ``ctx`` or ``event`` — so
+#: this is a contract, and checking it catches a hook still written for the
+#: old per-event arguments.
+_CALL_SHAPES = {
+    "actions": (1, "fn(ctx)"),
+    "event_hooks": (2, "fn(ctx, event)"),
+}
+
+
+def _check_reference(root: Path, ref: str, call: Optional[tuple[int, str]] = None
+                     ) -> Optional[str]:
     """Why ``module:name`` does not resolve inside ``root``, or None — read
-    from the module's source, never by importing it."""
+    from the module's source, never by importing it. With ``call``, a
+    top-level ``def`` must also accept that many positional arguments."""
     if not _REF_RE.match(ref):
         return f"{ref!r} is not a reference — write it as 'package.module:name'"
     module, name = ref.split(":")
@@ -327,7 +340,24 @@ def _check_reference(root: Path, ref: str) -> Optional[str]:
         return f"cannot read {path.relative_to(root)}: {exc}"
     if name not in _top_level_names(tree):
         return f"module {module} has no top-level '{name}'"
+    if call is not None:
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                    and node.name == name and not _accepts(node.args, call[0]):
+                return (f"{name} cannot be called as {call[1]} — XeFM passes "
+                        f"exactly that, and anything more it has to say is an "
+                        f"attribute of ctx or event")
     return None
+
+
+def _accepts(args: ast.arguments, n: int) -> bool:
+    """Whether a ``def`` with ``args`` can be called with ``n`` positional
+    arguments and nothing else."""
+    positional = len(args.posonlyargs) + len(args.args)
+    required = positional - len(args.defaults)
+    needs_keyword = any(d is None for d in args.kw_defaults)
+    return required <= n and (n <= positional or args.vararg is not None) \
+        and not needs_keyword
 
 
 def _check_key(expr) -> Optional[str]:
@@ -459,7 +489,8 @@ def check_manifest(manifest: Manifest, *, others: Iterable[Manifest] = (),
                      "with another extension's or a future built-in action")
 
     for where, ref in manifest.references():
-        problem = _check_reference(manifest.root, ref)
+        kind = where.split(".")[1] if where.startswith("contributes.") else ""
+        problem = _check_reference(manifest.root, ref, _CALL_SHAPES.get(kind))
         if problem:
             err(where, problem)
 

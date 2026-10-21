@@ -417,7 +417,7 @@ def test_a_malformed_action_is_one_warning_not_a_failure(spec, fragment, clean_r
 
 
 def test_hooks_load_and_unknown_events_warn(clean_registry):
-    def hook(ctx):
+    def hook(ctx, event):
         pass
 
     warnings, _, hooks_n, *_ = user_api.load_user_entries(config_with(
@@ -444,16 +444,50 @@ def test_the_preview_notice_only_appears_when_the_api_is_used():
 def test_a_hook_that_raises_is_logged_not_propagated(clean_registry):
     ran = []
 
-    def boom(ctx):
+    def boom(ctx, event):
         raise RuntimeError("nope")
 
-    def after(ctx):
-        ran.append("after")
+    def after(ctx, event):
+        ran.append(event.name)
 
     user_api.load_user_entries(config_with(EVENT_HOOKS={"startup": [boom, after]}))
     # The bad hook does not abort the ones behind it.
     assert user_api.hooks.fire("startup", None) is False
-    assert ran == ["after"]
+    assert ran == ["startup"]
+
+
+def test_a_hook_written_for_the_old_arguments_is_refused_at_load(clean_registry):
+    """Every hook is fn(ctx, event). One that cannot be called that way would
+    fail on every firing, so it is named once, at load, and left out."""
+    def old_style(ctx, pane, old, new):
+        pass
+
+    def bare(ctx):
+        pass
+
+    def fine(ctx, event, *rest):
+        pass
+
+    warnings, _, hooks_n, *_ = user_api.load_user_entries(config_with(
+        EVENT_HOOKS={"directory_changed": [old_style, fine], "startup": bare}))
+    assert hooks_n == 1
+    assert user_api.hooks.get("directory_changed") == [fine]
+    assert len(warnings) == 2
+    assert all("cannot be called as fn(ctx, event)" in w for w in warnings)
+
+
+def test_an_action_that_cannot_take_ctx_is_refused(clean_registry):
+    warnings, actions_n, *_ = user_api.load_user_entries(config_with(
+        ACTIONS={"mine": lambda: None, "ok": lambda ctx, extra=1: None}))
+    assert actions_n == 1
+    assert "cannot be called as fn(ctx)" in warnings[0]
+
+
+def test_hook_event_carries_the_facts_as_attributes():
+    event = user_api.HookEvent("directory_changed", pane="p", old_path=1, new_path=2)
+    assert (event.name, event.pane, event.old_path, event.new_path) == \
+        ("directory_changed", "p", 1, 2)
+    assert "new_path=2" in repr(event)
 
 
 # --------------------------------------------------------------------------- #
@@ -634,8 +668,8 @@ def test_pane_api_cd_accepts_a_pathlib_path(app_with):
 
 def test_startup_and_quit_hooks_fire(app_with):
     seen = []
-    app, _ = app_with(EVENT_HOOKS={"startup": [lambda ctx: seen.append("startup")],
-                                   "quit": [lambda ctx: seen.append("quit")]})
+    app, _ = app_with(EVENT_HOOKS={"startup": [lambda ctx, e: seen.append(e.name)],
+                                   "quit": [lambda ctx, e: seen.append(e.name)]})
     app.backend.run_event_loop = lambda cb: None
     app.run()
     assert seen == ["startup"]
@@ -647,8 +681,9 @@ def test_startup_and_quit_hooks_fire(app_with):
 def test_directory_changed_fires_once_per_real_change(app_with):
     seen = []
 
-    def hook(ctx, pane, old, new):
-        seen.append((pane.name, os.path.basename(str(old)), os.path.basename(str(new))))
+    def hook(ctx, event):
+        seen.append((event.pane.name, os.path.basename(str(event.old_path)),
+                     os.path.basename(str(event.new_path))))
 
     app, tmp = app_with(EVENT_HOOKS={"directory_changed": [hook]})
     assert seen == []                      # the startup listings are not a change
@@ -668,9 +703,9 @@ def test_directory_changed_fires_once_per_real_change(app_with):
 def test_file_open_can_claim_the_open(app_with):
     seen = []
 
-    def route(ctx, path):
-        seen.append(path.name)
-        return path.suffix == ".pdf"
+    def route(ctx, event):
+        seen.append(event.path.name)
+        return event.path.suffix == ".pdf"
 
     app, _ = app_with(EVENT_HOOKS={"file_open": [route]})
     opened = []
@@ -690,7 +725,7 @@ def test_file_open_can_claim_the_open(app_with):
 
 def test_file_open_does_not_fire_for_directories(app_with):
     seen = []
-    app, _ = app_with(EVENT_HOOKS={"file_open": [lambda ctx, p: seen.append(p.name)]})
+    app, _ = app_with(EVENT_HOOKS={"file_open": [lambda ctx, e: seen.append(e.path.name)]})
     pane = app.active_pane()
     pane["focused_index"] = [f.name for f in pane["files"]].index("sub")
     app._open(pane)
@@ -757,7 +792,7 @@ def test_reload_config_installs_the_edited_actions_and_hooks(app_with, tmp_path)
 
             class Config:
                 ACTIONS = {'first': first}
-                EVENT_HOOKS = {'startup': [lambda ctx: None]}
+                EVENT_HOOKS = {'startup': [lambda ctx, event: None]}
         """)
         app.reload_config()
         assert xa.registry.resolve(xa.FILER, "first") is not None

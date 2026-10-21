@@ -311,12 +311,16 @@ String-named events mapping to lists of callables, fired in list order:
 ```python
 class Config:
     EVENT_HOOKS = {
-        "startup": [restore_session],          # fn(ctx)
-        "quit": [save_session],                # fn(ctx)
-        "directory_changed": [log_visit],      # fn(ctx, pane, old_path, new_path)
-        "file_open": [route_psd],              # fn(ctx, path) -> True to swallow
+        "startup": [restore_session],          # fn(ctx, event)
+        "quit": [save_session],                # fn(ctx, event)
+        "directory_changed": [log_visit],      # event.pane / .old_path / .new_path
+        "file_open": [route_psd],              # event.path; -> True to swallow
     }
 ```
+
+Every hook is `fn(ctx, event)` (#632). v1 passed each event's facts as
+positional arguments (`fn(ctx, pane, old_path, new_path)`), which froze each
+event at the facts it had on day one — see the callback rule in §6.
 
 `file_open` fires before the built-in open logic; returning `True` claims the
 event — per-type routing (send `.psd` to a specific app) without touching
@@ -374,6 +378,25 @@ a glob is refused at load. See
 - **Dual backend.** Every façade signature is expressed at the pane-model
   level, so TUI/desktop parity holds by construction (§5's renderer builder
   being the sole, deliberate exception).
+- **Callbacks never gain arguments** (#632). Adding a parameter with a
+  default is safe in the direction a user *calls* — `ctx.run_task(...,
+  read_only=False)` — and breaking in the direction XeFM calls *them*: a
+  callback written `fn(ctx, pane)` fails the day XeFM passes a third
+  argument. So every callback has a fixed, small shape — an action
+  `fn(ctx)`, a hook `fn(ctx, event)`, `work(job)`, `on_done(ctx, outcome)`,
+  a sort key or filter `fn(entry)`, a dialog's `on_result(value)` — and
+  anything new arrives as an **attribute** of the object it is handed.
+  Adapting to each callback's signature by inspection was rejected: wrappers
+  hide signatures, `*args` says nothing, and "why did I get three arguments
+  here and two there" is worse than one rule. The shape is checked where it
+  can be — at load (`_call_problem`) and statically by `xefm ext check` —
+  so a callback that does not fit is named once instead of failing on every
+  call.
+- **Methods a user overrides never gain arguments either.** A `PATH_SCHEMES`
+  backend implements methods XeFM calls; XeFM does not pass a new argument to
+  an existing one. A new need is a new method, defaulted in
+  `xefm.path_base.ReadOnlyPathImpl` (which may delegate to the old one) — the
+  intermediate class exists for exactly this.
 - **Versioning.** `xefm.user_api.API_VERSION`, an integer bumped only on a
   breaking change to the façade or the config-variable formats. The façade
   being minimal is the main stability strategy; the version number is the

@@ -475,15 +475,15 @@ action: a command that takes seconds freezes the window for those seconds.
 ## Reacting to events: `EVENT_HOOKS`
 
 ```python
-def log_visit(ctx, pane, old_path, new_path):
+def log_visit(ctx, event):
     with open(Path.home() / '.xefm' / 'visited.log', 'a') as f:
-        f.write(f"{new_path}\n")
+        f.write(f"{event.new_path}\n")
 
 
-def open_psd_in_gimp(ctx, path):
-    if path.suffix.lower() != '.psd':
+def open_psd_in_gimp(ctx, event):
+    if event.path.suffix.lower() != '.psd':
         return False
-    subprocess.Popen(['gimp', str(path)])
+    subprocess.Popen(['gimp', str(event.path)])
     return True          # claimed — XeFM does nothing further
 
 
@@ -494,15 +494,24 @@ class Config:
     }
 ```
 
-| Event | Signature | When |
+Every hook is `fn(ctx, event)`. `event.name` is the event's name, and what
+happened is in the event's other attributes:
+
+| Event | `event` carries | When |
 |---|---|---|
-| `startup` | `fn(ctx)` | once the app is up and the panes are listed |
-| `quit` | `fn(ctx)` | before XeFM shuts down, panes still live |
-| `directory_changed` | `fn(ctx, pane, old_path, new_path)` | a pane moves to a different directory |
-| `file_open` | `fn(ctx, path)` | Enter on a file, before XeFM decides what to do with it; return `True` to claim it |
+| `startup` | — | once the app is up and the panes are listed |
+| `quit` | — | before XeFM shuts down, panes still live |
+| `directory_changed` | `pane`, `old_path`, `new_path` | a pane moves to a different directory |
+| `file_open` | `path` | Enter on a file, before XeFM decides what to do with it; return `True` to claim it |
 
 Each event maps to a list, run in order. A bare function is accepted where you
 have only one.
+
+The arguments never change: when an event has more to say in a later version,
+it says it as a new attribute, and a hook that does not read it is unaffected.
+(Hooks used to take the facts as separate arguments — `fn(ctx, pane,
+old_path, new_path)`. Such a hook is now left out at load with a line in the
+log pane naming it.)
 
 `file_open` is how you route a file type somewhere of your own without touching
 `FILE_ASSOCIATIONS`. It fires for the **open** action (Enter) — not for

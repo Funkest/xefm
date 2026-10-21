@@ -285,10 +285,42 @@ class Check(_Home):
             api_version = 0
 
             [contributes.event_hooks]
-            lunch = "{mod}.actions:greet"
-        ''')
+            lunch = "{mod}.hooks:on_lunch"
+        ''', code={"hooks.py": "def on_lunch(ctx, event): pass\n"})
         (problem,) = ext.errors(self.problems(root))
         self.assertIn("'lunch' is not an event", problem.message)
+
+    def test_a_callback_must_take_what_xefm_passes(self):
+        root, _ = self.package(manifest='''
+            [extension]
+            id = "{id}"
+            version = "0.1.0"
+            api_version = 0
+
+            [contributes.actions]
+            "{id}.greet" = "{mod}.code:greet"
+            "{id}.fine" = "{mod}.code:fine"
+
+            [contributes.event_hooks]
+            directory_changed = ["{mod}.code:old_hook", "{mod}.code:new_hook"]
+        ''', code={"code.py": '''
+            def greet(ctx, extra):
+                pass
+
+            def fine(ctx, *args, flag=False):
+                pass
+
+            def old_hook(ctx, pane, old_path, new_path):
+                pass
+
+            def new_hook(ctx, event):
+                pass
+        '''})
+        problems = ext.errors(self.problems(root))
+        self.assertEqual(sorted(p.message.split(" cannot")[0] for p in problems),
+                         ["greet", "old_hook"])
+        self.assertTrue(any("cannot be called as fn(ctx, event)" in p.message
+                            for p in problems))
 
     def test_a_data_only_package_needs_no_code(self):
         root, _ = self.package(manifest='''

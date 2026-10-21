@@ -122,8 +122,8 @@ logger = getLogger("UserAPI")
 __all__ = [
     # versioning: what is promised, and what is not yet
     "API_VERSION", "PREVIEW_APIS",
-    # what an action is handed
-    "ActionContext", "PaneApi", "EntryInfo",
+    # what an action or a hook is handed
+    "ActionContext", "PaneApi", "EntryInfo", "HookEvent",
     # background work
     "TaskJob", "TaskOutcome",
     # building Markdown for ctx.show_markdown
@@ -154,10 +154,10 @@ MENU_WHEN = {
 #: The events ``EVENT_HOOKS`` understands, mapped to the extra arguments each
 #: passes after ``ctx``. Used for validation messages and for the docs.
 EVENTS: dict[str, str] = {
-    "startup": "fn(ctx) — after the app is up, before the first key",
-    "quit": "fn(ctx) — before XeFM shuts down",
-    "directory_changed": "fn(ctx, pane, old_path, new_path)",
-    "file_open": "fn(ctx, path) -> True to claim the open",
+    "startup": "after the app is up, before the first key",
+    "quit": "before XeFM shuts down",
+    "directory_changed": "a pane moved — event.pane, event.old_path, event.new_path",
+    "file_open": "Enter on a file — event.path; return True to claim the open",
 }
 
 
@@ -575,6 +575,48 @@ class TaskOutcome:
 
 
 # --------------------------------------------------------------------------- #
+# Events
+# --------------------------------------------------------------------------- #
+
+@preview
+class HookEvent:
+    """What an ``EVENT_HOOKS`` function is handed after ``ctx``: every hook is
+    ``fn(ctx, event)``, whatever the event.
+
+    ``event.name`` is the event's name; the rest is what happened, as
+    attributes — ``pane``, ``old_path`` and ``new_path`` for
+    ``directory_changed``, ``path`` for ``file_open`` (see ``EVENTS``).
+
+    One object rather than one argument per fact is what lets an event say
+    more later: a new fact is a new attribute, and a hook that does not read
+    it never notices. A hook written ``fn(ctx, pane, old, new)`` would break
+    the day a fifth argument arrived."""
+
+    def __init__(self, name: str, **facts: Any):
+        self.name = name
+        for key, value in facts.items():
+            setattr(self, key, value)
+
+    def __repr__(self) -> str:
+        facts = ", ".join(f"{k}={v!r}" for k, v in vars(self).items() if k != "name")
+        return f"<HookEvent {self.name}{': ' + facts if facts else ''}>"
+
+
+def _call_problem(func: Callable, n_args: int, shape: str) -> str | None:
+    """Why ``func`` cannot be called with ``n_args`` positional arguments — the
+    way XeFM calls the callback documented as ``shape`` — or None. A function
+    whose signature cannot be read is given the benefit of the doubt."""
+    try:
+        inspect.signature(func).bind(*range(n_args))
+    except TypeError:
+        name = getattr(func, "__name__", repr(func))
+        return f"{name} cannot be called as {shape}"
+    except ValueError:
+        return None
+    return None
+
+
+# --------------------------------------------------------------------------- #
 # Action context
 # --------------------------------------------------------------------------- #
 
@@ -925,13 +967,15 @@ class EventHooks:
     def count(self) -> int:
         return sum(len(v) for v in self._hooks.values())
 
-    def fire(self, event: str, ctx: "ActionContext", *args) -> bool:
-        """Run every hook for ``event`` in order. Returns ``True`` as soon as one
-        claims the event by returning ``True`` — the remaining hooks still run,
-        so a claim never silently disables another hook's side effect."""
+    def fire(self, event: str, ctx: "ActionContext", **facts) -> bool:
+        """Run every hook for ``event`` in order, as ``fn(ctx, HookEvent)``
+        carrying ``facts``. Returns ``True`` as soon as one claims the event by
+        returning ``True`` — the remaining hooks still run, so a claim never
+        silently disables another hook's side effect."""
         claimed = False
+        info = HookEvent(event, **facts)
         for func in self.get(event):
-            if run_guarded(f"'{event}' hook", func, ctx, *args) is True:
+            if run_guarded(f"'{event}' hook", func, ctx, info) is True:
                 claimed = True
         return claimed
 
@@ -1031,6 +1075,17 @@ def _process_user_entries(config, registry, apply: bool) -> tuple[list[str], int
                 f"EVENT_HOOKS['{event}'] contains "
                 f"{len(funcs) - len(good)} entr(y/ies) that are not callable; "
                 f"they were ignored")
+        # Every hook is fn(ctx, event). One written for the old per-event
+        # arguments (fn(ctx, pane, old_path, new_path)) would fail on every
+        # firing; say so once, here, and leave it out.
+        for func in list(good):
+            problem = _call_problem(func, 2, "fn(ctx, event)")
+            if problem:
+                warnings.append(
+                    f"EVENT_HOOKS['{event}']: {problem} and was ignored — every "
+                    f"hook takes (ctx, event) and reads what happened from "
+                    f"the event's attributes")
+                good.remove(func)
         if good:
             if apply:
                 hooks.set(event, good)
@@ -1309,6 +1364,9 @@ def _build_action(name, spec) -> tuple[_actions.Action | None, str | None]:
     func = spec.get("func")
     if not callable(func):
         return None, f"ACTIONS['{name}'] has no callable 'func'"
+    problem = _call_problem(func, 1, "fn(ctx)")
+    if problem:
+        return None, f"ACTIONS['{name}']: {problem} — an action takes ctx alone"
     context = spec.get("context", _actions.FILER)
     if context not in _actions.CONTEXTS:
         return None, (f"ACTIONS['{name}'] names unknown context '{context}' — "
