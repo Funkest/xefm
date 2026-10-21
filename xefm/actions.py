@@ -848,6 +848,14 @@ _DETAILS: dict[str, str] = {
         "bindings, file associations, external programs, favorites and your "
         "own actions take effect at once. Theme, fonts and layout apply on the "
         "next start, and the log says so."),
+    "sync_python_packages": (
+        "Makes `~/.xefm/site-packages` match `~/.xefm/requirements.txt`: "
+        "installs what the file lists, with pip, for the Python XeFM runs on, "
+        "and removes what it no longer lists. Packages XeFM already ships win — "
+        "a requirement that needs a different version of one fails the sync "
+        "and the log names it. Runs in the background and reaches the network; "
+        "pip's output goes to the log, and the configuration reloads when it "
+        "is done. The same as `xefm deps sync` from a shell."),
 }
 
 
@@ -1041,6 +1049,8 @@ _FILER_ACTIONS = [
     _a("reload_config", FILER, "Re-read config.py and apply it live"),
     _a("install_extension", FILER, "Install the extension package under the cursor"),
     _a("extensions", FILER, "List the extension packages and whether they loaded"),
+    _a("sync_python_packages", FILER,
+       "Install the Python packages ~/.xefm/requirements.txt lists"),
 ]
 
 _TEXT_VIEWER_ACTIONS = [

@@ -261,6 +261,7 @@ def bindings() -> dict:
         'reload_config': [],                   # Re-read this config.py and apply live
         'install_extension': [],               # Install the extension package (folder or .zip) under the cursor
         'extensions': [],                      # List extension packages and why any did not load
+        'sync_python_packages': [],            # Install what ~/.xefm/requirements.txt lists
 
         # === Viewer-local actions (rebindable, not listed above) ==============
         # Every key the modal viewers use is a named action too, and every one of

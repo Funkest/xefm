@@ -127,6 +127,7 @@ the user picked in **Tools ▸ Keymap**; ask which if `KEY_PRESET` is
 | `reload_config` | Re-read config.py and apply it live | — | — |
 | `install_extension` | Install the extension package under the cursor | — | — |
 | `extensions` | List the extension packages and whether they loaded | — | — |
+| `sync_python_packages` | Install the Python packages ~/.xefm/requirements.txt lists | — | — |
 | `quit` | Quit XeFM — or close the open viewer | `Q` | `Alt-F4` |
 | `help` | Show the key bindings for what is on screen | `F1` | `F1` |
 | `isearch` | Incremental search | `F` | — |

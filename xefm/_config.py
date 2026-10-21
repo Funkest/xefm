@@ -544,9 +544,12 @@ class Config:
     # RAW through the system's own decoder; on Windows through whichever WIC
     # codecs are installed (the HEIF and AV1 extensions from the Store, if you
     # have them); in a terminal through Pillow, including any Pillow plugin you
-    # installed. Installing pillow-heif is enough to add HEIC anywhere:
+    # installed. Installing pillow-heif is enough to add HEIC anywhere: add a
+    # line to ~/.xefm/requirements.txt, then Tools > Sync Python Packages (or
+    # `xefm deps sync` from a shell). The same goes for rawpy, cairosvg and any
+    # other library a decoder below imports.
     #
-    #     pip install pillow-heif
+    #     pillow-heif
     #
     # What is left after all that is the formats only a library XeFM does not
     # ship can read. Write a function that turns the file's bytes into a

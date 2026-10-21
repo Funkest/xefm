@@ -64,12 +64,11 @@ platform-specific ones, comes with it.
 brew install crftwr/tap/xefm
 ```
 
-Homebrew brings its own Python and rebuilds XeFM's environment on every
-upgrade, so nothing you add to that environment survives. If your `config.py`
-imports a library XeFM doesn't ship, or you want a Pillow plugin such as
-`pillow-heif`, use uv or pipx instead: `uv tool install xefm --with pillow-heif`,
-or `pipx install xefm` followed by `pipx inject xefm pillow-heif`. Both keep
-what you added across upgrades.
+If your `config.py` imports a library XeFM doesn't ship, or you want a Pillow
+plugin such as `pillow-heif`, list it in `~/.xefm/requirements.txt` and run
+`xefm deps sync` (or Tools → Sync Python Packages). This works for every
+install, Homebrew and the desktop apps included, and survives upgrades; see
+[Extra Python Libraries](PYTHON_PACKAGES_FEATURE.md).
 
 The two installs coexist and share `~/.xefm/`; installing both is a perfectly
 normal setup. The **[README](../README.md#from-source)** covers working from a
