@@ -2064,6 +2064,10 @@ class XeFMApp:
         self._handlers: dict | None = None
         self._user_ctx = ActionContext(self)
         self._load_user_entries(self.config)
+        # Again, now that config.py's own actions are registered: a key bound
+        # to one is taken off the preset action that had it only once the
+        # keymap can tell where that action is reached (#662).
+        self._rebuild_keymap()
 
         # Everything the listing path needs is up: read the two directories.
         self._start_initial_listings()
@@ -5068,6 +5072,16 @@ class XeFMApp:
         self.keys = KeyBindings(self.config.KEY_BINDINGS)
         config_manager._key_bindings = None
 
+    def _rebuild_keymap(self) -> None:
+        """:meth:`_apply_keymap_preset`, then the two surfaces that quote a key
+        name instead of reading one on demand: the status bar caches its hint
+        line, and the menu holds the shortcut strings resolved when it was
+        built. Both were left naming the pre-reload key — the help dialog said
+        'D' while the bar and the menu still said 'K' (issue #382)."""
+        self._apply_keymap_preset()
+        self.status.invalidate()
+        self.menu_bar.set_menu(self._build_menu())
+
     def _ask_keymap_preset(self) -> None:
         """Which keymap, asked at the first launch with none chosen — a new
         install and one from before presets alike (#597). Neither is the
@@ -5102,9 +5116,7 @@ class XeFMApp:
                           f"the keymap — change it there")
             return
         self.state_manager.set_state(self._KEYMAP_STATE, name)
-        self._apply_keymap_preset()
-        self.status.invalidate()
-        self.menu_bar.set_menu(self._build_menu())
+        self._rebuild_keymap()
         hint = (" — typing a letter searches; F1 lists every key"
                 if keymap_presets.type_ahead(self.config) else "")
         self.log_info(f"Keymap: {keymap_presets.LABELS[self._keymap_preset]}{hint}")
@@ -5162,26 +5174,20 @@ class XeFMApp:
             self.log_info(f"Config warning: {err}")
 
         self.config = new_config
+        # User actions and event hooks reload the same way everything else does:
+        # every 'user' entry is dropped and rebuilt from the file just read, so
+        # iterating on a custom action is edit-then-reload, with no restart.
+        # Before the keymap, which needs them registered to know where a key
+        # bound to one of them is reached (#662).
+        self._load_user_entries(new_config)
         # Rebuild the keymap from the (possibly rebound) KEY_BINDINGS, with
         # the keymap preset laid over it again.
-        self._apply_keymap_preset()
-        # The two surfaces that quote a key name instead of reading one on
-        # demand: the status bar caches its hint line, and the menu holds the
-        # shortcut strings resolved when it was built. Both were left naming the
-        # pre-reload key — the help dialog said 'D' while the bar and the menu
-        # still said 'K' (issue #382). Rebuild them from the keymap just made.
-        self.status.invalidate()
-        self.menu_bar.set_menu(self._build_menu())
+        self._rebuild_keymap()
         # Re-point the config reference every long-lived subsystem holds so
         # their on-demand reads pick up the new values without a rebuild.
         for holder in (self._fileops, self.flm, self.pm, self.file_monitor,
                        self.left_view, self.right_view):
             holder.config = new_config
-
-        # User actions and event hooks reload the same way everything else does:
-        # every 'user' entry is dropped and rebuilt from the file just read, so
-        # iterating on a custom action is edit-then-reload, with no restart.
-        self._load_user_entries(new_config)
 
         self.log_info("Configuration reloaded — key bindings and file settings "
                       "applied; theme, layout and font changes take effect on "

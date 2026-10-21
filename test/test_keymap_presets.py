@@ -130,6 +130,94 @@ class Apply(unittest.TestCase):
         self.assertNotIn("rename", config.KEY_BINDINGS)
         self.assertEqual(config.KEY_BINDINGS["rename_file"], ["Ctrl-K"])
 
+    def test_a_rebound_key_leaves_the_action_that_had_it(self):
+        """#662: binding Shift-T is enough; the preset's own Shift-T action
+        does not have to be emptied by hand."""
+        self.assertIn("Shift-T", _keys(types.SimpleNamespace(
+            KEY_BINDINGS=_afx()), "open_in_new_tab"))
+        config = _config_with(toggle_color_scheme=["Shift-T"])
+        keymap_presets.apply(config, keymap_presets.AFX)
+        self.assertNotIn("Shift-T", _keys(config, "open_in_new_tab"))
+        self.assertEqual(_keys(config, "toggle_color_scheme"), ["Shift-T"])
+        keys = xefm_config.KeyBindings(config.KEY_BINDINGS)
+        event = Event(EventType.KEY, key="t", char="T", modifiers={"shift"})
+        self.assertEqual(keys.find_action_for_event(event, context="filer"),
+                         "toggle_color_scheme")
+
+    def test_a_rebound_key_is_matched_however_it_is_spelled(self):
+        config = _config_with(toggle_color_scheme=["shift-t"])
+        keymap_presets.apply(config, keymap_presets.AFX)
+        self.assertNotIn("Shift-T", _keys(config, "open_in_new_tab"))
+
+    def test_the_actions_other_keys_stay(self):
+        config = _config_with(toggle_color_scheme=["Shift-T"])
+        keymap_presets.apply(config, keymap_presets.AFX)
+        expected = [k for k in _keys(types.SimpleNamespace(KEY_BINDINGS=_afx()),
+                                     "open_in_new_tab") if k != "Shift-T"]
+        self.assertEqual(_keys(config, "open_in_new_tab"), expected)
+
+    def test_a_shared_key_rebound_in_one_context_stays_elsewhere(self):
+        """quit is a common action: a file-list action taking Q takes it in the
+        file list only, and the viewers still quit on it."""
+        self.assertIn("Q", _keys(types.SimpleNamespace(KEY_BINDINGS=_afx()), "quit"))
+        config = _config_with(view_file=["Q"])
+        keymap_presets.apply(config, keymap_presets.AFX)
+        self.assertIn("Q", _keys(config, "quit"))
+        keys = xefm_config.KeyBindings(config.KEY_BINDINGS)
+        event = Event(EventType.KEY, key="q", char="q", modifiers=set())
+        self.assertEqual(keys.find_action_for_event(event, context="filer"),
+                         "view_file")
+        self.assertEqual(keys.find_action_for_event(event, context="text_viewer"),
+                         "quit")
+
+    def test_a_key_split_by_selection_is_not_taken(self):
+        """AFX's C copies only when files are marked; binding C for when none
+        are leaves that alone, and binding it outright takes it."""
+        self.assertEqual(_afx()["copy_files"]["selection"], "required")
+        self.assertIn("C", _afx()["copy_files"]["keys"])
+        # view_file is reached wherever copy_files is (the file list and the
+        # directory diff), so its C may take copy_files' C.
+        config = _config_with(view_file={"keys": ["C"], "selection": "none"})
+        keymap_presets.apply(config, keymap_presets.AFX)
+        self.assertIn("C", _keys(config, "copy_files"))
+        keys = xefm_config.KeyBindings(config.KEY_BINDINGS)
+        event = Event(EventType.KEY, key="c", char="c", modifiers=set())
+        self.assertEqual(keys.find_action_for_event(event, True, "filer"), "copy_files")
+        self.assertEqual(keys.find_action_for_event(event, False, "filer"), "view_file")
+
+        config = _config_with(view_file=["C"])
+        keymap_presets.apply(config, keymap_presets.AFX)
+        self.assertNotIn("C", _keys(config, "copy_files"))
+        # The gate survives on what is left.
+        self.assertEqual(config.KEY_BINDINGS["copy_files"]["selection"], "required")
+
+    def test_a_key_taken_where_the_action_is_not_stays_where_it_is(self):
+        """copy_files also copies in the directory diff; file_details, a file
+        list action, taking C leaves the diff's C copying."""
+        config = _config_with(file_details=["C"])
+        keymap_presets.apply(config, keymap_presets.AFX)
+        self.assertIn("C", _keys(config, "copy_files"))
+        keys = xefm_config.KeyBindings(config.KEY_BINDINGS)
+        event = Event(EventType.KEY, key="c", char="c", modifiers=set())
+        self.assertEqual(keys.find_action_for_event(event, True, "filer"), "file_details")
+        self.assertEqual(keys.find_action_for_event(event, True, "dir_diff"), "copy_files")
+
+    def test_a_scoped_rebind_takes_its_context_only(self):
+        """'text_viewer.quit' is not an action: rebinding Q there leaves the
+        file list's Q where the preset put it."""
+        afx = _afx()
+        holder = next(a for a, v in afx.items()
+                      if "Q" in (v["keys"] if isinstance(v, dict) else v))
+        config = _config_with(**{"text_viewer.quit": ["X"],
+                                 "text_viewer.toggle_wrap": ["Q"]})
+        keymap_presets.apply(config, keymap_presets.AFX)
+        self.assertIn("Q", _keys(config, holder))
+
+    def test_config_py_entries_are_matched_first(self):
+        config = _config_with(toggle_color_scheme=["Shift-T"])
+        keymap_presets.apply(config, keymap_presets.ORTHODOX)
+        self.assertEqual(next(iter(config.KEY_BINDINGS)), "toggle_color_scheme")
+
     def test_replaced_names_what_config_py_changes(self):
         config = _config_with(copy_files=_afx()["copy_files"],
                               help=["F1"])
@@ -215,7 +303,7 @@ class InTheApp(unittest.TestCase):
                        for name in self._PRESET_STATE if name in shared.__dict__}
         self.app = self._open()
 
-    def _open(self):
+    def _open(self, bindings=None):
         from puikit.backends import create_backend
         self.b = create_backend("memory")
         self.b.open()
@@ -223,7 +311,7 @@ class InTheApp(unittest.TestCase):
         # KEY_BINDINGS would be laid over every preset here. Test the presets
         # as a config.py binding nothing would see them.
         shared = xefm_config.get_config()
-        shared._KEY_BINDINGS_BASE = {}
+        shared._KEY_BINDINGS_BASE = dict(bindings or {})
         app = xefm_app.XeFMApp(self.b, self.tmp, self.tmp,
                                left_provided=True, right_provided=True,
                                state_manager=XeFMStateManager(db_path=self.db))
@@ -251,6 +339,27 @@ class InTheApp(unittest.TestCase):
 
     def _action(self, event):
         return self.app.keys.find_action_for_event(event, False, "filer")
+
+    def test_a_key_bound_to_a_config_py_action_leaves_the_preset_action(self):
+        """#662 with an action of config.py's own: it is registered after the
+        keymap is first built, and the keymap is built again once it is, so
+        the preset action gives up the key (and the help and menus stop
+        listing it there)."""
+        def say_hi(ctx):
+            """Say hi."""
+        shared = xefm_config.get_config()
+        saved_actions = getattr(shared, "ACTIONS", None)
+        shared.ACTIONS = {"say_hi": say_hi}
+        try:
+            self.app.file_monitor.stop_monitoring()
+            self.b.close()
+            self.app = self._open({"say_hi": ["Shift-T"]})
+            self.assertEqual(self._action(_key("t", "T", {"shift"})), "say_hi")
+            self.assertNotIn("Shift-T", self.app.config.KEY_BINDINGS["open_in_new_tab"])
+        finally:
+            shared.ACTIONS = saved_actions
+            from xefm.user_api import load_user_entries
+            load_user_entries(shared)
 
     def test_switching_relabels_the_keymap_at_once(self):
         self.assertEqual(self._action(_key("v", "v")), "view_file")

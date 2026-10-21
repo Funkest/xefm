@@ -24,7 +24,8 @@ its own ``bindings`` on top.
 
 ``config.py``'s ``KEY_BINDINGS`` is laid over the preset in force, action by
 action, **always**: an entry there replaces that action's keys whatever the
-preset says. It ships with examples only.
+preset says, and the keys it binds leave the preset actions that had them
+(:func:`_release_claimed_keys`, #662). It ships with examples only.
 
 :func:`apply` writes the result into ``config.KEY_BINDINGS`` itself, so every
 reader — the app's keymap, the help dialog, the menus, the directory diff
@@ -295,21 +296,86 @@ def replaced(config, name: Optional[str]) -> list:
     return result
 
 
+def _selection_of(value) -> str:
+    if isinstance(value, dict):
+        return value.get("selection", "any")
+    return "any"
+
+
+def _reach(name: str) -> frozenset:
+    """The contexts in which a ``KEY_BINDINGS`` entry named ``name`` binds
+    keys. A scoped rebind (``'diff_viewer.quit'``, not itself an action)
+    reaches its one context; any other name, every context that resolves it —
+    all of them, for a ``common`` action."""
+    from xefm.actions import registry
+    if "." in name:
+        context, rest = name.split(".", 1)
+        if registry.has_context(context) and registry.resolve(context, name) is None:
+            return frozenset({context}) if registry.canonical(context, rest) else frozenset()
+    return frozenset(c for c in registry.contexts() if registry.canonical(c, name))
+
+
+def _release_claimed_keys(result: dict, own: dict) -> None:
+    """Take each key ``config.py`` binds off the preset actions it does not
+    mention (#662), so binding ``Shift-T`` to one action is enough — without
+    also emptying the action the preset gave ``Shift-T`` to.
+
+    A preset action keeps the key where the user's entry would not take its
+    place: when the action is reached in a context the user's entry is not
+    (a ``common`` action's key, rebound for the file list alone, still works in
+    the viewers), or when the two selection gates never hold together
+    (``required`` and ``none``). :func:`apply` lists ``config.py``'s entries
+    first, so in what overlap is left the user's entry is still the one
+    matched."""
+    from xefm.config import KeyBindings
+    parse = KeyBindings({})._parse_key_expression
+    claims = []
+    for action, value in own.items():
+        if not isinstance(action, str):
+            continue
+        keys = {parse(k) for k in _keys_of(value)}
+        if keys:
+            claims.append((keys, _reach(action), _selection_of(value)))
+    if not claims:
+        return
+    for action, value in list(result.items()):
+        if not isinstance(action, str):
+            continue
+        reach = _reach(action)
+        selection = _selection_of(value)
+
+        def claimed(key) -> bool:
+            parsed = parse(key)
+            return any(parsed in keys and reach <= where
+                       and {selection, theirs} != {"required", "none"}
+                       for keys, where, theirs in claims)
+
+        keys = _keys_of(value)
+        kept = [k for k in keys if not claimed(k)]
+        if len(kept) != len(keys):
+            result[action] = dict(value, keys=kept) if isinstance(value, dict) else kept
+
+
 def apply(config, name: Optional[str]) -> None:
     """Make ``config.KEY_BINDINGS`` preset ``name``'s keymap with
     ``config.py``'s entries laid over it, and set ``config._KEY_TYPE_AHEAD``.
     None applies :data:`FALLBACK`."""
     own = overrides(config)
     result = table(name)
-    for action, value in own.items():
+    for action in own:
         # Under an old name, the entry still replaces the action: the preset's
         # entry under the current name would otherwise be matched first.
         current = _current_name(action) if isinstance(action, str) else action
-        if current != action:
-            result.pop(current, None)
-        result[action] = copy.deepcopy(value)
+        result.pop(current, None)
+        result.pop(action, None)
+    _release_claimed_keys(result, own)
+    # config.py's entries first: the context tables try entries in this order,
+    # so where a preset action keeps a key the user also bound, the user's
+    # binding is still the one a press finds.
+    merged = {action: copy.deepcopy(value) for action, value in own.items()}
+    merged.update(result)
     config._KEY_TYPE_AHEAD = get(name).type_ahead
-    config.KEY_BINDINGS = result
+    config.KEY_BINDINGS = merged
 
 
 def type_ahead(config) -> bool:
