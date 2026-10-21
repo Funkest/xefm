@@ -57,7 +57,18 @@ dot-paths. It uses `ast.walk` over each file's syntax tree:
 - **Error:** an `Attribute` whose name starts with `_` but not `__`, unless it
   is on `self` or `cls`. This is the `user_api` firewall.
 - **Error:** an absolute import of an `xefm` module outside `PUBLIC_MODULES`
-  (`xefm.user_api`, `xefm.path_base`).
+  (`xefm.user_api`, `xefm.path_base`). `from xefm import config` counts: each
+  alias of a `from xefm import …` names a module.
+- **Error:** a name taken from a public module that is not in its `__all__`
+  (`public_names()` imports the module and reads it, so the list has one
+  home) — by `from xefm.user_api import run_guarded`, or as an attribute
+  through any name the file bound to the module (`import xefm.user_api as ua`
+  → `ua.hooks`; `from xefm import user_api`; a bare `import xefm.user_api` →
+  `xefm.user_api.Path`). The message lists the public names, so an assistant
+  writing the package can correct itself without a search (#632). Before
+  `__all__`, a public module was public whole, so `load_user_entries`,
+  `run_guarded` or the re-exported `Path` were indistinguishable from
+  `md_code_block` to anyone reading the code — the docs were the only line.
 - **Warning:** a call to `print`.
 - **Warning:** `sys.path`.
 

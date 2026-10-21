@@ -38,6 +38,17 @@ The class to inherit is :class:`xefm.path_base.ReadOnlyPathImpl`, never
 the storage interface later arrives carrying a default, so a config written
 against today's XeFM keeps loading. See ``doc/VIRTUAL_FOLDERS_FEATURE.md``.
 
+The public names
+----------------
+
+**What an extension or a config may use is exactly** ``__all__`` **below** —
+``xefm ext check`` refuses any other name taken from this module, and
+``help(xefm.user_api)`` lists only these. Everything else here (the loader,
+the registries, ``run_guarded``, the names imported from elsewhere such as
+``Path``) is XeFM's own and moves without notice, however public it looks.
+On the objects, the same line runs through the leading underscore:
+``ctx.pane`` is the API, ``ctx._app`` is not.
+
 Preview status
 --------------
 
@@ -104,6 +115,21 @@ class _SeededStat(NamedTuple):
 
 
 logger = getLogger("UserAPI")
+
+#: The public API: the only names an extension or a config may take from this
+#: module (see *The public names* above). ``xefm ext check`` reads this list.
+__all__ = [
+    # versioning
+    "API_VERSION", "PREVIEW",
+    # what the tables accept
+    "EVENTS", "MENUS", "MENU_WHEN",
+    # what an action is handed
+    "ActionContext", "PaneApi", "EntryInfo",
+    # background work
+    "TaskJob", "TaskOutcome",
+    # building Markdown for ctx.show_markdown
+    "md_code_block", "md_escape",
+]
 
 
 #: Bumped only on a breaking change to the façade below or to the ``ACTIONS`` /

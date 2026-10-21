@@ -534,8 +534,51 @@ def check_manifest(manifest: Manifest, *, others: Iterable[Manifest] = (),
 
 #: The XeFM modules an extension may import: the customization API itself and
 #: the published base classes for storage backends. Everything else in the
-#: ``xefm`` package is internal and moves without notice.
+#: ``xefm`` package is internal and moves without notice — and within these
+#: two, only the names in their ``__all__`` (:func:`public_names`).
 PUBLIC_MODULES = ("xefm.user_api", "xefm.path_base")
+
+
+def public_names(module: str) -> tuple[str, ...]:
+    """The names an extension may take from ``module``, one of
+    :data:`PUBLIC_MODULES`: its ``__all__``, read from the module itself so
+    the list has one home."""
+    return tuple(importlib.import_module(module).__all__)
+
+
+def _public_modules_bound(tree: ast.AST) -> dict[str, str]:
+    """Each local name a file binds to a public module — ``ua`` for
+    ``import xefm.user_api as ua``, ``user_api`` for ``from xefm import
+    user_api``, ``xefm.user_api`` itself for a bare ``import xefm.user_api`` —
+    so an attribute read through it can be checked against the module's
+    ``__all__``."""
+    bound = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in PUBLIC_MODULES:
+                    bound[alias.asname or alias.name] = alias.name
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 \
+                and node.module == "xefm":
+            for alias in node.names:
+                if f"xefm.{alias.name}" in PUBLIC_MODULES:
+                    bound[alias.asname or alias.name] = f"xefm.{alias.name}"
+    return bound
+
+
+def _dotted(node: ast.AST) -> Optional[str]:
+    """``a.b.c`` for a chain of names and attributes, else None."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        base = _dotted(node.value)
+        return f"{base}.{node.attr}" if base else None
+    return None
+
+
+def _not_public(module: str, name: str) -> str:
+    return (f"'{name}' is not part of {module}'s public API — use only: "
+            f"{', '.join(public_names(module))}")
 
 
 def lint_code(root: Path) -> list[Problem]:
@@ -559,7 +602,21 @@ def lint_code(root: Path) -> list[Problem]:
         except (SyntaxError, OSError, UnicodeDecodeError):
             continue  # the reference check reports unreadable referenced modules
         where = lambda node: f"{_CODE}{rel.as_posix()}:{node.lineno}"  # noqa: E731
+        bound = _public_modules_bound(tree)
         for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and not node.attr.startswith("_"):
+                module = bound.get(_dotted(node.value) or "")
+                if module and node.attr not in public_names(module):
+                    problems.append(Problem("error", where(node),
+                                            _not_public(module, node.attr)))
+                    continue
+            if isinstance(node, ast.ImportFrom) and node.level == 0 \
+                    and node.module in PUBLIC_MODULES:
+                for alias in node.names:
+                    if alias.name != "*" and alias.name not in public_names(node.module):
+                        problems.append(Problem("error", where(node),
+                                                _not_public(node.module, alias.name)))
+                continue
             if isinstance(node, ast.Attribute) and node.attr.startswith("_") \
                     and not node.attr.startswith("__") \
                     and not (isinstance(node.value, ast.Name)
@@ -569,8 +626,15 @@ def lint_code(root: Path) -> list[Problem]:
                     f"'.{node.attr}' is private — use only the public API "
                     "(ctx.pane, ctx.invoke, ctx.run_program, ctx.message, …)"))
             elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                names = ([a.name for a in node.names] if isinstance(node, ast.Import)
-                         else [node.module or ""] if node.level == 0 else [])
+                if isinstance(node, ast.Import):
+                    names = [a.name for a in node.names]
+                elif node.level:
+                    names = []
+                elif node.module == "xefm":
+                    # ``from xefm import user_api`` names a module per alias.
+                    names = [f"xefm.{a.name}" for a in node.names]
+                else:
+                    names = [node.module or ""]
                 for name in names:
                     if (name == "xefm" or name.startswith("xefm.")) \
                             and not any(name == m or name.startswith(m + ".")

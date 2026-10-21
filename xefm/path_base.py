@@ -85,6 +85,12 @@ from typing import Iterator, List, Optional
 
 from xefm.path import Path, PathImpl
 
+#: The public API of this module: what a ``PATH_SCHEMES`` backend may import
+#: from it. ``xefm ext check`` refuses any other name — ``UriPathImpl`` and
+#: ``UnsupportedPathImpl`` included, which are XeFM's own building blocks
+#: rather than something a backend is promised.
+__all__ = ["ReadOnlyPathImpl", "UriStatResult"]
+
 
 class UriStatResult:
     """An ``os.stat_result`` stand-in built from the three facts a listing

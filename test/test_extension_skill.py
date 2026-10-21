@@ -126,6 +126,45 @@ class CodeLint(_Tmp):
         self.assertEqual([p.severity for p in problems], ["error", "error"])
         self.assertIn("'xefm.app' is internal", problems[0].message)
 
+    def test_only_the_public_names_of_a_public_module(self):
+        problems = self.lint('''
+            from xefm.user_api import md_code_block, run_guarded
+            from xefm.path_base import ReadOnlyPathImpl, UriPathImpl
+            from xefm.user_api import *
+        ''')
+        self.assertEqual([p.severity for p in problems], ["error", "error"])
+        self.assertIn("'run_guarded' is not part of xefm.user_api's public API",
+                      problems[0].message)
+        # The message lists what is allowed, so the fix needs no search.
+        self.assertIn("md_code_block", problems[0].message)
+        self.assertIn("'UriPathImpl' is not part of xefm.path_base", problems[1].message)
+
+    def test_names_read_through_the_module_are_checked_too(self):
+        problems = self.lint('''
+            import xefm.user_api
+            import xefm.user_api as ua
+            from xefm import user_api
+            from xefm import path_base as pb
+
+            ok = (xefm.user_api.API_VERSION, ua.md_escape, user_api.TaskOutcome,
+                  pb.ReadOnlyPathImpl, user_api.__doc__)
+            bad = (xefm.user_api.load_user_entries, ua.hooks, user_api.Path,
+                   pb.UnsupportedPathImpl)
+        ''')
+        self.assertEqual(len(problems), 4, problems)
+        self.assertTrue(all(p.severity == "error" for p in problems))
+        self.assertEqual(sorted(p.message.split("'")[1] for p in problems),
+                         ["Path", "UnsupportedPathImpl", "hooks", "load_user_entries"])
+
+    def test_from_xefm_import_an_internal_module_is_an_error(self):
+        (problem,) = self.lint("from xefm import user_api, config\n")
+        self.assertIn("'xefm.config' is internal", problem.message)
+
+    def test_every_public_name_exists(self):
+        for module in ext.PUBLIC_MODULES:
+            for name in ext.public_names(module):
+                self.assertTrue(hasattr(sys.modules[module], name), f"{module}.{name}")
+
     def test_print_and_sys_path_are_warnings(self):
         problems = self.lint('''
             import sys
@@ -187,6 +226,30 @@ class SkillMatchesTheChecker(_Tmp):
         section = _section("## 3. The code")
         for module in ext.PUBLIC_MODULES:
             self.assertIn(f"`{module}`", section)
+
+    def test_every_import_the_docs_show_is_public(self):
+        """What the skill and the user docs tell an author to import must pass
+        the check that author's package will face. (``references/config.md``
+        is about ``config.py`` itself, which the template already has importing
+        helpers such as ``xefm_tool``; the check is for extension code.)"""
+        texts = [SKILL]
+        for doc in ("CUSTOMIZATION_FEATURE.md", "EXTENSIONS_FEATURE.md",
+                    "VIRTUAL_FOLDERS_FEATURE.md"):
+            texts.append((Path(xefm.__file__).parent.parent / "doc" / doc)
+                         .read_text(encoding="utf-8"))
+        seen = 0
+        for text in texts:
+            for module, names in re.findall(r"from (xefm\.\w+) import ([\w, ]+)", text):
+                self.assertIn(module, ext.PUBLIC_MODULES)
+                for name in (n.strip() for n in names.split(",")):
+                    self.assertIn(name, ext.public_names(module), f"{module}.{name}")
+                    seen += 1
+        self.assertGreater(seen, 0)
+
+    def test_the_skill_names_the_public_lists(self):
+        section = _section("## 3. The code")
+        for module in ext.PUBLIC_MODULES:
+            self.assertIn(f"`{module}.__all__`", section)
 
     def test_every_ctx_name_the_skill_cites_exists(self):
         # Lower-case names only: the skill also quotes ``ctx._app`` — as the

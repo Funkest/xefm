@@ -146,12 +146,31 @@ An action is `def name(ctx): ...`; a hook is `def name(ctx, *event_args)`.
 The function's docstring is its help text (first line = one-line summary).
 
 `ctx` is an `xefm.user_api.ActionContext`. Use **only** the names below.
-`xefm ext check` enforces this on your code:
+
+**What is public is declared, not guessed.** From XeFM you may import two
+modules, and from each only the names in its `__all__`:
+
+- `xefm.user_api.__all__` — `API_VERSION`, `PREVIEW`, `EVENTS`, `MENUS`,
+  `MENU_WHEN`, `ActionContext`, `PaneApi`, `EntryInfo`, `TaskJob`,
+  `TaskOutcome`, `md_code_block`, `md_escape`
+- `xefm.path_base.__all__` — `ReadOnlyPathImpl`, `UriStatResult`
+
+Anything else those modules happen to contain (`run_guarded`,
+`load_user_entries`, `hooks`, `Path`, `UriPathImpl`, …) is XeFM's own, however
+public its name looks. On the objects you are handed, the line is the leading
+underscore: `ctx.pane` is the API, `ctx._app` is not. To see the lists in the
+installed XeFM: `python -c "import xefm.user_api as u, xefm.path_base as p;
+print(u.__all__, p.__all__)"`.
+
+`xefm ext check` enforces this on your code, and each error names what to use
+instead:
 
 - **error** — any `._name` attribute on something other than `self`/`cls`
   (`ctx._app`, `pane._pane`): private, changes without notice.
 - **error** — importing any `xefm` module except `xefm.user_api` and
   `xefm.path_base` (the base classes for a `path_schemes` backend).
+- **error** — taking a name from those two that is not in their `__all__`,
+  by `from … import` or as an attribute (`user_api.run_guarded`).
 - **warning** — `print()`: it never reaches the user.
 - **warning** — touching `sys.path` (see *Dependencies*).
 

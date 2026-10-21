@@ -237,8 +237,10 @@ them:
 
 - **Error:** using a private name such as `ctx._app` (anything starting with
   `_` on an object other than `self`), or importing an XeFM module other than
-  `xefm.user_api` and `xefm.path_base`. Such code works today and breaks on
-  any release.
+  `xefm.user_api` and `xefm.path_base`. From those two, only the names in
+  their `__all__` are public; anything else they contain is XeFM's own, and
+  using it is an error too — the message lists the names you may use. Such
+  code works today and breaks on any release.
 - **Warning:** `print()`, which never reaches you (use `ctx.message`), and
   changing `sys.path`.
 
