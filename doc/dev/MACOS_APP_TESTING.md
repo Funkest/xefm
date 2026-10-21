@@ -300,6 +300,14 @@ findings:
   macOS 12 Mac can tell those apart. Until one does, it stays an open risk
   for macOS 12 users of those three themes, not a confirmed bug.
 
+**2026-10-21, XeFM 1.8.0 release DMG, macOS 27.0 (26A428) in a Tart VM**
+(`ghcr.io/cirruslabs/macos-golden-gate-vanilla:27.0`), the newest end of the
+range. Gatekeeper accepts it as Notarized Developer ID, and it launches and
+draws its panes. The image comes up with Gatekeeper allowing the App Store
+only, so restore "App Store & Known Developers" in System Settings before
+reading a Gatekeeper result, and turn off automatic macOS update downloads,
+which fill its 44 GB disk within minutes.
+
 ---
 
 ## Troubleshooting
