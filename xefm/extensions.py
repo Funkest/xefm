@@ -113,10 +113,11 @@ CONTRIBUTION_TABLES = {
     "path_schemes": "PATH_SCHEMES",
     "lexers": "LEXERS",
     "themes": "THEMES",
+    "menus": "MENU_ITEMS",
 }
 #: Kinds whose entries may be plain data rather than a code reference — the
 #: tier that runs no code at all.
-_DATA_KINDS = {"themes", "filters", "lexers"}
+_DATA_KINDS = {"themes", "filters", "lexers", "menus"}
 
 _KNOWN_SECTIONS = {"extension", "contributes", "requires", "settings"}
 _KNOWN_EXTENSION_KEYS = {"id", "version", "api_version", "min_xefm", "name",
@@ -618,6 +619,8 @@ def _check_contribution(kind: str, key: str, value, action_names: set) -> Option
                 return f"unknown keys {', '.join(sorted(extra))} — known: description, entry"
             return None
         return "must be 'module:function' or { entry = ..., description = ... }"
+    if kind == "menus":
+        return _check_menu(key, value, action_names)
     if kind == "event_hooks":
         from xefm.user_api import EVENTS
         if key not in EVENTS:
@@ -639,6 +642,32 @@ def _check_contribution(kind: str, key: str, value, action_names: set) -> Option
             return "must be a table (or 'module:name')"
         return None
     return "must be 'module:name'"
+
+
+def _check_menu(key: str, value, action_names: set) -> Optional[str]:
+    """One ``[contributes.menus]`` entry: keyed by one of this package's own
+    actions, a table of ``menus``, ``label`` and an optional ``when`` — the
+    shape ``MENU_ITEMS`` takes in config.py."""
+    from xefm.user_api import MENU_WHEN, MENUS
+    if key not in action_names:
+        return (f"puts '{key}' in a menu, but this extension does not "
+                "contribute it in [contributes.actions]")
+    if not isinstance(value, dict):
+        return ('must be a table, e.g. { menus = ["file", "context"], '
+                'label = "Compute Hash…" }')
+    unknown = sorted(set(value) - {"menus", "label", "when"})
+    if unknown:
+        return f"unknown keys {', '.join(unknown)} — known: label, menus, when"
+    menus = value.get("menus")
+    if not isinstance(menus, list) or not menus or not all(m in MENUS for m in menus):
+        return f"needs menus = a list of {', '.join(MENUS)}"
+    label = value.get("label")
+    if not isinstance(label, str) or not label.strip():
+        return "needs label = the text the menu shows"
+    when = value.get("when", "always")
+    if when not in MENU_WHEN:
+        return f"when must be one of {', '.join(MENU_WHEN)}"
+    return None
 
 
 #: The keys ``[requires]`` understands.

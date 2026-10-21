@@ -2,7 +2,7 @@
 
 > **Preview.** Everything on this page is subject to change. The objects your
 > functions receive and the shape of the `ACTIONS`, `EVENT_HOOKS`, `SORT_KEYS`,
-> `FILTERS`, `IMAGE_DECODERS`, `PATH_SCHEMES` and `LEXERS` variables may change in any release until `xefm.user_api.API_VERSION` reaches `1` (it is
+> `FILTERS`, `IMAGE_DECODERS`, `PATH_SCHEMES`, `LEXERS` and `MENU_ITEMS` variables may change in any release until `xefm.user_api.API_VERSION` reaches `1` (it is
 > `0` today). XeFM writes one line to the log pane saying so whenever a config
 > uses them. Nothing else in `config.py` is affected.
 
@@ -257,6 +257,9 @@ summary with no further page.
 | `ctx.left`, `ctx.right` | the panes by position |
 | `ctx.invoke(name)` | run another action — built-in or your own |
 | `ctx.message(text)` | write one line to the log pane |
+| `ctx.show_markdown(title, source)` | show Markdown in a scrollable dialog, with a Copy button on each code block — see below |
+| `ctx.copy_text(text)` | put text on the clipboard |
+| `ctx.run_task(title, work, on_done=fn)` | run slow work in the background, with a progress dialog — see below |
 | `ctx.input(prompt, default, on_accept=fn)` | ask for a line of text |
 | `ctx.choose(title, items, on_result=fn)` | pick from a list (index, or `None`); `type='filter'` for a searchable one |
 | `ctx.confirm(prompt, on_result=fn)` | yes / no |
@@ -289,6 +292,105 @@ works wherever the pane does.
 `.size` and `.mtime` read from disk the first time you ask; the rest are free.
 A predicate that only looks at names therefore costs no filesystem access at
 all, which matters in a large directory.
+
+### Showing a result
+
+`ctx.show_markdown` opens the dialog Help and File Details use, with your
+Markdown in it. Every fenced code block gets a **Copy** button — reach it with
+Tab and press Enter, or click it — and any of the text can be selected with the
+mouse and copied. Put whatever the user will want to paste elsewhere in a code
+block:
+
+```python
+from xefm.user_api import md_code_block, md_escape
+
+def show_names(ctx):
+    entries = ctx.pane.selected() or [ctx.pane.focused]
+    names = "\n".join(e.name for e in entries if e is not None)
+    ctx.show_markdown("Names",
+                      f"From **{md_escape(ctx.pane.path.name)}**:\n\n"
+                      + md_code_block(names))
+```
+
+`md_code_block(text, lang='')` fences `text` so that nothing in it — a name
+with backticks, text that is itself Markdown — can end the block early.
+`md_escape(text)` makes a file name read literally in a sentence: `a_b*.txt`
+stays `a_b*.txt` rather than turning half of it italic.
+
+To copy without showing anything, `ctx.copy_text(text)`.
+
+### Slow work: `ctx.run_task`
+
+Your action runs on the UI thread, and the window waits for it. Work that takes
+a while — reading whole files, a remote folder — goes to `ctx.run_task`, which
+runs a function on a worker thread behind the same progress dialog a copy uses,
+with **Cancel** and **Run in background**:
+
+```python
+import hashlib
+from xefm.user_api import md_code_block
+
+def sha256_selection(ctx):
+    paths = [e.path for e in (ctx.pane.selected() or [ctx.pane.focused])
+             if e is not None and not e.is_dir]
+
+    def work(job):                       # on the worker thread
+        lines = []
+        for i, path in enumerate(paths):
+            job.checkpoint()             # stops here if the user cancelled
+            job.progress(i, len(paths), detail=path.name)
+            digest = hashlib.sha256()
+            with path.open('rb') as f:
+                for block in iter(lambda: f.read(1 << 20), b''):
+                    digest.update(block)
+            lines.append(f"{digest.hexdigest()}  {path.name}")
+        return lines
+
+    def done(ctx, outcome):              # back on the UI thread
+        if outcome.ok:
+            ctx.show_markdown("SHA-256", md_code_block("\n".join(outcome.value)))
+        elif outcome.status == "cancelled":
+            ctx.message("SHA-256: cancelled")
+
+    ctx.run_task("SHA-256", work, on_done=done, read_only=True)
+```
+
+- **The worker touches only `job`.** Not `ctx`, not a pane: take what it needs
+  — paths, settings — before the task starts. `entry.path` works on any
+  thread, and `path.open('rb')` reads a file on disk, inside an archive or on
+  SSH / S3 alike.
+- `job.progress(done, total, detail='')` moves the bar and shows `detail` under
+  the title; before the first call the dialog shows a spinner.
+  `job.checkpoint()` stops the work when the user cancels — let it pass through
+  rather than catching it in an `except Exception`. `job.cancelled()` asks
+  without stopping.
+- `on_done(ctx, outcome)` runs once, however the work ended, with a new `ctx`.
+  `outcome.status` is `'done'` (with `outcome.value`, what `work` returned),
+  `'cancelled'`, or `'failed'` (with `outcome.error`; the traceback is already
+  in the log). `outcome.ok` is true for `'done'`.
+- `read_only=True` says the work changes nothing. Background jobs otherwise run
+  one at a time, so a task started during a long background copy would wait for
+  it; a read-only one runs beside it instead.
+
+### Putting an action in a menu: `MENU_ITEMS`
+
+An action can sit in the **File** menu, in the **context menu** a row opens
+(right-click, or the Menu key), or both:
+
+```python
+class Config:
+    ACTIONS = {'sha256': sha256_selection}
+    MENU_ITEMS = {
+        'sha256': {'menus': ['file', 'context'], 'label': 'SHA-256…',
+                   'when': 'entry'},
+    }
+```
+
+`when` greys the item out unless it applies: `'entry'` needs an entry under the
+cursor, `'selection'` at least one selected entry; the default is `'always'`.
+Your items gather in a group of their own near the foot of each menu, in the
+order written, and show the action's key when it has one. A built-in action can
+be named too. An entry with a mistake is skipped with a line in the log pane.
 
 ### Running an external program from a key
 
@@ -794,8 +896,8 @@ sys.path.append('/Users/me/src/xefm-extensions')
 ## Things to know
 
 **Your code runs on the UI thread, and XeFM waits for it.** A slow action
-freezes the window until it returns. There is no background-work helper in this
-version; keep actions quick, and launch anything long with `ctx.run_program()`.
+freezes the window until it returns. Keep actions quick: put slow work in
+`ctx.run_task()`, and launch external programs with `ctx.run_program()`.
 
 **Prompts do not block.** XeFM never stops for a dialog, so `ctx.input`,
 `ctx.choose` and `ctx.confirm` return immediately and deliver their answer to a

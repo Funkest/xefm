@@ -198,10 +198,11 @@ Each `[contributes.<kind>]` table feeds the `config.py` table of the same name
 | `path_schemes` | `PATH_SCHEMES` | `"mod:Class"` |
 | `lexers` | `LEXERS` | a Pygments alias, or `{ entry = "mod:LexerClass" }` |
 | `themes` | `THEMES` | a table of colors, as in `config.py` |
+| `menus` | `MENU_ITEMS` | `{ menus = ["file", "context"], label = "...", when = "entry" }`, for the package's own actions |
 | `key_suggestions` | `KEY_BINDINGS` | a list of keys, for the package's own actions |
 
-A package with only themes, glob filters, lexer aliases and key suggestions
-runs no code at all.
+A package with only themes, glob filters, lexer aliases, menus and key
+suggestions runs no code at all.
 
 Name actions `<something>.<name>`, such as `hello.greet`. A name without a dot
 gets a warning, and a built-in action's name is refused.

@@ -81,6 +81,9 @@ homepage = "https://github.com/me/hello-xefm"   # optional
 [contributes.key_suggestions]
 "hello.greet" = ["Ctrl-Shift-G"]    # only for this package's own actions
 
+[contributes.menus]                 # only for this package's own actions
+"hello.greet" = { menus = ["file", "context"], label = "Say Hello", when = "entry" }
+
 [contributes.event_hooks]
 directory_changed = "hello_xefm.hooks:on_cd"   # or a list of references
 
@@ -110,7 +113,14 @@ Rules the check enforces — each violation is an `error:` naming the field:
   level of that module's file inside the package (a `def`, `class`,
   assignment or import). The check reads the file; it does not import it.
 - Contribution kinds: `actions`, `event_hooks`, `sort_keys`, `filters`,
-  `image_decoders`, `path_schemes`, `lexers`, `themes`, `key_suggestions`.
+  `image_decoders`, `path_schemes`, `lexers`, `themes`, `menus`,
+  `key_suggestions`.
+- A `menus` entry is keyed by one of the package's own actions: `menus` is a
+  list of `"file"` (the File menu) and `"context"` (a row's context menu),
+  `label` the text shown, and the optional `when` greys it out unless it
+  applies — `"entry"` (an entry under the cursor), `"selection"` (something
+  selected) or `"always"` (the default). XeFM places the item, in a group of
+  extension items near the foot of the menu; there is no position to give.
 - Action names must not be a built-in action's name. Prefix them with a
   short name for your extension — any lowercase word, usually the id or its
   first part (`hello.greet` for `hello-xefm`); an unprefixed name is a
@@ -125,7 +135,7 @@ Rules the check enforces — each violation is an `error:` naming the field:
 
 What each table entry *does* is the same as the `config.py` table it feeds —
 `ACTIONS`, `EVENT_HOOKS`, `SORT_KEYS`, `FILTERS`, `IMAGE_DECODERS`,
-`PATH_SCHEMES`, `LEXERS`, `THEMES`. Each is documented, with the shape of
+`PATH_SCHEMES`, `LEXERS`, `THEMES`, `MENU_ITEMS`. Each is documented, with the shape of
 its values, in the comment above it in `references/config-template.md`; for a
 `sort_keys`, `filters`, `image_decoders` or `path_schemes` entry the
 referenced object is exactly the value that table would hold.
@@ -154,8 +164,18 @@ The public names:
 - `ctx.run_program(command, *, terminal=False, cwd=None, env=None)` — run an
   external program; `terminal=True` hands it the terminal (TUI) or opens a
   terminal window (desktop)
+- `ctx.run_task(title, work, *, on_done=None, read_only=False)` — run
+  `work(job)` on a worker thread behind XeFM's progress dialog (Cancel, Run in
+  background); see *Long work* below
 - `ctx.message(text)` — one line in the log pane (XeFM's "log"); call it
   once per line rather than passing a string with newlines
+- `ctx.show_markdown(title, source)` — a scrollable dialog showing Markdown;
+  each fenced code block gets a Copy button, and the text is selectable. The
+  way to show a result
+- `ctx.copy_text(text)` — put text on the clipboard without showing anything
+- `md_code_block(text, lang="")` and `md_escape(text)` (import them from
+  `xefm.user_api`) — build that Markdown safely: a code block whose fence no
+  line of `text` can close, and a file name escaped for prose
 - `ctx.input(prompt, default="", *, title="", on_accept=None, on_cancel=None)`
 - `ctx.choose(title, items, *, type="choice", on_result=None)` — `type` is
   `"choice"` or `"filter"`; `on_result` gets the index or `None`
@@ -195,12 +215,50 @@ access; a predicate that only reads names stays fast.
   `keys()`; JSON-serialisable values, kept across restarts
 - `data_dir` — a `pathlib.Path` for your own files, created on first use
 
+### Long work: `ctx.run_task`
+
+```python
+from xefm.user_api import md_code_block
+
+def compute(ctx):
+    paths = [e.path for e in (ctx.pane.selected() or [ctx.pane.focused])
+             if e is not None and not e.is_dir]   # read ctx here, not in work
+
+    def work(job):                     # worker thread: touch only `job`
+        lines = []
+        for i, path in enumerate(paths):
+            job.checkpoint()           # unwinds if the user cancelled
+            job.progress(i, len(paths), detail=path.name)
+            lines.append(f"{digest(path)}  {path.name}")
+        return lines
+
+    def done(ctx, outcome):            # UI thread, with a fresh ctx
+        if outcome.ok:
+            ctx.show_markdown("Digests", md_code_block("\n".join(outcome.value)))
+        elif outcome.status == "cancelled":
+            ctx.message("Cancelled")
+
+    ctx.run_task("Compute Digests", work, on_done=done, read_only=True)
+```
+
+- `work` may touch only `job` — never `ctx`, a pane, or an `EntryInfo`'s
+  pane-backed fields. Take what it needs from `ctx` before starting it;
+  `entry.path` and its `open('rb')` are fine on the worker.
+- `job.progress(done, total, *, detail="")` moves the bar; `job.checkpoint()`
+  raises when cancelled (let it propagate — do not catch it in a broad
+  `except Exception`); `job.cancelled()` asks without raising.
+- `on_done(ctx, outcome)` always runs once: `outcome.status` is `"done"`
+  (`outcome.value` is what `work` returned), `"cancelled"` or `"failed"`
+  (`outcome.error`; XeFM has already logged the traceback). `outcome.ok` is
+  `status == "done"`.
+- `read_only=True` says the work changes nothing on disk; XeFM may then run it
+  beside a background copy instead of queuing it behind one.
+
 ### Things that are true of every action
 
 - **It runs on the UI thread and XeFM waits.** Keep it short. Anything slow
-  (a big walk, a network call, an external tool) belongs in
-  `ctx.run_program(...)` or must be avoided — there is no background-work
-  helper in API version 0.
+  (reading whole files, a big walk, a network call) belongs in
+  `ctx.run_task(...)`; an external tool in `ctx.run_program(...)`.
 - **Prompts do not block.** `ctx.input`, `ctx.choose`, `ctx.confirm` return
   at once; put the rest of the action in the callback.
 - **Exceptions are caught at the boundary** and logged with a traceback; the

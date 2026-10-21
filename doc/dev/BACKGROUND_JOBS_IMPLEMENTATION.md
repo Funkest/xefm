@@ -40,6 +40,13 @@ and every enqueue. The slot's job keeps the slot while it is brought forward,
 so answering its prompt does not let the next one start. A foreground
 `submit` never waits, because the user chose to watch it.
 
+**Non-exclusive tasks** (#632). A task whose `exclusive` is False — one an
+extension started with `ctx.run_task(..., read_only=True)` — is outside the
+queue altogether: detached, it starts at once; sent back, it keeps running.
+It holds up no writer, so there is nothing to serialize it against.
+`background_tasks()` lists these after the slot's job (`_beside()`), and
+`running_task()` names one when the slot is free.
+
 **Suspension.** `Task.suspend()` clears `_running`, and the worker waits at
 its next **pausable** `checkpoint()`, setting `task.paused` while it does.
 `resume()` and `request_cancel()` both release it; cancel unwinds as usual.

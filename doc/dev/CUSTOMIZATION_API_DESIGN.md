@@ -368,7 +368,9 @@ a glob is refused at load. See
   crashes the file manager on keypress would poison trust in the mechanism.
 - **Threading.** Actions and hooks run on the UI thread; the API docs state
   this from day one. Long work belongs in the existing task framework — v1
-  documents the restriction rather than exposing a background-work helper.
+  documented the restriction rather than exposing a background-work helper;
+  `ctx.run_task` (#632) now exposes it as a function plus a small worker-side
+  handle (see the implementation doc).
 - **Dual backend.** Every façade signature is expressed at the pane-model
   level, so TUI/desktop parity holds by construction (§5's renderer builder
   being the sole, deliberate exception).

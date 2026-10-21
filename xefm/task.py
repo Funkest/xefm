@@ -130,6 +130,12 @@ class Task:
         #: True while the worker is actually waiting there, as against asked
         #: to and still finishing the files it had in flight.
         self.paused = False
+        #: Whether the task takes the background queue's slot. A task that
+        #: only reads (#632) says so by clearing this, and then runs in the
+        #: background beside the slot's job instead of waiting behind it: it
+        #: holds up no writer, and a writer it ran beside holds it up only as
+        #: much as sharing a disk does.
+        self.exclusive = True
 
     # --- worker-side API (called on the worker thread) -----------------------
 
@@ -282,13 +288,24 @@ class TaskManager:
                    for t in self.tasks)
 
     def background_tasks(self) -> list[Task]:
-        """The slot's job first (in front or not), then the queue in order."""
+        """The slot's job first (in front or not), then the non-exclusive jobs
+        running beside it, then the queue in order."""
         running = [self._slot.task] if self._slot is not None else []
-        return running + [entry.task for entry in self._queue]
+        return running + self._beside() + [entry.task for entry in self._queue]
 
     def running_task(self) -> Optional[Task]:
-        """The background job holding the slot, or None."""
-        return self._slot.task if self._slot is not None else None
+        """The background job holding the slot — or, with the slot free, the
+        first non-exclusive one running beside it — or None."""
+        if self._slot is not None:
+            return self._slot.task
+        beside = self._beside()
+        return beside[0] if beside else None
+
+    def _beside(self) -> list[Task]:
+        """Non-exclusive background jobs, running outside the slot."""
+        return [job.task for job in self._jobs.values()
+                if job.task.background and not job.task.exclusive
+                and job is not self._slot]
 
     def queued_count(self) -> int:
         return len(self._queue)
@@ -311,7 +328,8 @@ class TaskManager:
 
         ``detached`` starts the task in the background instead, with no dialog,
         through the serial queue: it waits while another background job holds
-        the slot."""
+        the slot. A task that is not :attr:`Task.exclusive` never waits: it
+        starts at once, beside whatever holds the slot."""
         self.tasks.append(task)
 
         if not background:
@@ -323,6 +341,11 @@ class TaskManager:
                 on_done(result)
             return task
 
+        if detached and not task.exclusive:
+            task.background = True
+            self._start(task, panel, run, on_done, z)
+            panel.render()
+            return task
         if detached:
             task.background = True
             self._queue.append(_Waiting(task, panel, run=run, on_done=on_done, z=z))
@@ -451,13 +474,13 @@ class TaskManager:
         """Send a running foreground task to the background: its dialog leaves
         the screen, and unless it already holds the slot it is suspended and
         queued — it runs again when its turn comes, which is at once when the
-        slot is free."""
+        slot is free. A non-exclusive task is neither: it goes on running."""
         job = self._jobs.get(task.id)
         if job is None or task.background:
             return
         job.dialog.close()
         task.background = True
-        if self._slot is not job:
+        if self._slot is not job and task.exclusive:
             task.suspend()
             self._queue.append(_Waiting(task, job.panel, job=job))
             self._start_next()

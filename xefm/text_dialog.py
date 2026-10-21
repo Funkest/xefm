@@ -12,7 +12,8 @@ Enter/Esc/outside-click to dismiss), differing only in the body widget:
 - :func:`show_markdown` hosts a ``MarkdownView`` — CommonMark-ish rich text with
   headings, bold/italic, tables, ``code`` and links — so information that reads
   better as *structured* prose (help, file details) lays itself out instead of
-  being hand-aligned into columns.
+  being hand-aligned into columns. Its text can be selected and copied, and each
+  fenced code block carries a Copy button (#632).
 
 Both reuse the body widget's own virtualized draw, smooth scroll, scrollbar, and
 ↑/↓/PageUp/PageDown navigation; the modal simply forwards those keys and closes
@@ -132,7 +133,9 @@ class _ScrollModal(FocusContainer, Widget):
     def handle_event(self, event: Event) -> bool:
         if event.type is EventType.KEY:
             key = event.key
-            if key == "tab":
+            if key in ("a", "c") and event.modifiers & {"ctrl", "cmd"}:
+                self.body.handle_event(event)  # select all / copy, where selectable
+            elif key == "tab":
                 self._step_link(-1 if "shift" in event.modifiers else 1)
             elif key == "enter" and self._follow_link():
                 pass  # a keyboard-focused link was followed; the dialog stays
@@ -204,8 +207,12 @@ class MarkdownDialog(_ScrollModal):
         hint: str | None = None,
     ):
         kw = {} if hint is None else {"hint": hint}
-        super().__init__(MarkdownView(source, on_link=on_link), title=title,
-                         on_close=on_close, **kw)
+        # Selectable, and a Copy button on each code block: a dialog is where
+        # XeFM shows a result (an extension's, #632) as well as help, and what
+        # is shown there is often wanted elsewhere — a digest, a path.
+        super().__init__(MarkdownView(source, on_link=on_link, selectable=True,
+                                      code_copy=True),
+                         title=title, on_close=on_close, **kw)
         self.md = self.body
 
     def _style_body(self, theme, surface_bg) -> None:
