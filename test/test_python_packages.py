@@ -214,6 +214,7 @@ class _FakePip:
 
     def __call__(self, argv, **kwargs):
         self.argv, self.kwargs = argv, kwargs
+        self.requirements = Path(argv[argv.index("-r") + 1]).read_text(encoding="utf-8")
         target = Path(argv[argv.index("--target") + 1])
         if self.code == 0:
             for name, version, files in self.dists:
@@ -253,7 +254,7 @@ class SyncTest(_Fixture):
         # pip ran with the host packages as constraints, from ~/.xefm.
         argv = fake.argv
         self.assertEqual(argv[:4], ["py", "-m", "pip", "install"])
-        self.assertEqual(argv[argv.index("-r") + 1], str(self.layout.requirements))
+        self.assertEqual(fake.requirements, f"-r {self.layout.requirements}\n")
         self.assertEqual(fake.kwargs["cwd"], str(self.home))
 
     def test_constraints_pin_the_host_versions(self):

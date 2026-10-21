@@ -99,6 +99,7 @@ defaults = "hello_xefm.settings:Settings"
 [requires]
 programs = ["ffmpeg"]               # external programs; missing → action says so
 host_packages = ["PIL"]             # importable packages XeFM itself ships
+python_packages = ["PyYAML>=6"]     # PyPI requirements, installed by the sync
 ```
 
 Rules the check enforces — each violation is an `error:` naming the field:
@@ -239,17 +240,25 @@ make them guess it.
 
 ## 5. Dependencies
 
-- Pure-Python libraries: vendor them inside your package
-  (`hello_xefm/_vendor/foo/`) and import them as `hello_xefm._vendor.foo`,
-  rewriting the library's own absolute imports if it has any. Never add
-  `_vendor` to `sys.path`: every extension shares one process, and two
-  extensions vendoring different versions would collide.
+- Libraries from PyPI, compiled or not (PyYAML, numpy, rawpy): list them in
+  `requires.python_packages` and import them normally. Each entry is a plain
+  requirement — name, optional `[extras]`, specifiers, `; marker`. Pip
+  options, URLs and paths are errors. Keep specifiers loose (`>=`, not `==`):
+  every extension and the user's `~/.xefm/requirements.txt` share one
+  resolution, and a pin is what makes two of them clash. Do not list what
+  XeFM already ships; that goes in `host_packages`.
+- The package is not loaded until the user has synced (`xefm deps sync`, or
+  Tools > Sync Python Packages). `xefm ext install` offers it; tell the user
+  to accept, or to run it afterwards.
 - Libraries XeFM itself ships (Pillow, Pygments): list them in
   `requires.host_packages` and import them normally.
+- A small pure-Python helper may instead be vendored inside your package
+  (`hello_xefm/_vendor/foo/`) and imported as `hello_xefm._vendor.foo`,
+  rewriting the library's own absolute imports if it has any. That needs no
+  network. Never add `_vendor` to `sys.path`: every extension shares one
+  process, and two extensions vendoring different versions would collide.
 - External programs: list them in `requires.programs`; the action is refused,
   with a message naming the program, until it is on PATH.
-- Compiled libraries XeFM does not ship (numpy, scipy…): not supported. Say so
-  rather than working around it.
 
 ### After installing: how the user runs it
 
