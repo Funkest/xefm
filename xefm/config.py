@@ -625,6 +625,7 @@ class ConfigManager:
         self.logger = getLogger("Config")
         self.config_dir = Path.home() / '.xefm'
         self.extension_report = None
+        self.python_packages_status = None
         self.config_file = self.config_dir / 'config.py'
         self.user_tools_dir = self.config_dir / 'tools'
         self.user_extensions_dir = self.config_dir / 'extensions'
@@ -703,6 +704,14 @@ class ConfigManager:
                 pass
         importlib.invalidate_caches()
 
+    def prepare_python_packages(self):
+        """Put ~/.xefm/site-packages/X.Y on sys.path and check it against
+        requirements.txt (#664). Unlike the extensions directory it is never
+        purged on reload: numpy and C extensions do not re-import."""
+        from xefm import python_packages
+        self.python_packages_status = python_packages.activate(
+            python_packages.Layout(self.config_dir))
+
     def create_default_config(self):
         """Create a default configuration file by copying from template"""
         if not self.ensure_config_dir():
@@ -739,6 +748,8 @@ class ConfigManager:
         # so xefm_tool('example_tool.py') in a config resolves to the user copy.
         self.ensure_user_tools_dir()
         self.prepare_user_extensions()
+        # Before config.py runs, which may import what requirements.txt brought.
+        self.prepare_python_packages()
         self._config_namespace = {}
 
         # Load template config class for filling in missing fields

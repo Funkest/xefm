@@ -2087,6 +2087,7 @@ class XeFMApp:
         at all gets the one-line preview notice: this is not a stable surface
         yet, and the log pane is where a user finds that out."""
         self._report_extensions()
+        self._report_python_packages()
         (warnings, action_count, hook_count, sort_count,
          filter_count, decoder_count, scheme_count,
          lexer_count) = load_user_entries(config)
@@ -2204,6 +2205,73 @@ class XeFMApp:
                 self.log_info(f"Extension {label} not loaded: {reason}")
         for warning in report.warnings:
             self.log_info(f"Extension warning: {warning}")
+
+    #: Set while a Sync Python Packages runs; the worker leaves its outcome
+    #: (a SyncResult or the exception) in ``_python_packages_done`` for the pump.
+    _python_packages_syncing = False
+    _python_packages_done = None
+
+    def _report_python_packages(self) -> None:
+        """One log line when ~/.xefm/requirements.txt and the directory synced
+        from it disagree (#664). The check is offline and never syncs: a sync
+        reaches the network, so it waits to be asked for."""
+        status = getattr(config_manager, "python_packages_status", None)
+        if status is not None and status.message:
+            self.log_info(status.message)
+
+    def sync_python_packages(self) -> None:
+        """Install what ~/.xefm/requirements.txt lists into
+        ~/.xefm/site-packages, on a worker thread: pip reaches the network and
+        can take minutes. Its output streams into the log as it comes; the
+        outcome is reported, and the config reloaded, by the pump."""
+        from xefm import python_packages
+        if self._python_packages_syncing:
+            self.log_info("Sync Python Packages is already running")
+            return
+        layout = python_packages.Layout(config_manager.config_dir)
+        self._python_packages_syncing = True
+        self.log_info(f"Syncing Python packages from {layout.requirements}…")
+
+        def pip_line(line: str) -> None:
+            self._log_queue.put(("STDOUT", line))
+            self._wake_pump()
+
+        def worker() -> None:
+            try:
+                outcome = python_packages.sync(layout, log=pip_line)
+            except Exception as e:
+                outcome = e
+            self._python_packages_done = outcome
+            self._wake_pump()
+
+        threading.Thread(target=worker, name="xefm-deps-sync", daemon=True).start()
+        self.panel.render()
+
+    def _pump_python_packages(self) -> bool:
+        """On the UI thread: report a finished sync and reload the config, so a
+        config.py import that failed for want of a package gets another try."""
+        from xefm import python_packages
+        outcome, self._python_packages_done = self._python_packages_done, None
+        if outcome is None:
+            return False
+        self._python_packages_syncing = False
+        if isinstance(outcome, python_packages.SyncError):
+            self.log_info(f"Sync Python Packages failed: {outcome}")
+            return True
+        if isinstance(outcome, Exception):
+            getLogger("Main").error(f"Sync Python Packages failed: {outcome}")
+            return True
+        names = ", ".join(outcome.installed) or "nothing"
+        self.log_info(f"Python packages synced: {names}")
+        if outcome.pruned:
+            self.log_info(f"Already provided by XeFM, left out: {', '.join(outcome.pruned)}")
+        if outcome.pending_restart:
+            self.log_info("The packages in use are replaced when XeFM next starts.")
+            return True
+        self.log_info("Packages already imported keep their old version until "
+                      "XeFM restarts.")
+        self.reload_config()
+        return True
 
     def _start_initial_listings(self) -> None:
         """Kick off the two startup listings, on worker threads like every other
@@ -2432,7 +2500,8 @@ class XeFMApp:
         scans = self._pump_scans()
         trees = self._pump_xft()
         tagged, self._tags_dirty = getattr(self, "_tags_dirty", False), False
-        return listed or loading or captured or scans or trees or tagged
+        synced = self._pump_python_packages()
+        return listed or loading or captured or scans or trees or tagged or synced
 
     def _on_tags_ready(self) -> None:
         """Worker thread: tags for drawn rows landed; ask for a repaint."""
@@ -3621,6 +3690,7 @@ class XeFMApp:
                 "reload_config": (self.reload_config, False),
                 "install_extension": (self.install_extension, False),
                 "extensions": (self.show_extensions, False),
+                "sync_python_packages": (self.sync_python_packages, False),
                 # --- file operations ---
                 "create_directory": (self.create_directory, False),
                 "create_file": (self.create_file, False),
@@ -4498,6 +4568,9 @@ class XeFMApp:
                      shortcut=sc("extensions")),
             MenuItem("Install Extension…", on_select=self.install_extension,
                      enabled=has_files, shortcut=sc("install_extension")),
+            MenuItem("Sync Python Packages", on_select=self.sync_python_packages,
+                     enabled=lambda: not self._python_packages_syncing,
+                     shortcut=sc("sync_python_packages")),
             MenuItem("Reload Configuration", on_select=self.reload_config,
                      shortcut=sc("reload_config")),
             title="Tools",
@@ -10558,6 +10631,7 @@ class XeFMApp:
             ("reload_config", "Reload ~/.xefm/config.py (Tools menu)"),
             ("install_extension", "Install the extension package under the cursor (Tools menu)"),
             ("extensions", "List extension packages (Tools menu)"),
+            ("sync_python_packages", "Install what ~/.xefm/requirements.txt lists (Tools menu)"),
             ("help", "Show this help"),
             ("quit", "Quit XeFM"),
         )),
@@ -11363,6 +11437,10 @@ def main() -> None:
     if len(sys.argv) > 1 and sys.argv[1] == "skill":
         from xefm.extension_cli import skill_main
         sys.exit(skill_main(sys.argv[2:]))
+    # `xefm deps sync|status` — the packages ~/.xefm/requirements.txt declares.
+    if len(sys.argv) > 1 and sys.argv[1] == "deps":
+        from xefm.deps_cli import main as deps_main
+        sys.exit(deps_main(sys.argv[2:]))
     args = create_parser().parse_args()
 
     backend_name = _BACKENDS.get(args.backend, args.backend)

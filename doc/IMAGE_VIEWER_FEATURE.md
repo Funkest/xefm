@@ -98,9 +98,9 @@ system rather than carrying a decoder for them:
 
 | | macOS | Windows | Linux |
 |---|---|---|---|
-| HEIC / HEIF | yes, built in | with *HEIF Image Extensions* from the Store — plus *HEVC Video Extensions*, which decodes what a HEIC actually holds | `pip install pillow-heif` |
+| HEIC / HEIF | yes, built in | with *HEIF Image Extensions* from the Store — plus *HEVC Video Extensions*, which decodes what a HEIC actually holds | `pillow-heif` in [requirements.txt](PYTHON_PACKAGES_FEATURE.md) |
 | AVIF | yes | yes | yes |
-| JPEG XL | yes, built in | if your Windows has the codec — recent builds do | `pip install pillow-jxl-plugin` |
+| JPEG XL | yes, built in | if your Windows has the codec — recent builds do | `pillow-jxl-plugin` in [requirements.txt](PYTHON_PACKAGES_FEATURE.md) |
 | Camera RAW (DNG, CR2, NEF, ARW…) | see below | see below | see below |
 
 On macOS the pictures are drawn by the same decoder Preview and Quick Look use;
@@ -137,7 +137,7 @@ function that turns the file's bytes into a picture and name the suffix:
 import io
 
 def open_raw(data):
-    import rawpy                      # pip install rawpy
+    import rawpy                      # listed in ~/.xefm/requirements.txt
     from PIL import Image
     with rawpy.imread(io.BytesIO(data)) as raw:
         return Image.fromarray(raw.postprocess())

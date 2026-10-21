@@ -573,8 +573,10 @@ arithmetic, strings and quick filesystem questions.
 The image viewer already reads more than XeFM ships a decoder for, because it
 asks your machine: on macOS the system decoder handles HEIC, JPEG XL and camera
 RAW; on Windows, whichever imaging codecs are installed; in a terminal, Pillow
-and any Pillow plugin you added. `pip install pillow-heif` is the whole of
-adding HEIC anywhere it is not already there.
+and any Pillow plugin you added. A `pillow-heif` line in
+`~/.xefm/requirements.txt` and a sync ([Extra Python
+Libraries](PYTHON_PACKAGES_FEATURE.md)) is the whole of adding HEIC anywhere it
+is not already there.
 
 What is left is the formats only a library XeFM does not ship can read. Write a
 function from the file's bytes to a picture, and name the suffix:

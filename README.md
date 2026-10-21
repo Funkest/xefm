@@ -101,14 +101,11 @@ On macOS and Linux, Homebrew can install the terminal app instead:
 brew install crftwr/tap/xefm
 ```
 
-Homebrew owns that environment and rebuilds it on every upgrade, so Python
-libraries you add to it are lost. If your `config.py` imports a library XeFM
-doesn't ship, or you want a Pillow plugin such as `pillow-heif`, install with
-uv or pipx, which keep what you add:
-
-```bash
-uv tool install xefm --with pillow-heif     # or:  pipx install xefm && pipx inject xefm pillow-heif
-```
+If your `config.py` imports a library XeFM doesn't ship, or you want a Pillow
+plugin such as `pillow-heif`, list it in `~/.xefm/requirements.txt` and run
+`xefm deps sync` (or Tools → Sync Python Packages). That works the same for
+every install, the desktop apps included, and survives upgrades. See
+[Extra Python Libraries](doc/PYTHON_PACKAGES_FEATURE.md).
 
 **Upgrade with the same tool you installed with** (`pipx upgrade xefm`,
 `uv tool upgrade xefm`, `pip install --upgrade xefm`, or `brew upgrade xefm`) — they are not
