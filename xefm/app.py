@@ -65,7 +65,8 @@ from xefm.backend_detector import is_desktop_mode
 # Every background scene XeFM offers is a fragment shader; a theme's ``animation`` key
 # names one of these and ``_resolve_background`` turns it into a puikit ``Shader``.
 from xefm.background_shaders import SHADER_KINDS
-from xefm.config import (KeyBindings, config_manager, deprecated_names_notice,
+from xefm.config import (KeyBindings, apply_wide_chars, config_manager,
+                         deprecated_names_notice,
                          get_builtin_handler_for_file, get_config,
                          get_drive_locations,
                          get_program_for_file, has_explicit_association,
@@ -1779,6 +1780,9 @@ class XeFMApp:
         # _config.Config() directly (as the port did) skipped both — the file was
         # never created and the user's settings were ignored.
         self.config = get_config()
+        # Before anything is measured: the characters WIDE_CHARS names count as
+        # two columns from the first layout on (#611).
+        apply_wide_chars(self.config)
         self.keys = KeyBindings(self.config.KEY_BINDINGS)
         # Central registry of running background tasks (file ops today; the seam
         # for future queued / non-modal tasks + a task-management UI).

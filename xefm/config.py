@@ -909,6 +909,11 @@ class ConfigManager:
         if not isinstance(config.FILE_MONITORING_FALLBACK_POLL_INTERVAL_S, (int, float)) or config.FILE_MONITORING_FALLBACK_POLL_INTERVAL_S <= 0:
             errors.append("FILE_MONITORING_FALLBACK_POLL_INTERVAL_S must be a positive number")
 
+        wide = getattr(config, 'WIDE_CHARS', None)
+        if wide is not None and not _wide_chars_shape_ok(wide):
+            errors.append("WIDE_CHARS must be a string of characters, or a list of "
+                          "one-character strings")
+
         # ACTIONS / EVENT_HOOKS / SORT_KEYS / FILTERS / ... / LEXERS (the Preview customization
         # API). Shape problems are reported here like every other config field —
         # all of them in one pass, each one skipping just its own entry — so a
@@ -980,6 +985,37 @@ config_manager = ConfigManager()
 def get_config():
     """Get the current configuration"""
     return config_manager.get_config()
+
+
+def _wide_chars_shape_ok(value) -> bool:
+    if isinstance(value, str):
+        return True
+    return (isinstance(value, (list, tuple, set, frozenset))
+            and all(isinstance(ch, str) and len(ch) == 1 for ch in value))
+
+
+def apply_wide_chars(config) -> None:
+    """Hand ``WIDE_CHARS`` to PuiKit, which counts each of those characters as
+    two columns (#611): the East Asian Ambiguous symbols a font draws
+    full-width on a terminal that advances one column for them.
+
+    An advanced setting, read with ``getattr`` and absent from the template.
+    Applied once at startup, before anything is measured; a reload does not
+    re-measure what is already laid out, so it takes effect on the next
+    launch."""
+    value = getattr(config, 'WIDE_CHARS', None)
+    if not value or not _wide_chars_shape_ok(value):
+        return
+    try:
+        from puikit.text import set_wide_chars
+    except ImportError:
+        logger.warning("WIDE_CHARS needs a newer PuiKit (set_wide_chars); ignored")
+        return
+    widened = set_wide_chars(value)
+    skipped = sorted(set(value) - widened)
+    if skipped:
+        logger.warning("WIDE_CHARS: left at their usual width (ASCII, or already "
+                       "zero or two columns): " + " ".join(repr(ch) for ch in skipped))
 
 
 def reload_config():
