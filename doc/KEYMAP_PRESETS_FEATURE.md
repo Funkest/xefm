@@ -8,7 +8,7 @@ the first time XeFM starts, it asks which one you want.
 | **AFX style** | run commands | letters (`C`, `M`, `K`, `V`, …) |
 | **Orthodox** | search for a file | function keys (`F3`, `F5`, `F8`, …) |
 
-**Tools → Keymap** switches at any time. The change applies at once: the help
+**Tools → Advanced → Keymap** switches at any time. The change applies at once: the help
 dialog (`F1`), the menus and the status bar show the new keys, and XeFM
 remembers your choice for later sessions.
 
@@ -17,7 +17,7 @@ remembers your choice for later sessions.
 When no preset has been chosen yet, XeFM starts with a **Keymap** dialog
 with one button per preset. That includes the first start after updating from
 a version without presets. The dialog has no Cancel, and `Esc` does not close
-it: choose one to go on. You can switch later from Tools → Keymap.
+it: choose one to go on. You can switch later from Tools → Advanced → Keymap.
 
 If you are updating and want the keys you have been using, choose **AFX
 style**. Your `config.py` may hold a full copy of the old keymap. See

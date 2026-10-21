@@ -180,11 +180,15 @@ the mouse for the first, take the whole buffer with the second. See
 | Find Similar Files… | `find_similar` *(ships unbound)* — see [Find Similar Files](FIND_SIMILAR_FILES_FEATURE.md) |
 | External Programs… | `programs` |
 | Subshell Here | `subshell` *(desktop mode: in a terminal window)* |
-| Keymap ▸ | AFX style / Orthodox — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md) |
 | Edit Configuration… | `edit_config` *(ships unbound)* |
-| Extensions… | `extensions` *(ships unbound)* — see [Extension Packages](EXTENSIONS_FEATURE.md) |
-| Install Extension… | `install_extension` *(ships unbound)* |
 | Reload Configuration | `reload_config` *(ships unbound)* |
+| Advanced ▸ Keymap ▸ | AFX style / Orthodox — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md) |
+| Advanced ▸ Extensions… | `extensions` *(ships unbound)* — see [Extension Packages](EXTENSIONS_FEATURE.md) |
+| Advanced ▸ Install Extension… | `install_extension` *(ships unbound)* |
+| Advanced ▸ Sync Python Packages | `sync_python_packages` *(ships unbound)* — see [Extra Python Libraries](PYTHON_PACKAGES_FEATURE.md) |
+
+Advanced holds what is set up once or now and then. Everything in it is also
+in the command palette.
 
 ### Help Menu
 

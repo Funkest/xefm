@@ -77,7 +77,7 @@ class Config:
 Every key comes from a **keymap preset**: `'afx'` (single letters: `C` copy,
 `M` move, `K` delete …) or `'orthodox'` (function keys: `F5` copy, `F6` move,
 `F8` delete; letters start an incremental search). The user picks one at
-first launch or in **Tools ▸ Keymap**; `KEY_PRESET = 'afx'` or `'orthodox'` in
+first launch or in **Tools ▸ Advanced ▸ Keymap**; `KEY_PRESET = 'afx'` or `'orthodox'` in
 `config.py` overrides that choice. `None` (the default) leaves it to the menu.
 
 `KEY_BINDINGS` holds **only the user's changes** to the preset. An entry

@@ -103,7 +103,7 @@ brew install crftwr/tap/xefm
 
 If your `config.py` imports a library XeFM doesn't ship, or you want a Pillow
 plugin such as `pillow-heif`, list it in `~/.xefm/requirements.txt` and run
-`xefm deps sync` (or Tools → Sync Python Packages). That works the same for
+`xefm deps sync` (or Tools → Advanced → Sync Python Packages). That works the same for
 every install, the desktop apps included, and survives upgrades. See
 [Extra Python Libraries](doc/PYTHON_PACKAGES_FEATURE.md).
 
