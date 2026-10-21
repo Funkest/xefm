@@ -151,10 +151,11 @@ CFLAGS="-framework Cocoa"
 # release - a 1.5.0 built on macOS 27 refused to launch on macOS 26 with "You
 # can't use this version of the application with this version of macOS"
 # (issue #455). Pinning it keeps the floor a decision rather than an accident.
-# 11.0 is the oldest macOS any arm64 Mac runs, and every bundled wheel already
-# targets it; the embedded Homebrew Python is currently the one component that
-# sits higher, so the bundle's real floor is what Step 5 reads back from it.
-MACOS_MIN_VERSION="11.0"
+# 12.0 is the oldest macOS anyone has run XeFM on (1.8.0 in a Tart VM; Apple
+# silicon virtualizes 12 and later only, so 11 was never run). Every bundled
+# wheel already goes lower; the embedded Homebrew Python is the one component
+# that can sit higher, so the bundle's real floor is what Step 5 reads back.
+MACOS_MIN_VERSION="12.0"
 CFLAGS="${CFLAGS} -mmacosx-version-min=${MACOS_MIN_VERSION}"
 
 # Configure compiler flags based on Python installation type

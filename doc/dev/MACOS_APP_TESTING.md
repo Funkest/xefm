@@ -5,7 +5,7 @@ This guide provides comprehensive testing procedures for the XeFM macOS applicat
 ## Prerequisites
 
 - XeFM.app built successfully (run `cd macos_app && ./build.sh`)
-- macOS 10.13 or later
+- macOS 12 or later
 - Application bundle located at: `macos_app/build/XeFM.app`
 
 ## Quick Test Checklist
@@ -268,6 +268,45 @@ Essential tests to verify basic functionality:
 - No CPU spikes during idle
 - Stable performance over time
 - No crashes or hangs
+
+---
+
+## The oldest supported macOS
+
+The floor is `MACOS_MIN_VERSION` in `macos_app/build.sh`: **12.0**, the oldest
+macOS XeFM has actually been run on. Apple silicon virtualizes macOS 12 and
+later only, so 11 has never been run, and the floor was raised to 12 rather than
+kept unverified. To repeat the check, run the release DMG in a
+[Tart](https://tart.run) VM (`ghcr.io/cirruslabs/macos-monterey-vanilla`).
+
+**2026-10-21, XeFM 1.8.0 release DMG, macOS 12.7.6 in a Tart VM on an M5 host
+running macOS 27.** Gatekeeper accepts the notarized app. It launches with no
+dyld or import error, and the file panes and basic operations work. Two
+findings:
+
+- **The app icon was oversized** in the Dock and Launchpad. The `.icns` was
+  full-bleed, which macOS 11–15 draw as is. It is now on the 824/1024 icon grid
+  (#668). macOS 26 and later draw both versions identically.
+- **Sci-Fi, Cyber and Phosphor show only the background animation**, with the
+  UI gone (white without a background shader). Those themes' post effects are
+  Core Image content filters (glow, bloom, tint), and in this VM *any* layer
+  carrying a CIFilter drops out of the composite. That includes a plain
+  `NSTextField` with a default `CIColorControls`, in a window with no Metal at
+  all, while an offscreen `CIContext` renders the same filters fine. Shinagawa
+  works, because its `drop_shadow` is drawn with the text and no filter is
+  attached. The same test in a macOS 27 VM on the same host draws all three
+  views, CIBloom halo included, so this is not Tart VMs in general: it is
+  macOS 12 itself or macOS 12's paravirtualized GPU driver, and only a real
+  macOS 12 Mac can tell those apart. Until one does, it stays an open risk
+  for macOS 12 users of those three themes, not a confirmed bug.
+
+**2026-10-21, XeFM 1.8.0 release DMG, macOS 27.0 (26A428) in a Tart VM**
+(`ghcr.io/cirruslabs/macos-golden-gate-vanilla:27.0`), the newest end of the
+range. Gatekeeper accepts it as Notarized Developer ID, and it launches and
+draws its panes. The image comes up with Gatekeeper allowing the App Store
+only, so restore "App Store & Known Developers" in System Settings before
+reading a Gatekeeper result, and turn off automatic macOS update downloads,
+which fill its 44 GB disk within minutes.
 
 ---
 
