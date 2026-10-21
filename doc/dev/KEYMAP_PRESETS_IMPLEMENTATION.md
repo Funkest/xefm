@@ -69,7 +69,35 @@ read is what makes a preset reach every surface without touching any of them.
    under an **old action name** (`rename_file`) also removes the preset's
    entry under the current one (`rename`). `KeyBindings` matches current
    names first, so the preset's entry would otherwise win.
-3. `config._KEY_TYPE_AHEAD` records the flag.
+3. **The keys an entry binds leave the preset actions it does not mention**
+   (`_release_claimed_keys`, #662). Binding `Shift-T` to
+   `toggle_color_scheme` takes `Shift-T` off AFX's `open_in_new_tab`, so the
+   user doesn't have to find that action and empty it too. Keys are compared
+   parsed (`KeyBindings._parse_key_expression`), so `shift-t` and `Shift-T`
+   are the same key. A preset action keeps a key in two cases, because there
+   the user's entry would not replace it:
+   - **It is reached somewhere the user's entry is not.** Each name's reach is
+     the set of contexts that resolve it (`_reach`). `common` actions are
+     reached everywhere; a scoped rebind (`'text_viewer.quit'`) reaches only
+     its own context. The key is taken only when the preset action's reach
+     is a subset of the entry's. `view_file: ['Q']` does not take `Q` from
+     `quit`, so the viewers still quit on it. `file_details: ['C']` does not
+     take `C` from `copy_files`, which also copies in the directory diff.
+   - **The two selection gates never hold together** (`required` and
+     `none`). The pair splits the key the way AFX's `M` is split between
+     `move_files` and `create_directory`.
+4. The result lists **`config.py`'s entries first**. `KeyBindings` tries
+   entries in table order, so in whatever overlap step 3 leaves, the user's
+   entry is matched: `Q` opens the file in the file list, and still quits in
+   a viewer.
+5. `config._KEY_TYPE_AHEAD` records the flag.
+
+Step 3 can only see where an action is reached once that action is
+registered, and `config.py`'s own `ACTIONS` register after the first
+`apply`. `XeFMApp._rebuild_keymap` (apply, then relabel the status bar and
+the menu) therefore runs again right after `_load_user_entries`, at startup.
+`reload_config` loads the user entries *before* rebuilding, for the same
+reason.
 
 `replaced(config, name)` lists the `config.py` entries whose value differs
 from preset `name`'s. `set_keymap_preset` logs it when non-empty. That is the
@@ -144,8 +172,9 @@ with the dialog open stores nothing, so the next launch asks again.
 
 `make keymap-reset` deletes the stored choice, for hand-checking the dialog.
 
-`XeFMApp._apply_keymap_preset` runs right after the state manager exists, and
-again in `reload_config` after the new config replaces the old one. It
+`XeFMApp._apply_keymap_preset` runs right after the state manager exists,
+again (as `_rebuild_keymap`) once `config.py`'s actions are registered, and in
+`reload_config` after the new config and its actions replace the old ones. It
 rebuilds `self.keys` and clears `config_manager._key_bindings`.
 `set_keymap_preset` stores the choice, applies it, and invalidates the two
 surfaces that cache key names: the status bar's hint line, and the menu
@@ -199,6 +228,11 @@ The pure half covers:
 - letters freed from the file list but not from a viewer;
 - `config.py` overriding every preset, even with a value equal to AFX's,
   and under an old action name;
+- a rebound key leaving the preset action that had it (#662), however it is
+  spelled, and the other keys of that action staying; the key staying where
+  the preset action is reached beyond the user's entry (a `common` action, a
+  scoped rebind, `copy_files` in the directory diff) or split by selection;
+  `config.py`'s entries listed first;
 - `replaced`;
 - switching back and forth without compounding;
 - no key clashes, `is_typing_key`, `resolve`;

@@ -127,7 +127,9 @@ Every key comes from a **preset**, a complete keymap: AFX style (letters) or
 Orthodox (function keys). XeFM asks which one at its first launch, and
 **Tools → Keymap** (or `KEY_PRESET` in `config.py`) switches it.
 `KEY_BINDINGS` holds only your changes, and each entry replaces that action's
-keys under every preset. See [Keymap Presets](KEYMAP_PRESETS_FEATURE.md).
+keys under every preset. A key you bind is taken off the action the preset
+gave it, so there is no need to empty that action too. See
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#your-own-key-bindings-come-on-top).
 
 ### What a terminal can carry
 

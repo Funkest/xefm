@@ -367,6 +367,10 @@ class ActionRegistry:
     def has_context(self, context: str) -> bool:
         return context in self._tables
 
+    def contexts(self) -> list[str]:
+        """Every context with an action table, ``common`` included."""
+        return list(self._tables)
+
 
 def _new_registry() -> ActionRegistry:
     """A registry holding only the built-in actions — the process-wide one

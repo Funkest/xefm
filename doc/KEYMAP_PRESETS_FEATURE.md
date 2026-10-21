@@ -132,6 +132,17 @@ entry replaces that action's keys, whichever preset is in force. An action
 you don't list keeps the preset's keys. That is why the `KEY_BINDINGS` XeFM
 writes into a new `config.py` holds only commented-out examples.
 
+A key you bind is also taken off the action the preset had given it, so you
+don't have to find that action and empty it as well. `'toggle_color_scheme':
+['Shift-T']` is enough on its own; AFX's `Shift-T` (open in a new tab) stops
+answering, and the help and the menus stop listing it there.
+
+A key you bind for the file list only stays on a shared action elsewhere.
+`'view_file': ['Q']` opens the file with `Q` in the file list, and `Q`
+still closes a viewer. A key you bind with a selection requirement leaves
+the opposite one alone: `{'keys': ['C'], 'selection': 'none'}` keeps `C`
+copying marked files.
+
 ```python
 KEY_BINDINGS = {
     'reload_config': ['F12'],   # F12 reloads the config, under every preset
