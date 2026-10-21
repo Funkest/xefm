@@ -56,7 +56,8 @@ make run-gui                    # the same thing, through .venv
 |---|---|---|
 | Windows 10/11 x64 | **[Microsoft Store](https://apps.microsoft.com/detail/9PK2X44W810V)** (recommended) | Yes — signed by Microsoft |
 | Windows 10/11 x64 | `XeFM-<version>-win64.zip` (portable alternative) | No — needs [unblocking once](#windows--the-portable-zip) |
-| macOS 26+ (Apple Silicon) | `XeFM-<version>-macos.dmg` | Yes — Apple Developer ID |
+| macOS 11+ (Apple Silicon) | `XeFM-<version>-macos.dmg` | Yes — Apple Developer ID |
+| macOS 11+ (Apple Silicon) | [Homebrew](#macos--homebrew): `brew install --cask crftwr/tap/xefm` (the same DMG) | Yes — Apple Developer ID |
 
 A stable release attaches the ready-to-run DMG and zip, but one that only
 fixes a single platform may carry just that platform's build, so the newest zip
@@ -95,6 +96,23 @@ choose **Open**, then confirm. That whitelists it permanently.
 
 To remove it: drag `XeFM.app` to the Trash. Settings live in `~/.xefm/` and can
 be deleted separately.
+
+#### macOS — Homebrew
+
+```bash
+brew install --cask crftwr/tap/xefm
+```
+
+This installs the same notarized DMG into *Applications*, and
+`brew upgrade --cask xefm` moves it to each new release. If you already
+installed the DMG by hand, add `--adopt` so Homebrew takes over that copy
+instead of refusing to overwrite it. `brew uninstall --cask xefm` removes the
+app; `~/.xefm/` is left in place even with `--zap`, because the terminal app
+reads it too.
+
+The cask installs the desktop app only. `brew install crftwr/tap/xefm` — the
+formula, without `--cask` — is the terminal app; see
+[Switching Between Modes](#switching-between-modes).
 
 #### Windows — the portable zip
 
@@ -249,8 +267,9 @@ python3 -m xefm --backend gui
 
 ### Switching Between Modes
 
-Terminal mode comes from the PyPI install (`pipx install xefm`) or a source
-checkout — the desktop package is a self-contained application and does not put
+Terminal mode comes from the PyPI install (`pipx install xefm`), the Homebrew
+formula (`brew install crftwr/tap/xefm`) or a source checkout — the desktop
+package is a self-contained application and does not put
 an `xefm` command on your PATH, so the two installs coexist rather than replace
 each other:
 

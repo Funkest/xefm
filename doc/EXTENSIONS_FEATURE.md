@@ -12,8 +12,8 @@ still change.
 
 ## Installing and managing
 
-From a shell — this works the same for pip/pipx installs, the macOS app and the
-Windows app:
+From a shell — this works the same for pip/pipx/uv and Homebrew installs, the
+macOS app and the Windows app:
 
 ```bash
 xefm ext install ~/Downloads/hello-xefm.zip   # a .zip
