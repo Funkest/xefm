@@ -42,6 +42,15 @@ own install, so upgrading XeFM keeps them.
   imported keeps its old version until XeFM restarts. On Windows, if a library
   in use can't be replaced, the new set takes over at the next start.
 
+## Extensions that need libraries
+
+An extension package can list the libraries it needs in its manifest
+(`requires.python_packages`). The same sync installs them alongside your
+`requirements.txt`, all resolved together. Installing such an extension offers
+to sync right away. Until a sync has run, the extension isn't loaded and the
+log says why. Removing or disabling the extension leaves its libraries in place
+until the next sync.
+
 ## Commands
 
 | Command | What it does |

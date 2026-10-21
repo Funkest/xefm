@@ -129,6 +129,32 @@ def _ask(prompt: str) -> bool:
         return False
 
 
+def _sync_python_packages(layout: ext.Layout, *, ask: bool) -> int:
+    """Install what an extension just installed asks for from PyPI — the same
+    sync as `xefm deps sync`, offered rather than assumed, since it reaches
+    the network and runs pip."""
+    from xefm import python_packages as pp
+    if ask and not _ask("It needs Python packages from PyPI. Sync them now?"):
+        print("Not synced — the extension loads after `xefm deps sync`.")
+        return 0
+    try:
+        result = pp.sync(pp.Layout(layout.home), log=print)
+    except pp.SyncError as exc:
+        print(f"Python packages sync failed: {exc}", file=sys.stderr)
+        return 1
+    print("Python packages synced"
+          + (" — they take effect when XeFM next starts" if result.pending_restart else ""))
+    return 0
+
+
+def _note_python_packages(layout: ext.Layout) -> None:
+    """One line when a change to the installed set leaves the Python
+    packages out of date — the sync that removes or adds them is the user's."""
+    from xefm import python_packages as pp
+    if pp.check(pp.Layout(layout.home)).state == pp.NEEDS_SYNC:
+        print("Python packages are out of date — run `xefm deps sync`")
+
+
 def _print_problems(problems) -> None:
     for problem in problems:
         print(problem)
@@ -177,6 +203,8 @@ def main(argv: list[str] | None = None, layout: ext.Layout | None = None) -> int
             return 1
         print(f"installed {manifest.id} {manifest.version} — reload the config "
               "(Tools ▸ Reload Configuration) or restart XeFM to load it")
+        if manifest.requires.get("python_packages"):
+            return _sync_python_packages(layout, ask=not args.yes)
         return 0
 
     if args.command == "uninstall":
@@ -190,6 +218,7 @@ def main(argv: list[str] | None = None, layout: ext.Layout | None = None) -> int
             print(f"error: {exc}", file=sys.stderr)
             return 1
         print(f"uninstalled {args.id}")
+        _note_python_packages(layout)
         return 0
 
     if args.command == "list":
@@ -224,6 +253,7 @@ def main(argv: list[str] | None = None, layout: ext.Layout | None = None) -> int
             print(f"error: {exc}", file=sys.stderr)
             return 1
         print(f"{args.id} {args.command}d — takes effect on the next config reload")
+        _note_python_packages(layout)
         return 0
 
     if args.command == "new":

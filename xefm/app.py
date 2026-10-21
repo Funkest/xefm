@@ -2160,10 +2160,16 @@ class XeFMApp:
                 return
             self.log_info(f"Installed extension {installed.id} {installed.version}")
             self.reload_config()
+            # Its packages come from PyPI; the dialog said so, and Install
+            # was the consent. The sync reloads the config again when done.
+            if installed.requires.get("python_packages"):
+                self.sync_python_packages()
 
+        pypi = (["", "Installing also downloads its Python packages from PyPI."]
+                if manifest.requires.get("python_packages") else [])
         show_message_box(
             self.panel,
-            "\n".join(lines + warnings
+            "\n".join(lines + warnings + pypi
                       + ["", "Extensions run inside XeFM with your permissions."]),
             title=f"Install {manifest.name} {manifest.version}?",
             icon="question", buttons=("Install", "Cancel"), default=1, cancel=1,

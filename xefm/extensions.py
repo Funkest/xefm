@@ -64,6 +64,7 @@ except ModuleNotFoundError:  # Python < 3.11
 
 from xefm import __version__ as _XEFM_VERSION
 from xefm.log_manager import getLogger
+from xefm import python_packages as _python_packages
 
 logger = getLogger("Extensions")
 
@@ -481,12 +482,17 @@ def check_manifest(manifest: Manifest, *, others: Iterable[Manifest] = (),
         err("requires", "must be a table")
         requires = {}
     for key in requires:
-        if key not in ("programs", "host_packages"):
-            err(f"requires.{key}", "unknown key — known: host_packages, programs")
-    for key in ("programs", "host_packages"):
+        if key not in REQUIRES_KEYS:
+            err(f"requires.{key}", "unknown key — known: " + ", ".join(REQUIRES_KEYS))
+    for key in REQUIRES_KEYS:
         value = requires.get(key, [])
         if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
             err(f"requires.{key}", "must be a list of strings")
+        elif key == "python_packages":
+            for line in value:
+                reason = requirement_problem(line)
+                if reason:
+                    err("requires.python_packages", f"'{line}': {reason}")
     if machine:
         for program in requires.get("programs", []) or []:
             if isinstance(program, str) and shutil.which(program) is None:
@@ -633,6 +639,58 @@ def _check_contribution(kind: str, key: str, value, action_names: set) -> Option
             return "must be a table (or 'module:name')"
         return None
     return "must be 'module:name'"
+
+
+#: The keys ``[requires]`` understands.
+REQUIRES_KEYS = ("programs", "host_packages", "python_packages")
+
+#: A PEP 508 requirement as an extension may write it: a project name, extras,
+#: version specifiers and an environment marker. Nothing that would let one
+#: package steer pip for every other one: no options (``--index-url``), no
+#: direct references (``name @ https://…``), no paths.
+_REQUIREMENT = re.compile(
+    r"\s*[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?\s*"   # name
+    r"(?:\[\s*[A-Za-z0-9._,\s-]*\])?\s*"                   # [extras]
+    r"(?:(?:===|==|!=|~=|<=|>=|<|>)\s*[A-Za-z0-9.*+!_-]+\s*"
+    r"(?:,\s*(?:===|==|!=|~=|<=|>=|<|>)\s*[A-Za-z0-9.*+!_-]+\s*)*)?"  # specifiers
+    r"(?:;[^@\n]*)?")                                          # ; marker
+
+
+def requirement_problem(line: str) -> Optional[str]:
+    """Why ``line`` is not accepted in ``requires.python_packages``, or None."""
+    if not line.strip():
+        return "empty"
+    if _REQUIREMENT.fullmatch(line) is None:
+        return ("not a plain requirement — write a project name with optional "
+                "[extras], version specifiers and ; marker (no pip options, "
+                "URLs or paths)")
+    return None
+
+
+def requirement_name(line: str) -> str:
+    """The project name a requirement line names."""
+    return re.match(r"\s*([A-Za-z0-9._-]+)", line).group(1)
+
+
+def python_requirements(layout: Layout | None = None) -> dict[str, list[str]]:
+    """``{extension id: [requirement, …]}`` for every enabled package whose
+    manifest asks for Python packages — what ``xefm deps sync`` installs
+    beside ``requirements.txt``. Lists with a line the check would refuse are
+    left out: that package does not load anyway."""
+    layout = layout or Layout()
+    installed = read_installed(layout)
+    out: dict[str, list[str]] = {}
+    for manifest in discover(layout):
+        if manifest.root.name.startswith("."):
+            continue
+        entry = installed.get(manifest.id)
+        if entry is not None and not entry.enabled:
+            continue
+        wanted = manifest.requires.get("python_packages") or []
+        if (wanted and isinstance(wanted, list)
+                and all(isinstance(r, str) and not requirement_problem(r) for r in wanted)):
+            out[manifest.id] = [r.strip() for r in wanted]
+    return out
 
 
 def _importable(name: str) -> bool:
@@ -935,6 +993,8 @@ def summarize(manifest: Manifest) -> list[str]:
     for key in ("programs", "host_packages"):
         for item in manifest.requires.get(key, []) or []:
             lines.append(f"requires {key[:-1].replace('_', ' ')}: {item}")
+    for item in manifest.requires.get("python_packages", []) or []:
+        lines.append(f"installs Python package from PyPI: {item}")
     return lines
 
 
@@ -1356,6 +1416,13 @@ def load(config, layout: Layout | None = None, *,
         if absent_hosts:
             report.skipped.append((label, "this XeFM build has no "
                                    + ", ".join(absent_hosts)))
+            continue
+        wanted = [r.strip() for r in manifest.requires.get("python_packages", []) or []]
+        if wanted and not _python_packages.synced_for(
+                _python_packages.Layout(layout.home), manifest.id, wanted):
+            report.skipped.append((label, "its Python packages are not installed "
+                                   "yet — run Sync Python Packages (Tools menu), "
+                                   "or `xefm deps sync`"))
             continue
         try:
             _apply(config, manifest, layout, report)
