@@ -197,6 +197,9 @@ def _key(key, char=None, mods=()):
 
 class InTheApp(unittest.TestCase):
 
+    #: What keymap_presets.apply writes onto the config it is given.
+    _PRESET_STATE = ("KEY_BINDINGS", "_KEY_BINDINGS_BASE", "_KEY_TYPE_AHEAD")
+
     def setUp(self):
         self.tmp = os.path.realpath(tempfile.mkdtemp())
         for name in ("alpha.txt", "beta.txt", "report.txt"):
@@ -204,6 +207,12 @@ class InTheApp(unittest.TestCase):
                 fh.write("x")
         self.state_dir = tempfile.mkdtemp()
         self.db = os.path.join(self.state_dir, "state.db")
+        # Applying a preset rewrites the shared config's KEY_BINDINGS and stashes
+        # the table it started from; keep all three as found, so the next test
+        # file reads the developer's config and not the last preset tested here.
+        shared = xefm_config.get_config()
+        self._saved = {name: copy.deepcopy(shared.__dict__[name])
+                       for name in self._PRESET_STATE if name in shared.__dict__}
         self.app = self._open()
 
     def _open(self):
@@ -214,8 +223,6 @@ class InTheApp(unittest.TestCase):
         # KEY_BINDINGS would be laid over every preset here. Test the presets
         # as a config.py binding nothing would see them.
         shared = xefm_config.get_config()
-        if not hasattr(self, "_saved_base"):
-            self._saved_base = getattr(shared, "_KEY_BINDINGS_BASE", None)
         shared._KEY_BINDINGS_BASE = {}
         app = xefm_app.XeFMApp(self.b, self.tmp, self.tmp,
                                left_provided=True, right_provided=True,
@@ -227,9 +234,16 @@ class InTheApp(unittest.TestCase):
         return app
 
     def tearDown(self):
-        # Leave the shared config as it was found for the next test file.
-        self.app.config._KEY_BINDINGS_BASE = self._saved_base
-        self.app.set_keymap_preset("afx")
+        # Leave the shared config as it was found for the next test file. Not
+        # by applying a preset again: with no stashed base, apply() would take
+        # the table this test left behind for the developer's own entries.
+        shared = self.app.config
+        for name in self._PRESET_STATE:
+            if name in self._saved:
+                setattr(shared, name, self._saved[name])
+            else:
+                shared.__dict__.pop(name, None)
+        xefm_config.config_manager._key_bindings = None
         self.app.file_monitor.stop_monitoring()
         self.b.close()
         shutil.rmtree(self.tmp, ignore_errors=True)

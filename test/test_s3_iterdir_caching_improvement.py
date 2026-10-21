@@ -7,7 +7,6 @@ complete directory listings and avoids API calls when cache exists.
 Run with: python -m pytest test/test_s3_iterdir_caching_improvement.py -v
 """
 
-import time
 import unittest
 from unittest.mock import Mock, patch, call
 from datetime import datetime
@@ -202,30 +201,28 @@ class TestS3IterdirCachingImprovement(unittest.TestCase):
     
     @patch('xefm.s3.boto3.client')
     def test_performance_improvement_with_cache(self, mock_boto3_client):
-        """Test that cached iterdir() is significantly faster"""
+        """A cached iterdir() makes no API call at all.
+
+        That is the whole of the improvement. It used to be asserted as "the
+        second call took less wall time", which on a mock is two microsecond
+        figures, and under a parallel test run the order flipped now and then."""
         mock_boto3_client.return_value = self.mock_client
-        
+
         # Create S3 path for directory
         s3_path = Path('s3://test-bucket/project/')
-        
-        # First call (with API calls)
-        start_time = time.time()
+
         files1 = list(s3_path.iterdir())
-        first_call_time = time.time() - start_time
-        
-        # Second call (cached)
-        start_time = time.time()
+        calls = (self.mock_client.list_objects_v2.call_count
+                 + self.mock_paginator.paginate.call_count)
+        self.assertGreater(calls, 0)
+
         files2 = list(s3_path.iterdir())
-        second_call_time = time.time() - start_time
-        
-        # Verify same results
+
+        # Verify same results, and no request for them
         self.assertEqual(len(files1), len(files2))
-        
-        # Cached call should be much faster (at least 10x faster)
-        # Note: In real scenarios the difference would be much more dramatic
-        # due to network latency, but in mocked tests the difference is smaller
-        self.assertLess(second_call_time, first_call_time)
-    
+        self.assertEqual(self.mock_client.list_objects_v2.call_count
+                         + self.mock_paginator.paginate.call_count, calls)
+
     @patch('xefm.s3.boto3.client')
     def test_cache_invalidation_on_write_operations(self, mock_boto3_client):
         """Test that cache is properly invalidated on write operations"""
