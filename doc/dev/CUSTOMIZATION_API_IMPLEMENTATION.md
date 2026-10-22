@@ -349,9 +349,10 @@ deliver))`, whose signature carries a PuiKit panel. So the worker is handed a
 `cancelled()` — and grows by addition; a worker-side `confirm` / `choose` can
 come later by wrapping `Task.ask`.
 
-- **Threading rule.** The worker may touch only the `TaskJob`. `on_done` gets a
-  *new* `ActionContext`, carrying the same `ctx.extension`, because the one the
-  action held belongs to a moment that has passed.
+- **Threading rule.** The worker may touch only the `TaskJob` (and
+  `user_api.extension(__name__)`, whose `state` is safe from any thread).
+  `on_done` gets a *new* `ActionContext`, because the one the action held
+  belongs to a moment that has passed.
 - **One outcome object.** `TaskOutcome(status, value, error)` with `status` in
   `done` / `cancelled` / `failed`, rather than a callback per ending: a result
   dialog usually wants the same code path for all three (show what there is,

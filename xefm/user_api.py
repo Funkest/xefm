@@ -124,6 +124,8 @@ __all__ = [
     "API_VERSION", "PREVIEW_APIS",
     # what an action or a hook is handed
     "ActionContext", "PaneApi", "EntryInfo", "HookEvent",
+    # an extension package's own settings, state and files
+    "extension",
     # background work
     "TaskJob", "TaskOutcome",
     # building Markdown for ctx.show_markdown
@@ -575,6 +577,36 @@ class TaskOutcome:
 
 
 # --------------------------------------------------------------------------- #
+# Extension packages
+# --------------------------------------------------------------------------- #
+
+@preview
+def extension(module: str):
+    """The extension package that ``module`` belongs to — call it with
+    ``__name__``::
+
+        from xefm.user_api import extension
+
+        def compute(ctx):
+            state = extension(__name__).state
+
+    It returns a handle with ``id``, ``version``, ``settings`` (the package's
+    defaults overlaid with the plain ``config.py`` class named after it, e.g.
+    ``ComputeHashConfig``), ``state`` (a key-value store in XeFM's state
+    database, safe from any thread) and ``data_dir`` (its own directory under
+    ``~/.xefm/extension-data/``). ``None`` for code that is not in a loaded
+    package — ``config.py`` itself, or a hand-written module.
+
+    The package is found from the module's own name, not from what is running
+    at the moment, so the answer is the same in an action, a prompt's callback,
+    a ``run_task`` worker or a sort key — the places a value handed in through
+    ``ctx`` could not reach. Nothing is written twice: the id stays in the
+    manifest alone."""
+    from xefm.extensions import handle_for_module
+    return handle_for_module(module)
+
+
+# --------------------------------------------------------------------------- #
 # Events
 # --------------------------------------------------------------------------- #
 
@@ -633,20 +665,6 @@ class ActionContext:
         #: so that an action which overrides a built-in and then invokes its own
         #: name reaches the built-in rather than recurring into itself.
         self._invoking: set[str] = set()
-
-    # --- the running extension ------------------------------------------- #
-
-    @property
-    @preview
-    def extension(self):
-        """While an extension package's action or hook runs, its handle:
-        ``id``, ``version``, ``settings`` (the extension's defaults overlaid
-        with the plain ``config.py`` class named after it, e.g.
-        ``CommandPaletteConfig``), ``state`` (a key-value store kept in XeFM's
-        state database) and ``data_dir`` (its own directory under
-        ``~/.xefm/extension-data/``). ``None`` for an action defined in
-        ``config.py`` itself."""
-        return getattr(self, "_extension", None)
 
     # --- panes -------------------------------------------------------------- #
 
@@ -758,7 +776,6 @@ class ActionContext:
         """
         from xefm.task import Task
         app = self._app
-        extension = self.extension
         task = Task(str(title), config=app.config, kind="user",
                     busy_label="Working…")
         task.exclusive = not read_only
@@ -777,7 +794,6 @@ class ActionContext:
                 outcome = TaskOutcome("done", result.get("value"))
             if on_done is not None:
                 ctx = ActionContext(app)
-                ctx._extension = extension
                 run_guarded(f"'{task.title}' completion", on_done, ctx, outcome)
             app.panel.render()
 

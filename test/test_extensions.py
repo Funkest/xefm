@@ -73,11 +73,13 @@ class _Home(unittest.TestCase):
             textwrap.dedent(manifest).format(id=ext_id, mod=module), encoding="utf-8")
         if code is None:
             code = {"actions.py": '''
+                from xefm.user_api import extension
+
                 calls = []
 
                 def greet(ctx):
                     """Say hello."""
-                    calls.append(ctx.extension)
+                    calls.append(extension(__name__))
             '''}
         if code:
             pkg = root / module
@@ -380,7 +382,29 @@ class Load(_Home):
         spec["func"](ctx)
         handle = sys.modules[f"{mod}.actions"].calls[-1]
         self.assertEqual(handle.id, root.name)
-        self.assertIsNone(ctx.extension, "reset after the call")
+
+    def test_a_package_finds_itself_from_its_module_name_at_any_time(self):
+        """#679: the answer comes from __name__, not from what is running, so
+        a prompt callback run after the action returned — or a worker, or a
+        sort key — gets the same handle."""
+        from xefm.user_api import extension
+        root, mod = self.installed_package()
+        ext.load(_config(), self.layout)
+        handle = extension(f"{mod}.actions")
+        self.assertEqual(handle.id, root.name)
+        self.assertIs(extension(f"{mod}.deep.inner"), handle)
+        self.assertIs(extension(mod), handle)
+        self.assertIsNone(extension("config"), "config.py's own code")
+        self.assertIsNone(extension("someone_else"))
+
+    def test_a_reload_forgets_packages_that_no_longer_load(self):
+        from xefm.user_api import extension
+        root, mod = self.installed_package()
+        ext.load(_config(), self.layout)
+        self.assertIsNotNone(extension(mod))
+        ext.set_enabled(root.name, False, self.layout)
+        ext.load(_config(), self.layout)
+        self.assertIsNone(extension(mod))
 
     def test_menus_are_folded_into_menu_items(self):
         root, _ = self.installed_package(manifest='''

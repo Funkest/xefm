@@ -142,8 +142,6 @@ def test_job_checkpoint_raises_once_cancelled():
 
 def test_run_task_hands_the_value_to_on_done_with_a_fresh_ctx(app):
     ctx = ActionContext(app)
-    marker = object()
-    ctx._extension = marker
     seen = []
     threads = []
 
@@ -158,7 +156,7 @@ def test_run_task_hands_the_value_to_on_done_with_a_fresh_ctx(app):
     assert threads[0] is not threading.main_thread()
     assert outcome.ok and outcome.status == "done"
     assert outcome.value == ["digest  a.txt"] and outcome.error is None
-    assert done_ctx is not ctx and done_ctx.extension is marker
+    assert done_ctx is not ctx
 
 
 def test_run_task_reports_a_cancel(app):

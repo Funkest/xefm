@@ -167,11 +167,15 @@ python_packages = ["PyYAML>=6"]       # installed from PyPI by the sync
 
 ```python
 # hello_xefm/actions.py
+from xefm.user_api import extension
+
+
 def greet(ctx):
     """Say hello in the log."""
-    times = ctx.extension.state.get("times", 0) + 1
-    ctx.extension.state.set("times", times)
-    ctx.message(f"{ctx.extension.settings.GREETING} (#{times})")
+    me = extension(__name__)
+    times = me.state.get("times", 0) + 1
+    me.state.set("times", times)
+    ctx.message(f"{me.settings.GREETING} (#{times})")
 ```
 
 ```python
@@ -209,15 +213,22 @@ gets a warning, and a built-in action's name is refused.
 
 ### What your code is given
 
-While your action or hook runs, `ctx.extension` holds:
+`xefm.user_api.extension(__name__)` returns your package's handle:
 
 - `id`, `version`
 - `settings` — your defaults, overlaid with the user's settings class
 - `state` — `get(key, default)`, `set(key, value)`, `delete(key)` and `keys()`;
-  values are anything JSON can hold
+  values are anything JSON can hold; safe from any thread
 - `data_dir` — your folder under `~/.xefm/extension-data/`, created on first use
 
-For an action defined in `config.py`, `ctx.extension` is `None`.
+The package is found from the module's own name, so it works anywhere in your
+code and at any time — in an action, in the callback of a prompt that answers
+after the action has returned, in a background task, in a sort key. Outside a
+loaded package (in `config.py`) it returns `None`.
+
+(Earlier previews had `ctx.extension`, set only while an action ran, so a
+prompt's callback found `None`. It is gone, and `xefm ext check` names the
+replacement.)
 
 ### Checking a package
 

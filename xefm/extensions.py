@@ -641,6 +641,14 @@ def lint_code(root: Path) -> list[Problem]:
                     problems.append(Problem("error", where(node),
                                             _not_public(module, node.attr)))
                     continue
+            if isinstance(node, ast.Attribute) and node.attr == "extension" \
+                    and isinstance(node.value, ast.Name) and node.value.id == "ctx":
+                problems.append(Problem(
+                    "error", where(node),
+                    "ctx.extension was removed — use "
+                    "xefm.user_api.extension(__name__), which works anywhere "
+                    "in the package: callbacks, workers, sort keys"))
+                continue
             if isinstance(node, ast.ImportFrom) and node.level == 0 \
                     and node.module in PUBLIC_MODULES:
                 for alias in node.names:
@@ -884,6 +892,8 @@ defaults = "{pkg}.settings:Settings"
 keep the work itself in plain functions (see logic.py) so it can be tested
 without XeFM."""
 
+from xefm.user_api import extension
+
 from {pkg}.logic import greeting
 
 
@@ -892,7 +902,7 @@ def hello(ctx):
 
     Shows the configured greeting with the name under the cursor."""
     entry = ctx.pane.focused
-    ctx.message(greeting(ctx.extension.settings.GREETING,
+    ctx.message(greeting(extension(__name__).settings.GREETING,
                          entry.name if entry else None))
 ''', encoding="utf-8")
     (root / pkg / "logic.py").write_text('''"""Plain functions with no XeFM in them — what the tests exercise."""
@@ -1376,7 +1386,8 @@ class ExtensionState:
 
 
 class ExtensionHandle:
-    """``ctx.extension`` while an extension's action or hook runs."""
+    """What ``xefm.user_api.extension(__name__)`` returns to a package's code:
+    its own id, version, settings, state and data directory."""
 
     def __init__(self, manifest: Manifest, layout: Layout, state_manager=None):
         self.id = manifest.id
@@ -1390,7 +1401,7 @@ class ExtensionHandle:
 
     @property
     def state(self) -> ExtensionState:
-        return ExtensionState(self._sm, self.id)
+        return ExtensionState(self._sm or state_manager_for_handles, self.id)
 
     @property
     def data_dir(self) -> Path:
@@ -1402,11 +1413,27 @@ class ExtensionHandle:
 #: The state manager handles are given; the app sets it once it has one.
 state_manager_for_handles = None
 
+#: Top-level module name → the handle of the loaded package that provides it,
+#: rebuilt by every :func:`load`. A package's code finds itself through its own
+#: ``__name__`` (:func:`handle_for_module`), so knowing which extension is
+#: running never depends on *when* the code runs — a prompt's callback, a
+#: worker thread, a sort key all find the same answer (#679).
+_handles_by_module: dict[str, ExtensionHandle] = {}
+
+
+def handle_for_module(module: str) -> Optional[ExtensionHandle]:
+    """The handle of the loaded package ``module`` (a ``__name__``) belongs
+    to, or None — for ``config.py``'s own code, a hand-written module in
+    ``~/.xefm/extensions/``, or a package that did not load."""
+    return _handles_by_module.get(str(module).partition(".")[0])
+
 
 def _in_extension(handle: ExtensionHandle, func: Callable, *,
                   missing: list[str] = ()) -> Callable:
-    """``func`` run with ``ctx.extension`` set to ``handle``; refused, with
-    the install hint, while a program it requires is missing."""
+    """``func``, refused with the install hint while a program it requires is
+    missing."""
+    if not missing:
+        return func
     import functools
 
     @functools.wraps(func)
@@ -1416,13 +1443,7 @@ def _in_extension(handle: ExtensionHandle, func: Callable, *,
             logger.warning(f"{handle.id}: needs {', '.join(absent)} on PATH — "
                            "install it to use this")
             return None
-        handle._sm = handle._sm or state_manager_for_handles
-        previous = getattr(ctx, "_extension", None)
-        ctx._extension = handle
-        try:
-            return func(ctx, *args)
-        finally:
-            ctx._extension = previous
+        return func(ctx, *args)
     return run
 
 
@@ -1500,6 +1521,7 @@ def load(config, layout: Layout | None = None, *,
     layout = layout or Layout()
     report = LoadReport()
     installed = read_installed(layout)
+    _handles_by_module.clear()
     manifests = []
     try:
         children = sorted(layout.packages.iterdir())
@@ -1604,3 +1626,5 @@ def _apply(config, manifest: Manifest, layout: Layout, report: LoadReport) -> No
             bindings[action] = list(keys)
             used.update(parsed)
         config.KEY_BINDINGS = bindings
+    for name in python_top_level(manifest.root):
+        _handles_by_module[name] = handle
