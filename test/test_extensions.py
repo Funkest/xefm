@@ -16,6 +16,7 @@ import shutil
 import sys
 import tempfile
 import textwrap
+import time
 import types
 import unittest
 import zipfile
@@ -939,13 +940,38 @@ class AppInstall(_Home):
         shutil.rmtree(self.state_dir, ignore_errors=True)
         super().tearDown()
 
+    def _layer(self):
+        return self.app.panel._layers[-1].widget
+
+    def _settle(self):
+        deadline = time.monotonic() + 5
+        while self.app._ext_fetch_done is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(self.app._pump_extension_fetch())
+
+    def _enter(self, text=None):
+        """Install Extension, then Enter in its field (after typing ``text``)."""
+        from xefm.input_dialog import InputDialog
+        self.app.install_extension()
+        dialog = self._layer()
+        self.assertIsInstance(dialog, InputDialog)
+        if text is not None:
+            dialog.edit.text = text
+        dialog._accept()
+        self._settle()
+        return dialog
+
     def test_shows_what_it_adds_then_installs_and_reloads(self):
         from puikit.widgets.message_box import MessageBox
         from xefm.config import config_manager
         with patch.object(config_manager, "config_dir", self.home), \
              patch.object(self.app, "reload_config") as reload_config:
             self.app.install_extension()
-            box = self.app.panel._layers[-1].widget
+            # The package under the cursor fills the field.
+            self.assertEqual(self._layer().edit.text, str(self.root))
+            self._layer()._accept()
+            self._settle()
+            box = self._layer()
             self.assertIsInstance(box, MessageBox)
             self.assertIn("action: app-ext.greet", box.message)
             self.assertFalse(self.layout.packages.exists(), "nothing before Install")
@@ -958,8 +984,50 @@ class AppInstall(_Home):
         from xefm.config import config_manager
         (self.root / ext.MANIFEST).write_text("[extension]\n")
         with patch.object(config_manager, "config_dir", self.home):
-            self.app.install_extension()
-        box = self.app.panel._layers[-1].widget
+            self._enter()
+        box = self._layer()
         self.assertIsInstance(box, MessageBox)
         self.assertIn("extension.id", box.message)
         self.assertEqual(box.buttons, ["OK"])
+
+    def test_a_github_source_is_downloaded_once(self):
+        """Pasted into the field: fetched on the worker to show what it adds,
+        and that copy installed — no second download on Install."""
+        from xefm.config import config_manager
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            for path in self.root.rglob("*"):
+                if path.is_file():
+                    z.write(path, f"exts-v1/pkgs/app-ext/{path.relative_to(self.root)}")
+        urls = []
+
+        def opener(url):
+            urls.append(url)
+            return buf.getvalue()
+
+        source = "github:someone/exts/pkgs/app-ext@v1"
+        with patch.object(config_manager, "config_dir", self.home), \
+             patch.object(ext, "_open_url", opener), \
+             patch.object(self.app, "reload_config"):
+            self._enter(f"  {source}  ")
+            box = self._layer()
+            self.assertIn(f"From {source}", box.message)
+            box._close(box.buttons.index("Install"))
+        self.assertEqual(urls, ["https://codeload.github.com/someone/exts/zip/v1"])
+        self.assertEqual(ext.read_installed(self.layout)["app-ext"].source, source)
+
+    def test_a_relative_path_is_the_active_pane_s(self):
+        from puikit.widgets.message_box import MessageBox
+        from xefm.config import config_manager
+        with patch.object(config_manager, "config_dir", self.home):
+            self._enter("app-ext")
+        self.assertIsInstance(self._layer(), MessageBox)
+        self.assertIn(f"From {self.root}", self._layer().message)
+
+    def test_a_source_that_is_not_there_is_logged(self):
+        from xefm.config import config_manager
+        with patch.object(config_manager, "config_dir", self.home), \
+             patch.object(self.app, "log_info") as log_info:
+            self._enter("no-such-package")
+        self.assertIn("not a directory, a zip", log_info.call_args.args[0])
+        self.assertFalse(self.app._ext_fetch_busy)

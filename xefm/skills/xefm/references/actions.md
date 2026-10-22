@@ -125,7 +125,7 @@ the user picked in **Tools ▸ Advanced ▸ Keymap**; ask which if `KEY_PRESET` 
 | `subshell` | Open a subshell in this directory | `Shift-X` | — |
 | `edit_config` | Edit config.py, then reload it | — | — |
 | `reload_config` | Re-read config.py and apply it live | — | — |
-| `install_extension` | Install the extension package under the cursor | — | — |
+| `install_extension` | Install an extension package from a folder, a .zip, a URL or GitHub | — | — |
 | `extensions` | List the extension packages and whether they loaded | — | — |
 | `check_extension_updates` | Look for newer versions of the installed extension packages | — | — |
 | `sync_python_packages` | Install the Python packages ~/.xefm/requirements.txt lists | — | — |

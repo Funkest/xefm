@@ -428,6 +428,7 @@ def show_input(
     anchor: str = "center",
     z: int = 70,
     password: bool = False,
+    width: float | None = None,
 ) -> InputDialog:
     """Push a modal :class:`InputDialog` over ``panel`` and return it.
 
@@ -448,7 +449,10 @@ def show_input(
 
     Pass ``password=True`` for a masked field (typed characters show as bullets
     and copy/cut of the value is disabled) — used for encrypted-archive
-    passwords."""
+    passwords.
+
+    Pass ``width`` (in units) for a wider box than the default, for text longer
+    than a file name: it is capped at 90% of the window."""
     dialog = InputDialog(
         title=title, prompt=prompt, text=text,
         on_accept=on_accept, on_cancel=on_cancel, on_change=on_change,
@@ -457,7 +461,9 @@ def show_input(
     )
     dialog._z = z
     sw, sh = panel.backend.size_units
-    w = max(36.0, min(sw * 0.6, 64.0))
+    # ``width`` widens the box for a field that holds long text (a URL), up to
+    # most of the window; the default suits a file name.
+    w = max(36.0, min(sw * 0.9, width)) if width else max(36.0, min(sw * 0.6, 64.0))
     # pad + title bar + field + error row, then the hint band down to the bottom
     # border (``HINT_ROWS`` covers the rule, the keys, and the border, so the old
     # bottom pad is folded into it). Error shares the row directly below the

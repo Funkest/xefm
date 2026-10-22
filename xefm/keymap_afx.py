@@ -259,7 +259,7 @@ def bindings() -> dict:
         # open/reload this file without leaving XeFM, e.g. 'edit_config': ['Y'].
         'edit_config': [],                     # Edit this config.py in TEXT_EDITOR, then reload
         'reload_config': [],                   # Re-read this config.py and apply live
-        'install_extension': [],               # Install the extension package (folder or .zip) under the cursor
+        'install_extension': [],               # Install an extension package: folder, .zip, URL or github:owner/repo
         'extensions': [],                      # List extension packages and why any did not load
         'check_extension_updates': [],         # Look for newer versions of extension packages
         'sync_python_packages': [],            # Install what ~/.xefm/requirements.txt lists

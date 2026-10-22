@@ -2117,65 +2117,126 @@ class XeFMApp:
             self.log_info(f"Config warning: {swallowed}")
 
     def install_extension(self) -> None:
-        """Install the extension package under the cursor — a folder holding
-        ``xefm-extension.toml``, or a ``.zip`` of one — after showing what it
-        adds. The same check ``xefm ext check`` runs decides first; a package
-        that fails it is refused with every finding listed."""
-        from xefm import extensions as _ext
+        """Ask for an extension package to install: a folder holding
+        ``xefm-extension.toml``, a ``.zip`` of one, an ``https://`` zip URL or
+        ``github:owner/repo[/path][@ref]`` — pasted, typed, or the package
+        under the cursor, which fills the field. It is fetched and checked on
+        a worker thread (a GitHub source is a download), then what it adds is
+        shown before anything is installed. A package that fails the check
+        ``xefm ext check`` runs is refused with every finding listed."""
+        pane = self.active_pane()
         entry = self._focused_entry()
-        if entry is None or not self._is_local(entry):
-            self.log_info("Install Extension: put the cursor on a local "
-                          "extension folder or .zip")
+        text = ""
+        if entry is not None and self._is_local(entry) and (
+                str(entry).lower().endswith(".zip")
+                or _StdPath(str(entry), "xefm-extension.toml").is_file()):
+            text = str(entry)
+        base = str(pane["path"]) if self._is_local(pane["path"]) else None
+
+        def accept(value: str) -> None:
+            source = value.strip()
+            if not source:
+                self.panel.render()
+                return
+            # A relative path is the active pane's, as everywhere else.
+            if base and not source.startswith(("github:", "https://", "~")) \
+                    and not os.path.isabs(source):
+                source = os.path.join(base, source)
+            self._fetch_extension(source)
+            self.panel.render()
+
+        show_input(self.panel,
+                   title="Install Extension — folder, .zip, URL or github:owner/repo",
+                   prompt="Source:", text=text, on_accept=accept, width=100.0)
+        self.panel.render()
+
+    #: Set while Install Extension fetches and checks a package; the worker
+    #: leaves ``(source, work dir, root, manifest, problems)`` or an exception
+    #: in ``_ext_fetch_done`` for the pump.
+    _ext_fetch_busy = False
+    _ext_fetch_done = None
+
+    def _fetch_extension(self, source: str) -> None:
+        from xefm import extensions as _ext
+        if self._ext_fetch_busy:
+            self.log_info("Install Extension is already fetching a package")
             return
-        work = tempfile.mkdtemp(prefix="xefm-ext-")
-        try:
-            root = _ext.fetch(str(entry), _StdPath(work))
-            manifest = _ext.read_manifest(root)
-            problems = _ext.check_manifest(
-                manifest, others=[m for m in _ext.discover(_ext.Layout(
-                    config_manager.config_dir)) if m.id != manifest.id])
-        except (_ext.InstallError, _ext.ManifestError, OSError) as exc:
-            shutil.rmtree(work, ignore_errors=True)
-            self.log_info(f"Install Extension: {exc}")
-            return
-        shutil.rmtree(work, ignore_errors=True)
+        self._ext_fetch_busy = True
+        if source.startswith(("github:", "https://")):
+            self.log_info(f"Install Extension: downloading {source}…")
+        layout = _ext.Layout(config_manager.config_dir)
+
+        def worker() -> None:
+            work = tempfile.mkdtemp(prefix="xefm-ext-")
+            try:
+                root = _ext.fetch(source, _StdPath(work))
+                manifest = _ext.read_manifest(root)
+                problems = _ext.check_manifest(
+                    manifest, others=[m for m in _ext.discover(layout)
+                                      if m.id != manifest.id])
+                outcome = (source, work, root, manifest, problems)
+            except Exception as e:
+                shutil.rmtree(work, ignore_errors=True)
+                outcome = e
+            self._ext_fetch_done = outcome
+            self._wake_pump()
+
+        threading.Thread(target=worker, name="xefm-ext-fetch", daemon=True).start()
+
+    def _pump_extension_fetch(self) -> bool:
+        """On the UI thread: refuse a package that failed, or show what it adds
+        and install it on Install."""
+        from xefm import extensions as _ext
+        outcome, self._ext_fetch_done = self._ext_fetch_done, None
+        if outcome is None:
+            return False
+        self._ext_fetch_busy = False
+        if isinstance(outcome, (_ext.InstallError, _ext.ManifestError, OSError)):
+            self.log_info(f"Install Extension: {outcome}")
+            return True
+        if isinstance(outcome, Exception):
+            getLogger("Main").error(f"Install Extension failed: {outcome}")
+            return True
+        source, work, root, manifest, problems = outcome
         if _ext.errors(problems):
+            shutil.rmtree(work, ignore_errors=True)
             show_message_box(
                 self.panel, "\n".join(str(p) for p in problems),
-                title=f"{manifest.id or entry.name} cannot be installed",
-                icon="error")
-            self.panel.render()
-            return
+                title=f"{manifest.id or source} cannot be installed", icon="error")
+            return True
         lines = _ext.summarize(manifest) or ["(nothing)"]
         warnings = [f"⚠ {p.where}: {p.message}" for p in problems]
 
         def answered(label: str) -> None:
-            if label != "Install":
-                self.panel.render()
-                return
             try:
-                installed = _ext.install(str(entry), _ext.Layout(config_manager.config_dir))
-            except (_ext.InstallError, _ext.ManifestError, OSError) as exc:
-                self.log_info(f"Install Extension failed: {exc}")
+                if label != "Install":
+                    return
+                try:
+                    installed = _ext.install(source, _ext.Layout(config_manager.config_dir),
+                                             fetched=root)
+                except (_ext.InstallError, _ext.ManifestError, OSError) as exc:
+                    self.log_info(f"Install Extension failed: {exc}")
+                    return
+                self.log_info(f"Installed extension {installed.id} {installed.version}")
+                self.reload_config()
+                # Its packages come from PyPI; the dialog said so, and Install
+                # was the consent. The sync reloads the config again when done.
+                if installed.requires.get("python_packages"):
+                    self.sync_python_packages()
+            finally:
+                shutil.rmtree(work, ignore_errors=True)
                 self.panel.render()
-                return
-            self.log_info(f"Installed extension {installed.id} {installed.version}")
-            self.reload_config()
-            # Its packages come from PyPI; the dialog said so, and Install
-            # was the consent. The sync reloads the config again when done.
-            if installed.requires.get("python_packages"):
-                self.sync_python_packages()
 
         pypi = (["", "Installing also downloads its Python packages from PyPI."]
                 if manifest.requires.get("python_packages") else [])
         show_message_box(
             self.panel,
-            "\n".join(lines + warnings + pypi
+            "\n".join([f"From {source}", ""] + lines + warnings + pypi
                       + ["", "Extensions run inside XeFM with your permissions."]),
             title=f"Install {manifest.name} {manifest.version}?",
             icon="question", buttons=("Install", "Cancel"), default=1, cancel=1,
             on_result=answered)
-        self.panel.render()
+        return True
 
     def show_extensions(self) -> None:
         """What the last config load did with each extension package: loaded,
@@ -2613,8 +2674,9 @@ class XeFMApp:
         tagged, self._tags_dirty = getattr(self, "_tags_dirty", False), False
         synced = self._pump_python_packages()
         updates = self._pump_extension_updates()
+        fetched = self._pump_extension_fetch()
         return (listed or loading or captured or scans or trees or tagged or synced
-                or updates)
+                or updates or fetched)
 
     def _on_tags_ready(self) -> None:
         """Worker thread: tags for drawn rows landed; ask for a repaint."""
@@ -4704,7 +4766,8 @@ class XeFMApp:
                          enabled=lambda: not self._ext_updates_busy,
                          shortcut=sc("check_extension_updates")),
                 MenuItem("Install Extension…", on_select=self.install_extension,
-                         enabled=has_files, shortcut=sc("install_extension")),
+                         enabled=lambda: not self._ext_fetch_busy,
+                         shortcut=sc("install_extension")),
                 MenuItem("Sync Python Packages", on_select=self.sync_python_packages,
                          enabled=lambda: not self._python_packages_syncing,
                          shortcut=sc("sync_python_packages")),
@@ -10787,7 +10850,7 @@ class XeFMApp:
             ("command_palette", "Search every action by name and run it"),
             ("edit_config", "Edit ~/.xefm/config.py, then reload (Tools menu)"),
             ("reload_config", "Reload ~/.xefm/config.py (Tools menu)"),
-            ("install_extension", "Install the extension package under the cursor (Tools ▸ Advanced menu)"),
+            ("install_extension", "Install an extension package: the one under the cursor, a .zip, a URL or github:owner/repo (Tools ▸ Advanced menu)"),
             ("extensions", "List extension packages (Tools ▸ Advanced menu)"),
             ("check_extension_updates", "Look for newer versions of extension packages (Tools ▸ Advanced menu)"),
             ("sync_python_packages", "Install what ~/.xefm/requirements.txt lists (Tools ▸ Advanced menu)"),
