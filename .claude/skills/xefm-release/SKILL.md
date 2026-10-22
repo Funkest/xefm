@@ -132,6 +132,11 @@ gh release edit vX.Y.Z --notes-file <scratch>/release-note-x.y.z.md
   brew bump-formula-pr --no-fork --url <PyPI sdist URL> crftwr/tap/xefm
   brew bump-cask-pr --no-fork --version X.Y.Z crftwr/tap/xefm   # only if this release has a DMG
   ```
+  The formula bump fails on release day: Homebrew resolves resources only from
+  packages uploaded at least 24 hours ago (`--uploaded-prior-to=P1D`), so run
+  it the next day, after the cask PR is merged (both use the branch
+  `bump-xefm-X.Y.Z`). Report it as remaining rather than editing resources
+  by hand.
   Each opens a PR on crftwr/homebrew-tap. Merge the cask PR when its CI
   passes. For the formula PR, run the tap's **brew pr-pull** workflow with the
   PR number once CI passes (`gh workflow run publish.yml -R crftwr/homebrew-tap
