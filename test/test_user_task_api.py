@@ -139,6 +139,29 @@ def test_item_progress_drives_the_byte_bar_of_the_current_item():
     assert (op["file_bytes_copied"], op["file_bytes_total"]) == (0, 0)
 
 
+def test_item_progress_leaves_the_item_bar_to_the_item_count():
+    """#686: bytes read within an item, with no byte total for the whole
+    task, must not move the item bar — it filled after 8 KiB."""
+    task = Task("Hash")
+    job = TaskJob(task)
+    job.progress(0, 1, detail="big")
+    for read in (1024, 2**20, 6 * 2**30, 12 * 2**30):
+        job.item_progress(read, 12 * 2**30)
+        assert task.progress.get_progress_percentage() == 0
+    job.progress(1, 1)
+    assert task.progress.get_progress_percentage() == 100
+
+
+def test_items_and_bytes_still_weigh_together_with_a_byte_total():
+    from xefm.progress_manager import OperationType, ProgressManager
+    pm = ProgressManager()
+    pm.start_operation(OperationType.COPY, 0)
+    pm.update_operation_total(2, total_bytes=10 * 2**20)
+    pm.update_progress("big")
+    pm.update_file_byte_progress(5 * 2**20, 10 * 2**20)
+    assert 40 < pm.get_progress_percentage() < 100
+
+
 def test_item_progress_alone_counts_the_work_as_one_item():
     task = Task("Hash")
     TaskJob(task).item_progress(10, 100)
