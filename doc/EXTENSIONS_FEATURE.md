@@ -24,6 +24,9 @@ examples to copy. Each has a README with its usage.
 Each release is a tag such as `compute-hash-v0.1.0`; add `@<tag>` to the
 install source to pin one.
 
+Extensions written by others are listed on the wiki's
+[Extensions](https://github.com/crftwr/xefm/wiki/Extensions) page.
+
 ## Installing and managing
 
 From a shell — this works the same for pip/pipx/uv and Homebrew installs, the
@@ -186,6 +189,12 @@ installs any tag, branch or commit, and a version is a **tag**:
 belongs to the package, not to how it was installed, so a copy installed from a
 downloaded zip still knows where its next version is. Set it from the first
 release: a version that lacks it cannot point its users to the next one.
+
+To have it listed on the wiki's [Extensions](https://github.com/crftwr/xefm/wiki/Extensions)
+page, post it in the
+[Show and tell](https://github.com/crftwr/xefm/discussions/categories/show-and-tell)
+discussion category with a link to the repository, a one-line description and
+its install source.
 
 ### The layout
 
