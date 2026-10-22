@@ -2189,10 +2189,114 @@ class XeFMApp:
             rows += [f"⚠ {w}" for w in report.warnings]
         if not rows:
             rows = [f"No extension packages in {_ext.Layout(config_manager.config_dir).packages}"]
-        rows += ["", "Manage them from a shell with `xefm ext list | install | "
-                 "uninstall | enable | disable`."]
+        rows += ["", "Check for Extension Updates (Tools ▸ Advanced) looks for "
+                 "newer versions.",
+                 "Manage them from a shell with `xefm ext list | install | "
+                 "uninstall | enable | disable | outdated | upgrade`."]
         show_message_box(self.panel, "\n".join(rows), title="Extensions")
         self.panel.render()
+
+    #: Set while Check for Extension Updates is looking or upgrading (#676);
+    #: the worker leaves ``(stage, outcome)`` in ``_ext_updates_done`` for the
+    #: pump — stage "checked" with the checks, "upgraded" with report lines.
+    _ext_updates_busy = False
+    _ext_updates_done = None
+
+    def check_extension_updates(self) -> None:
+        """Ask each installed package's update source for a newer version, on
+        a worker thread: it reaches GitHub. Only ever run when the user asks —
+        XeFM never looks on its own (#676). What it finds is offered in a
+        dialog; Upgrade installs through the same check an install runs."""
+        from xefm import extensions as _ext
+        if self._ext_updates_busy:
+            self.log_info("Check for Extension Updates is already running")
+            return
+        layout = _ext.Layout(config_manager.config_dir)
+        self._ext_updates_busy = True
+        self.log_info("Checking extension packages for newer versions…")
+
+        def worker() -> None:
+            try:
+                outcome = _ext.check_updates(layout)
+            except Exception as e:
+                outcome = e
+            self._ext_updates_done = ("checked", outcome)
+            self._wake_pump()
+
+        threading.Thread(target=worker, name="xefm-ext-updates", daemon=True).start()
+        self.panel.render()
+
+    def _upgrade_extensions(self, checks: list) -> None:
+        from xefm import extensions as _ext
+        layout = _ext.Layout(config_manager.config_dir)
+        self._ext_updates_busy = True
+        self.log_info("Upgrading " + ", ".join(f"{c.id} to {c.latest}" for c in checks)
+                      + "…")
+
+        def worker() -> None:
+            lines, needs_packages = [], False
+            for check in checks:
+                try:
+                    manifest = _ext.upgrade(check, layout)
+                except Exception as e:
+                    lines.append(f"Could not upgrade {check.id}: {e}")
+                    continue
+                lines.append(f"Upgraded extension {manifest.id} to {manifest.version}")
+                needs_packages |= bool(manifest.requires.get("python_packages"))
+            self._ext_updates_done = ("upgraded", (lines, needs_packages))
+            self._wake_pump()
+
+        threading.Thread(target=worker, name="xefm-ext-upgrade", daemon=True).start()
+
+    def _pump_extension_updates(self) -> bool:
+        """On the UI thread: show what a check found, or report an upgrade
+        and reload the config so the new versions load."""
+        done, self._ext_updates_done = self._ext_updates_done, None
+        if done is None:
+            return False
+        self._ext_updates_busy = False
+        stage, outcome = done
+        if stage == "upgraded":
+            lines, needs_packages = outcome
+            for line in lines:
+                self.log_info(line)
+            self.reload_config()
+            # Their packages come from PyPI; the dialog said so, and Upgrade
+            # was the consent. The sync reloads the config again when done.
+            if needs_packages:
+                self.sync_python_packages()
+            return True
+        if isinstance(outcome, Exception):
+            self.log_info(f"Check for Extension Updates failed: {outcome}")
+            return True
+        newer = [c for c in outcome if c.outdated]
+        notes = [f"{c.id}: could not check — {c.problem}" for c in outcome if c.failed]
+        notes += [f"{c.id}: not checked — {c.problem}"
+                  for c in outcome if c.problem and not c.failed]
+        if not newer:
+            current = [c for c in outcome if c.updates and not c.problem]
+            head = ([f"Every extension is up to date ({len(current)} checked)."]
+                    if current else ["No newer versions found."]) if outcome \
+                else ["No extension packages are installed."]
+            show_message_box(self.panel, "\n".join(head + ([""] + notes if notes else [])),
+                             title="Extension Updates")
+            return True
+
+        def answered(label: str) -> None:
+            if label == "Upgrade":
+                self._upgrade_extensions(newer)
+            self.panel.render()
+
+        rows = [f"{c.id}  {c.version} → {c.latest}" for c in newer]
+        show_message_box(
+            self.panel,
+            "\n".join(rows + ([""] + notes if notes else [])
+                      + ["", "Each new version is checked before it replaces the "
+                         "old one.", "Extensions run inside XeFM with your permissions."]),
+            title=f"Upgrade {len(newer)} extension{'s' if len(newer) > 1 else ''}?",
+            icon="question", buttons=("Upgrade", "Cancel"), default=0, cancel=1,
+            on_result=answered)
+        return True
 
     def _report_extensions(self) -> None:
         """One log line for the extension packages the config load folded in,
@@ -2508,7 +2612,9 @@ class XeFMApp:
         trees = self._pump_xft()
         tagged, self._tags_dirty = getattr(self, "_tags_dirty", False), False
         synced = self._pump_python_packages()
-        return listed or loading or captured or scans or trees or tagged or synced
+        updates = self._pump_extension_updates()
+        return (listed or loading or captured or scans or trees or tagged or synced
+                or updates)
 
     def _on_tags_ready(self) -> None:
         """Worker thread: tags for drawn rows landed; ask for a repaint."""
@@ -3707,6 +3813,7 @@ class XeFMApp:
                 "reload_config": (self.reload_config, False),
                 "install_extension": (self.install_extension, False),
                 "extensions": (self.show_extensions, False),
+                "check_extension_updates": (self.check_extension_updates, False),
                 "sync_python_packages": (self.sync_python_packages, False),
                 # --- file operations ---
                 "create_directory": (self.create_directory, False),
@@ -4592,6 +4699,10 @@ class XeFMApp:
                 SEPARATOR,
                 MenuItem("Extensions…", on_select=self.show_extensions,
                          shortcut=sc("extensions")),
+                MenuItem("Check for Extension Updates…",
+                         on_select=self.check_extension_updates,
+                         enabled=lambda: not self._ext_updates_busy,
+                         shortcut=sc("check_extension_updates")),
                 MenuItem("Install Extension…", on_select=self.install_extension,
                          enabled=has_files, shortcut=sc("install_extension")),
                 MenuItem("Sync Python Packages", on_select=self.sync_python_packages,
@@ -10678,6 +10789,7 @@ class XeFMApp:
             ("reload_config", "Reload ~/.xefm/config.py (Tools menu)"),
             ("install_extension", "Install the extension package under the cursor (Tools ▸ Advanced menu)"),
             ("extensions", "List extension packages (Tools ▸ Advanced menu)"),
+            ("check_extension_updates", "Look for newer versions of extension packages (Tools ▸ Advanced menu)"),
             ("sync_python_packages", "Install what ~/.xefm/requirements.txt lists (Tools ▸ Advanced menu)"),
             ("help", "Show this help"),
             ("quit", "Quit XeFM"),
