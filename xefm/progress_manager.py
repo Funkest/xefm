@@ -366,8 +366,14 @@ class ProgressManager:
         if not op or op['total_items'] == 0:
             return 0
 
-        weight = op.get('total_bytes', 0) + _ITEM_WEIGHT * op['total_items']
-        done = op.get('processed_bytes', 0) + _ITEM_WEIGHT * op['processed_items']
+        # Bytes count only against a byte total. Without one the weight is the
+        # items' alone, and bytes read would be measured against a few KiB of
+        # it: one large file's first reads filled the bar over "0 / 1 items"
+        # (#686) — any per-item byte report without a published total did.
+        total_bytes = op.get('total_bytes', 0)
+        done_bytes = op.get('processed_bytes', 0) if total_bytes else 0
+        weight = total_bytes + _ITEM_WEIGHT * op['total_items']
+        done = done_bytes + _ITEM_WEIGHT * op['processed_items']
         return int(min(weight, done) / weight * 100)
     
     def get_progress_text(self, max_width: int = 80) -> str:
