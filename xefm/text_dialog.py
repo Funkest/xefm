@@ -206,13 +206,12 @@ class MarkdownDialog(_ScrollModal):
         on_link: Callable[[str], bool] | None = None,
         hint: str | None = None,
     ):
-        kw = {} if hint is None else {"hint": hint}
         # Selectable, and a Copy button on each code block: a dialog is where
         # XeFM shows a result (an extension's, #632) as well as help, and what
         # is shown there is often wanted elsewhere — a digest, a path.
-        super().__init__(MarkdownView(source, on_link=on_link, selectable=True,
-                                      code_copy=True),
-                         title=title, on_close=on_close, **kw)
+        body = MarkdownView(source, on_link=on_link, selectable=True, code_copy=True)
+        super().__init__(body, title=title, on_close=on_close,
+                         hint=hint if hint is not None else _hint_for(body))
         self.md = self.body
 
     def _style_body(self, theme, surface_bg) -> None:
@@ -222,6 +221,22 @@ class MarkdownDialog(_ScrollModal):
         # so mutating the style between draws is safe.
         if theme is not None:
             self.md.style = Style(fg=theme.text, bg=surface_bg)
+
+
+#: The footer for each set of Tab stops a Markdown body can have (#681): the
+#: keys are only worth naming when Tab reaches something.
+_STOP_HINTS = {
+    frozenset(): "↑/↓ scroll · Esc close",
+    frozenset({"link"}): "↑/↓ scroll · Tab next link · Enter open · Esc close",
+    frozenset({"copy"}): "↑/↓ scroll · Tab Copy button · Enter copy · Esc close",
+    frozenset({"link", "copy"}):
+        "↑/↓ scroll · Tab next link or Copy · Enter open / copy · Esc close",
+}
+
+
+def _hint_for(body: MarkdownView) -> str:
+    """The footer for ``body``: what Tab reaches in it, if anything."""
+    return _STOP_HINTS.get(body.focus_stop_kinds, _STOP_HINTS[frozenset()])
 
 
 def show_text(
