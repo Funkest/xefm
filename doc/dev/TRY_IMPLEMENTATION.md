@@ -46,8 +46,19 @@ point.
   the recording needs the raw bytes, and quality-loop's reader keeps them to
   itself. Between steps it waits for quiet, counted from the last key as well
   as the last output. Each step's screen goes to `NN.txt`. `steps.jsonl` gets
-  the keys, whether the screen settled, and the event-log lines written
-  during the step. The run ends when the script does, so an agent's shell is
+  the keys, whether the screen settled, the highlights, and the event-log
+  lines written during the step.
+- **Highlights** stand in for colour, which `screen.display` drops. The
+  selection and the menu row under the cursor exist only as a background
+  colour, so `highlights()` lists the runs whose background is tinted (channel
+  spread ≥ 0.15) or reversed. Panels, shadows and separators are greys and
+  drop out. The file list's cursor row needs nothing, because PuiKit draws it
+  between `[` and `]`. The status bars come along too: they are tinted, and
+  telling them apart would mean knowing the theme. A heuristic on the
+  rendered cells was chosen over dialog/menu events from a PuiKit observer
+  (#682 proposal 3) because the screen already says what an agent needs once
+  colour is kept, and it costs XeFM and PuiKit nothing. Events can follow if
+  scripted regression tests outgrow reading screens. The run ends when the script does, so an agent's shell is
   never held. The script is read and validated before the home is made, so a
   typo costs no install.
 - **`Recording`** writes asciicast v2:

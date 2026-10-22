@@ -193,6 +193,39 @@ class Recording(_Tmp):
         self.assertEqual(times, sorted(times))
 
 
+try:
+    import pyte
+except ImportError:
+    pyte = None
+
+
+@unittest.skipIf(pyte is None, "pyte (quality-loop[tui]) is not installed")
+class Highlights(unittest.TestCase):
+    def screen(self, data: str):
+        screen = pyte.Screen(40, 4)
+        pyte.Stream(screen).feed(data)
+        return screen
+
+    def test_tinted_background_and_reverse_are_listed(self):
+        screen = self.screen(
+            "\x1b[48;2;30;30;30m panel \x1b[48;2;17;69;103m folder  \x1b[0m\r\n"
+            "\x1b[48;2;48;48;52m Open \x1b[7m Edit \x1b[0m")
+        self.assertEqual(trial.highlights(screen), [
+            {"line": 1, "from": 8, "to": 16, "text": "folder"},
+            {"line": 2, "from": 7, "to": 12, "text": "Edit"},
+        ])
+
+    def test_greys_and_blank_runs_are_not(self):
+        screen = self.screen("\x1b[48;2;48;48;52m Open \x1b[44m    \x1b[0m plain")
+        self.assertEqual(trial.highlights(screen), [])
+
+    def test_screen_file_puts_them_under_the_screen(self):
+        marks = [{"line": 3, "from": 2, "to": 9, "text": "folder"}]
+        self.assertEqual(trial.screen_file("a\nb", marks),
+                         "a\nb\n\n--- highlighted (line:columns) ---\n3:2-9  folder\n")
+        self.assertEqual(trial.screen_file("a\nb", []), "a\nb\n")
+
+
 class EventLog(_Tmp):
     def setUp(self):
         super().setUp()
