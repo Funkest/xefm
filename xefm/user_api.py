@@ -538,6 +538,18 @@ class TaskJob:
             pm.update_operation_total(total)
         pm.update_progress(str(detail), processed_items=max(0, int(done)))
 
+    def item_progress(self, done: int, total: int) -> None:
+        """Say how far the work is *inside* the current item, in bytes:
+        ``done`` of the item's ``total`` bytes. The dialog adds a second bar
+        under the item count, with the sizes (``1.2 GB / 30.0 GB``) — what a
+        copy shows for a large file. :meth:`progress` starts the next item
+        and clears it. Without a :meth:`progress` call first, the work counts
+        as one item (#680)."""
+        pm = self._task.progress
+        if pm.get_current_operation() is None:
+            self.progress(0, 1)
+        pm.update_file_byte_progress(max(0, int(done)), max(0, int(total)))
+
     def checkpoint(self) -> None:
         """Stop here if the user cancelled: raises an exception that unwinds
         the worker, and the outcome says ``"cancelled"``. Call it between
