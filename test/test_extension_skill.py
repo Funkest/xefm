@@ -402,6 +402,57 @@ class Distribution(_Tmp):
             text = archive.read("xefm/SKILL.md").decode()
         self.assertIn("name: xefm\n", text.split("---")[1])
 
+    def _assert_stamped(self, files: dict):
+        version = ext.skill_version()
+        head = files["xefm/SKILL.md"].split("---")[1]
+        self.assertIn(f'metadata:\n  xefm-version: "{version}"\n', head)
+        self.assertIn(f"packaged from **XeFM {version}**", files["xefm/SKILL.md"])
+        self.assertIn(f"Generated from XeFM {version}'s",
+                      files["xefm/references/actions.md"])
+        for name, text in files.items():
+            self.assertNotIn(ext.SKILL_VERSION_TOKEN, text, name)
+
+    def test_the_zip_states_the_version_it_describes(self):
+        """#690: a skill out in the world can be told apart from a newer one."""
+        import zipfile
+        path = ext.write_skill_zip(self.tmp / "s.zip")
+        with zipfile.ZipFile(path) as archive:
+            self._assert_stamped({n: archive.read(n).decode() for n in archive.namelist()})
+
+    def test_install_states_the_version_it_describes(self):
+        with redirect_stdout(io.StringIO()):
+            extension_cli.skill_main(["--install", str(self.tmp)])
+        self._assert_stamped({
+            f"xefm/{f.relative_to(self.tmp / 'xefm').as_posix()}": f.read_text(encoding="utf-8")
+            for f in (self.tmp / "xefm").rglob("*.md")})
+
+    def test_the_source_carries_no_version(self):
+        """Only the token: a version written into the tree is one more place
+        a bump has to remember."""
+        self.assertIn(f'xefm-version: "{ext.SKILL_VERSION_TOKEN}"', ROUTER)
+        self.assertNotIn(xefm.__version__, ROUTER)
+
+    def test_the_version_check_comes_first(self):
+        """Read before the work starts, not after a long SKILL.md."""
+        self.assertLess(ROUTER.index("## Which XeFM this describes"),
+                        ROUTER.index("## Ground rules"))
+
+    def test_a_checkout_off_the_release_tag_is_a_dev_build(self):
+        def git(stdout):
+            return unittest.mock.patch(
+                "subprocess.run",
+                return_value=subprocess.CompletedProcess([], 0, stdout, ""))
+        with git(f"v{xefm.__version__}\n"):
+            self.assertEqual(ext.skill_version(), xefm.__version__)
+        with git(""):
+            self.assertEqual(ext.skill_version(), f"{xefm.__version__}+dev")
+        with unittest.mock.patch("subprocess.run", side_effect=FileNotFoundError):
+            self.assertEqual(ext.skill_version(), xefm.__version__)
+
+    def test_an_install_without_a_checkout_is_the_release(self):
+        with unittest.mock.patch.object(ext, "SKILL_DIR", self.tmp / "a" / "b" / "xefm"):
+            self.assertEqual(ext.skill_version(), xefm.__version__)
+
     def test_the_asset_name_carries_the_version(self):
         self.assertEqual(ext.skill_zip_name("1.8.1"), "xefm-1.8.1-skill.zip")
         self.assertEqual(ext.skill_zip_name(), f"xefm-{xefm.__version__}-skill.zip")

@@ -1,6 +1,8 @@
 ---
 name: xefm
 description: Work with the XeFM file manager on the user's behalf — edit its configuration file (~/.xefm/config.py) and write, check and install extension packages. Use when the user wants to change how XeFM behaves or looks ("bind Ctrl-T to …", "make the editor code --wait", "add a favorite", "open .log files with less", "add an external program", "use the function-key keymap", "define a theme"), or wants a new XeFM feature that can live outside the core ("add an XeFM action that…", "make an XeFM extension", "turn my config.py action into an extension"), or asks to fix an extension that `xefm ext check` rejects.
+metadata:
+  xefm-version: "{XEFM_VERSION}"
 ---
 
 # Working with XeFM
@@ -17,6 +19,21 @@ lives in one folder, `~/.xefm/`, shared by every XeFM install on the machine:
 ```
 
 On Windows `~` is the user's profile folder (`C:\Users\<name>`).
+
+## Which XeFM this describes
+
+This skill was packaged from **XeFM {XEFM_VERSION}** and describes that
+version's settings, actions and extension API. An installed skill does not
+update itself when XeFM does. If `xefm` is on PATH, `xefm --version` prints
+the XeFM the user runs (`XeFM X.Y.Z`); if it is not, skip this check.
+
+- **Same major.minor** (patch and `+dev` parts aside): carry on. Patch
+  releases do not change what this skill describes.
+- **Different:** tell the user **once, in one sentence**, to install the skill
+  from their release (`xefm skill --install <skills dir>` does it), then carry
+  on, treating the names this skill gives as unconfirmed. If XeFM or
+  `xefm ext check` rejects a setting, action or API name taken from here, name
+  the version mismatch as the likely cause instead of working around it.
 
 ## Ground rules
 

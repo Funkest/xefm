@@ -84,6 +84,46 @@ def skill_zip_name(version: str = _XEFM_VERSION) -> str:
     return f"xefm-{version}-skill.zip"
 
 
+#: Where the source ``SKILL.md`` names the XeFM it describes. Resolved when the
+#: skill leaves the source tree (the zip, ``xefm skill --install``), so the
+#: tree itself carries no version that a bump could forget (#690).
+SKILL_VERSION_TOKEN = "{XEFM_VERSION}"
+
+
+def skill_version() -> str:
+    """The version a skill made from this tree describes: ``__version__``, or
+    ``X.Y.Z+dev`` from a git checkout that is not at the ``vX.Y.Z`` tag — main
+    between releases still carries the last release's ``__version__``, and a
+    skill made there must not pass for that release's. An install with no
+    checkout (a wheel, the app bundle) is the release it says it is."""
+    root = SKILL_DIR.parents[2]
+    if not (root / ".git").exists():
+        return _XEFM_VERSION
+    import subprocess
+    try:
+        done = subprocess.run(["git", "-C", str(root), "describe", "--tags",
+                               "--exact-match", "HEAD"],
+                              capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.warning(f"Cannot tell whether the skill is a release build: {e}")
+        return _XEFM_VERSION
+    if done.stdout.strip() == f"v{_XEFM_VERSION}":
+        return _XEFM_VERSION
+    return f"{_XEFM_VERSION}+dev"
+
+
+def _skill_files(version: str) -> Iterable[tuple[str, bytes]]:
+    """``(path inside the skill folder, contents)`` for every skill file, with
+    the version token resolved."""
+    for file in sorted(SKILL_DIR.rglob("*")):
+        if file.is_file() and "__pycache__" not in file.parts:
+            data = file.read_bytes()
+            if file.suffix == ".md":
+                data = data.decode("utf-8").replace(
+                    SKILL_VERSION_TOKEN, version).encode("utf-8")
+            yield file.relative_to(SKILL_DIR).as_posix(), data
+
+
 def write_skill_zip(path: Path) -> Path:
     """Zip the skill as one top-level folder, ``xefm/SKILL.md`` plus its
     ``references/``, so unzipping it into any agent's skills directory gives
@@ -91,10 +131,24 @@ def write_skill_zip(path: Path) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
-        for file in sorted(SKILL_DIR.rglob("*")):
-            if file.is_file() and "__pycache__" not in file.parts:
-                archive.write(file, f"{SKILL_DIR.name}/{file.relative_to(SKILL_DIR).as_posix()}")
+        for name, data in _skill_files(skill_version()):
+            archive.writestr(f"{SKILL_DIR.name}/{name}", data)
     return path
+
+
+def install_skill(skills_dir: Path) -> Path:
+    """Copy the skill into ``skills_dir/xefm/``, replacing what is there, and
+    return that folder."""
+    target = Path(skills_dir) / SKILL_DIR.name
+    if target.exists():
+        shutil.rmtree(target)
+    for name, data in _skill_files(skill_version()):
+        file = target / name
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_bytes(data)
+    return target
+
+
 INSTALLED_SET = "extensions.toml"
 
 #: Where packages may say they run. ``desktop`` is the native GUI, ``tui`` the

@@ -1,7 +1,7 @@
 # XeFM actions and their default keys
 
-Generated from XeFM's action registry and keymap presets by
-`tools/gen_skill_references.py` — do not edit by hand.
+Generated from XeFM {XEFM_VERSION}'s action registry and keymap presets
+by `tools/gen_skill_references.py` — do not edit by hand.
 
 Use these names exactly in `KEY_BINDINGS` (and with `ctx.invoke`). The
 key columns are each preset's defaults *before* the user's
