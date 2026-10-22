@@ -825,9 +825,12 @@ def test_a_config_that_uses_none_of_it_says_nothing(app_with):
     lines = []
     app, _ = app_with()
     app.log_info = lines.append
-    # The developer's installed extension packages are reported here too; this
-    # test is about a config.py that uses none of the API.
-    with patch.object(config_manager, "extension_report", None):
+    # The developer's installed extension packages are reported here too, and
+    # so is their ~/.xefm Python-packages sync (which goes stale whenever the
+    # venv's own packages change); this test is about a config.py that uses
+    # none of the API.
+    with patch.object(config_manager, "extension_report", None), \
+            patch.object(app, "_report_python_packages", lambda: None):
         app._load_user_entries(app.config)
     assert lines == []
 

@@ -215,3 +215,13 @@ similar-files[image]>=0.2.1
 # ctypes, Windows only. macOS needs nothing -- Spotlight is queried through
 # /usr/bin/mdfind. Without it the action says how to install it.
 comtypes; sys_platform == "win32"
+# truststore verifies HTTPS through the operating system's own trust store --
+# Security.framework on macOS, CryptoAPI on Windows -- instead of OpenSSL against
+# a static PEM file, so a revoked certificate is refused and the system's roots
+# (and any a company added to the Keychain / certificate store) are the ones
+# trusted (#676). On macOS the app bundle's Python otherwise looks for a CA file
+# outside the app and fails on a Mac without python.org's Python; on Windows
+# Python sees only the roots Windows has already fetched. Both channels, app
+# and TUI. Linux has no OS verifier to defer to, so it keeps OpenSSL and the
+# distribution's CA bundle. Pure Python on ctypes.
+truststore>=0.10; sys_platform == "darwin" or sys_platform == "win32"
