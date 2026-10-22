@@ -24,7 +24,14 @@
 # PuiKit is XeFM's UI/rendering framework (the TUI/GUI backend layer), published
 # on PyPI as of 1.0. For co-development against a local checkout, ``make venv``
 # additionally installs it editable from ../puikit, which overrides this pin.
-# 1.11.1 is the floor, and a soft one: three terminal-input and -rendering
+# 1.13.0 is the floor, and a hard one: every Markdown dialog -- Help, file
+# details, an extension's ctx.show_markdown result -- builds its MarkdownView
+# with ``code_copy=True`` and reads ``focus_stop_kinds`` for its footer, a
+# TypeError / AttributeError on any older PuiKit, so none of them would open
+# (#632, #681; puikit#171, puikit#172). It also closes a code fence the
+# CommonMark way, which ``user_api.md_code_block`` relies on to wrap text that
+# itself contains a fence.
+# 1.11.1 was the previous floor, and a soft one: three terminal-input and -rendering
 # fixes, none of them an API XeFM calls. An Escape pressed during a trackpad
 # scroll no longer types the next mouse report into the app, which opened the
 # filter with "60;34M" as its pattern (#656, puikit#165); a horizontal wheel
@@ -173,7 +180,7 @@
 # itself from under a covering confirm box -- issue #333), and
 # ``MenuBar.open_menu`` / ``open_menu_mnemonic`` (keyboard menu activation --
 # issue #304).
-puikit>=1.11.1
+puikit>=1.13.0
 pygments
 boto3
 watchdog
