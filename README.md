@@ -31,7 +31,8 @@ XeFM — short for *Xenolith File Manager* — is a powerful file manager that r
 - **Advanced search** with real-time filtering, background processing, and multi-selection bulk operations
 - **Rich built-in viewers** - Syntax-highlighted text, images, Markdown, JSON, and CSV/TSV
 - **Themes & visual effects** - A dozen built-in themes; desktop mode adds GPU background animations, CRT/phosphor screen effects, and text-reveal animations
-- **Customizable** - Fully configurable key bindings, settings, and external program launchers
+- **Customizable** - Fully configurable key bindings, settings, and external program launchers; a command palette finds every action by name
+- **Extensions** - Install packages that add actions, themes, sort orders, syntax highlighting and more — or let an AI agent write one with the XeFM skill
 
 ## Quick Start
 
@@ -151,6 +152,14 @@ macOS / Windows app bundles.
 - **[Archives](doc/ARCHIVE_FEATURE.md)** - Create, extract, and browse archives as directories
 - **[Migemo Search](doc/MIGEMO_SEARCH_FEATURE.md)** - Japanese matching from typed romaji in incremental search
 - **[Search Animation](doc/SEARCH_ANIMATION_FEATURE.md)** - Advanced search features and visual feedback
+- **[Folder Tabs](doc/FOLDER_TABS_FEATURE.md)**, **[Quick View](doc/QUICK_VIEW_FEATURE.md)** & **[Command Palette](doc/COMMAND_PALETTE_FEATURE.md)** - Several places per pane, a live preview in the other pane, and every action by name
+- **[Searching the OS Index](doc/OS_INDEX_SEARCH_FEATURE.md)** & **[File Lists](doc/FILE_LIST_IMPORT_FEATURE.md)** - Spotlight / Windows Search results, or any tool's list of paths, as a pane
+- **[Find Similar Files](doc/FIND_SIMILAR_FILES_FEATURE.md)** - Identical files and similar images, videos and audio
+- **[Extension Packages](doc/EXTENSIONS_FEATURE.md)** - Install, upgrade and write extensions
+- **[The XeFM Skill for AI Agents](doc/AGENT_SKILL_FEATURE.md)** - Let an AI coding agent edit your configuration and write extensions
+
+Every feature guide is listed at the end of the [User Guide](doc/XEFM_USER_GUIDE.md#feature-documentation).
+Recipes and community extensions are collected on the **[XeFM wiki](https://github.com/crftwr/xefm/wiki)**.
 
 ### Developer Documentation
 - **[Project Structure](doc/dev/PROJECT_STRUCTURE.md)** - Repository layout and where things live
@@ -233,6 +242,26 @@ directories, and behavior settings. Open it with **Tools → Edit Configuration�
 in the menu bar, or edit the file directly. See the
 **[Configuration Feature Guide](doc/CONFIGURATION_FEATURE.md)**.
 
+## Extensions
+
+Extension packages add actions, event hooks, themes, sort orders, filters,
+picture formats, locations or syntax highlighting without touching
+`config.py`, and install, upgrade and uninstall as one unit:
+
+```bash
+xefm ext install github:crftwr/xefm-extensions/compute-hash
+xefm ext list
+```
+
+In the desktop apps, use **Tools → Advanced → Install Extension…** instead.
+The official extensions live in
+[crftwr/xefm-extensions](https://github.com/crftwr/xefm-extensions), and the
+wiki's **[Extensions](https://github.com/crftwr/xefm/wiki/Extensions)** page lists the community's.
+To write your own, see [Extension Packages](doc/EXTENSIONS_FEATURE.md) — or
+give an AI coding agent [the XeFM skill](doc/AGENT_SKILL_FEATURE.md) and ask
+it for the feature. The extension API is a Preview, so the format may still
+change.
+
 ## Troubleshooting
 
 - *"Windows protected your PC"* when launching the portable `XeFM.exe` — the zip is not code-signed; click **More info** → **Run anyway**, or [unblock the zip](doc/DESKTOP_MODE_GUIDE.md#windows--the-portable-zip) before extracting. The [Microsoft Store](https://apps.microsoft.com/detail/9PK2X44W810V) install is signed and never shows this prompt
@@ -244,6 +273,8 @@ More in the [User Guide](doc/XEFM_USER_GUIDE.md#troubleshooting) and the [Deskto
 ## Contact & Support
 
 - **GitHub Issues**: [Report bugs or request features](https://github.com/crftwr/xefm/issues)
+- **GitHub Discussions**: [Ask questions and show what you have built](https://github.com/crftwr/xefm/discussions)
+- **Wiki**: [Recipes and community extensions](https://github.com/crftwr/xefm/wiki)
 - **Microsoft Store**: [XeFM on the Store](https://apps.microsoft.com/detail/9PK2X44W810V) — the Windows desktop app
 - **PyPI**: [pypi.org/project/xefm](https://pypi.org/project/xefm/) — released versions (`pipx install xefm`)
 - **Author's X (Twitter)**: [@crftwr](https://x.com/crftwr)

@@ -323,6 +323,97 @@ TIPS: tuple[tuple[str, str], ...] = (
      "ones with no key or menu item, and your own from `config.py` — with the "
      "key each is bound to, and {key:describe_list_item} on a row explains it."),
 
+    ("Tabs in each pane",
+     "{key:new_tab} opens another tab in the active pane at the same place, "
+     "and {key:open_in_new_tab} opens the folder under the cursor in a new "
+     "one. {key:next_tab} / {key:prev_tab} step between them and "
+     "{key:close_tab} closes one — a search result or a list keeps its own "
+     "tab while you browse elsewhere."),
+
+    ("Preview in the other pane",
+     "{key:quick_view} turns the other pane into a **quick view** of the item "
+     "under the cursor: text highlighted, pictures fitted, folders totalled. "
+     "The keyboard stays on the file list and the preview follows the cursor; "
+     "press it again, or Esc, and the other pane comes back as it was."),
+
+    ("The whole tree as one list",
+     "{key:flat_view} swaps the listing for **every file below** this folder "
+     "in one flat list — sort by size to find what takes the space, by date "
+     "to see what changed, or filter to collect one kind of file. Press it "
+     "again to go back."),
+
+    ("Deleted, but not gone",
+     "{key:delete_files} moves files to the **Trash** (the Recycle Bin on "
+     "Windows), so a mistake can be put back. {key:delete_permanently} "
+     "deletes for good. Places with no Trash — SSH, S3, inside archives — "
+     "say so before anything is deleted."),
+
+    ("Select by pattern",
+     "{key:select_by_pattern} asks for a pattern such as `*.jpg *.png` and "
+     "adds every matching file to the selection, without filtering the pane; "
+     "{key:unselect_by_pattern} takes them out again. **Select ▸ Select Same "
+     "Extension** picks every file like the one under the cursor."),
+
+    ("Rename in your editor",
+     "{key:rename_in_editor} lists the selected names in your text editor, "
+     "one per line. Rename them with everything the editor offers — "
+     "multi-cursor, search and replace, column selection — save, close, and "
+     "XeFM shows every change before it renames anything."),
+
+    ("Ask the OS index",
+     "{key:index_search} searches **Spotlight** on macOS or **Windows "
+     "Search** on Windows under this folder — names, contents and more — with "
+     "results as you type. Enter opens them in the pane as a list you can "
+     "sort, copy, move and delete in."),
+
+    ("Bring a list in",
+     "**Go ▸ Open List** shows a list of paths in the pane — from the "
+     "clipboard, a text file, or a command such as `fd`, `git ls-files` or "
+     "Everything's `es.exe` — and every file operation works on it. Worked "
+     f"examples are on the wiki: {GITHUB_URL}/wiki/Recipes"),
+
+    ("Tag your files",
+     "{key:add_favorite} also tags: below the favorite rows, its dialog "
+     "lists your tags for the selected items. They are the system's own "
+     "tags, so Finder or your desktop's file manager sees them too. **View ▸ Search Tags…** finds files by "
+     "tag under this folder."),
+
+    ("Find duplicates and look-alikes",
+     "**Tools ▸ Find Similar Files…** scans a folder for identical files, and "
+     "for similar images, videos or audio. Groups show up while the scan "
+     "runs, and the results are kept, so you can come back to them later."),
+
+    ("Keep working while it copies",
+     "Copy and Move offer a **Background** button, and a running operation's "
+     "progress dialog has **Run in background**. The status bar shows the "
+     "job, and {key:jobs} lists the jobs to pause, resume or cancel."),
+
+    ("Documents as text",
+     "{key:view_file} on a PDF, Word, Excel, PowerPoint, OpenDocument or EPUB "
+     "file shows what it says — headings, tables, slides, sheets — ready to "
+     "search and copy, even on a server or inside an archive. Content search "
+     "({key:find_in_files}) looks inside them too."),
+
+    ("Extensions",
+     "Extension packages add actions, themes, sort orders, filters, syntax "
+     "highlighting and more, installed and removed as one unit. Try the "
+     "official ones: `xefm ext install github:crftwr/xefm-extensions/compute-hash` "
+     "from a shell, or **Tools ▸ Advanced ▸ Install Extension…** in the app. "
+     f"What is available is listed at {GITHUB_URL}/wiki/Extensions"),
+
+    ("Let an AI agent do it",
+     "The **`xefm` skill** teaches an AI coding agent to edit your "
+     "`config.py` and to write extension packages for you — \"bind F12 to "
+     "reload the configuration\", \"make an XeFM extension that…\". Ask your "
+     "agent to install it from "
+     "https://crftwr.github.io/xefm/doc/AGENT_SKILL_FEATURE.html"),
+
+    ("Recipes and show-and-tell",
+     "The XeFM wiki collects recipes — pairing XeFM with other tools — and "
+     f"community extensions: {GITHUB_URL}/wiki\n\n"
+     "Built something with XeFM, or have a question? Share it in "
+     f"Discussions: {GITHUB_URL}/discussions"),
+
     ("Bugs, ideas, requests",
      "XeFM is developed in the open. Found a bug, or missing a feature? "
      f"Issues and requests are very welcome at {GITHUB_URL}/issues"),

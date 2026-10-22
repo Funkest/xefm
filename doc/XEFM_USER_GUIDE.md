@@ -30,7 +30,7 @@ XeFM (*Xenolith File Manager*) is a powerful dual-pane file manager that runs bo
 - **Desktop *and* terminal** - the same app as a native window on Windows/macOS or as a TUI on Windows/macOS/Linux
 - **AWS S3 integration** for seamless cloud storage management
 - **Advanced search** with content search and filtering
-- **Extensible** with external programs and custom key bindings
+- **Extensible** with external programs, custom key bindings, Python actions in `config.py`, and installable [extension packages](EXTENSIONS_FEATURE.md)
 - **Cross-platform** support for macOS, Linux, and Windows
 
 ---
@@ -775,6 +775,8 @@ Check file permissions and disk space
   any action by name, see its key, and run it
 - Check feature documentation below
 - Use `--help` command line option
+- The [XeFM wiki](https://github.com/crftwr/xefm/wiki) collects recipes and community extensions
+- Ask questions and share what you have built in [Discussions](https://github.com/crftwr/xefm/discussions); report bugs in [Issues](https://github.com/crftwr/xefm/issues)
 
 **See detailed documentation**: [Help Dialog Feature](HELP_DIALOG_FEATURE.md)
 
@@ -786,21 +788,28 @@ For detailed information about specific features, see these dedicated guides:
 
 ### File Operations
 - [File Operations Feature](FILE_OPERATIONS_FEATURE.md) - Copy, move, duplicate, rename-conflict handling, and progress
+- [Deleting to the Trash](TRASH_FEATURE.md) - Delete to the Trash / Recycle Bin, or for good
 - [File Clipboard](FILE_CLIPBOARD_FEATURE.md) - Copy or cut now, paste wherever you go next (and with Finder / Explorer)
 - [Background Jobs](BACKGROUND_JOBS_FEATURE.md) - Keep working while a copy, move or delete runs
 - [Find Similar Files](FIND_SIMILAR_FILES_FEATURE.md) - Identical files and similar images, videos and audio, in scans that outlive XeFM
 - [Batch Rename Feature](BATCH_RENAME_FEATURE.md) - Regex-based renaming for multiple files
+- [Rename in the Editor](RENAME_IN_EDITOR_FEATURE.md) - Rename many files by editing their names in your text editor
+- [Select by Pattern](SELECT_BY_PATTERN_FEATURE.md) - Select or unselect every file matching a pattern
+- [File Tags](FILE_TAGS_FEATURE.md) - Read and write the tags your system keeps, and search by tag
 - [Archive Feature](ARCHIVE_FEATURE.md) - Create, extract, and browse archives (incl. password-protected)
 - [File Details Feature](FILE_DETAILS_FEATURE.md) - Viewing detailed file information
 - [Searching the OS Index](OS_INDEX_SEARCH_FEATURE.md) - Spotlight and Windows Search, results as a list
+- [File Lists](FILE_LIST_IMPORT_FEATURE.md) - Show a list of paths from the clipboard, a file, or a command in a pane
 - [Documents as Text](DOCUMENT_VIEWER_FEATURE.md) - PDF, Office and EPUB files in the viewer and in content search
 - [Quick View](QUICK_VIEW_FEATURE.md) - The other pane previews the item under the cursor
 - [Tree Files](TREE_FILES_FEATURE.md) - Browse .xft groups of references, act on the real files
 - [File Monitoring Feature](FILE_MONITORING_FEATURE.md) - Automatic refresh when directories change on disk
+- [Directory Sync](DIRECTORY_SYNC_FEATURE.md) - Make one directory match another, from the directory diff
 
 ### Remote and Cloud Storage
 - [AWS S3 Support Feature](S3_SUPPORT_FEATURE.md) - Cloud storage integration and S3 bucket management
 - [SFTP Support Feature](SFTP_SUPPORT_FEATURE.md) - Remote server access over SSH
+- [Editing Remote Files](REMOTE_EDIT_FEATURE.md) - Edit files on SSH and S3 in your local editor
 
 ### Navigation and Search
 - [Navigation Dialogs Feature](NAVIGATION_DIALOGS_FEATURE.md) - Favorites, jump, history, and drives pickers
@@ -810,6 +819,7 @@ For detailed information about specific features, see these dedicated guides:
 - [Connect to Server](CONNECT_TO_SERVER_FEATURE.md) - Mount a NAS or file server from inside XeFM
 - [Tab Completion Feature](TAB_COMPLETION_FEATURE.md) - Path completion in input dialogs
 - [Migemo Search Feature](MIGEMO_SEARCH_FEATURE.md) - Japanese matching from typed romaji in incremental search
+- [Search Options](SEARCH_OPTIONS_FEATURE.md) - Options for file name and content search
 - [Search Animation Feature](SEARCH_ANIMATION_FEATURE.md) - Progress indicators during search
 
 ### Viewers
@@ -818,6 +828,7 @@ For detailed information about specific features, see these dedicated guides:
 - [JSON / CSV Viewers Feature](JSON_CSV_VIEWERS_FEATURE.md) - Rendered structured-file views
 - [Image Viewer Feature](IMAGE_VIEWER_FEATURE.md) - Built-in zoom / pan image viewer
 - [Diff Viewer Feature](DIFF_VIEWER_FEATURE.md) - File and directory diff viewers
+- [Text Encoding](TEXT_ENCODING_FEATURE.md) - Legacy encodings detected in the viewer, and choosing one by hand
 - [Text Editor Feature](TEXT_EDITOR_FEATURE.md) - External editor integration
 
 ### Interface and Display
@@ -826,6 +837,8 @@ For detailed information about specific features, see these dedicated guides:
 - [Status Bar Feature](STATUS_BAR_FEATURE.md) - Viewer status information display
 - [Help Dialog Feature](HELP_DIALOG_FEATURE.md) - Built-in help system
 - [Command Palette Feature](COMMAND_PALETTE_FEATURE.md) - Search every action by name and run it
+- [Context Menus](CONTEXT_MENU_FEATURE.md) - Right-click menus for an item and for the directory, from the mouse or the keyboard
+- [Tip of the Day](TIPS_FEATURE.md) - A short tip about one feature at startup
 - [Mouse & Interaction Feature](MOUSE_EVENT_SUPPORT_FEATURE.md) - Mouse, double-click, and drag-and-drop
 - [Color Schemes & Visual Effects](COLOR_SCHEMES_FEATURE.md) - Themes, background animations, and motion
 - [Wide Character Support Feature](WIDE_CHARACTER_SUPPORT_FEATURE.md) - International character display
@@ -835,9 +848,16 @@ For detailed information about specific features, see these dedicated guides:
 - [Configuration Feature](CONFIGURATION_FEATURE.md) - Complete configuration reference and customization guide
 - [Key Bindings Feature](KEY_BINDINGS_FEATURE.md) - Customizable keyboard shortcuts
 - [Customization (Preview)](CUSTOMIZATION_FEATURE.md) - Rebind viewer keys, bind keys to your own Python functions, run functions on events
+- [File Associations](FILE_ASSOCIATIONS_FEATURE.md) - Which program opens, views and edits each file type
+- [Extra Python Libraries](PYTHON_PACKAGES_FEATURE.md) - Libraries your `config.py` or extensions need, from `~/.xefm/requirements.txt`
+- [Logging](LOGGING_FEATURE.md) - The log pane and log files
 
 ### Integration and Extensions
+- [Extension Packages (Preview)](EXTENSIONS_FEATURE.md) - Install, upgrade and write packages that add actions, themes, sort orders, syntax highlighting and more; the official ones live in [crftwr/xefm-extensions](https://github.com/crftwr/xefm-extensions), others on the [wiki](https://github.com/crftwr/xefm/wiki/Extensions)
+- [The XeFM Skill for AI Agents](AGENT_SKILL_FEATURE.md) - Let an AI coding agent edit your configuration and write extensions
+- [Trying XeFM in a Throwaway Home](TRY_FEATURE.md) - `xefm try`: run XeFM in a temporary home, leaving your own `~/.xefm` untouched
 - [External Programs Feature](EXTERNAL_PROGRAMS_FEATURE.md) - Custom program integration (incl. the VSCode recipe)
+- [External Terminal](EXTERNAL_TERMINAL_FEATURE.md) - The terminal window the desktop app opens for the subshell and terminal programs
 - [Virtual Folders (Preview)](VIRTUAL_FOLDERS_FEATURE.md) - Browse something that is not a directory - a registry, a database, an API - as if it were one
 
 ---

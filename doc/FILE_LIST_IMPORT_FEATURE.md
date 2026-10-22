@@ -197,3 +197,11 @@ A config action can open a list the same way, with
 [`pane.open_list()`](CUSTOMIZATION_FEATURE.md#opening-your-own-list-of-files) —
 for a search written in Python. Unlike **Open List → From Command**, the
 action runs on the UI thread, so keep anything slow out of it.
+
+## See also
+
+- [Search with Everything](https://github.com/crftwr/xefm/wiki/Search-with-Everything) on the wiki:
+  Everything's `es.exe` set up for **Open List → From Command**, step by step
+  (Windows).
+- The wiki's [Recipes](https://github.com/crftwr/xefm/wiki/Recipes) page, for more ways to
+  pair XeFM with other tools.
