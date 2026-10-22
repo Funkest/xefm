@@ -1,7 +1,7 @@
 # Extension Packages — Implementation
 
-Issue #583, from discussion #543 (§§2–7 plus additions A–H). The pre-PR check
-in §8 is a separate piece of work.
+Issue #583, from discussion #543 (§§2–7 plus additions A–H). §8, the check on
+core changes, became a check before each release (#697).
 
 ## Modules
 
@@ -335,16 +335,20 @@ every candidate's manifest.
 2. **Name:** "extension". Packages live in the existing `~/.xefm/extensions/`,
    as G proposes.
 3. **Catalog:** none in v1. Install is from a source only.
-4. **Pre-PR check:** separate work.
+4. **Pre-PR check:** a check before each release instead, not on every PR
+   (#697).
 
 Not done yet:
 
-- `xefm.testing` fixtures (F).
 - Enter on an extension zip offering to install it. The explicit action exists
   instead.
 - The Microsoft Store dynamic-code policy check (§5). It matters only once a
   catalog exists.
 - Rewriting vendored imports (C, option 1). Only the collision refusal is done.
+
+Set aside: the `xefm.testing` fixtures (F). The skill's own fake and
+`xefm try --keys` cover extension testing for now. A compatibility check
+against real extensions belongs with API_VERSION 1 (discussion #469).
 
 ## Tests
 
