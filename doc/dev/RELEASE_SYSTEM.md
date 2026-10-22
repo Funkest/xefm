@@ -230,7 +230,12 @@ the new `xefm` sdist, nor a PuiKit released the same day, and fails with
 "Unable to determine dependencies … Please update the resources manually".
 Bump the cask on release day and the formula the next day (first hit with
 1.9.0). Both bumps push a branch named `bump-xefm-X.Y.Z`, so merge the cask PR
-before running the formula bump, or the second push collides with the first.
+before running the formula bump, or the second push collides with the first. A failed
+bump has already rewritten the formula's `url` and `sha256` in the local tap
+checkout (`$(brew --repo crftwr/tap)`) and leaves the edit uncommitted. That
+checkout is the machine's live Homebrew, so `brew upgrade` there offers the new
+version with no bottle behind it (a 404). Restore it with
+`git -C "$(brew --repo crftwr/tap)" checkout -- Formula/xefm.rb`.
 
 `bump-formula-pr` regenerates the formula's Python resources. Its
 `pypi_packages exclude_packages:` stanza keeps Pillow (taken from Homebrew's

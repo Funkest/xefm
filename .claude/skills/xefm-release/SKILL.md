@@ -136,7 +136,10 @@ gh release edit vX.Y.Z --notes-file <scratch>/release-note-x.y.z.md
   packages uploaded at least 24 hours ago (`--uploaded-prior-to=P1D`), so run
   it the next day, after the cask PR is merged (both use the branch
   `bump-xefm-X.Y.Z`). Report it as remaining rather than editing resources
-  by hand.
+  by hand. A failed bump has already edited the formula in the local tap
+  checkout and leaves it uncommitted, and this Mac's own `brew upgrade` then
+  offers a version with no bottle (404). After any failed bump, restore it:
+  `git -C "$(brew --repo crftwr/tap)" checkout -- Formula/xefm.rb`.
   Each opens a PR on crftwr/homebrew-tap. Merge the cask PR when its CI
   passes. For the formula PR, run the tap's **brew pr-pull** workflow with the
   PR number once CI passes (`gh workflow run publish.yml -R crftwr/homebrew-tap
