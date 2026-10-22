@@ -63,9 +63,12 @@ ends, so nothing is left waiting. The script is a JSON list of steps:
 In the `--screens` folder:
 
 - `00.txt` is the screen after XeFM started, and `01.txt`, `02.txt`, … the
-  screen after each step;
+  screen after each step. Below the screen, under `--- highlighted ---`, are
+  the parts drawn on a coloured background, such as selected files, the menu
+  item under the cursor and the status bars, each with its line and columns;
 - `steps.jsonl` has one line per step: the keys, whether the screen settled,
-  and every message XeFM logged during it, including errors.
+  what was highlighted, and every message XeFM logged during it, including
+  errors.
 
 A recording plays with `asciinema play demo.cast`, or becomes a GIF with
 [agg](https://github.com/asciinema/agg): `agg demo.cast demo.gif`.
@@ -75,9 +78,9 @@ run on Windows yet. Trying XeFM by hand works everywhere.
 
 ### Things to know
 
-- The screens are plain text, so colour is lost: you cannot see which files
-  are selected or which menu row is highlighted. Check what an action does
-  instead, or its message in `steps.jsonl`.
+- The screens are plain text. Colour survives only as the highlighted list
+  under each screen; a theme that marks the selection in grey would not show
+  there.
 - While a long task runs, its progress keeps the screen changing, so the step
   waits its full patience. To press keys during a task (to cancel it), put
   them in one step with pauses: `["Enter", {"pause": 1}, "Esc"]`.

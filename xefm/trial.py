@@ -233,6 +233,67 @@ class Recording:
         self._file.close()
 
 
+# --- what colour alone shows --------------------------------------------------
+
+#: How far from grey a background must be to count as a highlight: the spread
+#: between its strongest and weakest channel, 0 to 1. Panels, shadows and
+#: separators are greys (spread near 0); the selection, the menu row under
+#: the cursor and the status bars are tinted (0.3 and up in the themes XeFM
+#: ships).
+_TINT = 0.15
+
+#: pyte's names for the 16-colour palette's greys.
+_GREY_NAMES = {"default", "black", "white", "brightblack", "brightwhite"}
+
+
+def _tinted(colour: str) -> bool:
+    if colour in _GREY_NAMES:
+        return False
+    if len(colour) != 6:
+        return True  # a named colour: red, blue, …
+    try:
+        channels = [int(colour[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    except ValueError:
+        return False
+    return max(channels) - min(channels) >= _TINT
+
+
+def highlights(screen) -> list[dict]:
+    """The runs of a pyte screen drawn on a tinted background or in reverse
+    video — what the text screen loses: which files are selected, which menu
+    row is under the cursor. (The cursor row of a file list needs no help: it
+    is drawn between ``[`` and ``]``.) Each is ``{"line", "from", "to",
+    "text"}``, 1-based like the lines and columns of the screen file."""
+    out = []
+    for y in range(screen.lines):
+        row = screen.buffer[y]
+        run = None
+        for x in range(screen.columns + 1):
+            cell = row[x] if x < screen.columns else None
+            key = (cell.bg, cell.reverse) if cell and (
+                cell.reverse or _tinted(cell.bg)) else None
+            if run and key != run["key"]:
+                text = run["text"].strip()
+                if text:
+                    out.append({"line": y + 1, "from": run["x"] + 1, "to": x,
+                                "text": text})
+                run = None
+            if key and run is None:
+                run = {"key": key, "x": x, "text": ""}
+            if run:
+                run["text"] += cell.data
+    return out
+
+
+def screen_file(text: str, marks: list[dict]) -> str:
+    """A step's screen file: the screen, then its highlights under a rule."""
+    if not marks:
+        return text + "\n"
+    rows = [f"{m['line']}:{m['from']}-{m['to']}  {m['text']}" for m in marks]
+    return (text + "\n\n--- highlighted (line:columns) ---\n"
+            + "\n".join(rows) + "\n")
+
+
 # --- the terminal -------------------------------------------------------------
 
 class PtyApp:
@@ -315,6 +376,10 @@ class PtyApp:
             lines.pop()
         return "\n".join(lines)
 
+    def highlights(self) -> list[dict]:
+        with self._lock:
+            return highlights(self.screen)
+
     def wait_quiet(self, quiet: float, patience: float) -> bool:
         """Wait until the app has written nothing for ``quiet`` seconds, counted
         from the last key as well as the last output (a key answered with
@@ -365,8 +430,9 @@ def run_script(home: TryHome, argv: list[str], steps: list[Step], *, screens: Pa
                startup: float = 20.0) -> ScriptResult:
     """Drive the TUI through ``steps``. ``screens`` gets ``00.txt`` (the screen
     once XeFM has started), ``NN.txt`` after each step, and ``steps.jsonl``:
-    per step its intent, the keys as sent, whether the screen settled, and the
-    event-log lines (messages, exceptions) XeFM wrote during it."""
+    per step its intent, the keys as sent, whether the screen settled, what
+    was highlighted, and the event-log lines (messages, exceptions) XeFM wrote
+    during it."""
     keys = _keys_module()
     screens.mkdir(parents=True, exist_ok=True)
     events_path = home.root / "events.jsonl"
@@ -396,9 +462,12 @@ def run_script(home: TryHome, argv: list[str], steps: list[Step], *, screens: Pa
     try:
         with open(screens / "steps.jsonl", "w", encoding="utf-8") as log:
             settled = app.wait_quiet(quiet=1.0, patience=startup)
-            (screens / "00.txt").write_text(app.text() + "\n", encoding="utf-8")
+            marks = app.highlights()
+            (screens / "00.txt").write_text(screen_file(app.text(), marks),
+                                            encoding="utf-8")
             log.write(json.dumps({"step": 0, "intent": "start", "settled": settled,
-                                  "screen": "00.txt", "events": new_events()},
+                                  "screen": "00.txt", "highlighted": marks,
+                                  "events": new_events()},
                                  ensure_ascii=False) + "\n")
             for n, step in enumerate(steps, 1):
                 if app.process.poll() is not None:
@@ -410,11 +479,14 @@ def run_script(home: TryHome, argv: list[str], steps: list[Step], *, screens: Pa
                 app.send(step.keys)
                 settled = app.wait_quiet(quiet=step.quiet, patience=step.patience)
                 name = f"{n:02d}.txt"
-                (screens / name).write_text(app.text() + "\n", encoding="utf-8")
+                marks = app.highlights()
+                (screens / name).write_text(screen_file(app.text(), marks),
+                                            encoding="utf-8")
                 log.write(json.dumps({
                     "step": n, "intent": step.intent, "keys": keys.describe(step.keys),
                     "settled": settled, "waited": round(time.monotonic() - started, 2),
-                    "screen": name, "events": new_events()}, ensure_ascii=False) + "\n")
+                    "screen": name, "highlighted": marks, "events": new_events()},
+                    ensure_ascii=False) + "\n")
                 log.flush()
                 result.steps = n
                 if not settled:

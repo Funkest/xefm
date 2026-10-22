@@ -50,7 +50,13 @@ preset, `Ctrl-T` opens the command palette, which runs any action by name;
 
 What comes back, in `--screens` (default `try-screens/`):
 
-- `00.txt` (after start-up) and `NN.txt` after each step: the screen as text.
+- `00.txt` (after start-up) and `NN.txt` after each step: the screen as text,
+  then, under a dashed `highlighted (line:columns)` rule, every run drawn on a
+  coloured background or in reverse. That is how the selection (file rows) and
+  the menu or list row under the cursor show; the status bars are always
+  there too. A file list's cursor row needs no list: it sits between `[` and
+  `]` in the text itself. The same runs are in `steps.jsonl` as
+  `highlighted`.
 - `steps.jsonl`: per step, the keys sent, whether the screen settled
   (`"settled": false` means it was still drawing after `patience` seconds, 10
   by default), and `events` — every line XeFM wrote to its log pane during the
@@ -63,10 +69,9 @@ What comes back, in `--screens` (default `try-screens/`):
 
 Things that will catch you out:
 
-- **Colour is gone.** The selection marks and the highlighted menu row are
-  colours, which the text screen does not keep. Check a selection through the
-  events (`Selected: …`) or through what the action then does, not by looking
-  for the mark.
+- **Colour is only in the highlighted list.** Find the menu row you are on
+  there instead of counting `Down` presses; confirm a selection there or by
+  its `Selected: …` event.
 - **A running task never goes quiet.** Its progress dialog keeps redrawing, so
   a step during a task waits its full `patience`. To press keys while a task
   runs (to cancel it, say), put them in one step with pauses:
