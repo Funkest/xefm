@@ -50,8 +50,12 @@ xefm ext upgrade compute-hash # just this one
 
 Inside XeFM:
 
-- To install, put the cursor on a package folder or `.zip` and choose
-  **Tools ▸ Advanced ▸ Install Extension…**.
+- To install, choose **Tools ▸ Advanced ▸ Install Extension…** and paste
+  where the package is: anything `xefm ext install` takes, such as
+  `github:crftwr/xefm-extensions/compute-hash`, an `https://` zip URL, or a
+  path. With the cursor on a package folder or `.zip`, its path is already
+  filled in, so Enter installs it. A relative path is taken from the active
+  pane's folder.
 - **Tools ▸ Advanced ▸ Extensions…** shows which packages loaded, and why any did not.
 - **Tools ▸ Advanced ▸ Check for Extension Updates…** looks for newer versions
   and offers to upgrade them.

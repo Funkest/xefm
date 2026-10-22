@@ -848,6 +848,14 @@ _DETAILS: dict[str, str] = {
         "bindings, file associations, external programs, favorites and your "
         "own actions take effect at once. Theme, fonts and layout apply on the "
         "next start, and the log says so."),
+    "install_extension": (
+        "Asks where the extension package is — a folder holding "
+        "`xefm-extension.toml`, a `.zip` of one, an `https://` zip URL, or "
+        "`github:owner/repo[/path][@ref]` (paste it) — with the package under "
+        "the cursor already filled in. XeFM fetches it and runs the same check "
+        "as `xefm ext check`; a package that fails is refused with every "
+        "finding listed. Otherwise it shows what the package adds, and installs "
+        "it on Install. The same as `xefm ext install` from a shell."),
     "check_extension_updates": (
         "Asks where each installed extension package publishes its versions "
         "(its `updates` source on GitHub) whether there is a newer one, and "
@@ -1055,7 +1063,8 @@ _FILER_ACTIONS = [
     _a("subshell", FILER, "Open a subshell in this directory"),
     _a("edit_config", FILER, "Edit config.py, then reload it"),
     _a("reload_config", FILER, "Re-read config.py and apply it live"),
-    _a("install_extension", FILER, "Install the extension package under the cursor"),
+    _a("install_extension", FILER,
+       "Install an extension package from a folder, a .zip, a URL or GitHub"),
     _a("extensions", FILER, "List the extension packages and whether they loaded"),
     _a("check_extension_updates", FILER,
        "Look for newer versions of the installed extension packages"),

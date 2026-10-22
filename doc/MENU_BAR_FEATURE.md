@@ -184,7 +184,8 @@ the mouse for the first, take the whole buffer with the second. See
 | Reload Configuration | `reload_config` *(ships unbound)* |
 | Advanced ▸ Keymap ▸ | AFX style / Orthodox — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md) |
 | Advanced ▸ Extensions… | `extensions` *(ships unbound)* — see [Extension Packages](EXTENSIONS_FEATURE.md) |
-| Advanced ▸ Install Extension… | `install_extension` *(ships unbound)* |
+| Advanced ▸ Check for Extension Updates… | `check_extension_updates` *(ships unbound)* |
+| Advanced ▸ Install Extension… | `install_extension` *(ships unbound)* — a folder, `.zip`, URL or `github:owner/repo` |
 | Advanced ▸ Sync Python Packages | `sync_python_packages` *(ships unbound)* — see [Extra Python Libraries](PYTHON_PACKAGES_FEATURE.md) |
 
 Advanced holds what is set up once or now and then. Everything in it is also

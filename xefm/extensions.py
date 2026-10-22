@@ -1245,15 +1245,20 @@ def summarize(manifest: Manifest) -> list[str]:
 
 
 def install(source: str, layout: Layout | None = None, *,
-            opener: Callable[[str], bytes] | None = None) -> Manifest:
+            opener: Callable[[str], bytes] | None = None,
+            fetched: Path | None = None) -> Manifest:
     """Check the package at ``source`` and copy it into ``extensions/``,
     recording it in the installed set. Nothing is copied when the check finds
     an error. Reinstalling an installed id replaces it (an upgrade); a *local*
-    package of the same id — one the user made — is never overwritten."""
+    package of the same id — one the user made — is never overwritten.
+
+    ``fetched`` is ``source`` already put on disk by :func:`fetch` — the app
+    downloads once to show what a package adds, and installs that copy rather
+    than downloading it again after the user agrees."""
     layout = layout or Layout()
     installed = read_installed(layout)
     with tempfile.TemporaryDirectory(prefix="xefm-ext-") as tmp:
-        root = fetch(source, Path(tmp), opener=opener)
+        root = Path(fetched) if fetched is not None else fetch(source, Path(tmp), opener=opener)
         manifest = read_manifest(root)
         others = [m for m in discover(layout) if m.id != manifest.id]
         problems = check_manifest(manifest, others=others)
