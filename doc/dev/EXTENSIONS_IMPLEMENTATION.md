@@ -8,11 +8,13 @@ in §8 is a separate piece of work.
 - `xefm/extensions.py` — the manifest, the static check, the installed set,
   install/uninstall/sync, loading into a config, settings, and the
   `ExtensionHandle` that `user_api.extension(__name__)` returns.
-- `xefm/extension_cli.py` — `xefm ext check|install|uninstall|list|enable|disable|sync|settings`.
+- `xefm/extension_cli.py` — `xefm ext check|install|uninstall|list|enable|disable|sync|settings|try`.
   `xefm.app.main` dispatches `argv[1] == "ext"` here before the UI's argparse
   runs, so no backend is opened.
 - `XeFMApp.install_extension` / `show_extensions` — the in-app install, with a
   summary-and-confirm box, and the load report.
+- `xefm try --ext <dir>` runs XeFM with a package in a throwaway home: see
+  [TRY_IMPLEMENTATION.md](TRY_IMPLEMENTATION.md).
 
 ## The static check (`check_manifest`)
 
@@ -96,6 +98,22 @@ satisfy every extension requirement. Three pieces make that hold.
   resolve the latest tag (GitHub API or `gh`) when no `xefm` is on PATH.
   `write_skill_zip` puts the skill under one top-level folder, so unzipping it
   into any skills directory gives the right layout.
+
+  **The skill states the XeFM it describes (#690).** The source `SKILL.md`
+  carries `{XEFM_VERSION}` (`SKILL_VERSION_TOKEN`) in a
+  `metadata.xefm-version` frontmatter key and in a *Which XeFM this
+  describes* section placed before the ground rules; the generated
+  references carry it in their "Generated from" line. `write_skill_zip` and
+  `install_skill` (`xefm skill --install`) resolve it from `skill_version()`
+  on the way out, so the tree never holds a version a bump could miss. A git
+  checkout that is not at the `vX.Y.Z` tag stamps `X.Y.Z+dev`: main keeps the
+  last release's `__version__` until the bump, and a skill made there must not
+  pass for that release. A wheel or app bundle has no checkout and stamps its
+  release. The section tells the agent to compare major.minor with
+  `xefm --version` and, on a mismatch, say so once and carry on. Patch
+  releases do not change what the skill describes, so comparing the patch
+  part would only make the agent nag. Without `xefm` on PATH there is no
+  running version to compare, so the check is skipped (#639 dropped detection).
 
   `doc/AGENT_SKILL_FEATURE.md` (published on GitHub Pages) has a section
   written as instructions to an agent: pick the version, get the zip, verify,

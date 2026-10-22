@@ -73,6 +73,12 @@ The skill describes the configuration and the extension API of one XeFM
 version. When you upgrade XeFM, install the skill again from the matching
 release. Replace the old `xefm/` folder rather than unzipping on top of it.
 
+To see which XeFM an installed skill describes, look at the
+`xefm-version` line near the top of its `SKILL.md`. A version ending in
+`+dev` (for example `1.9.0+dev`) was made from unreleased source, newer than
+that release. An agent using the skill checks this against
+`xefm --version` itself and tells you once if they differ.
+
 ---
 
 ## Instructions for AI agents
@@ -105,6 +111,10 @@ zip contains only Markdown, so nothing in it needs to be run.
    `~/.agents/skills/`. Install at project level only when the user asked for
    that. If you can't tell where you load skills from, ask the user rather than
    guessing.
+
+   If `<skills dir>/xefm/SKILL.md` already exists and its frontmatter has
+   `xefm-version: "X.Y.Z"` for the version from step 1, the skill is already
+   current. Remove the temporary directory, tell the user so and stop.
 5. **Install:**
    - If `<skills dir>/xefm/` already exists, remove it.
    - Extract the zip so that the result is `<skills dir>/xefm/SKILL.md`. Make

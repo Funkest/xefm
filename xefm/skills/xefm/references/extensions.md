@@ -18,13 +18,17 @@ The loop is always the same:
    manifest *and* the code rules in section 3, so a clean check means the
    package meets XeFM's requirements.
 4. `python -m pytest tests` in the package directory (see *Testing*).
-5. `xefm ext install <dir>` (add `--yes` only when the user has said to install).
-6. Tell the user to run **Tools ▸ Reload Configuration** in XeFM, or restart
+5. When the action opens a prompt, a dialog, a menu or a task:
+   `xefm try --ext <dir> --keys steps.json` to see it run (see *See it run*).
+6. `xefm ext install <dir>` (add `--yes` only when the user has said to install).
+7. Tell the user to run **Tools ▸ Reload Configuration** in XeFM, or restart
    it.
 
-Never launch XeFM yourself to try an extension: `xefm` (and `python -m xefm`)
-opens an interactive file manager that blocks until a person quits it. The
-`xefm ext …` subcommands are safe; they never open a window.
+Never launch XeFM yourself with `xefm` (or `python -m xefm`): it opens an
+interactive file manager that blocks until a person quits it. The `xefm ext …`
+subcommands are safe; they never open a window. The one way for you to see an
+extension run is `xefm try --ext <dir> --keys <script>`, which runs XeFM in a
+pseudo-terminal, follows the script and exits (*See it run*).
 
 ## 1. Start a package
 
@@ -390,23 +394,53 @@ user (`python -m pip install pytest` installs it) rather than skipping the
 tests silently.
 
 For the thin wrapper, a small fake is enough — make it match the real API's
-shape, methods as methods (`selected=lambda: [...]`):
+shape, methods as methods (`selected=lambda: [...]`). The action reads its
+settings and state through `extension(__name__)`, so the test replaces that
+name in the action's module. This one runs against the `hello` action
+`xefm ext new hello-xefm` writes:
 
 ```python
+# tests/test_actions.py
 from types import SimpleNamespace
 from hello_xefm import actions
 
-def test_greet_logs():
+def test_hello_logs(monkeypatch):
     lines = []
-    ext = SimpleNamespace(settings=SimpleNamespace(GREETING="Hi"),
-                          state=SimpleNamespace(get=lambda k, d=None: d,
-                                                set=lambda k, v: None))
-    ctx = SimpleNamespace(message=lines.append, extension=ext)
-    actions.greet(ctx)
-    assert lines == ["Hi"]
+    handle = SimpleNamespace(settings=SimpleNamespace(GREETING="Hi"))
+    monkeypatch.setattr(actions, "extension",
+                        lambda module: handle if module.startswith("hello_xefm.") else None)
+    ctx = SimpleNamespace(message=lines.append,
+                          pane=SimpleNamespace(focused=SimpleNamespace(name="a.txt")))
+    actions.hello(ctx)
+    assert lines == ["Hi, a.txt"]
 ```
 
-## 7. Installing, sharing, removing
+A fake prompt should answer **after** the action returns, as XeFM does: store
+the callback, return, then call it from the test. A fake that calls the
+callback at once runs it while the action is still on the stack, and hides
+bugs that only show once it has returned:
+
+```python
+    asked = []
+    ctx.choose = lambda title, items, **kw: asked.append(kw["on_result"])
+    actions.pick(ctx)          # returns with the prompt still open
+    asked[0](1)                # now the user picks the second item
+```
+
+## 7. See it run
+
+`xefm ext check` reads the code and the tests run it against a fake `ctx`, so
+neither sees a menu, a dialog, a task's progress or a cancel. Run XeFM with the
+package and nothing else, from a script, and read the screens it saves:
+
+```bash
+xefm try --ext <dir> --keys steps.json --screens out/
+```
+
+`references/try.md` has the script format, what comes back, and what will
+catch you out.
+
+## 8. Installing, sharing, removing
 
 ```bash
 xefm ext install ./hello-xefm          # shows what it adds and asks

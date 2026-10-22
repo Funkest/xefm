@@ -292,6 +292,19 @@ Files under a `_vendor/` folder are skipped.
 The exit status is 0 when the package would install. An install runs the same
 check and installs nothing if it finds an error.
 
+### Trying a package
+
+```bash
+xefm try --ext ./hello-xefm
+```
+
+This runs XeFM in the terminal with your package and nothing else, so you can
+see its menus, dialogs and tasks before you install it. It runs in a
+temporary home folder, so your own `~/.xefm`, its config and your other
+extensions are never touched. Quit XeFM as usual and the temporary home is
+deleted. An AI assistant uses the same command with a script of keys. See
+[Trying XeFM in a Throwaway Home](TRY_FEATURE.md).
+
 ### Dependencies
 
 - **Libraries from PyPI** (PyYAML, numpy, rawpy, compiled or not): list them

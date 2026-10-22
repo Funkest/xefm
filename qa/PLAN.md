@@ -41,9 +41,10 @@ once its macOS backend has been run for real.
 
 ## Open questions for the person
 
-- Whether to drive the desktop app too (above), and whether XeFM should
-  write a level-1 event log (`QUALITY_LOOP_EVENTS`): today a live check reads
-  the log pane off the screen, where noisier lines can push a message out.
+- Whether to drive the desktop app too (above). XeFM now writes a level-1
+  event log when `QUALITY_LOOP_EVENTS` is set (#682, `xefm try`): every log-pane line and
+  every logged exception, so a live check need not read messages off the
+  screen. Dialog and menu events still need a PuiKit layer observer.
 - Where the policy lives: a tracking Issue (`quality-loop:loop`) or
   `qa/LOOP.md`.
 

@@ -92,11 +92,9 @@ def _skill(args: argparse.Namespace) -> int:
         return 0
     import shutil
     skills = Path(args.install).expanduser()
-    target = skills / source.name
-    if target.exists():
-        shutil.rmtree(target)
-    shutil.copytree(source, target)
-    print(f"installed the {source.name} skill in {target}")
+    target = ext.install_skill(skills)
+    print(f"installed the {source.name} skill for XeFM {ext.skill_version()} "
+          f"in {target}")
     # Only a folder that really is the old skill: this is the user's
     # directory, and a same-named folder of someone else's stays.
     legacy = skills / ext.LEGACY_SKILL_NAME

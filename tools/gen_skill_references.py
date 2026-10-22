@@ -79,8 +79,8 @@ def render() -> str:
     out = [
         "# XeFM actions and their default keys",
         "",
-        "Generated from XeFM's action registry and keymap presets by",
-        "`tools/gen_skill_references.py` — do not edit by hand.",
+        "Generated from XeFM {XEFM_VERSION}'s action registry and keymap presets",
+        "by `tools/gen_skill_references.py` — do not edit by hand.",
         "",
         "Use these names exactly in `KEY_BINDINGS` (and with `ctx.invoke`). The",
         "key columns are each preset's defaults *before* the user's",
@@ -161,8 +161,8 @@ def render_template() -> str:
     return "\n".join([
         "# XeFM's configuration template",
         "",
-        "Generated from `xefm/_config.py` by `tools/gen_skill_references.py` —",
-        "do not edit by hand.",
+        "Generated from XeFM {XEFM_VERSION}'s `xefm/_config.py` by",
+        "`tools/gen_skill_references.py` — do not edit by hand.",
         "",
         "This is the file XeFM copies to `~/.xefm/config.py` on first launch, and",
         "the one it fills every setting the user's file leaves out from. It is the",

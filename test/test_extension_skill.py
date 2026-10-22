@@ -15,6 +15,7 @@ three things stay in step, so each is pinned here:
 Run with: python -m pytest test/test_extension_skill.py -v
 """
 
+import importlib.util
 import io
 import os
 import re
@@ -40,6 +41,7 @@ from xefm import user_api  # noqa: E402
 ROUTER = (ext.SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
 SKILL = (ext.SKILL_DIR / "references" / "extensions.md").read_text(encoding="utf-8")
 CONFIG = (ext.SKILL_DIR / "references" / "config.md").read_text(encoding="utf-8")
+TRY = (ext.SKILL_DIR / "references" / "try.md").read_text(encoding="utf-8")
 
 
 def _section(title: str) -> str:
@@ -69,6 +71,23 @@ class Scaffold(_Tmp):
             [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests"],
             cwd=root, capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_the_skill_s_wrapper_test_runs_against_it(self):
+        """The skill's thin-wrapper example is written for this scaffold; it
+        drifted once (#689) because nothing ran it."""
+        code = re.search(r"For the thin wrapper.*?```python\n(.*?)```",
+                         SKILL, re.S).group(1)
+        root = ext.scaffold("hello-xefm", self.tmp)
+        (root / "tests" / "test_actions.py").write_text(code, encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+             "tests/test_actions.py"],
+            cwd=root, capture_output=True, text=True, timeout=60,
+            # actions.py imports xefm.user_api, which the scaffold's own
+            # logic-only test never needs.
+            env=dict(os.environ, PYTHONPATH=str(Path(xefm.__file__).parent.parent)))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("1 passed", result.stdout)
 
     def test_the_package_name_follows_the_id(self):
         self.assertEqual(ext.package_name_for("hello-xefm"), "hello_xefm")
@@ -196,7 +215,8 @@ class SkillMatchesTheChecker(_Tmp):
         cited = set(re.findall(r"`(references/[\w.-]+)`", ROUTER))
         self.assertEqual(cited, {"references/config.md", "references/extensions.md",
                                  "references/actions.md",
-                                 "references/config-template.md"})
+                                 "references/config-template.md",
+                                 "references/try.md"})
         for ref in cited:
             self.assertTrue((ext.SKILL_DIR / ref).is_file(), ref)
 
@@ -290,6 +310,24 @@ class SkillMatchesTheChecker(_Tmp):
         commands = set(parser._subparsers._group_actions[0].choices)
         for command in set(re.findall(r"xefm ext (\w+)", SKILL)):
             self.assertIn(command, commands)
+
+    def test_every_try_option_the_skill_uses_exists(self):
+        from xefm import try_cli
+        options = set(try_cli._parser()._option_string_actions)
+        texts = [ROUTER, SKILL, CONFIG, TRY]
+        used = {o for text in texts for line in re.findall(r"xefm try[^`\n]*", text)
+                for o in re.findall(r"--[\w-]+", line)}
+        used |= set(re.findall(r"`(--[\w-]+)", TRY))
+        self.assertIn("--keys", used)
+        self.assertLessEqual(used, options)
+
+    @unittest.skipUnless(importlib.util.find_spec("quality_loop"), "needs quality-loop")
+    def test_the_example_script_reads(self):
+        from xefm import trial
+        script = re.search(r"```json\n(.*?)```", TRY, re.S).group(1)
+        path = self.tmp / "steps.json"
+        path.write_text(script, encoding="utf-8")
+        self.assertEqual(len(trial.read_script(path)), 3)
 
     def test_skill_install_copies_it(self):
         out = io.StringIO()
@@ -401,6 +439,57 @@ class Distribution(_Tmp):
             self.assertTrue(all(n.startswith("xefm/") for n in names))
             text = archive.read("xefm/SKILL.md").decode()
         self.assertIn("name: xefm\n", text.split("---")[1])
+
+    def _assert_stamped(self, files: dict):
+        version = ext.skill_version()
+        head = files["xefm/SKILL.md"].split("---")[1]
+        self.assertIn(f'metadata:\n  xefm-version: "{version}"\n', head)
+        self.assertIn(f"packaged from **XeFM {version}**", files["xefm/SKILL.md"])
+        self.assertIn(f"Generated from XeFM {version}'s",
+                      files["xefm/references/actions.md"])
+        for name, text in files.items():
+            self.assertNotIn(ext.SKILL_VERSION_TOKEN, text, name)
+
+    def test_the_zip_states_the_version_it_describes(self):
+        """#690: a skill out in the world can be told apart from a newer one."""
+        import zipfile
+        path = ext.write_skill_zip(self.tmp / "s.zip")
+        with zipfile.ZipFile(path) as archive:
+            self._assert_stamped({n: archive.read(n).decode() for n in archive.namelist()})
+
+    def test_install_states_the_version_it_describes(self):
+        with redirect_stdout(io.StringIO()):
+            extension_cli.skill_main(["--install", str(self.tmp)])
+        self._assert_stamped({
+            f"xefm/{f.relative_to(self.tmp / 'xefm').as_posix()}": f.read_text(encoding="utf-8")
+            for f in (self.tmp / "xefm").rglob("*.md")})
+
+    def test_the_source_carries_no_version(self):
+        """Only the token: a version written into the tree is one more place
+        a bump has to remember."""
+        self.assertIn(f'xefm-version: "{ext.SKILL_VERSION_TOKEN}"', ROUTER)
+        self.assertNotIn(xefm.__version__, ROUTER)
+
+    def test_the_version_check_comes_first(self):
+        """Read before the work starts, not after a long SKILL.md."""
+        self.assertLess(ROUTER.index("## Which XeFM this describes"),
+                        ROUTER.index("## Ground rules"))
+
+    def test_a_checkout_off_the_release_tag_is_a_dev_build(self):
+        def git(stdout):
+            return unittest.mock.patch(
+                "subprocess.run",
+                return_value=subprocess.CompletedProcess([], 0, stdout, ""))
+        with git(f"v{xefm.__version__}\n"):
+            self.assertEqual(ext.skill_version(), xefm.__version__)
+        with git(""):
+            self.assertEqual(ext.skill_version(), f"{xefm.__version__}+dev")
+        with unittest.mock.patch("subprocess.run", side_effect=FileNotFoundError):
+            self.assertEqual(ext.skill_version(), xefm.__version__)
+
+    def test_an_install_without_a_checkout_is_the_release(self):
+        with unittest.mock.patch.object(ext, "SKILL_DIR", self.tmp / "a" / "b" / "xefm"):
+            self.assertEqual(ext.skill_version(), xefm.__version__)
 
     def test_the_asset_name_carries_the_version(self):
         self.assertEqual(ext.skill_zip_name("1.8.1"), "xefm-1.8.1-skill.zip")

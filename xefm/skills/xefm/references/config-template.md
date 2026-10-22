@@ -1,7 +1,7 @@
 # XeFM's configuration template
 
-Generated from `xefm/_config.py` by `tools/gen_skill_references.py` —
-do not edit by hand.
+Generated from XeFM {XEFM_VERSION}'s `xefm/_config.py` by
+`tools/gen_skill_references.py` — do not edit by hand.
 
 This is the file XeFM copies to `~/.xefm/config.py` on first launch, and
 the one it fills every setting the user's file leaves out from. It is the
