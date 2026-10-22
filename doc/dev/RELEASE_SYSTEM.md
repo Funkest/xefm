@@ -223,6 +223,15 @@ done; bumping either earlier points it at a file that does not exist yet. A
 release that ships no DMG (one that fixes only Windows) bumps the formula and
 leaves the cask on the older tag, as the DMG table above already does.
 
+**The formula waits a day.** `bump-formula-pr` resolves the resources with
+`pip install --uploaded-prior-to=P1D`, a supply-chain cooldown: it ignores
+anything uploaded to PyPI in the last 24 hours, so on release day it cannot see
+the new `xefm` sdist, nor a PuiKit released the same day, and fails with
+"Unable to determine dependencies … Please update the resources manually".
+Bump the cask on release day and the formula the next day (first hit with
+1.9.0). Both bumps push a branch named `bump-xefm-X.Y.Z`, so merge the cask PR
+before running the formula bump, or the second push collides with the first.
+
 `bump-formula-pr` regenerates the formula's Python resources. Its
 `pypi_packages exclude_packages:` stanza keeps Pillow (taken from Homebrew's
 formula), PuiKit's desktop-only PyObjC frameworks and the Windows-only packages
