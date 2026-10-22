@@ -73,6 +73,7 @@ min_xefm = "1.7.0"                  # optional: the oldest XeFM it runs on
 backends = ["desktop", "tui"]       # optional, default both
 platforms = ["macos", "windows", "linux"]   # optional, default all
 homepage = "https://github.com/me/hello-xefm"   # optional
+updates = "github:me/hello-xefm"    # where newer versions are tagged; no @ref
 
 [contributes.actions]
 "hello.greet" = { entry = "hello_xefm.actions:greet", description = "Say hello" }
@@ -401,13 +402,19 @@ def test_greet_logs():
 ```bash
 xefm ext install ./hello-xefm          # shows what it adds and asks
 xefm ext install github:me/hello-xefm  # a GitHub repo (manifest at the root)
+xefm ext install github:me/exts/hello  # one package in a subdirectory
 xefm ext list
 xefm ext disable hello-xefm | enable hello-xefm
 xefm ext uninstall hello-xefm          # asks before deleting its data
 ```
 
-To share a package, put it in a GitHub repository with the manifest at the
-repository root, or zip the folder.
+To share a package, put it in a GitHub repository — the manifest at the
+repository root, or in a subdirectory when the repository holds several — or zip
+the folder. Nothing needs uploading to GitHub Releases: a version is a tag,
+`v0.1.0` for a package at the root and `<id>-v0.1.0` (e.g.
+`hello-xefm-v0.1.0`) for one in a subdirectory. Set `updates` in
+`[extension]` to that repository (`github:me/exts/hello`, no `@ref`) from the
+first release, so an installed copy knows where its next version is.
 
 ## When `xefm ext check` complains
 

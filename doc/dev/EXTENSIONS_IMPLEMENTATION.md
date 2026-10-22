@@ -224,11 +224,14 @@ the file atomically.
    - A directory is used in place.
    - A zip is extracted with `_safe_extract`, which refuses members that
      resolve outside the target.
-   - A `github:owner/repo[@ref]` source or a github.com URL becomes a codeload
-     zip URL.
+   - A `github:owner/repo[/path][@ref]` source or a github.com URL becomes a
+     codeload zip URL (`parse_github_source`). The optional path names a
+     package in a subdirectory, so one repository can hold several
+     (crftwr/xefm-extensions); a `.` or `..` component is refused.
    - Any other `https://` URL is fetched as is.
    - The manifest root is the extracted top, or its single child directory
-     (GitHub zips wrap everything in `repo-ref/`).
+     (GitHub zips wrap everything in `repo-ref/`) — followed by the path, when
+     the source named one.
 2. Check the package against the others already installed.
 3. Copy it to `.<id>.installing` and swap it into place.
 

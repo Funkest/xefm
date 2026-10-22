@@ -43,6 +43,7 @@ PREVIEW_APIS: set[str] = {
     *(f"manifest.contributes.{kind}" for kind in (
         "actions", "event_hooks", "sort_keys", "filters", "image_decoders",
         "path_schemes", "lexers", "themes", "menus", "key_suggestions")),
+    "manifest.extension.updates",
     "manifest.settings",
     "manifest.requires",
 }

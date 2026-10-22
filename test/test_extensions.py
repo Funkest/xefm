@@ -277,6 +277,27 @@ class Check(_Home):
         self.assertTrue(any("needs label" in m for m in messages))
         self.assertTrue(any("when must be one of" in m for m in messages))
 
+    def _with_updates(self, value):
+        root, _ = self.package(manifest=f'''
+            [extension]
+            id = "{{id}}"
+            version = "0.1.0"
+            api_version = 0
+            updates = {value}
+
+            [contributes.actions]
+            "{{id}}.greet" = "{{mod}}.actions:greet"
+        ''')
+        return [p for p in self.problems(root) if p.where == "extension.updates"]
+
+    def test_updates_names_a_github_repository_or_a_package_in_one(self):
+        self.assertEqual(self._with_updates('"github:crftwr/xefm-extensions/compute-hash"'), [])
+        self.assertEqual(self._with_updates('"github:someone/hello-xefm"'), [])
+        for bad in ('"github:crftwr/x@v1"', '"https://example.com/x.zip"', "3"):
+            (problem,) = self._with_updates(bad)
+            self.assertEqual(problem.severity, "error")
+            self.assertIn("with no @ref", problem.message)
+
     def test_an_unknown_event_is_named(self):
         root, _ = self.package(manifest='''
             [extension]
@@ -666,6 +687,41 @@ class Install(_Home):
         self.assertEqual(urls, ["https://codeload.github.com/someone/repo/zip/main"])
         self.assertEqual(ext.read_installed(self.layout)[manifest.id].source,
                          "github:someone/repo@main")
+
+    def test_install_from_a_subdirectory_of_a_github_repository(self):
+        """One repository, several packages (crftwr/xefm-extensions): the path
+        after owner/repo names the package's directory."""
+        first, _ = self.package()
+        second, _ = self.package()
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            for name, root in (("one", first), ("two", second)):
+                for path in root.rglob("*"):
+                    if path.is_file():
+                        z.write(path, f"exts-v1/packages/{name}/{path.relative_to(root)}")
+        urls = []
+
+        def opener(url):
+            urls.append(url)
+            return buf.getvalue()
+
+        source = "github:crftwr/exts/packages/two@v1"
+        manifest = ext.install(source, self.layout, opener=opener)
+        self.assertEqual(urls, ["https://codeload.github.com/crftwr/exts/zip/v1"])
+        self.assertEqual(manifest.id, second.name)
+        self.assertEqual(ext.read_installed(self.layout)[manifest.id].source, source)
+        with self.assertRaises(ext.InstallError) as caught:
+            ext.install("github:crftwr/exts/packages/three@v1", self.layout,
+                        opener=opener)
+        self.assertIn("packages/three/", str(caught.exception))
+
+    def test_github_sources_parse(self):
+        parse = ext.parse_github_source
+        self.assertEqual(parse("github:o/r"), ("o", "r", "", None))
+        self.assertEqual(parse("github:o/r@v1.2"), ("o", "r", "", "v1.2"))
+        self.assertEqual(parse("github:o/r/a/b@feature/x"), ("o", "r", "a/b", "feature/x"))
+        for bad in ("github:o", "github:o/r/../x", "gh:o/r", "github:o/r/"):
+            self.assertIsNone(parse(bad), bad)
 
     def test_a_zip_escaping_its_folder_is_refused(self):
         buf = io.BytesIO()
