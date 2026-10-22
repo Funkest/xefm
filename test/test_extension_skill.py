@@ -70,6 +70,23 @@ class Scaffold(_Tmp):
             cwd=root, capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_the_skill_s_wrapper_test_runs_against_it(self):
+        """The skill's thin-wrapper example is written for this scaffold; it
+        drifted once (#689) because nothing ran it."""
+        code = re.search(r"For the thin wrapper.*?```python\n(.*?)```",
+                         SKILL, re.S).group(1)
+        root = ext.scaffold("hello-xefm", self.tmp)
+        (root / "tests" / "test_actions.py").write_text(code, encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+             "tests/test_actions.py"],
+            cwd=root, capture_output=True, text=True, timeout=60,
+            # actions.py imports xefm.user_api, which the scaffold's own
+            # logic-only test never needs.
+            env=dict(os.environ, PYTHONPATH=str(Path(xefm.__file__).parent.parent)))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("1 passed", result.stdout)
+
     def test_the_package_name_follows_the_id(self):
         self.assertEqual(ext.package_name_for("hello-xefm"), "hello_xefm")
         self.assertEqual(ext.package_name_for("a.b-c"), "a_b_c")

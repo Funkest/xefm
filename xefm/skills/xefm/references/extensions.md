@@ -390,20 +390,37 @@ user (`python -m pip install pytest` installs it) rather than skipping the
 tests silently.
 
 For the thin wrapper, a small fake is enough — make it match the real API's
-shape, methods as methods (`selected=lambda: [...]`):
+shape, methods as methods (`selected=lambda: [...]`). The action reads its
+settings and state through `extension(__name__)`, so the test replaces that
+name in the action's module. This one runs against the `hello` action
+`xefm ext new hello-xefm` writes:
 
 ```python
+# tests/test_actions.py
 from types import SimpleNamespace
 from hello_xefm import actions
 
-def test_greet_logs():
+def test_hello_logs(monkeypatch):
     lines = []
-    ext = SimpleNamespace(settings=SimpleNamespace(GREETING="Hi"),
-                          state=SimpleNamespace(get=lambda k, d=None: d,
-                                                set=lambda k, v: None))
-    ctx = SimpleNamespace(message=lines.append, extension=ext)
-    actions.greet(ctx)
-    assert lines == ["Hi"]
+    handle = SimpleNamespace(settings=SimpleNamespace(GREETING="Hi"))
+    monkeypatch.setattr(actions, "extension",
+                        lambda module: handle if module.startswith("hello_xefm.") else None)
+    ctx = SimpleNamespace(message=lines.append,
+                          pane=SimpleNamespace(focused=SimpleNamespace(name="a.txt")))
+    actions.hello(ctx)
+    assert lines == ["Hi, a.txt"]
+```
+
+A fake prompt should answer **after** the action returns, as XeFM does: store
+the callback, return, then call it from the test. A fake that calls the
+callback at once runs it while the action is still on the stack, and hides
+bugs that only show once it has returned:
+
+```python
+    asked = []
+    ctx.choose = lambda title, items, **kw: asked.append(kw["on_result"])
+    actions.pick(ctx)          # returns with the prompt still open
+    asked[0](1)                # now the user picks the second item
 ```
 
 ## 7. Installing, sharing, removing
