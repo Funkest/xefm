@@ -2145,9 +2145,9 @@ class XeFMApp:
             self._fetch_extension(source)
             self.panel.render()
 
-        show_input(self.panel, title="Install Extension",
-                   prompt="Folder, .zip, https:// zip URL or github:owner/repo[/path][@ref]:",
-                   text=text, on_accept=accept)
+        show_input(self.panel,
+                   title="Install Extension — folder, .zip, URL or github:owner/repo",
+                   prompt="Source:", text=text, on_accept=accept, width=100.0)
         self.panel.render()
 
     #: Set while Install Extension fetches and checks a package; the worker
