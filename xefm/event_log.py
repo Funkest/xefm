@@ -4,7 +4,7 @@ A driver that reads XeFM's screen as text sees what the screen seems to show:
 a message can scroll out of the log pane before the next look, and an
 exception that only reaches the log is easy to miss among other lines. When
 the environment names a file in ``QUALITY_LOOP_EVENTS`` (the name quality-loop
-starts every app with; ``xefm ext try --keys`` sets it too), XeFM appends one
+starts every app with; ``xefm try --keys`` sets it too), XeFM appends one
 JSON object per line to it:
 
 - ``{"t": ..., "kind": "message", "source": "info"|"error"|..., "text": ...}``

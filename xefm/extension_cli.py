@@ -53,31 +53,6 @@ def _parser() -> argparse.ArgumentParser:
     _skill_arguments(sub.add_parser(
         "skill", help="the AI-agent skill for XeFM — same as `xefm skill`"))
 
-    try_ = sub.add_parser(
-        "try", help="run XeFM with only this package, in a throwaway home",
-        description="Run the terminal XeFM in a temporary home that holds only "
-        "this package (your ~/.xefm is never touched), with the keymap preset "
-        "chosen and no Tip of the Day. Without --keys it runs in this terminal "
-        "until you quit it; with --keys it runs the script in a pseudo-terminal, "
-        "saves each step's screen as text and exits.")
-    try_.add_argument("path", help=f"the package directory (the one holding {ext.MANIFEST})")
-    try_.add_argument("--keymap", default="afx", help="the keymap preset (default: afx)")
-    try_.add_argument("--left", help="the left pane's directory (default: a few "
-                      "fixture files in the home)")
-    try_.add_argument("--right", help="the right pane's directory (default: the home)")
-    try_.add_argument("--config", help="a config.py to use (default: XeFM's template)")
-    try_.add_argument("--keys", metavar="SCRIPT", help="a JSON list of steps to run "
-                      "instead of handing the terminal over (needs "
-                      "'quality-loop[tui]'; not on Windows yet)")
-    try_.add_argument("--screens", metavar="DIR", help="with --keys: where each step's "
-                      "screen and steps.jsonl go (default: try-screens)")
-    try_.add_argument("--record", metavar="FILE", help="with --keys: also record the "
-                      "session as an asciicast v2 file")
-    try_.add_argument("--size", default="120x40", help="with --keys: the terminal's "
-                      "COLSxROWS (default: 120x40)")
-    try_.add_argument("--keep-home", action="store_true",
-                      help="leave the home in place and print where it is")
-
     sub.add_parser("sync", help="reinstall listed packages whose files are missing")
     settings = sub.add_parser("settings", help="print a package's settings class "
                               "for config.py, with every default")
@@ -176,60 +151,6 @@ def _note_python_packages(layout: ext.Layout) -> None:
     from xefm import python_packages as pp
     if pp.check(pp.Layout(layout.home)).state == pp.NEEDS_SYNC:
         print("Python packages are out of date — run `xefm deps sync`")
-
-
-def _try(args: argparse.Namespace) -> int:
-    from xefm import extension_try as trial
-    if args.keys is None and (args.screens or args.record):
-        print("error: --screens and --record go with --keys", file=sys.stderr)
-        return 2
-    try:
-        cols, rows = (int(n) for n in args.size.lower().split("x"))
-    except ValueError:
-        print(f"error: --size is COLSxROWS, not {args.size!r}", file=sys.stderr)
-        return 2
-    try:
-        # The script is read first, so a typo in it costs no install.
-        steps = trial.read_script(Path(args.keys)) if args.keys else None
-        home = trial.TryHome(Path(args.path), keymap=args.keymap,
-                             config=Path(args.config).expanduser() if args.config else None)
-    except ext.InstallError as exc:
-        _print_problems(exc.problems)
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    except (ext.ManifestError, trial.TryError) as exc:
-        print(f"error: {getattr(exc, 'problem', exc)}", file=sys.stderr)
-        return 1
-    print(f"trying {home.manifest.id} {home.manifest.version} in {home.root}")
-    left = Path(args.left).expanduser().resolve() if args.left else home.work
-    right = Path(args.right).expanduser().resolve() if args.right else home.root
-    argv = trial.xefm_argv(left, right)
-    try:
-        if steps is None:
-            return trial.run_interactive(home, argv)
-        screens = Path(args.screens or "try-screens")
-        record = Path(args.record) if args.record else None
-        try:
-            result = trial.run_script(home, argv, steps, screens=screens,
-                                      record=record, rows=rows, cols=cols)
-        except trial.TryError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
-        print(f"ran {result.steps} of {len(steps)} steps; screens and steps.jsonl "
-              f"in {screens}" + (f", recording in {record}" if record else ""))
-        if result.unsettled:
-            print("still drawing when patience ran out at step(s) "
-                  + ", ".join(map(str, result.unsettled)))
-        if result.exited is not None:
-            print(f"XeFM exited during the script (status {result.exited}); "
-                  f"see the last screen in {screens}")
-            return 1
-        return 0
-    finally:
-        if args.keep_home:
-            print(f"kept the home: {home.root}")
-        else:
-            home.remove()
 
 
 def _print_problems(problems) -> None:
@@ -357,9 +278,6 @@ def main(argv: list[str] | None = None, layout: ext.Layout | None = None) -> int
                   file=sys.stderr)
             return 1
         return 0
-
-    if args.command == "try":
-        return _try(args)
 
     if args.command == "sync":
         lines = ext.sync(layout)

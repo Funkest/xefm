@@ -40,8 +40,8 @@ the XeFM the user runs (`XeFM X.Y.Z`); if it is not, skip this check.
 - **Never launch XeFM.** `xefm`, `python -m xefm` and the app itself open an
   interactive file manager that blocks until a person quits it. `xefm ext …`
   and `xefm skill` are safe: they never open a window. The one exception is
-  `xefm ext try <dir> --keys <script>`, which runs XeFM in a pseudo-terminal
-  and exits when the script ends (*See it run* in `references/extensions.md`);
+  `xefm try --keys <script>`, which runs XeFM in a temporary home and a
+  pseudo-terminal and exits when the script ends (`references/try.md`);
   without `--keys` it blocks like `xefm`.
 - **XeFM applies a change when the user asks it to.** Finish with: run
   **Tools ▸ Reload Configuration** in XeFM, or restart it. Say which of the two
@@ -60,6 +60,7 @@ the XeFM the user runs (`XeFM X.Y.Z`); if it is not, skip this check.
 | what a setting is called, its default, what it does | `references/config-template.md` (XeFM's template, generated) |
 | a feature to package, share, or keep apart from their config; anything with settings of its own, tests, or several files | `references/extensions.md` |
 | an extension fixed that `xefm ext check` rejects | `references/extensions.md` |
+| to see a change work in XeFM itself — an extension's dialogs, a key a config edit bound — or a recorded demo | `references/try.md` |
 
 **`config.py` or an extension?** Edit `config.py` for the user's own settings
 and for a short function only they will use. Write an extension instead when

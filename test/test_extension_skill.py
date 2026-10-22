@@ -15,6 +15,7 @@ three things stay in step, so each is pinned here:
 Run with: python -m pytest test/test_extension_skill.py -v
 """
 
+import importlib.util
 import io
 import os
 import re
@@ -40,6 +41,7 @@ from xefm import user_api  # noqa: E402
 ROUTER = (ext.SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
 SKILL = (ext.SKILL_DIR / "references" / "extensions.md").read_text(encoding="utf-8")
 CONFIG = (ext.SKILL_DIR / "references" / "config.md").read_text(encoding="utf-8")
+TRY = (ext.SKILL_DIR / "references" / "try.md").read_text(encoding="utf-8")
 
 
 def _section(title: str) -> str:
@@ -213,7 +215,8 @@ class SkillMatchesTheChecker(_Tmp):
         cited = set(re.findall(r"`(references/[\w.-]+)`", ROUTER))
         self.assertEqual(cited, {"references/config.md", "references/extensions.md",
                                  "references/actions.md",
-                                 "references/config-template.md"})
+                                 "references/config-template.md",
+                                 "references/try.md"})
         for ref in cited:
             self.assertTrue((ext.SKILL_DIR / ref).is_file(), ref)
 
@@ -307,6 +310,24 @@ class SkillMatchesTheChecker(_Tmp):
         commands = set(parser._subparsers._group_actions[0].choices)
         for command in set(re.findall(r"xefm ext (\w+)", SKILL)):
             self.assertIn(command, commands)
+
+    def test_every_try_option_the_skill_uses_exists(self):
+        from xefm import try_cli
+        options = set(try_cli._parser()._option_string_actions)
+        texts = [ROUTER, SKILL, CONFIG, TRY]
+        used = {o for text in texts for line in re.findall(r"xefm try[^`\n]*", text)
+                for o in re.findall(r"--[\w-]+", line)}
+        used |= set(re.findall(r"`(--[\w-]+)", TRY))
+        self.assertIn("--keys", used)
+        self.assertLessEqual(used, options)
+
+    @unittest.skipUnless(importlib.util.find_spec("quality_loop"), "needs quality-loop")
+    def test_the_example_script_reads(self):
+        from xefm import trial
+        script = re.search(r"```json\n(.*?)```", TRY, re.S).group(1)
+        path = self.tmp / "steps.json"
+        path.write_text(script, encoding="utf-8")
+        self.assertEqual(len(trial.read_script(path)), 3)
 
     def test_skill_install_copies_it(self):
         out = io.StringIO()

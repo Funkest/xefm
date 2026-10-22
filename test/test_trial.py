@@ -1,12 +1,12 @@
-"""``xefm ext try`` and the event log it reads (#682).
+"""``xefm try`` and the event log it reads (#682).
 
 The run itself starts XeFM in a pseudo-terminal, which is too slow for this
 suite; what is pinned here is everything around it: the home holds the
-package and none of the user's, no first-run dialog is left to take a key,
+packages given and none of the user's, no first-run dialog is left to take a key,
 the script is refused before anything is installed, the recording is a valid
 asciicast, and XeFM's event log carries the log pane's lines and exceptions.
 
-Run with: python -m pytest test/test_extension_try.py -v
+Run with: python -m pytest test/test_trial.py -v
 """
 
 import io
@@ -24,8 +24,8 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from xefm import event_log  # noqa: E402
-from xefm import extension_cli  # noqa: E402
-from xefm import extension_try as trial  # noqa: E402
+from xefm import trial  # noqa: E402
+from xefm import try_cli  # noqa: E402
 from xefm import extensions as ext  # noqa: E402
 from xefm import log_manager  # noqa: E402
 
@@ -56,19 +56,31 @@ class Home(_Tmp):
         super().tearDown()
 
     def make(self, **kw) -> trial.TryHome:
-        home = trial.TryHome(self.package, keymap=kw.pop("keymap", "afx"), **kw)
+        home = trial.TryHome(kw.pop("packages", [str(self.package)]),
+                             keymap=kw.pop("keymap", "afx"), **kw)
         self.homes.append(home)
         return home
 
     def test_holds_the_package_and_nothing_of_the_user_s(self):
         home = self.make()
         self.assertTrue((home.xefm / "extensions" / "hello-xefm" / ext.MANIFEST).is_file())
-        self.assertEqual(home.manifest.id, "hello-xefm")
+        self.assertEqual([m.id for m in home.manifests], ["hello-xefm"])
         self.assertFalse((home.xefm / "config.py").exists())   # XeFM's template
         env = home.environment()
         self.assertEqual(env["HOME"], str(home.root))
         self.assertEqual(env["USERPROFILE"], str(home.root))
         self.assertNotIn(str(Path.home()), env["HOME"])
+
+    def test_no_package_at_all(self):
+        """For a test or a demo of XeFM itself."""
+        home = self.make(packages=[])
+        self.assertEqual(home.manifests, [])
+        self.assertFalse((home.xefm / "extensions").exists())
+
+    def test_several_packages(self):
+        other = ext.scaffold("other-xefm", self.tmp)
+        home = self.make(packages=[str(self.package), str(other)])
+        self.assertEqual([m.id for m in home.manifests], ["hello-xefm", "other-xefm"])
 
     def test_no_first_run_dialog_is_left_to_take_a_key(self):
         from xefm.state_manager import StateManager
@@ -91,11 +103,11 @@ class Home(_Tmp):
     def test_removed_when_it_cannot_be_made(self):
         before = set(Path(tempfile.gettempdir()).glob("xefm-try-*"))
         with self.assertRaises(trial.TryError):
-            trial.TryHome(self.package, keymap="emacs")
+            trial.TryHome([str(self.package)], keymap="emacs")
         (self.package / ext.MANIFEST).write_text("[extension]\nid = 'Bad Id'\n",
                                                  encoding="utf-8")
         with self.assertRaises((ext.InstallError, ext.ManifestError)):
-            trial.TryHome(self.package, keymap="afx")
+            trial.TryHome([str(self.package)], keymap="afx")
         self.assertEqual(set(Path(tempfile.gettempdir()).glob("xefm-try-*")), before)
 
     def test_the_xefm_that_runs_is_the_terminal_one(self):
@@ -134,7 +146,7 @@ class Script(_Tmp):
         script.write_text("[{\"keys\": [\"Cmd-Q\"]}]", encoding="utf-8")
         with unittest.mock.patch.object(trial, "TryHome") as home, \
                 redirect_stderr(io.StringIO()) as err:
-            code = extension_cli.main(["try", str(package), "--keys", str(script)])
+            code = try_cli.main(["--ext", str(package), "--keys", str(script)])
         self.assertEqual(code, 1)
         home.assert_not_called()
         self.assertIn("Cmd", err.getvalue())
@@ -143,12 +155,17 @@ class Script(_Tmp):
 class Cli(_Tmp):
     def run_cli(self, *argv):
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as err:
-            return extension_cli.main(["try", str(self.tmp), *argv]), err.getvalue()
+            return try_cli.main(list(argv)), err.getvalue()
 
     def test_screens_and_record_need_keys(self):
         code, err = self.run_cli("--record", "x.cast")
         self.assertEqual(code, 2)
         self.assertIn("--keys", err)
+
+    def test_xefm_try_is_dispatched_before_the_ui_starts(self):
+        source = (Path(trial.__file__).parent / "app.py").read_text(encoding="utf-8")
+        dispatch = source.index('sys.argv[1] == "try"')
+        self.assertLess(dispatch, source.index("args = create_parser().parse_args()"))
 
     def test_size_is_cols_by_rows(self):
         code, err = self.run_cli("--size", "big")

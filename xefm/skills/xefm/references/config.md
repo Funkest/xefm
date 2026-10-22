@@ -300,8 +300,7 @@ invent a name — an attribute XeFM does not know is silently ignored.
 
 ## 4. Checking an edit
 
-XeFM cannot be started to try the file, and there is no `xefm config check`.
-What you can check:
+There is no `xefm config check`. What you can check:
 
 1. **It parses.** With any Python 3 (use the full path on Windows):
 
@@ -315,6 +314,19 @@ What you can check:
    changed appears once, its name matches `references/config-template.md`
    exactly, and the value has the shape shown there (a list where it wants a
    list, a dict entry with the keys it wants).
+
+3. **By running it**, where `xefm try` works (`references/try.md`): XeFM
+   loads the file in a temporary home and follows a script, for example
+   pressing the key you bound:
+
+   ```bash
+   xefm try --config ~/.xefm/config.py --keys steps.json --screens out/
+   ```
+
+   Then look in `out/steps.jsonl` for an `Error loading configuration` or
+   `Config warning` message, and at the screen after the key. The temporary
+   home has none of the user's extensions; add `--ext` for one the edit
+   depends on, or leave that part unchecked.
 
 Tell the user what you checked and what you could not. If loading fails, XeFM
 logs `Error loading configuration: …` and runs on **built-in defaults for

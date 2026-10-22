@@ -1,23 +1,26 @@
-"""``xefm ext try`` — see an extension run, in a home of its own (#682).
+"""``xefm try`` — XeFM in a throwaway home, by hand or from a script (#682).
 
-``xefm ext check`` is static and an extension's unit tests run against a fake
-``ctx``, so menus, dialogs, task progress and cancel go untested until a
-person tries them. Running the TUI under a throwaway home caught what both
-missed while Compute Hash was built (#679), and this makes that the one
-sanctioned way to launch XeFM for an extension's author — or the agent
-writing it:
+Two jobs need XeFM running where nothing of the user's is: an automated test
+that drives the real app and reads what it shows, and a demo recorded for a
+README or a release note. An extension's author needs it too: ``xefm ext
+check`` is static and the unit tests run against a fake ``ctx``, so menus,
+dialogs, task progress and cancel go untested until a person tries them
+(running the TUI like this caught #679, which both had missed). One command
+serves all three:
 
 - **A throwaway home.** ``HOME`` (and ``USERPROFILE``) point at a temporary
-  directory holding only this package, installed the way ``xefm ext install``
-  installs it. The user's ``~/.xefm`` is never read or written. The keymap
-  preset is chosen and the Tip of the Day is off, so no first-run dialog takes
-  the first keys; the home is removed at exit.
+  directory, so the user's ``~/.xefm`` is never read or written. It holds
+  XeFM's template config (or the one given), the packages given with
+  ``--ext`` installed the way ``xefm ext install`` installs them, and nothing
+  else. The keymap preset is chosen and the Tip of the Day is off, so no
+  first-run dialog takes the first keys; the home is removed at exit.
 - **Interactive** (no ``--keys``): the TUI in this terminal, for a person.
 - **Scripted** (``--keys steps.json``): the TUI in a pseudo-terminal of a fixed
   size, read as text through a terminal emulator. Each step's keys go in, the
-  screen settles, and its text is saved; the whole session is recorded as an
-  asciicast v2 file a player can replay. It exits when the script ends, so it
-  can never block the shell that ran it.
+  screen settles, and its text is saved; the whole session can be recorded as
+  an asciicast v2 file a player can replay. It exits when the script ends, so
+  it can never block the shell that ran it — the one way an agent may launch
+  XeFM.
 
 Scripted mode needs ``pyte`` (the emulator) and quality-loop's key notation:
 ``pip install 'quality-loop[tui]'`` brings both. POSIX only for now: Windows
@@ -43,9 +46,7 @@ from pathlib import Path
 from xefm import event_log
 from xefm import extensions as ext
 from xefm.external_programs import xefm_python
-from xefm.log_manager import getLogger
 
-logger = getLogger("ExtTry")
 
 #: The fixture the left pane opens on when no ``--left`` is given: a few
 #: files and a folder, enough for selection and navigation.
@@ -65,10 +66,11 @@ class TryError(Exception):
 # --- the home -----------------------------------------------------------------
 
 class TryHome:
-    """A temporary ``~`` holding one installed package and nothing of the
+    """A temporary ``~`` holding the given packages and nothing of the
     user's."""
 
-    def __init__(self, package: Path, *, keymap: str, config: Path | None = None):
+    def __init__(self, packages: list[str] = (), *, keymap: str = "afx",
+                 config: Path | None = None):
         from xefm import keymap_presets
         from xefm.state_manager import StateManager
         if keymap_presets.canonical(keymap) not in keymap_presets.PRESETS:
@@ -91,8 +93,9 @@ class TryHome:
             state.set_state("tips.enabled", False)
             state.set_state("keymap.preset", keymap_presets.canonical(keymap))
             layout = ext.Layout(self.xefm)
-            self.manifest = ext.install(str(package), layout)
-            if self.manifest.requires.get("python_packages"):
+            #: The installed packages' manifests, in the order given.
+            self.manifests = [ext.install(str(source), layout) for source in packages]
+            if any(m.requires.get("python_packages") for m in self.manifests):
                 from xefm import python_packages as pp
                 pp.sync(pp.Layout(layout.home), log=print)
         except BaseException:
@@ -101,8 +104,8 @@ class TryHome:
 
     def environment(self) -> dict:
         """For the XeFM that runs here: this home as ``~``, and this XeFM's
-        own package first on the path, so the copy that runs is the one that
-        installed the package."""
+        own package first on the path, so the copy that runs is this one (the
+        one that installed the packages)."""
         package_parent = str(Path(ext.__file__).resolve().parent.parent)
         path = os.pathsep.join(p for p in (package_parent, os.environ.get("PYTHONPATH"))
                                if p)
@@ -241,7 +244,7 @@ class PtyApp:
                  cwd: str, recording: Recording | None = None):
         if os.name == "nt":
             raise TryError("--keys drives XeFM in a pseudo-terminal, which this "
-                           "does not do on Windows yet; run `xefm ext try` without "
+                           "does not do on Windows yet; run `xefm try` without "
                            "--keys to try it by hand")
         import fcntl
         import struct
