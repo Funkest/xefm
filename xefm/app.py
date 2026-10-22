@@ -11459,6 +11459,10 @@ def _web_access_message(url: str) -> str:
 
 
 def main() -> None:
+    # Before anything can open a connection: HTTPS is verified by the OS on
+    # macOS and Windows, every channel alike (#676, xefm/tls.py).
+    from xefm.tls import use_os_trust_store
+    use_os_trust_store()
     # XeFM.app started from Finder/Dock runs with launchd's bare PATH, not the
     # login shell's, so Homebrew's ffmpeg/fpcalc were invisible to anything that
     # searches *our* PATH: similar-files, an extension's required-program check

@@ -7,6 +7,19 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def restore_ssl():
+    """Undo ``truststore.inject_into_ssl()`` after a test that ran the real
+    ``xefm.app.main()`` (#676). The injection replaces ``ssl.SSLContext`` for
+    the whole process, so without this every later test in the same worker —
+    the S3 ones first — would build its contexts through the OS verifier."""
+    yield
+    import sys
+    truststore = sys.modules.get("truststore")
+    if truststore is not None and hasattr(truststore, "extract_from_ssl"):
+        truststore.extract_from_ssl()
+
+
+@pytest.fixture(autouse=True)
 def reset_s3_clients():
     """Hand every test a clean S3 client registry.
 
