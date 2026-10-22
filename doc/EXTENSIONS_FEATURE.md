@@ -10,6 +10,20 @@ Extensions run against the same Preview API as `config.py` customization (API
 version 0, see [Customization](CUSTOMIZATION_FEATURE.md)), so the format may
 still change.
 
+## Official extensions
+
+The XeFM project keeps its own extensions in
+[crftwr/xefm-extensions](https://github.com/crftwr/xefm-extensions). They are
+written against the same public API as anyone else's, so they also serve as
+examples to copy. Each has a README with its usage.
+
+| Extension | What it does | Install |
+|---|---|---|
+| [Compute Hash](https://github.com/crftwr/xefm-extensions/tree/main/compute-hash) | MD5, SHA-1, SHA-256, SHA-512 or BLAKE2b digests of the selected files, in the background, shown ready to copy in `sha256sum` form. Works on SSH, S3 and in archives. File menu and right-click menu. | `xefm ext install github:crftwr/xefm-extensions/compute-hash` |
+
+Each release is a tag such as `compute-hash-v0.1.0`; add `@<tag>` to the
+install source to pin one.
+
 ## Installing and managing
 
 From a shell — this works the same for pip/pipx/uv and Homebrew installs, the
