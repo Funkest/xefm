@@ -165,6 +165,11 @@ class CodeLint(_Tmp):
             for name in ext.public_names(module):
                 self.assertTrue(hasattr(sys.modules[module], name), f"{module}.{name}")
 
+    def test_ctx_extension_is_an_error_naming_its_replacement(self):
+        (problem,) = self.lint("def a(ctx):\n    return ctx.extension.state\n")
+        self.assertEqual(problem.severity, "error")
+        self.assertIn("use xefm.user_api.extension(__name__)", problem.message)
+
     def test_print_and_sys_path_are_warnings(self):
         problems = self.lint('''
             import sys
@@ -259,9 +264,9 @@ class SkillMatchesTheChecker(_Tmp):
         # thing not to do.
         for name in set(re.findall(r"`ctx\.([a-z]\w*)", SKILL)):
             self.assertTrue(hasattr(user_api.ActionContext, name), f"ctx.{name}")
-        for name in set(re.findall(r"ctx\.extension\.(\w+)", SKILL)):
-            self.assertTrue(hasattr(ext.ExtensionHandle, name) or name == "settings"
-                            or name in ("id", "version"), f"ctx.extension.{name}")
+        for name in set(re.findall(r"extension\(__name__\)\.(\w+)", SKILL)):
+            self.assertTrue(hasattr(ext.ExtensionHandle, name)
+                            or name in ("id", "version"), f"extension(__name__).{name}")
 
     def _bullets(self, heading: str) -> set:
         block = SKILL.split(heading, 1)[1].lstrip("\n").split("\n\n", 1)[0]

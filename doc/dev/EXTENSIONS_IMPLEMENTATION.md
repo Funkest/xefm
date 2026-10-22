@@ -7,7 +7,7 @@ in §8 is a separate piece of work.
 
 - `xefm/extensions.py` — the manifest, the static check, the installed set,
   install/uninstall/sync, loading into a config, settings, and the
-  `ctx.extension` handle.
+  `ExtensionHandle` that `user_api.extension(__name__)` returns.
 - `xefm/extension_cli.py` — `xefm ext check|install|uninstall|list|enable|disable|sync|settings`.
   `xefm.app.main` dispatches `argv[1] == "ext"` here before the UI's argparse
   runs, so no backend is opened.
@@ -165,21 +165,29 @@ For each package directory (sorted; dot-directories skipped), `load` does:
    free. "Free" is judged by `_bound_keys`: every key in `KEY_BINDINGS`, plus
    the registry defaults of `FILER` actions the config does not mention.
 
-Actions and hooks are wrapped by `_in_extension`, which:
+A package with `requires.programs` has its actions and hooks wrapped by
+`_in_extension`, which refuses to run them, with a warning naming the program,
+while one is missing. The wrapped function keeps its docstring and signature
+(`functools.wraps`), so `user_api._build_action` still takes the help text from
+it and the call-shape check still reads the author's `def`.
 
-- refuses to run, with a warning naming the program, while a
-  `requires.programs` entry is missing;
-- otherwise sets `ctx._extension` to the package's `ExtensionHandle` for the
-  duration of the call, and restores the previous value afterwards.
-
-`ActionContext.extension` reads `ctx._extension`. The wrapped function keeps
-its docstring (`functools.wraps`), so `user_api._build_action` still takes the
-help text from it.
+**Which package is running** (#679). Each loaded package registers its
+top-level module names (`python_top_level`) in `_handles_by_module`, rebuilt by
+every `load()`, and `user_api.extension(__name__)` looks the caller up there
+(`handle_for_module`). It replaced `ctx.extension`, which `_in_extension` set
+on the one shared `ActionContext` for the duration of the call and then
+cleared. A prompt answers after the action has returned, so its callback found
+`None`, and so did a `run_task` worker, a sort key and anything else that runs
+outside the call or never receives a `ctx`. Asking "what is running now" made
+the answer depend on time; asking "whose module is this" does not. Hard-coding
+the id in the call was considered and refused: it would duplicate the
+manifest's `id`, and a rename or a fork would silently read another package's
+state. The lint reports a leftover `ctx.extension` as an error that names the
+replacement.
 
 The result is a `LoadReport` with `loaded`, `skipped` (label and reason) and
 `warnings`. `XeFMApp._report_extensions` logs it at startup and on every reload,
-and also hands the app's state manager to `ExtensionHandle` for
-`ctx.extension.state`.
+and also hands the app's state manager to `ExtensionHandle` for its `state`.
 
 ## Settings (addition A, revised)
 
@@ -269,7 +277,8 @@ Not done yet:
 - the check: precise fields, no import during the check, collisions,
   data-only packages;
 - loading: config.py wins, all-or-nothing loading, gates, missing programs,
-  `ctx.extension`;
+  `user_api.extension(__name__)` from any module of a package and after a
+  reload;
 - key suggestions;
 - settings: derived and declared class names, overlay, typo warnings, an
   unclaimed `…Config` class, the template;
