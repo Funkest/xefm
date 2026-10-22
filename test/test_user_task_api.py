@@ -126,6 +126,42 @@ def test_job_progress_without_a_total_stays_a_spinner():
     assert task.progress.get_current_operation()["counting"]
 
 
+def test_item_progress_drives_the_byte_bar_of_the_current_item():
+    task = Task("Hash")
+    job = TaskJob(task)
+    job.progress(0, 2, detail="big.iso")
+    job.item_progress(3 * 2**30, 30 * 2**30)
+    op = task.progress.get_current_operation()
+    assert (op["file_bytes_copied"], op["file_bytes_total"]) == (3 * 2**30, 30 * 2**30)
+    assert op["total_items"] == 2 and op["current_item"] == "big.iso"
+    job.progress(1, 2, detail="small.txt")          # the next item starts clean
+    op = task.progress.get_current_operation()
+    assert (op["file_bytes_copied"], op["file_bytes_total"]) == (0, 0)
+
+
+def test_item_progress_alone_counts_the_work_as_one_item():
+    task = Task("Hash")
+    TaskJob(task).item_progress(10, 100)
+    op = task.progress.get_current_operation()
+    assert op["total_items"] == 1 and not op["counting"]
+    assert op["file_bytes_total"] == 100
+
+
+def test_the_dialog_shows_the_byte_bar(app):
+    from xefm.task import ProgressDialog
+    task = Task("Compute Hash")
+    job = TaskJob(task)
+    job.progress(0, 1, detail="huge.bin")
+    job.item_progress(512 * 2**20, 2**30)
+    dialog = ProgressDialog(task)
+    dialog.show(app.panel)
+    app.panel.render()
+    screen = "\n".join(app.panel.backend.snapshot())
+    assert "huge.bin" in screen and "0 / 1 items" in screen
+    assert "512" in screen and "1.0" in screen and "GB" in screen
+    dialog.close()
+
+
 def test_job_checkpoint_raises_once_cancelled():
     task = Task("Hash")
     job = TaskJob(task)

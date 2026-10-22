@@ -278,7 +278,10 @@ def compute(ctx):
 - `work` may touch only `job` — never `ctx`, a pane, or an `EntryInfo`'s
   pane-backed fields. Take what it needs from `ctx` before starting it;
   `entry.path` and its `open('rb')` are fine on the worker.
-- `job.progress(done, total, *, detail="")` moves the bar; `job.checkpoint()`
+- `job.progress(done, total, *, detail="")` moves the bar;
+  `job.item_progress(done, total)` adds a byte bar for the current item (one
+  large file: call it as you read, a few times a second — do not fake a
+  percentage in `detail`); `job.checkpoint()`
   raises when cancelled (let it propagate — do not catch it in a broad
   `except Exception`); `job.cancelled()` asks without raising.
 - `on_done(ctx, outcome)` always runs once: `outcome.status` is `"done"`

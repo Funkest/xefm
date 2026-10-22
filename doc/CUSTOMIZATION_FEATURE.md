@@ -363,6 +363,9 @@ def sha256_selection(ctx):
   SSH / S3 alike.
 - `job.progress(done, total, detail='')` moves the bar and shows `detail` under
   the title; before the first call the dialog shows a spinner.
+  `job.item_progress(done, total)` adds a second bar for the current item, in
+  bytes (`1.2 GB / 30.0 GB`), as a copy shows for a large file — call it while
+  reading one file, and the next `job.progress` clears it.
   `job.checkpoint()` stops the work when the user cancels — let it pass through
   rather than catching it in an `except Exception`. `job.cancelled()` asks
   without stopping.
