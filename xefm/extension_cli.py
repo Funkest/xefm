@@ -27,7 +27,7 @@ def _parser() -> argparse.ArgumentParser:
 
     install = sub.add_parser("install", help="check a package and install it")
     install.add_argument("source", help="a directory, a .zip, an https:// zip "
-                         "URL, or github:owner/repo[@ref]")
+                         "URL, or github:owner/repo[/path][@ref]")
     install.add_argument("-y", "--yes", action="store_true",
                          help="do not ask before installing")
 

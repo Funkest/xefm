@@ -19,6 +19,7 @@ macOS app and the Windows app:
 xefm ext install ~/Downloads/hello-xefm.zip   # a .zip
 xefm ext install ./hello-xefm                 # a folder
 xefm ext install github:someone/hello-xefm    # a GitHub repository (@ref optional)
+xefm ext install github:crftwr/xefm-extensions/compute-hash   # one package of several in a repository
 xefm ext install https://example.com/hello-xefm.zip
 
 xefm ext list                 # what is installed, and whether it will load
@@ -123,6 +124,22 @@ Then ask for the feature ("make an XeFM extension that…"). If the agent follow
 the skill, the result meets the requirements below. `xefm ext check` verifies
 every one of them, so a clean check confirms it.
 
+### Publishing, and where newer versions come from
+
+Push the package to GitHub; nothing has to be uploaded. `github:owner/repo@ref`
+installs any tag, branch or commit, and a version is a **tag**:
+
+- a package at the repository's root: `v0.2.0`
+- a package in a subdirectory — one of several in a repository, as in
+  `github:crftwr/xefm-extensions/compute-hash` — the id first:
+  `compute-hash-v0.2.0`
+
+`updates` in `[extension]` says where newer versions are published, as
+`github:owner/repo` or `github:owner/repo/path/to/package`, with no `@ref`. It
+belongs to the package, not to how it was installed, so a copy installed from a
+downloaded zip still knows where its next version is. Set it from the first
+release: a version that lacks it cannot point its users to the next one.
+
 ### The layout
 
 A package is a folder containing a manifest and, if it runs code, a Python
@@ -148,6 +165,7 @@ description = "Says hello"
 min_xefm = "1.8.0"
 backends = ["desktop", "tui"]         # default: both
 platforms = ["macos", "windows", "linux"]   # default: all
+updates = "github:someone/hello-xefm" # where newer versions are published
 
 [contributes.actions]
 "hello.greet" = { entry = "hello_xefm.actions:greet", description = "Say hello" }

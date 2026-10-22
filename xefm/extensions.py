@@ -121,7 +121,8 @@ _DATA_KINDS = {"themes", "filters", "lexers", "menus"}
 
 _KNOWN_SECTIONS = {"extension", "contributes", "requires", "settings"}
 _KNOWN_EXTENSION_KEYS = {"id", "version", "api_version", "min_xefm", "name",
-                         "description", "backends", "platforms", "homepage"}
+                         "description", "backends", "platforms", "homepage",
+                         "updates"}
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 _REF_RE = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_]\w*$")
 
@@ -422,6 +423,14 @@ def check_manifest(manifest: Manifest, *, others: Iterable[Manifest] = (),
         if key not in _KNOWN_EXTENSION_KEYS:
             err(f"extension.{key}", "unknown key — known: "
                 f"{', '.join(sorted(_KNOWN_EXTENSION_KEYS))}")
+    updates = ext.get("updates")
+    if updates is not None:
+        parsed = parse_github_source(updates) if isinstance(updates, str) else None
+        if parsed is None or parsed[3] is not None:
+            err("extension.updates", "must be 'github:owner/repo', or "
+                "'github:owner/repo/path/to/package' for a package in a "
+                "subdirectory — with no @ref: newer versions are found from the "
+                "repository's tags")
     ext_id = ext.get("id")
     if not isinstance(ext_id, str) or not _ID_RE.match(ext_id):
         err("extension.id", "required: lowercase letters, digits, '.', '_' or "
@@ -1028,16 +1037,35 @@ class InstallError(Exception):
         self.problems = list(problems)
 
 
-def _github_zip_url(source: str) -> Optional[str]:
-    """``github:owner/repo[@ref]`` or a github.com repository URL → its zip."""
-    m = re.fullmatch(r"github:([\w.-]+)/([\w.-]+?)(?:@([\w./-]+))?", source)
-    if not m:
+#: ``github:owner/repo[/path/to/package][@ref]``. The path names a package in
+#: a subdirectory, so one repository can hold several (crftwr/xefm-extensions).
+_GITHUB_SOURCE = re.compile(
+    r"github:([\w.-]+)/([\w.-]+)((?:/[\w.-]+)*)(?:@([\w./-]+))?")
+
+
+def parse_github_source(source: str) -> Optional[tuple[str, str, str, Optional[str]]]:
+    """``(owner, repo, subdirectory, ref)`` for a ``github:`` source — the
+    subdirectory ``""`` for a package at the top, the ref None when the source
+    names none — or None for anything else."""
+    m = _GITHUB_SOURCE.fullmatch(source)
+    if not m or any(part in (".", "..") for part in m.group(3).split("/")):
+        return None
+    return m.group(1), m.group(2), m.group(3).strip("/"), m.group(4)
+
+
+def _github_zip_url(source: str) -> Optional[tuple[str, str]]:
+    """``github:owner/repo[/path][@ref]`` or a github.com repository URL → the
+    URL of its zip and the package's subdirectory inside it."""
+    parsed = parse_github_source(source)
+    if parsed is not None:
+        owner, repo, subdir, ref = parsed
+    else:
         m = re.fullmatch(r"https://github\.com/([\w.-]+)/([\w.-]+?)(?:\.git)?/?"
                          r"(?:tree/([\w./-]+))?", source)
-    if not m:
-        return None
-    owner, repo, ref = m.group(1), m.group(2), m.group(3) or "HEAD"
-    return f"https://codeload.github.com/{owner}/{repo}/zip/{ref}"
+        if not m:
+            return None
+        owner, repo, subdir, ref = m.group(1), m.group(2), "", m.group(3)
+    return f"https://codeload.github.com/{owner}/{repo}/zip/{ref or 'HEAD'}", subdir
 
 
 def _safe_extract(archive: zipfile.ZipFile, dest: Path) -> None:
@@ -1054,21 +1082,24 @@ def _safe_extract(archive: zipfile.ZipFile, dest: Path) -> None:
             shutil.copyfileobj(src, out)
 
 
-def _find_package_root(top: Path) -> Path:
+def _find_package_root(top: Path, subdir: str = "") -> Path:
     """The directory holding the manifest: ``top`` itself, or its only child
-    directory (a GitHub zip wraps everything in ``repo-ref/``)."""
-    if (top / MANIFEST).is_file():
-        return top
+    directory (a GitHub zip wraps everything in ``repo-ref/``) — and in either,
+    ``subdir`` when the source named one."""
     children = [c for c in top.iterdir() if not c.name.startswith(".")]
-    if len(children) == 1 and children[0].is_dir() and (children[0] / MANIFEST).is_file():
-        return children[0]
+    wrapped = children[0] if len(children) == 1 and children[0].is_dir() else None
+    for base in (top, wrapped):
+        if base is not None and (base / subdir / MANIFEST).is_file():
+            return base / subdir if subdir else base
+    if subdir:
+        raise InstallError(f"no {MANIFEST} in {subdir}/ of the repository")
     raise InstallError(f"no {MANIFEST} at the top of the package")
 
 
 def fetch(source: str, workdir: Path,
           opener: Callable[[str], bytes] | None = None) -> Path:
     """Put the package named by ``source`` — a directory, a ``.zip``, an
-    ``https://`` URL of a zip, or ``github:owner/repo[@ref]`` — under
+    ``https://`` URL of a zip, or ``github:owner/repo[/path][@ref]`` — under
     ``workdir`` and return the directory holding its manifest."""
     path = Path(source).expanduser()
     if path.is_dir():
@@ -1080,10 +1111,11 @@ def fetch(source: str, workdir: Path,
         except zipfile.BadZipFile:
             raise InstallError(f"{source} is not a zip file") from None
         return _find_package_root(workdir)
-    url = _github_zip_url(source) or (source if source.startswith("https://") else None)
+    github = _github_zip_url(source)
+    url, subdir = github or (source if source.startswith("https://") else None, "")
     if url is None:
         raise InstallError(f"{source} is not a directory, a zip, an https:// URL "
-                           "or github:owner/repo")
+                           "or github:owner/repo[/path]")
     if opener is None:
         def opener(u: str) -> bytes:
             with urllib.request.urlopen(u, timeout=60) as response:
@@ -1097,7 +1129,7 @@ def fetch(source: str, workdir: Path,
             _safe_extract(archive, workdir)
     except zipfile.BadZipFile:
         raise InstallError(f"{url} did not return a zip file") from None
-    return _find_package_root(workdir)
+    return _find_package_root(workdir, subdir)
 
 
 def summarize(manifest: Manifest) -> list[str]:
