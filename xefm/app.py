@@ -10719,8 +10719,7 @@ class XeFMApp:
         (:meth:`_action_link`): click it, or Tab to it and press Enter, and the
         page opens over the help; Esc returns to the help where it was."""
         show_markdown(self.panel, self._help_markdown(), title="Help",
-                      on_link=self._follow_action_link,
-                      hint="↑/↓ scroll · Tab next link · Enter open · Esc close")
+                      on_link=self._follow_action_link)
         self.panel.render()
 
     def _action_link(self, name: str, text: str) -> str:

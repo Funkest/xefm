@@ -440,3 +440,23 @@ def test_the_tables_and_manifest_sections_are_named():
     assert {f"manifest.contributes.{k}" for k in kinds} <= user_api.PREVIEW_APIS
     tables = set(_ext.CONTRIBUTION_TABLES.values()) - {"THEMES"}
     assert {f"config.{t}" for t in tables} <= user_api.PREVIEW_APIS
+
+
+# --------------------------------------------------------------------------- #
+# The Markdown dialog's footer names what Tab reaches (#681)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("source, says", [
+    ("plain text", "↑/↓ scroll · Esc close"),
+    ("see [docs](https://example.com)", "Tab next link · Enter open"),
+    (md_code_block("abc  a.txt"), "Tab Copy button · Enter copy"),
+    ("[docs](https://example.com)\n\n" + md_code_block("x"), "Tab next link or Copy"),
+])
+def test_the_footer_says_what_tab_reaches(app, source, says):
+    ActionContext(app).show_markdown("Result", source)
+    assert says in _top_dialog(app).hint
+
+
+def test_an_explicit_hint_still_wins():
+    from xefm.text_dialog import MarkdownDialog as Dialog
+    assert Dialog("[a](u:1)", hint="mine").hint == "mine"
