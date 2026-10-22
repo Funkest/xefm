@@ -261,6 +261,7 @@ def bindings() -> dict:
         'reload_config': [],                   # Re-read this config.py and apply live
         'install_extension': [],               # Install the extension package (folder or .zip) under the cursor
         'extensions': [],                      # List extension packages and why any did not load
+        'check_extension_updates': [],         # Look for newer versions of extension packages
         'sync_python_packages': [],            # Install what ~/.xefm/requirements.txt lists
 
         # === Viewer-local actions (rebindable, not listed above) ==============

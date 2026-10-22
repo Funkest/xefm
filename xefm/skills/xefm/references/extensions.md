@@ -449,6 +449,8 @@ xefm ext install github:me/exts/hello  # one package in a subdirectory
 xefm ext list
 xefm ext disable hello-xefm | enable hello-xefm
 xefm ext uninstall hello-xefm          # asks before deleting its data
+xefm ext outdated                      # newer versions, from each package's `updates`
+xefm ext upgrade [id] [--yes]          # asks before installing them
 ```
 
 To share a package, put it in a GitHub repository — the manifest at the
@@ -457,7 +459,10 @@ the folder. Nothing needs uploading to GitHub Releases: a version is a tag,
 `v0.1.0` for a package at the root and `<id>-v0.1.0` (e.g.
 `hello-xefm-v0.1.0`) for one in a subdirectory. Set `updates` in
 `[extension]` to that repository (`github:me/exts/hello`, no `@ref`) from the
-first release, so an installed copy knows where its next version is.
+first release, so an installed copy knows where its next version is:
+`xefm ext outdated` and `upgrade` (and Check for Extension Updates in the
+Tools ▸ Advanced menu) read those tags. A tag that is not plain numbers
+(`v0.3.0-beta`) is never offered as an upgrade.
 
 ## When `xefm ext check` complains
 

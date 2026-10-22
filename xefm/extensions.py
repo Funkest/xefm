@@ -46,11 +46,13 @@ import ast
 import importlib
 import importlib.util
 import io
+import json
 import os
 import re
 import shutil
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 import zipfile
 from dataclasses import dataclass, field
@@ -232,6 +234,12 @@ class Manifest:
     @property
     def api_version(self) -> Any:
         return self.data.get("extension", {}).get("api_version")
+
+    @property
+    def updates(self) -> str:
+        """``[extension] updates``: where newer versions are tagged, or ""."""
+        value = self.data.get("extension", {}).get("updates")
+        return value if isinstance(value, str) else ""
 
     @property
     def contributes(self) -> dict:
@@ -1044,6 +1052,9 @@ class InstalledEntry:
     source: str = ""
     directory: str = ""
     enabled: bool = True
+    #: The package's ``[extension] updates``, copied at install so the update
+    #: check and ``sync`` have it even when the package's folder is gone.
+    updates: str = ""
 
 
 def read_installed(layout: Layout) -> dict[str, InstalledEntry]:
@@ -1064,7 +1075,8 @@ def read_installed(layout: Layout) -> dict[str, InstalledEntry]:
             id=ext_id, version=str(entry.get("version", "")),
             source=str(entry.get("source", "")),
             directory=str(entry.get("directory", ext_id)),
-            enabled=bool(entry.get("enabled", True)))
+            enabled=bool(entry.get("enabled", True)),
+            updates=str(entry.get("updates", "")))
     return out
 
 
@@ -1084,7 +1096,10 @@ def write_installed(layout: Layout, entries: dict[str, InstalledEntry]) -> None:
                   f"version = {_toml_str(e.version)}",
                   f"source = {_toml_str(e.source)}",
                   f"directory = {_toml_str(e.directory)}",
-                  f"enabled = {'true' if e.enabled else 'false'}", ""]
+                  f"enabled = {'true' if e.enabled else 'false'}"]
+        if e.updates:
+            lines.append(f"updates = {_toml_str(e.updates)}")
+        lines.append("")
     layout.home.mkdir(parents=True, exist_ok=True)
     tmp = layout.installed_file.with_suffix(".toml.tmp")
     tmp.write_text("\n".join(lines), encoding="utf-8")
@@ -1160,6 +1175,21 @@ def _find_package_root(top: Path, subdir: str = "") -> Path:
     raise InstallError(f"no {MANIFEST} at the top of the package")
 
 
+def _open_url(url: str) -> bytes:
+    """Every download an install or an update check makes: one place, so a
+    test can stand in for the network."""
+    request = urllib.request.Request(url, headers={"User-Agent": f"xefm/{_XEFM_VERSION}"})
+    if url.startswith("https://api.github.com/"):
+        request.add_header("Accept", "application/vnd.github+json")
+        # A token lifts GitHub's limit of 60 requests an hour; it is sent to
+        # api.github.com only, and only when the user has one set.
+        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        if token:
+            request.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return response.read()
+
+
 def fetch(source: str, workdir: Path,
           opener: Callable[[str], bytes] | None = None) -> Path:
     """Put the package named by ``source`` — a directory, a ``.zip``, an
@@ -1180,12 +1210,8 @@ def fetch(source: str, workdir: Path,
     if url is None:
         raise InstallError(f"{source} is not a directory, a zip, an https:// URL "
                            "or github:owner/repo[/path]")
-    if opener is None:
-        def opener(u: str) -> bytes:
-            with urllib.request.urlopen(u, timeout=60) as response:
-                return response.read()
     try:
-        payload = opener(url)
+        payload = (opener or _open_url)(url)
     except OSError as exc:
         raise InstallError(f"could not download {url}: {exc}") from None
     try:
@@ -1251,7 +1277,8 @@ def install(source: str, layout: Layout | None = None, *,
         else str(Path(source).expanduser().resolve())
     installed[manifest.id] = InstalledEntry(
         id=manifest.id, version=manifest.version, source=source_text,
-        directory=manifest.id, enabled=previous.enabled if previous else True)
+        directory=manifest.id, enabled=previous.enabled if previous else True,
+        updates=manifest.updates)
     write_installed(layout, installed)
     logger.info(f"Installed extension {manifest.id} {manifest.version} from {source}")
     return read_manifest(target)
@@ -1306,12 +1333,193 @@ def sync(layout: Layout | None = None, *,
     for ext_id, entry in read_installed(layout).items():
         if (layout.packages / entry.directory).is_dir() or entry.source in ("", "(local)"):
             continue
+        source = entry.source
+        if _local_source_gone(source) and entry.updates and entry.version:
+            # The zip it came from is gone, but the package said where its
+            # versions are tagged: the same version, from there.
+            source = release_source(entry.updates, ext_id, entry.version)
         try:
-            install(entry.source, layout, opener=opener)
-            report.append(f"{ext_id}: reinstalled from {entry.source}")
+            install(source, layout, opener=opener)
+            report.append(f"{ext_id}: reinstalled from {source}")
         except (InstallError, ManifestError, OSError) as exc:
-            report.append(f"{ext_id}: could not reinstall from {entry.source}: {exc}")
+            report.append(f"{ext_id}: could not reinstall from {source}: {exc}")
     return report
+
+
+# --- newer versions (#676) ------------------------------------------------------
+#
+# A package says where its versions are published with ``[extension] updates =
+# "github:owner/repo[/path]"``, and a version is a tag there: ``v<version>`` for
+# a package at the repository's root, ``<id>-v<version>`` for one in a
+# subdirectory. Nothing is looked up unless asked: ``xefm ext outdated`` /
+# ``upgrade`` and Check for Extension Updates are the only callers that reach
+# the network, and the startup check (:func:`stranded`) never does.
+
+#: A release version: dotted numbers only. A tag such as ``v0.3.0-beta`` is a
+#: pre-release and is never offered as an upgrade.
+_RELEASE_RE = re.compile(r"\d+(?:\.\d+)*")
+
+
+def _local_source_gone(source: str) -> bool:
+    """Whether ``source`` names a file or folder on this machine that is no
+    longer there. A ``github:`` or ``https://`` source is not local."""
+    if not source or source == "(local)" or source.startswith(("github:", "https://")):
+        return False
+    return not Path(source).expanduser().exists()
+
+
+def _updates_of(layout: Layout, entry: InstalledEntry) -> str:
+    """The entry's update source: recorded at install, or — for an entry
+    written before XeFM recorded it — read from the installed manifest."""
+    if entry.updates:
+        return entry.updates
+    try:
+        return read_manifest(layout.packages / entry.directory).updates
+    except ManifestError:
+        return ""
+
+
+def tag_prefix(updates: str, ext_id: str) -> str:
+    """``v`` for a package at the top of its repository, ``<id>-v`` for one in
+    a subdirectory."""
+    parsed = parse_github_source(updates)
+    return f"{ext_id}-v" if parsed and parsed[2] else "v"
+
+
+def release_source(updates: str, ext_id: str, version: str) -> str:
+    """The install source of one version: ``updates`` at that version's tag."""
+    return f"{updates}@{tag_prefix(updates, ext_id)}{version}"
+
+
+def _github_json(url: str, opener: Callable[[str], bytes] | None) -> Any:
+    try:
+        return json.loads((opener or _open_url)(url))
+    except urllib.error.HTTPError as exc:
+        if exc.code in (403, 429):
+            raise InstallError("GitHub's limit of 60 requests an hour without a "
+                               "token is used up; try again later, or set "
+                               "GITHUB_TOKEN") from None
+        if exc.code == 404:
+            raise InstallError(f"no such repository: {url}") from None
+        raise InstallError(f"could not read {url}: {exc}") from None
+    except (OSError, ValueError) as exc:
+        raise InstallError(f"could not read {url}: {exc}") from None
+
+
+def published_versions(updates: str, ext_id: str, *,
+                       opener: Callable[[str], bytes] | None = None) -> list[str]:
+    """Every release version tagged at ``updates``, oldest first. One request:
+    the tags whose names start with this package's prefix."""
+    parsed = parse_github_source(updates)
+    if parsed is None or parsed[3] is not None:
+        raise InstallError(f"updates = {updates!r} is not github:owner/repo[/path]")
+    owner, repo, _subdir, _ref = parsed
+    prefix = tag_prefix(updates, ext_id)
+    refs = _github_json(f"https://api.github.com/repos/{owner}/{repo}/git/"
+                        f"matching-refs/tags/{prefix}", opener)
+    versions = []
+    for ref in refs if isinstance(refs, list) else []:
+        name = str(ref.get("ref", "")).removeprefix("refs/tags/")
+        version = name[len(prefix):] if name.startswith(prefix) else ""
+        if _RELEASE_RE.fullmatch(version):
+            versions.append(version)
+    return sorted(set(versions), key=_version_tuple)
+
+
+@dataclass
+class UpdateCheck:
+    """One installed package, looked up. ``latest`` is set when a newer
+    release exists; ``problem`` says why the package could not be checked."""
+    id: str
+    version: str
+    updates: str = ""
+    latest: str = ""
+    problem: str = ""
+
+    @property
+    def outdated(self) -> bool:
+        return bool(self.latest)
+
+    @property
+    def failed(self) -> bool:
+        """Its source was asked and gave no answer — unlike a package with no
+        update source at all, which is a fact about the package, not a
+        failure."""
+        return bool(self.problem) and bool(self.updates)
+
+    @property
+    def source(self) -> str:
+        """Where the newer version installs from."""
+        return release_source(self.updates, self.id, self.latest) if self.latest else ""
+
+
+def check_updates(layout: Layout | None = None, *, ids: Iterable[str] = (),
+                  opener: Callable[[str], bytes] | None = None) -> list[UpdateCheck]:
+    """Look up every installed package (or those in ``ids``) at its update
+    source. Local packages — ones the user made in ``extensions/`` — have no
+    published versions and are left out."""
+    layout = layout or Layout()
+    installed = read_installed(layout)
+    wanted = list(ids)
+    unknown = [i for i in wanted if i not in installed]
+    if unknown:
+        raise InstallError(f"not installed: {', '.join(unknown)}")
+    results = []
+    for ext_id in wanted or sorted(installed):
+        entry = installed[ext_id]
+        if entry.source == "(local)":
+            continue
+        check = UpdateCheck(ext_id, entry.version, updates=_updates_of(layout, entry))
+        if not check.updates:
+            check.problem = "it does not say where newer versions are published"
+        else:
+            try:
+                versions = published_versions(check.updates, ext_id, opener=opener)
+            except InstallError as exc:
+                check.problem = str(exc)
+                versions = []
+            newer = [v for v in versions
+                     if _version_tuple(v) > _version_tuple(entry.version)]
+            if newer:
+                check.latest = newer[-1]
+            elif not versions and not check.problem:
+                check.problem = (f"no {tag_prefix(check.updates, ext_id)}<version> "
+                                 f"tags at {check.updates}")
+        results.append(check)
+    return results
+
+
+def upgrade(check: UpdateCheck, layout: Layout | None = None, *,
+            opener: Callable[[str], bytes] | None = None) -> Manifest:
+    """Install the newer version :func:`check_updates` found, through the same
+    check an install runs: a version this XeFM cannot run (``api_version``,
+    ``min_xefm``) is refused with the reason, and the installed one stays."""
+    if not check.outdated:
+        raise InstallError(f"{check.id} {check.version} is the newest version")
+    try:
+        return install(check.source, layout, opener=opener)
+    except InstallError as exc:
+        reasons = [p.message for p in exc.problems
+                   if p.where in ("extension.api_version", "extension.min_xefm")]
+        if reasons:
+            raise InstallError(f"{check.id} {check.latest} cannot run on this XeFM: "
+                               f"{'; '.join(reasons)}", exc.problems) from None
+        raise
+
+
+def stranded(layout: Layout | None = None) -> list[str]:
+    """Offline, for startup: installed packages that nothing could reinstall —
+    installed from a file or folder that is gone, with no update source. They
+    keep working; ``xefm ext sync`` (another machine, a lost ``extensions/``)
+    could not bring them back."""
+    layout = layout or Layout()
+    out = []
+    for ext_id, entry in sorted(read_installed(layout).items()):
+        if _local_source_gone(entry.source) and not _updates_of(layout, entry):
+            out.append(f"{ext_id} was installed from {entry.source}, which is gone, "
+                       "and it does not say where newer versions are published: "
+                       "`xefm ext sync` could not reinstall it")
+    return out
 
 
 # --- settings -----------------------------------------------------------------
@@ -1664,6 +1872,7 @@ def load(config, layout: Layout | None = None, *,
             continue
         report.loaded.append(manifest)
     _load_settings(manifests, report.loaded, namespace or {}, report.warnings)
+    report.warnings.extend(stranded(layout))
     return report
 
 

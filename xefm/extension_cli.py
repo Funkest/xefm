@@ -53,6 +53,17 @@ def _parser() -> argparse.ArgumentParser:
     _skill_arguments(sub.add_parser(
         "skill", help="the AI-agent skill for XeFM — same as `xefm skill`"))
 
+    outdated = sub.add_parser(
+        "outdated", help="list installed packages with a newer version (asks GitHub)")
+    outdated.add_argument("ids", nargs="*", metavar="id",
+                          help="only these packages (default: all)")
+    upgrade = sub.add_parser(
+        "upgrade", help="install the newer version of packages (asks GitHub)")
+    upgrade.add_argument("ids", nargs="*", metavar="id",
+                         help="only these packages (default: every outdated one)")
+    upgrade.add_argument("-y", "--yes", action="store_true",
+                         help="do not ask before upgrading")
+
     sub.add_parser("sync", help="reinstall listed packages whose files are missing")
     settings = sub.add_parser("settings", help="print a package's settings class "
                               "for config.py, with every default")
@@ -278,6 +289,57 @@ def main(argv: list[str] | None = None, layout: ext.Layout | None = None) -> int
                   file=sys.stderr)
             return 1
         return 0
+
+    if args.command in ("outdated", "upgrade"):
+        try:
+            checks = ext.check_updates(layout, ids=args.ids)
+        except ext.InstallError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        if not checks:
+            print("no installed extension packages to check")
+            return 0
+        newer = [c for c in checks if c.outdated]
+        failed = [c for c in checks if c.failed]
+        for check in checks:
+            if check.failed:
+                print(f"{check.id} {check.version}: could not check — {check.problem}",
+                      file=sys.stderr)
+            elif check.problem:
+                print(f"{check.id} {check.version}: not checked — {check.problem}")
+        if args.command == "outdated":
+            for check in newer:
+                print(f"{check.id} {check.version} → {check.latest}  ({check.source})")
+            current = sum(1 for c in checks if c.updates and not c.problem and not c.outdated)
+            if current:
+                print(f"{current} package(s) up to date")
+            # Like `deps status`: non-zero when something needs doing.
+            return 1 if newer or failed else 0
+        if not newer:
+            print("nothing to upgrade")
+            return 1 if failed else 0
+        for check in newer:
+            print(f"{check.id} {check.version} → {check.latest}")
+        print("Extensions run inside XeFM with your permissions.")
+        if not args.yes and not _ask(f"Upgrade {len(newer)} package(s)?"):
+            print("Not upgraded.")
+            return 1
+        failed = False
+        needs_packages = False
+        for check in newer:
+            try:
+                manifest = ext.upgrade(check, layout)
+            except (ext.InstallError, ext.ManifestError) as exc:
+                failed = True
+                print(f"error: {check.id}: {exc}", file=sys.stderr)
+                continue
+            print(f"upgraded {manifest.id} to {manifest.version}")
+            needs_packages |= bool(manifest.requires.get("python_packages"))
+        print("Reload the config (Tools ▸ Reload Configuration) or restart XeFM "
+              "to load the new versions")
+        if needs_packages:
+            failed |= _sync_python_packages(layout, ask=not args.yes) != 0
+        return 1 if failed else 0
 
     if args.command == "sync":
         lines = ext.sync(layout)

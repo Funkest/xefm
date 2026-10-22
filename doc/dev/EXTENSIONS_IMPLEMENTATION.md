@@ -240,7 +240,9 @@ harmless class behind. Nothing needs a stub.
 ## The installed set
 
 `~/.xefm/extensions.toml` holds one `[extensions."<id>"]` table each, with
-`version`, `source`, `directory` and `enabled`. Python only reads TOML, so
+`version`, `source`, `directory` and `enabled`, plus `updates` when the
+package declares one (copied at install, so `sync` and the update check have
+it even with the package's folder gone). Python only reads TOML, so
 `write_installed` writes this fixed shape itself, escaping strings, and replaces
 the file atomically.
 
@@ -267,7 +269,63 @@ flag.
 
 `uninstall` deletes `extension-data/<id>/` only when asked; the CLI asks
 interactively. `sync` reinstalls every listed package whose directory is
-missing.
+missing. When the recorded source is a local file or folder that is gone and
+the package has an `updates` source, `sync` installs the same version from
+there (`release_source`).
+
+All downloads go through `_open_url`, one function a test can replace.
+
+## Newer versions (#676)
+
+A package's versions are tags at its `updates` source: `v<version>` at a
+repository's root, `<id>-v<version>` in a subdirectory (`tag_prefix`).
+
+- `published_versions` makes one GitHub API request:
+  `git/matching-refs/tags/<prefix>`. It returns only this package's tags,
+  which the plain tags list would page through for a repository of many
+  packages. Only dotted-number versions count. A tag such as `v0.3.0-beta` is a
+  pre-release and is never offered.
+- `check_updates` returns an `UpdateCheck` per installed package. It has
+  `latest` when something newer exists and `problem` otherwise.
+  - `failed` tells a source that gave no answer (offline, the rate limit,
+    no such repository) from a package with no `updates`. The second is a
+    fact about the package, so the CLI reports it but it does not make the
+    exit status non-zero.
+  - Local packages (made in `extensions/`, listed as `(local)`) are left out.
+  - An entry written before `updates` was recorded falls back to the installed
+    manifest (`_updates_of`).
+- `upgrade` installs `updates@<tag>` through `install`, so the new version
+  passes the same check, keeps the `enabled` flag, and replaces the old one
+  only once it has passed. An `api_version` or `min_xefm` refusal is reworded
+  as "cannot run on this XeFM". After an upgrade the recorded source is the
+  tag, so `sync` reinstalls that exact version.
+- `stranded` is the offline startup check, added to the load report's
+  warnings. It lists packages installed from a local source that is gone and
+  have no `updates`: nothing could reinstall them.
+
+Nothing here runs unasked, because it reaches GitHub. The entry points are:
+
+- `xefm ext outdated [id…]`: lists newer versions. Exit 1 when something is
+  outdated or could not be checked, like `xefm deps status`.
+- `xefm ext upgrade [id…] [--yes]`: lists the upgrades, asks, upgrades, then
+  offers the Python-packages sync if a new version needs it.
+- **Tools ▸ Advanced ▸ Check for Extension Updates…**
+  (`check_extension_updates`):
+  - The check runs on a worker thread, and the pump
+    (`_pump_extension_updates`) shows the result in a message box.
+  - **Upgrade** runs the upgrades on a worker, then reloads the config and
+    starts the Python-packages sync when a new version lists
+    `python_packages`.
+  - The menu item is greyed out while either step runs.
+
+Requests send `User-Agent: xefm/<version>`. A `GH_TOKEN` / `GITHUB_TOKEN` in
+the environment is sent to `api.github.com` only, to lift the limit of 60
+requests an hour. The rate-limit refusal (403/429) names that variable.
+
+The issue's "what is newer, then what can run" order is not split further:
+when the newest release needs a newer XeFM, `upgrade` refuses it. It does not
+fall back to the newest release this XeFM can run, which would mean fetching
+every candidate's manifest.
 
 ## Decisions on the discussion's open questions
 

@@ -848,6 +848,14 @@ _DETAILS: dict[str, str] = {
         "bindings, file associations, external programs, favorites and your "
         "own actions take effect at once. Theme, fonts and layout apply on the "
         "next start, and the log says so."),
+    "check_extension_updates": (
+        "Asks where each installed extension package publishes its versions "
+        "(its `updates` source on GitHub) whether there is a newer one, and "
+        "offers to upgrade the ones that have. Each new version goes through "
+        "the same check as an install, so one this XeFM cannot run is refused "
+        "and the old one stays. Reaches the network, and only when you run it: "
+        "XeFM never looks on its own. The same as `xefm ext outdated` and "
+        "`xefm ext upgrade` from a shell."),
     "sync_python_packages": (
         "Makes `~/.xefm/site-packages` match `~/.xefm/requirements.txt`: "
         "installs what the file lists, with pip, for the Python XeFM runs on, "
@@ -1049,6 +1057,8 @@ _FILER_ACTIONS = [
     _a("reload_config", FILER, "Re-read config.py and apply it live"),
     _a("install_extension", FILER, "Install the extension package under the cursor"),
     _a("extensions", FILER, "List the extension packages and whether they loaded"),
+    _a("check_extension_updates", FILER,
+       "Look for newer versions of the installed extension packages"),
     _a("sync_python_packages", FILER,
        "Install the Python packages ~/.xefm/requirements.txt lists"),
 ]

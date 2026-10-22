@@ -42,6 +42,10 @@ xefm ext enable hello-xefm
 xefm ext uninstall hello-xefm # asks whether to delete its data too
 xefm ext sync                 # reinstall anything listed but missing
 xefm ext settings hello-xefm  # its settings class, ready to paste into config.py
+
+xefm ext outdated             # which packages have a newer version
+xefm ext upgrade              # install the newer versions (asks first)
+xefm ext upgrade compute-hash # just this one
 ```
 
 Inside XeFM:
@@ -49,13 +53,38 @@ Inside XeFM:
 - To install, put the cursor on a package folder or `.zip` and choose
   **Tools ▸ Advanced ▸ Install Extension…**.
 - **Tools ▸ Advanced ▸ Extensions…** shows which packages loaded, and why any did not.
+- **Tools ▸ Advanced ▸ Check for Extension Updates…** looks for newer versions
+  and offers to upgrade them.
+
+### Newer versions
+
+A package says where its newer versions are published (its `updates` field;
+see [Publishing](#publishing-and-where-newer-versions-come-from)). It does not
+matter how you installed it: a package installed from a downloaded zip still
+knows where to look. Compute Hash does this.
+
+XeFM never looks on its own. Checking reaches GitHub, so it happens only when
+you run `xefm ext outdated`, `xefm ext upgrade` or **Check for Extension
+Updates…**. An upgrade goes through the same check as an install. A version
+that needs a newer XeFM is refused and says so, and the version you have stays
+installed. A package you disabled stays disabled.
+
+A package that does not say where it is published cannot be checked; the
+command says so. GitHub allows 60 checks an hour without an account. If you
+hit that, wait, or set `GITHUB_TOKEN` (or `GH_TOKEN`) to a token.
+
+At startup XeFM warns, without going online, about a package nothing could
+reinstall: one installed from a file that is now gone, with no `updates`.
+It keeps working. Only `xefm ext sync`, on another machine or after
+`extensions/` is lost, could not bring it back.
 
 Before installing, XeFM checks the package and shows everything it adds,
 including which code each item runs. Extensions run inside XeFM with your
 permissions, and there is no sandbox. Install only packages you trust.
 
-After installing or enabling a package, reload the configuration (**Tools ▸
-Reload Configuration**) or restart XeFM.
+After installing, upgrading or enabling a package from a shell, reload the
+configuration (**Tools ▸ Reload Configuration**) or restart XeFM. Inside XeFM
+the configuration reloads by itself.
 
 ### Your config.py always wins
 
