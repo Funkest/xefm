@@ -228,9 +228,16 @@ leaves the cask on the older tag, as the DMG table above already does.
 anything uploaded to PyPI in the last 24 hours, so on release day it cannot see
 the new `xefm` sdist, nor a PuiKit released the same day, and fails with
 "Unable to determine dependencies … Please update the resources manually".
-Bump the cask on release day and the formula the next day (first hit with
-1.9.0). Both bumps push a branch named `bump-xefm-X.Y.Z`, so merge the cask PR
-before running the formula bump, or the second push collides with the first. A failed
+So the release bumps only the cask. The formula is bumped by the tap's
+**autobump** workflow (`.github/workflows/autobump.yml`, added after 1.9.0
+missed its day): every six hours it compares PyPI with the formula, and once
+the new sdist is a day old it runs Homebrew's `bump-packages` action, which
+opens the formula's PR. It opens the PR and nothing else. It uses the
+`HOMEBREW_TAP_BUMP_TOKEN` secret, because a PR opened with the default
+`GITHUB_TOKEN` would not start the tests that build the bottles. Both bumps
+push a branch named `bump-xefm-X.Y.Z`, so merge the cask PR within the day.
+
+Running `bump-formula-pr` by hand on release day fails the same way. A failed
 bump has already rewritten the formula's `url` and `sha256` in the local tap
 checkout (`$(brew --repo crftwr/tap)`) and leaves the edit uncommitted. That
 checkout is the machine's live Homebrew, so `brew upgrade` there offers the new
@@ -248,8 +255,8 @@ its PyObjC floor.
 Each bump opens a PR on the tap. Its CI (`brew test-bot`, macOS and Ubuntu)
 builds the formula's bottles. Once it is green, run the tap's **brew pr-pull**
 workflow with the PR number: it publishes the bottles and merges. A cask-only
-PR has no bottles, so it can be merged directly. The tap has no autobump
-workflow on purpose, so the release is the only thing that moves it.
+PR has no bottles, so it can be merged directly. Casks are moved only by the
+release, and the formula only by the autobump workflow above.
 
 ## Preflight checks
 

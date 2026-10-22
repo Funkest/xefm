@@ -126,22 +126,23 @@ gh release edit vX.Y.Z --notes-file <scratch>/release-note-x.y.z.md
 
 ## 5. After the release
 
-- Bump the Homebrew tap once the sdist is on PyPI and the DMG is attached.
-  Doing it earlier points the tap at a file that does not exist yet:
+- Bump the Homebrew **cask** once the DMG is attached (doing it earlier
+  points the tap at a file that does not exist yet), and merge its PR when CI
+  passes:
   ```
-  brew bump-formula-pr --no-fork --url <PyPI sdist URL> crftwr/tap/xefm
   brew bump-cask-pr --no-fork --version X.Y.Z crftwr/tap/xefm   # only if this release has a DMG
   ```
-  The formula bump fails on release day: Homebrew resolves resources only from
-  packages uploaded at least 24 hours ago (`--uploaded-prior-to=P1D`), so run
-  it the next day, after the cask PR is merged (both use the branch
-  `bump-xefm-X.Y.Z`). Report it as remaining rather than editing resources
-  by hand. A failed bump has already edited the formula in the local tap
-  checkout and leaves it uncommitted, and this Mac's own `brew upgrade` then
-  offers a version with no bottle (404). After any failed bump, restore it:
+  Do **not** bump the formula by hand. Homebrew resolves its resources only
+  from packages uploaded at least 24 hours ago (`--uploaded-prior-to=P1D`),
+  so a release-day bump fails. The tap's autobump workflow opens the formula
+  PR on its own once the sdist is a day old. Report "formula PR: opened by
+  autobump after <date+1>" as remaining. Merge the cask PR the same day,
+  because both bumps use the branch `bump-xefm-X.Y.Z`. If a manual bump was
+  tried anyway and failed, it has already edited the formula in the local
+  tap checkout and left the edit uncommitted, and this Mac's own
+  `brew upgrade` then offers a version with no bottle (404). Restore it:
   `git -C "$(brew --repo crftwr/tap)" checkout -- Formula/xefm.rb`.
-  Each opens a PR on crftwr/homebrew-tap. Merge the cask PR when its CI
-  passes. For the formula PR, run the tap's **brew pr-pull** workflow with the
+  When the autobump PR is up, run the tap's **brew pr-pull** workflow with the
   PR number once CI passes (`gh workflow run publish.yml -R crftwr/homebrew-tap
   -f pull_request=<n>`): it publishes the bottles and merges. If PuiKit raised
   its PyObjC floor in this release, bump the hand-kept `pyobjc-core` /
