@@ -18,13 +18,19 @@ The loop is always the same:
    manifest *and* the code rules in section 3, so a clean check means the
    package meets XeFM's requirements.
 4. `python -m pytest tests` in the package directory (see *Testing*).
-5. `xefm ext install <dir>` (add `--yes` only when the user has said to install).
-6. Tell the user to run **Tools ▸ Reload Configuration** in XeFM, or restart
+5. When the action opens a prompt, a dialog, a menu or a task:
+   `xefm ext try <dir> --keys steps.json` to see it run (see *See it run*).
+6. `xefm ext install <dir>` (add `--yes` only when the user has said to install).
+7. Tell the user to run **Tools ▸ Reload Configuration** in XeFM, or restart
    it.
 
-Never launch XeFM yourself to try an extension: `xefm` (and `python -m xefm`)
-opens an interactive file manager that blocks until a person quits it. The
-`xefm ext …` subcommands are safe; they never open a window.
+Never launch XeFM yourself with `xefm` (or `python -m xefm`): it opens an
+interactive file manager that blocks until a person quits it. The `xefm ext …`
+subcommands are safe; they never open a window. The one way for you to see an
+extension run is `xefm ext try <dir> --keys <script>`, which runs XeFM in a
+pseudo-terminal, follows the script and exits. Without `--keys`, `ext try`
+hands the terminal to XeFM and blocks like `xefm` does: that form is for the
+user.
 
 ## 1. Start a package
 
@@ -423,7 +429,72 @@ bugs that only show once it has returned:
     asked[0](1)                # now the user picks the second item
 ```
 
-## 7. Installing, sharing, removing
+## 7. See it run
+
+`xefm ext check` reads the code and the tests run it against a fake `ctx`, so
+neither sees a menu, a dialog, a task's progress or a cancel. `xefm ext try`
+runs the terminal XeFM with your package and nothing else:
+
+```bash
+xefm ext try hello-xefm --keys steps.json --screens out/ --record out/session.cast
+```
+
+- It installs the package into a **temporary home** (the user's `~/.xefm` is
+  never read or written) with the `afx` keymap preset already chosen
+  (`--keymap orthodox` for the other) and no Tip of the Day, then removes the
+  home at exit. `--config FILE` uses that `config.py` instead of the template,
+  for example to set the package's settings.
+- The left pane opens on a few fixture files (`a.txt`, `b.txt`, `c.md`,
+  `folder/`); `--left DIR` opens another directory.
+- It needs `pip install 'quality-loop[tui]'` (a terminal emulator and the key
+  notation below), and does not run on Windows yet. If either stops it, tell
+  the user, and rely on the tests.
+
+The script is a JSON list of steps. Each step sends its keys, then waits until
+the screen has stopped changing:
+
+```json
+[
+  {"intent": "open the command palette", "keys": ["Ctrl-T"]},
+  {"intent": "find the action", "keys": [{"text": "hello"}]},
+  {"intent": "run it", "keys": ["Enter"]}
+]
+```
+
+Keys are named like `Ctrl-T`, `Shift-Down`, `Enter`, `Esc`, `F5` or `a`;
+`{"text": "..."}` types text and `{"pause": 2}` waits. In the default `afx`
+preset, `Ctrl-T` opens the command palette, which runs any action by name;
+`references/actions.md` has every other key.
+
+What comes back, in `--screens` (default `try-screens/`):
+
+- `00.txt` (after start-up) and `NN.txt` after each step: the screen as text.
+- `steps.jsonl`: per step, the keys sent, whether the screen settled
+  (`"settled": false` means it was still drawing after `patience` seconds, 10
+  by default), and `events` — every line XeFM wrote to its log pane during the
+  step (`"kind": "message"`) and every exception it logged
+  (`"kind": "exception"`, with the traceback). Read the events rather than the
+  log pane on the screen: a message can scroll out of view.
+- With `--record`, an asciicast v2 file of the whole session, each step a
+  chapter. The user can watch it with `asciinema play` or turn it into a GIF
+  with `agg`.
+
+Things that will catch you out:
+
+- **Colour is gone.** The selection marks and the highlighted menu row are
+  colours, which the text screen does not keep. Check a selection through the
+  events (`Selected: …`) or through what the action then does, not by looking
+  for the mark.
+- **A running task never goes quiet.** Its progress dialog keeps redrawing, so
+  a step during a task waits its full `patience`. To press keys while a task
+  runs (to cancel it, say), put them in one step with pauses:
+  `["Enter", {"pause": 1}, "Esc"]`.
+- **The clipboard is not the system's.** In a terminal XeFM copies through the
+  terminal, and this terminal is an emulator: nothing reaches the OS clipboard.
+
+No step needs to quit XeFM: `ext try` ends it when the script runs out.
+
+## 8. Installing, sharing, removing
 
 ```bash
 xefm ext install ./hello-xefm          # shows what it adds and asks

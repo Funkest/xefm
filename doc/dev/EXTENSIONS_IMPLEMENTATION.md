@@ -8,11 +8,13 @@ in §8 is a separate piece of work.
 - `xefm/extensions.py` — the manifest, the static check, the installed set,
   install/uninstall/sync, loading into a config, settings, and the
   `ExtensionHandle` that `user_api.extension(__name__)` returns.
-- `xefm/extension_cli.py` — `xefm ext check|install|uninstall|list|enable|disable|sync|settings`.
+- `xefm/extension_cli.py` — `xefm ext check|install|uninstall|list|enable|disable|sync|settings|try`.
   `xefm.app.main` dispatches `argv[1] == "ext"` here before the UI's argparse
   runs, so no backend is opened.
 - `XeFMApp.install_extension` / `show_extensions` — the in-app install, with a
   summary-and-confirm box, and the load report.
+- `xefm/extension_try.py` — `xefm ext try` (see *Seeing a package run*).
+- `xefm/event_log.py` — the event log `ext try --keys` reads.
 
 ## The static check (`check_manifest`)
 
@@ -286,6 +288,62 @@ Not done yet:
   catalog exists.
 - Rewriting vendored imports (C, option 1). Only the collision refusal is done.
 
+## Seeing a package run (`xefm ext try`, #682)
+
+The check is static and the skill's tests run against a fake `ctx`, so menus,
+prompts, task progress and cancel were untested until a person tried them.
+Running the TUI in a pseudo-terminal under a throwaway home caught #679, which
+both had missed, while Compute Hash was built. `ext try` packages that method:
+
+- **`TryHome`** makes a temporary `~` (`HOME` and `USERPROFILE`), installs
+  the package into it with `extensions.install` (the same check and copy as
+  `xefm ext install`; a `python_packages` requirement is synced into it), and
+  writes `keymap.preset` and `tips.enabled = False` into its `state.db`. Those
+  are the two dialogs a fresh home opens, and each one used to take the
+  script's first keys: an Esc meant for something else picked a preset. The
+  child gets this XeFM's package directory first on `PYTHONPATH`, so the XeFM
+  that runs is the one that installed the package. It is started by
+  `external_programs.xefm_python`, not `sys.executable`, which in an app bundle
+  is the launcher and would open the desktop app.
+- **Interactive** (no `--keys`) hands the terminal to that XeFM and waits.
+- **Scripted** (`--keys`) is a small `PtyApp`: a fixed-size pty, `pyte` kept in
+  step with every byte, keys in quality-loop's notation (`quality_loop.drive.keys`,
+  so a script reads like an operator's live check). It is a copy of
+  quality-loop's `PtyApp` rather than a use of it, because the recording needs
+  the raw bytes, which quality-loop's reader keeps to itself. Between steps it
+  waits for quiet, counted from the last key as well as the last output. Each
+  step's screen goes to `NN.txt`, and `steps.jsonl` gets the keys, whether the
+  screen settled, and the event-log lines written during the step. The run
+  ends when the script does, so an agent's shell is never held.
+- **`Recording`** writes asciicast v2: the header with the one size the app
+  draws at (never resized, so the header cannot disagree with the rows), `"o"`
+  events through an incremental UTF-8 decoder (a read can split a character),
+  and an `"m"` marker per step for the player's chapters. Replaying it through
+  pyte reproduces the last step's screen exactly.
+
+The script mode depends on `quality-loop[tui]` (MIT; pyte, LGPL, comes with
+it), imported only when `--keys` is given. It is not a requirement: the
+desktop bundles would have to carry and attribute pyte for a developer
+feature. POSIX only: Windows has ConPTY, which neither this nor quality-loop
+drives yet.
+
+**The event log.** With `QUALITY_LOOP_EVENTS=<file>` in the environment (the
+name quality-loop starts every app with; `ext try --keys` sets it), XeFM
+appends one JSON line per log-pane line (`"kind": "message"`, written where
+the line is appended: `log_info` on the UI thread and `_drain_captured_output`
+for everything queued) and per logged exception (`"kind": "exception"`,
+written by `_LogSinkHandler` with the traceback). A message read from the
+screen can scroll away before the next look; the event log keeps it.
+
+Not done from #682's proposal:
+
+- **Dialog, menu and selection events.** XeFM opens its dialogs and menus
+  through PuiKit's `Panel.push_layer` from about twenty places, and nothing
+  public reports a layer coming or going. The clean place for that is a PuiKit
+  observer, not wrappers in XeFM (see the capability-branch rule). Selection
+  already shows as `Selected: …` messages.
+- **Driving the desktop app.** Left for later, as the issue proposed.
+
 ## Tests
 
 `test/test_extensions.py` covers:
@@ -303,3 +361,8 @@ Not done yet:
 - the CLI;
 - `ConfigManager` integration;
 - the in-app install.
+
+`test/test_extension_try.py` covers `ext try` short of starting XeFM: the
+home (the package and nothing of the user's, no first-run dialog, removal on a
+failed start), the script reader (and that a bad script installs nothing),
+the asciicast, and the event log.

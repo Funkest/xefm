@@ -5,11 +5,13 @@ XeFM Log Manager - Handles logging and log display functionality
 
 import sys
 import threading
+import traceback
 import logging
 from datetime import datetime
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Optional
+from xefm import event_log
 from xefm.const import LOG_TIME_FORMAT, MAX_LOG_MESSAGES
 from xefm.colors import get_log_color, get_status_color
 from xefm.logging_handlers import (FileLoggingHandler, LogPaneHandler,
@@ -716,6 +718,11 @@ class _LogSinkHandler(logging.Handler):
         try:
             line = (format_logger_message(record) if should_format_record(record)
                     else record.getMessage())
+            if record.exc_info and event_log.enabled():
+                event_log.write("exception", logger=record.name,
+                                text=record.getMessage(),
+                                traceback="".join(traceback.format_exception(
+                                    *record.exc_info)))
             source = (LOG_ERROR_SOURCE if record.levelno >= logging.WARNING
                       else LOG_SOURCE)
             with _sink_lock:

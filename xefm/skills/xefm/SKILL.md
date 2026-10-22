@@ -39,7 +39,10 @@ the XeFM the user runs (`XeFM X.Y.Z`); if it is not, skip this check.
 
 - **Never launch XeFM.** `xefm`, `python -m xefm` and the app itself open an
   interactive file manager that blocks until a person quits it. `xefm ext …`
-  and `xefm skill` are safe: they never open a window.
+  and `xefm skill` are safe: they never open a window. The one exception is
+  `xefm ext try <dir> --keys <script>`, which runs XeFM in a pseudo-terminal
+  and exits when the script ends (*See it run* in `references/extensions.md`);
+  without `--keys` it blocks like `xefm`.
 - **XeFM applies a change when the user asks it to.** Finish with: run
   **Tools ▸ Reload Configuration** in XeFM, or restart it. Say which of the two
   the change needs (the config reference lists what only a restart applies).

@@ -96,6 +96,7 @@ from xefm import name_key
 from xefm import document_text, keymap_presets, os_index, similar_scan, tree_walk, xft
 from xefm.file_clipboard import FileClipboard, conflicts as clipboard_conflicts
 from xefm.quick_view import QuickView
+from xefm import event_log
 from xefm.log_manager import (LOG_ERROR_SOURCE, LOG_SOURCE, clear_log_sink,
                               getLogger, route_library_logger, set_log_sink)
 from xefm.pane_manager import PaneManager
@@ -2529,6 +2530,12 @@ class XeFMApp:
     #: ``log_info`` from a worker thread, queued: drawn in the log's own style
     #: (None), like the lines ``log_info`` appends on the UI thread.
     _LOG_INFO_SOURCE = "LOG_INFO"
+    #: Queue source -> the ``source`` an event-log message carries (#682):
+    #: ``info`` for ``log_info``, ``log`` / ``error`` for logger records below
+    #: and at WARNING, ``stdout`` / ``stderr`` for captured output.
+    _EVENT_SOURCES = {_LOG_INFO_SOURCE: "info", LOG_SOURCE: "log",
+                      LOG_ERROR_SOURCE: "error", "STDOUT": "stdout",
+                      "STDERR": "stderr"}
     _LOG_STYLES = {
         "STDERR": _STDERR_STYLE,
         LOG_ERROR_SOURCE: _STDERR_STYLE,
@@ -2558,6 +2565,8 @@ class XeFMApp:
             except queue.Empty:
                 break
             self.log.append(line, self._LOG_STYLES.get(source, self._STDOUT_STYLE))
+            event_log.write("message", source=self._EVENT_SOURCES.get(source, "stdout"),
+                            text=line)
             appended = True
         return appended
 
@@ -3020,6 +3029,7 @@ class XeFMApp:
             self._wake_pump()
             return
         self.log.append(message)
+        event_log.write("message", source="info", text=message)
 
     def _log_result(self, result) -> None:
         """Log the (success, message) a FileListManager action returns."""

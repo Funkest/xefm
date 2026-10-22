@@ -292,6 +292,33 @@ Files under a `_vendor/` folder are skipped.
 The exit status is 0 when the package would install. An install runs the same
 check and installs nothing if it finds an error.
 
+### Trying a package
+
+```bash
+xefm ext try ./hello-xefm
+```
+
+This runs XeFM in the terminal with your package and nothing else, so you can
+see its menus, dialogs and tasks before you install it. It runs in a
+temporary home folder: your own `~/.xefm`, its config and its other
+extensions are never touched. The keymap preset is already chosen (`afx`, or
+`--keymap orthodox`) and the Tip of the Day is off. The left pane opens on a
+few sample files. Quit XeFM as usual and the temporary home is deleted.
+
+| Option | What it does |
+|---|---|
+| `--left DIR`, `--right DIR` | open these folders instead |
+| `--config FILE` | use this `config.py`, for example to change the package's settings |
+| `--keep-home` | keep the temporary home and print where it is |
+
+An AI assistant cannot use a terminal it has to type into, so it gives `ext try`
+a script of keys with `--keys steps.json`. XeFM then runs out of sight, saves
+the screen as text after each step and exits when the script ends.
+`--record session.cast` also records the whole session, which you can watch
+with `asciinema play session.cast`. The script mode needs
+`pip install 'quality-loop[tui]'` and does not run on Windows yet. The skill
+teaches an assistant how to use it.
+
 ### Dependencies
 
 - **Libraries from PyPI** (PyYAML, numpy, rawpy, compiled or not): list them
