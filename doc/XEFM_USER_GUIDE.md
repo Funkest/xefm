@@ -815,7 +815,7 @@ For detailed information about specific features, see these dedicated guides:
 
 ### Navigation and Search
 - [Navigation Dialogs Feature](NAVIGATION_DIALOGS_FEATURE.md) - Favorites, jump, history, and drives pickers
-- [Keymap Presets](KEYMAP_PRESETS_FEATURE.md) - A function-key layout with nothing on the bare letters
+- [Keymap Presets](KEYMAP_PRESETS_FEATURE.md) - AFX style, Orthodox, OS native and Vim style, with every key of each side by side
 - [Folder Tabs](FOLDER_TABS_FEATURE.md) - Several places kept open in each pane
 - [Flat View](FLAT_VIEW_FEATURE.md) - Every file below a directory as one flat list
 - [Connect to Server](CONNECT_TO_SERVER_FEATURE.md) - Mount a NAS or file server from inside XeFM
@@ -873,8 +873,9 @@ run.
 
 This guide names **actions** rather than keys for that reason — `copy_files`,
 `find_files`, `jump_to_path` — because the keys depend on the
-[keymap preset](KEYMAP_PRESETS_FEATURE.md) you chose. The AFX-style table, with
-every key commented, is [`xefm/keymap_afx.py`](../xefm/keymap_afx.py). To
+[keymap preset](KEYMAP_PRESETS_FEATURE.md) you chose. Every key of every preset
+is listed side by side in
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side). To
 change a key, add the action to `KEY_BINDINGS` in `~/.xefm/config.py`.
 
 - Which chords work where (a terminal cannot send everything a window can), and
