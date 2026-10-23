@@ -90,7 +90,7 @@ from pathlib import PurePosixPath
 from typing import Iterator, List, Optional
 
 from xefm.path import Path, PathImpl
-from xefm.preview import PREVIEW_APIS, preview
+from xefm.preview import PREVIEW_APIS, preview, record_use
 
 #: The public API of this module: what a ``PATH_SCHEMES`` backend may import
 #: from it. ``xefm ext check`` refuses any other name — ``UnsupportedPathImpl``
@@ -210,6 +210,21 @@ class UriPathImpl(PathImpl):
     #: A URI names a location, not a position relative to one, so this is
     #: always true here.
     IS_REMOTE = True
+
+    def __init_subclass__(cls, **kwargs):
+        """Record a backend outside XeFM that rests on Preview: one built on
+        this class directly, or a :class:`ReadOnlyPathImpl` that defines a
+        Preview member (:func:`~xefm.preview.record_use`)."""
+        # Taken before PathImpl's validation, which assigns CAPABILITIES on
+        # every subclass whether its body named it or not.
+        defined = set(vars(cls))
+        super().__init_subclass__(**kwargs)
+        if UriPathImpl in cls.__bases__:
+            record_use("UriPathImpl", cls.__module__)
+            return
+        for name in _PREVIEW_MEMBERS:
+            if name in defined:
+                record_use(f"ReadOnlyPathImpl.{name}", cls.__module__)
 
     def __init__(self, uri: str):
         self._key = _normalize_key(self.parse_uri(str(uri)))

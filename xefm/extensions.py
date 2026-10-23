@@ -57,7 +57,7 @@ import urllib.request
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Iterator, Optional
 
 try:
     import tomllib
@@ -190,7 +190,7 @@ class Problem:
     """One finding of :func:`check_package`. ``where`` is the manifest field it
     is about (``contributes.actions."hello.greet".entry``), so the fix is never
     a search."""
-    severity: str          # "error" | "warning"
+    severity: str          # "error" | "warning" | "preview"
     where: str
     message: str
 
@@ -683,6 +683,23 @@ def _not_public(module: str, name: str) -> str:
             f"{', '.join(public_names(module))}")
 
 
+def _package_trees(root: Path) -> Iterator[tuple[Path, ast.AST]]:
+    """``(relative path, syntax tree)`` for each of the package's own Python
+    files. Vendored code (any ``_vendor`` directory) is someone else's and is
+    skipped, and so is a file that does not parse — the reference check
+    reports an unreadable module the manifest points at."""
+    root = Path(root)
+    for path in sorted(root.rglob("*.py")):
+        rel = path.relative_to(root)
+        if "_vendor" in rel.parts or any(p.startswith(".") for p in rel.parts):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (SyntaxError, OSError, UnicodeDecodeError):
+            continue
+        yield rel, tree
+
+
 def lint_code(root: Path) -> list[Problem]:
     """What the authoring rules say about the package's own Python files, read
     from their syntax trees — never imported. Vendored code (any ``_vendor``
@@ -694,15 +711,7 @@ def lint_code(root: Path) -> list[Problem]:
     ``ctx.message``), and editing ``sys.path`` is how two extensions' vendored
     copies of one library end up colliding."""
     problems: list[Problem] = []
-    root = Path(root)
-    for path in sorted(root.rglob("*.py")):
-        rel = path.relative_to(root)
-        if "_vendor" in rel.parts or any(p.startswith(".") for p in rel.parts):
-            continue
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        except (SyntaxError, OSError, UnicodeDecodeError):
-            continue  # the reference check reports unreadable referenced modules
+    for rel, tree in _package_trees(root):
         where = lambda node: f"{_CODE}{rel.as_posix()}:{node.lineno}"  # noqa: E731
         bound = _public_modules_bound(tree)
         for node in ast.walk(tree):
@@ -766,6 +775,148 @@ def lint_code(root: Path) -> list[Problem]:
                     "do not touch sys.path — import vendored code as "
                     "yourpackage._vendor.name"))
     return problems
+
+
+#: What a ``preview`` finding's message ends with.
+_PREVIEW_NOTE = "Preview, may change in any release"
+
+
+def _preview_members(cls_name: str) -> set[str]:
+    """The public members of ``xefm.user_api.<cls_name>`` that are Preview."""
+    from xefm.preview import is_preview
+    import xefm.user_api as user_api
+    cls = getattr(user_api, cls_name)
+    return {name for name in dir(cls) if not name.startswith("_")
+            and is_preview(f"xefm.user_api.{cls_name}.{name}")}
+
+
+def preview_sections(manifest: Manifest) -> list[str]:
+    """The Preview parts of the manifest the package uses, named the way a
+    finding's ``where`` names them: ``contributes.menus``, ``settings``,
+    ``extension.updates``."""
+    from xefm.preview import is_preview
+    data = manifest.data
+    found = [f"contributes.{kind}" for kind in data.get("contributes", {}) or {}
+             if is_preview(f"manifest.contributes.{kind}")]
+    found += [section for section in ("settings", "requires")
+              if data.get(section) is not None and is_preview(f"manifest.{section}")]
+    if "updates" in (data.get("extension") or {}) \
+            and is_preview("manifest.extension.updates"):
+        found.append("extension.updates")
+    return found
+
+
+def preview_uses(manifest: Manifest) -> list[Problem]:
+    """Every use of a Preview API in the package, as ``preview`` findings —
+    not faults: a package with only these installs and loads. ``xefm ext
+    check`` lists them so the author knows which parts may need updating after
+    an XeFM release, and ``--stable-only`` makes them errors.
+
+    Read from the manifest and the syntax trees, never by running anything:
+    the sections it uses, the Preview names it takes from the public modules,
+    the Preview ``ReadOnlyPathImpl`` members a backend defines, and the
+    Preview members it reads off ``ctx`` / ``ctx.pane`` — where ``ctx`` is a
+    function's first parameter or a name ``ctx``, which is how every action,
+    hook and ``on_done`` callback is written. What is Preview is read from
+    :data:`xefm.user_api.PREVIEW_APIS`, so this never needs a list of its
+    own."""
+    from xefm.preview import is_preview
+    import xefm.path_base as path_base
+    found: list[Problem] = []
+
+    def note(where: str, what: Optional[str] = None) -> None:
+        message = f"{what} — {_PREVIEW_NOTE}" if what else _PREVIEW_NOTE
+        found.append(Problem("preview", where, message))
+
+    # In the manifest, ``where`` already names the section.
+    for section in preview_sections(manifest):
+        note(section)
+
+    ctx_members = _preview_members("ActionContext")
+    pane_members = _preview_members("PaneApi")
+    backend_members = {name for name in path_base.TIERS["overridable"]
+                       if is_preview(f"xefm.path_base.ReadOnlyPathImpl.{name}")}
+    for rel, tree in _package_trees(manifest.root):
+        hits: dict[tuple[int, str], ast.AST] = {}
+
+        def hit(node: ast.AST, what: str) -> None:
+            hits.setdefault((node.lineno, what), node)
+
+        bound = _public_modules_bound(tree)
+        # Local names for what the public modules export: ``ReadOnlyPathImpl``
+        # after ``from xefm.path_base import ReadOnlyPathImpl``.
+        imported: dict[str, str] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.level == 0 \
+                    and node.module in PUBLIC_MODULES:
+                for alias in node.names:
+                    if alias.name == "*":
+                        continue
+                    qualified = f"{node.module}.{alias.name}"
+                    imported[alias.asname or alias.name] = qualified
+                    if is_preview(qualified):
+                        hit(node, f"{node.module.split('.')[-1]}.{alias.name}")
+            elif isinstance(node, ast.Attribute) and not node.attr.startswith("_"):
+                module = bound.get(_dotted(node.value) or "")
+                if module and is_preview(f"{module}.{node.attr}"):
+                    hit(node, f"{module.split('.')[-1]}.{node.attr}")
+
+        receivers = {"ctx"}
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)) \
+                    and node.args.args:
+                receivers.add(node.args.args[0].arg)
+        receivers -= {"self", "cls"}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) \
+                    and node.value.id in receivers and node.attr in ctx_members:
+                hit(node, f"ctx.{node.attr}")
+            elif isinstance(node, ast.Attribute) and node.attr in pane_members \
+                    and isinstance(node.value, ast.Attribute) \
+                    and node.value.attr in ("pane", "other", "left", "right") \
+                    and isinstance(node.value.value, ast.Name) \
+                    and node.value.value.id in receivers:
+                hit(node, f"ctx.{node.value.attr}.{node.attr}")
+            elif isinstance(node, ast.ClassDef) and "xefm.path_base.ReadOnlyPathImpl" in {
+                    _public_name(base, imported, bound) for base in node.bases}:
+                for item in node.body:
+                    for name in _defined_names(item):
+                        if name in backend_members:
+                            hit(item, f"ReadOnlyPathImpl.{name}")
+        for lineno, what in sorted(hits):
+            note(f"{_CODE}{rel.as_posix()}:{lineno}", what)
+    return found
+
+
+def _public_name(expr: ast.AST, imported: dict[str, str],
+                 bound: dict[str, str]) -> Optional[str]:
+    """The qualified public name ``expr`` refers to — ``ReadOnlyPathImpl``
+    imported by name, or ``pb.ReadOnlyPathImpl`` through a bound module — or
+    None."""
+    dotted = _dotted(expr) or ""
+    if dotted in imported:
+        return imported[dotted]
+    head, _, attr = dotted.rpartition(".")
+    return f"{bound[head]}.{attr}" if head in bound else None
+
+
+def _defined_names(item: ast.AST) -> list[str]:
+    """The names one statement in a class body defines: a method, or the
+    plain targets of an assignment."""
+    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return [item.name]
+    if isinstance(item, ast.Assign):
+        return [t.id for t in item.targets if isinstance(t, ast.Name)]
+    if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+        return [item.target.id]
+    return []
+
+
+def stable_only(problems: Iterable[Problem]) -> list[Problem]:
+    """``problems`` with every ``preview`` finding raised to an error — what
+    ``xefm ext check --stable-only`` judges by."""
+    return [Problem("error", p.where, p.message) if p.severity == "preview" else p
+            for p in problems]
 
 
 def _check_contribution(kind: str, key: str, value, action_names: set) -> Optional[str]:

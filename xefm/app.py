@@ -2389,6 +2389,11 @@ class XeFMApp:
             names = ", ".join(f"{m.id} {m.version}" for m in report.loaded)
             self.log_info(f"Extensions: {names} (API "
                           f"{_extensions._api_version()})")
+            for manifest in report.loaded:
+                sections = _extensions.preview_sections(manifest)
+                if sections:
+                    self.log_info(f"Extension {manifest.id} uses Preview "
+                                  f"manifest sections: {', '.join(sections)}")
         for label, reason in report.skipped:
             if reason != "disabled":
                 self.log_info(f"Extension {label} not loaded: {reason}")

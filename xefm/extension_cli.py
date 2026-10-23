@@ -24,6 +24,8 @@ def _parser() -> argparse.ArgumentParser:
     check = sub.add_parser("check", help="validate a package without running it")
     check.add_argument("path", help="the package directory (the one holding "
                        f"{ext.MANIFEST})")
+    check.add_argument("--stable-only", action="store_true",
+                       help="treat every use of a Preview API as an error")
 
     install = sub.add_parser("install", help="check a package and install it")
     install.add_argument("source", help="a directory, a .zip, an https:// zip "
@@ -177,8 +179,16 @@ def main(argv: list[str] | None = None, layout: ext.Layout | None = None) -> int
         root = Path(args.path)
         others = [m for m in ext.discover(layout) if m.root.resolve() != root.resolve()]
         manifest, problems = ext.check_package(root, others=others)
-        _print_problems(problems)
-        bad = ext.errors(problems)
+        previews = ext.preview_uses(manifest) if manifest is not None else []
+        if args.stable_only:
+            previews = ext.stable_only(previews)
+        _print_problems(problems + previews)
+        apis = {p.message.split(" — ")[0] if " — " in p.message else p.where
+                for p in previews}
+        if apis:
+            print(f"{len(apis)} Preview API(s) in use; everything else this "
+                  "package uses is stable.")
+        bad = ext.errors(problems + previews)
         if not bad:
             name = f"{manifest.id} {manifest.version}" if manifest else str(root)
             print(f"ok: {name}" + (f" ({len(problems)} warning(s))" if problems else ""))

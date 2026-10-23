@@ -827,7 +827,9 @@ def test_a_config_on_the_stable_tables_gets_no_preview_notice(app_with):
     lines = []
     app, _ = app_with(ACTIONS={"mine": lambda ctx: None})
     app.log_info = lines.append
-    app._load_user_entries(app.config)
+    # The developer's installed extensions report their own Preview use.
+    with patch.object(config_manager, "extension_report", None):
+        app._load_user_entries(app.config)
     assert not any("Preview" in line for line in lines)
 
 

@@ -202,6 +202,165 @@ class CodeLint(_Tmp):
         self.assertEqual(self.lint("print(1)\nx._y\n", name="_vendor/lib/a.py"), [])
 
 
+class PreviewUses(_Tmp):
+    """``xefm ext check`` lists every Preview use (#713, plan §4.1): each row of
+    the detection table, found where it is used and not where it is not."""
+
+    MANIFEST = """
+        [extension]
+        id = "p-ext"
+        version = "0.1.0"
+        api_version = 1
+        {extra}
+
+        [contributes.actions]
+        "p.go" = "p_ext.mod:go"
+        {sections}
+    """
+
+    def uses(self, code: str = "def go(ctx):\n    pass\n", *, extra="",
+             sections=""):
+        root = self.tmp / "p-ext"
+        (root / "p_ext").mkdir(parents=True, exist_ok=True)
+        (root / ext.MANIFEST).write_text(textwrap.dedent(self.MANIFEST).format(
+            extra=extra, sections=textwrap.dedent(sections)), encoding="utf-8")
+        (root / "p_ext" / "__init__.py").write_text("", encoding="utf-8")
+        (root / "p_ext" / "mod.py").write_text(textwrap.dedent(code), encoding="utf-8")
+        return [str(p) for p in ext.preview_uses(ext.read_manifest(root))]
+
+    def test_a_package_on_the_stable_part_has_none(self):
+        self.assertEqual(self.uses('''
+            from xefm.user_api import EntryInfo
+
+            def go(ctx):
+                ctx.pane.select(lambda e: e.suffix == ".txt")
+                ctx.other.cd(ctx.pane.path)
+                ctx.invoke("refresh")
+                ctx.run_program(["ls"])
+                ctx.message(", ".join(ctx.action_names()))
+        ''', sections='''
+            [contributes.sort_keys]
+            "p.order" = "p_ext.mod:go"
+        '''), [])
+
+    def test_manifest_sections(self):
+        found = self.uses(extra='updates = "github:someone/p-ext"', sections='''
+            [contributes.menus]
+            "p.go" = { menus = ["context"], label = "Go" }
+
+            [requires]
+            programs = ["ffmpeg"]
+        ''')
+        self.assertEqual(sorted(line.split(": ")[2] for line in found),
+                         ["contributes.menus", "extension.updates", "requires"])
+
+    def test_names_taken_from_the_public_modules(self):
+        found = self.uses('''
+            from xefm.user_api import TaskJob, EntryInfo
+            from xefm import user_api as ua
+            from xefm.path_base import UriPathImpl, ReadOnlyPathImpl
+
+            def go(ctx):
+                return ua.md_escape, ua.PaneApi
+        ''')
+        self.assertEqual(sorted(line.split(": ")[2].split(" — ")[0] for line in found),
+                         ["path_base.UriPathImpl", "user_api.TaskJob",
+                          "user_api.md_escape"])
+
+    def test_ctx_members_through_ctx_and_through_a_first_parameter(self):
+        found = self.uses('''
+            def go(ctx):
+                ctx.run_task("t", work, on_done=done)
+                ctx.pane.open_list([], title="x")
+
+            def work(job):
+                job.progress(1, 2)
+
+            def done(c, outcome):
+                c.show_markdown("t", "x")
+                c.pane.cd("/")
+        ''')
+        self.assertEqual([line.split(": ", 2)[1:] for line in found], [
+            ["p_ext/mod.py:3", "ctx.run_task — Preview, may change in any release"],
+            ["p_ext/mod.py:4", "ctx.pane.open_list — Preview, may change in any release"],
+            ["p_ext/mod.py:10", "ctx.show_markdown — Preview, may change in any release"],
+        ])
+
+    def test_a_method_of_the_same_name_on_something_else_is_not_ctx(self):
+        self.assertEqual(self.uses('''
+            class Dialog:
+                def go(self):
+                    self.input = 1
+                    return self.choose, self.input
+
+            def go(ctx):
+                pass
+        '''), [])
+
+    def test_preview_members_a_backend_defines(self):
+        found = self.uses('''
+            from xefm import path_base as pb
+            from xefm.path_base import ReadOnlyPathImpl
+
+            class Mine(ReadOnlyPathImpl):
+                SCHEME = "mine"
+                CAPABILITIES = frozenset()
+                def get_display_title(self):
+                    return "x"
+                def listdir_attrs(self):
+                    return []
+
+            class Other(pb.ReadOnlyPathImpl):
+                def parse_uri(self, uri):
+                    return uri
+
+            class NotABackend:
+                CAPABILITIES = 1
+
+            def go(ctx):
+                pass
+        ''')
+        self.assertEqual(sorted(line.split(": ")[2].split(" — ")[0] for line in found),
+                         ["ReadOnlyPathImpl.CAPABILITIES",
+                          "ReadOnlyPathImpl.listdir_attrs",
+                          "ReadOnlyPathImpl.parse_uri"])
+
+    def test_the_scaffold_shows_settings_and_says_so(self):
+        root = ext.scaffold("hello-xefm", self.tmp)
+        found = [p.message.split(" — ")[0] if " — " in p.message else p.where
+                 for p in ext.preview_uses(ext.read_manifest(root))]
+        self.assertEqual(sorted(found), ["settings", "user_api.extension"])
+
+    def test_preview_findings_never_gate_install_or_loading(self):
+        root = ext.scaffold("hello-xefm", self.tmp)
+        manifest, problems = ext.check_package(root)
+        self.assertEqual(problems, [])          # check_manifest has no previews
+        self.assertTrue(ext.preview_uses(manifest))
+
+    def test_stable_only_raises_them_to_errors(self):
+        root = ext.scaffold("hello-xefm", self.tmp)
+        manifest = ext.read_manifest(root)
+        judged = ext.stable_only(ext.preview_uses(manifest))
+        self.assertEqual({p.severity for p in judged}, {"error"})
+
+    def test_cli(self):
+        root = ext.scaffold("hello-xefm", self.tmp)
+        layout = ext.Layout(self.tmp / "home")
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = extension_cli.main(["check", str(root)], layout)
+        self.assertEqual(code, 0, out.getvalue())
+        self.assertIn("preview: hello_xefm/actions.py:5: user_api.extension",
+                      out.getvalue())
+        self.assertIn("2 Preview API(s) in use", out.getvalue())
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = extension_cli.main(["check", "--stable-only", str(root)], layout)
+        self.assertEqual(code, 1)
+        self.assertIn("error: hello_xefm/actions.py:5: user_api.extension",
+                      out.getvalue())
+
+
 class SkillMatchesTheChecker(_Tmp):
     def test_frontmatter(self):
         head = ROUTER.split("---")[1]
