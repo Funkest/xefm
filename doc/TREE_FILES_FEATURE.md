@@ -19,8 +19,7 @@ scan.xft/
 
 You don't write these files yourself. Programs write them: XeFM's
 [Find Similar Files](FIND_SIMILAR_FILES_FEATURE.md) does, through
-similar-files. Earlier versions named these files `.xefml`; XeFM still opens
-those. The format is described in [XFT_FORMAT.md](XFT_FORMAT.md)
+similar-files. The format is described in [XFT_FORMAT.md](XFT_FORMAT.md)
 for anyone writing such a program.
 
 ## Browsing

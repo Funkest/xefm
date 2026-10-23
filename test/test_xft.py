@@ -176,19 +176,6 @@ class InThePane(_Files):
     def _names(self, pane=None):
         return sorted(f.name for f in (pane or self.pane)["files"])
 
-    def test_a_tree_written_under_the_old_name_still_opens(self):
-        """#613 renamed .xefml to .xft; a file an earlier similar-files wrote
-        — old extension, old format name — opens as before."""
-        old = os.path.join(self.tmp, "old.xefml")
-        with open(old, "w", encoding="utf-8") as f:
-            json.dump(_doc([_leaf("one.txt", os.path.join(self.real, "one.txt"))],
-                           format="xefml"), f)
-        self.app._relist(self.pane)
-        self.app._settle_listings()
-        self._enter("old.xefml")
-        self.assertTrue(xft.is_xft_path(self.pane["path"]))
-        self.assertEqual(self._names(), ["one.txt"])
-
     def test_enter_goes_in_and_backspace_lands_on_the_file(self):
         self._enter("scan.xft")
         self.assertTrue(xft.is_xft_path(self.pane["path"]))

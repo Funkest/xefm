@@ -150,12 +150,8 @@ class ScanJob:
 
     @property
     def result_path(self) -> _StdPath:
-        """The scan's tree file — written while it runs, final at the end. A
-        scan from before the format was renamed (#613) wrote ``result.xefml``,
-        which is read where it is the one there."""
-        new = self.folder / "result.xft"
-        old = self.folder / "result.xefml"
-        return old if old.exists() and not new.exists() else new
+        """The scan's tree file — written while it runs, final at the end."""
+        return self.folder / "result.xft"
 
     @property
     def log_path(self) -> _StdPath:

@@ -294,13 +294,3 @@ class TestMethods:
         with patch("shutil.which", return_value=None):
             why = similar_scan.unavailable(similar_scan.AUDIO)
         assert why is not None and "fpcalc" in why
-
-
-
-def test_a_scan_from_before_the_rename_keeps_its_result(dirs):
-    """A scan folder an earlier XeFM wrote holds result.xefml (#613)."""
-    _src, base = dirs
-    job = _job(base, "20260101-000000-old", status={"state": "done"})
-    assert job.result_path.name == "result.xft"
-    (job.folder / "result.xefml").write_text("{}")
-    assert job.result_path.name == "result.xefml"
