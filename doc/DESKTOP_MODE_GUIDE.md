@@ -307,6 +307,16 @@ Press `F1` at any time for the keys your config is using.
 - Currently, XeFM supports one window at a time
 - Launch multiple instances for multiple windows
 
+**Quitting**:
+- The window's close button, **Quit XeFM** in the application menu, the
+  Dock's Quit, and on Windows `Alt-F4` all quit the same way as XeFM's own
+  quit key: XeFM asks first, stops background jobs cleanly, and saves the
+  panes' state.
+- On macOS, `Cmd-Q` follows your keymap. The application menu's Quit item
+  shows the key that quits under it: `Cmd-Q` with the OS native preset, `Q`
+  with AFX style. Under a preset that does not bind `Cmd-Q`, `Cmd-Q` does
+  nothing.
+
 ## Troubleshooting
 
 ### Desktop Mode Won't Start

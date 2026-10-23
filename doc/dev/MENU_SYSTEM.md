@@ -225,6 +225,29 @@ Whether XeFM is running a native GUI is available via
 not consult it** — the OS-bar-vs-in-window decision is made by PuiKit from the
 backend's `native_menus` capability, so XeFM stays backend-agnostic.
 
+## Quitting from the platform
+
+The macOS application menu's **Quit** item is PuiKit's, not part of the
+`Menu` XeFM builds. Until XeFM set a quit handler, it was ⌘Q bound to
+`terminate:`, so it ended the process without the confirm, the background-job
+stop, the `quit` hooks or the state save. The window's close button had the
+same gap.
+
+`XeFMApp` now calls `panel.set_quit_handler(self._on_quit_request,
+self._quit_shortcut())` once at startup and again on every keymap rebuild:
+
+- **Platform requests** (the Quit item, the Dock, logout, the close button,
+  Windows' `WM_CLOSE`) reach `_on_quit_request`, which dispatches the `quit`
+  action, the same path as the keymap's quit key. `_quit_confirming` keeps a
+  second request from stacking a second confirm.
+- **The Quit item's shortcut** is the keymap's first key for `quit`. It is
+  display-only, like every menu shortcut, so ⌘Q reaches the keymap: it quits
+  where the preset binds `Command-Q` (OS native) and does nothing where it
+  does not (AFX, whose quit key is `Q`).
+
+The PuiKit side is documented in PuiKit's `docs/window_management.md`, under
+"Quit requests".
+
 ## Code locations
 
 ### XeFM (`xefm/app.py`)
