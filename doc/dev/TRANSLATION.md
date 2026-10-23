@@ -111,6 +111,8 @@ or type stays exactly as in the English page:
 - action names, config names and values, theme names — `copy`, `KEY_BINDINGS`, **Dracula**
 - code, commands, file names, paths, URLs, environment variables
 - product names — XeFM, PuiKit, Spotlight, Windows Terminal
+- code blocks, comments in them included — a reader copies them into
+  `config.py` as they are
 
 Where a label needs explaining, add the Japanese after it once:
 **Tools → Edit Configuration…**（設定ファイルを編集）.
