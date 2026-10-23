@@ -11,7 +11,7 @@ document is how, and what was learned the hard way.
 | Input | bytes written to the pty | VNC key and pointer events |
 | Capture | the pty's output, as an asciicast | the VM's framebuffer, over VNC |
 | Output | GIF (agg), in `doc/images/` | MP4 (ffmpeg), uploaded to GitHub |
-| Tool | `tools/make_demo_gif.py` | not committed yet (see the end) |
+| Tool | `tools/make_demo_gif.py` | `tools/gui_demo/` (a prototype; steps in its README) |
 
 ## TUI: `tools/make_demo_gif.py`
 
@@ -218,14 +218,16 @@ encode.
 - Browsers cache the README's images (Pages sends `max-age=600`). After
   replacing a GIF, reload with Cmd+Shift+R before judging it.
 
-## Not yet in the repository
+## The GUI tool
 
-The GUI tooling exists only as a prototype outside the repository: the RFB
-client, the VNC daemon, the scene driver, the home builder and the
-display-mode script. Turning it into a `tools/` script means:
+`tools/gui_demo/` holds the scripts that made the video: the RFB client
+(`rfb.py`), the daemon (`vncd.py`), the scene driver (`drive.py`) and the
+demo's scenes, the home builder, the guest's display-mode script, and shell
+scripts to set up, boot, reset and ssh into the VM. Its
+[README](../../tools/gui_demo/README.md) gives the steps. It is a prototype,
+and every step is run by hand. Making it a real tool would mean:
 
 - one command that boots the VM, starts the daemon, resets the home, runs
   the scenes and encodes the result;
-- the VM setup above as a documented one-time step;
-- its own dependencies (`numpy`, `cryptography`, `Pillow`) in a separate
-  environment, since the recorder does not need XeFM's.
+- dismissing a stray notification banner automatically, not by checking the
+  first still.
