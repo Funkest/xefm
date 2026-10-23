@@ -157,6 +157,18 @@ API_VERSION = 1
 #: ``PREVIEW_APIS`` — which APIs are Preview — is set at the foot of this
 #: module, once every ``@preview`` below has run.
 
+#: The keys each table's dict form accepts — the schema the API snapshot fixes
+#: (test/test_api_snapshot.py). A builder reads the ones it uses and ignores a
+#: key not listed, except ``MENU_ITEMS``, which refuses one.
+TABLE_KEYS: dict[str, tuple[str, ...]] = {
+    "ACTIONS": ("func", "context", "description", "override"),
+    "SORT_KEYS": ("key", "label", "explain", "hotkey", "override"),
+    "FILTERS": ("match", "pattern", "label"),
+    "IMAGE_DECODERS": ("open", "label"),
+    "PATH_SCHEMES": ("class", "override"),
+    "MENU_ITEMS": ("menus", "label", "when"),
+}
+
 #: The menus ``MENU_ITEMS`` can put an action in: the menu bar's File menu, and
 #: the context menu of a file-list row.
 MENUS = ("file", "context")
@@ -1263,10 +1275,11 @@ def _build_menu_entry(name, spec, registry, own: set) -> tuple[MenuEntry | None,
     if name not in own and registry.resolve(_actions.FILER, name) is None:
         return None, (f"MENU_ITEMS['{name}'] names no action — define it in "
                       f"ACTIONS, or name a built-in one")
-    unknown = sorted(set(spec) - {"menus", "label", "when"})
+    unknown = sorted(set(spec) - set(TABLE_KEYS["MENU_ITEMS"]))
     if unknown:
         return None, (f"MENU_ITEMS['{name}'] has unknown keys "
-                      f"{', '.join(unknown)} — known: label, menus, when")
+                      f"{', '.join(unknown)} — known: "
+                      f"{', '.join(sorted(TABLE_KEYS['MENU_ITEMS']))}")
     menus = spec.get("menus")
     if isinstance(menus, str):
         menus = [menus]

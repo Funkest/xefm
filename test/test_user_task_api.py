@@ -457,32 +457,8 @@ from xefm import extensions as _ext  # noqa: E402
 from xefm import path_base  # noqa: E402
 from xefm.preview import NOTE, is_preview  # noqa: E402
 
-#: Public APIs declared stable — outside PREVIEW_APIS on purpose. Adding to
-#: this set is the act of stabilizing one, so it is a decision, not an edit.
-STABLE = {"xefm.user_api.API_VERSION", "xefm.user_api.PREVIEW_APIS",
-          "xefm.user_api.EntryInfo", "xefm.user_api.PaneApi",
-          # the type of ctx; its members are marked one by one
-          "xefm.user_api.ActionContext",
-          *(f"xefm.user_api.ActionContext.{name}" for name in (
-              "api_version", "pane", "other", "left", "right", "invoke",
-              "run_program", "message", "action_names")),
-          "xefm.user_api.xefm_tool", "xefm.user_api.xefm_python",
-          "xefm.user_api.is_desktop_mode",
-          "xefm.path_base.ReadOnlyPathImpl", "xefm.path_base.UriStatResult"}
-
-
-def _public_api_names():
-    for module in (user_api, path_base):
-        for name in module.__all__:
-            yield f"{module.__name__}.{name}"
-    for name in dir(ActionContext):
-        if not name.startswith("_"):
-            yield f"xefm.user_api.ActionContext.{name}"
-
-
-def test_every_public_api_is_preview_or_declared_stable():
-    for name in _public_api_names():
-        assert is_preview(name) != (name in STABLE), name
+# Which public names are stable and which Preview is held still by the API
+# snapshot (test/test_api_snapshot.py); these check the mark itself.
 
 
 def test_a_preview_api_says_so_in_its_docstring():

@@ -179,6 +179,10 @@ _KNOWN_SECTIONS = {"extension", "contributes", "requires", "settings"}
 _KNOWN_EXTENSION_KEYS = {"id", "version", "api_version", "min_xefm", "name",
                          "description", "backends", "platforms", "homepage",
                          "updates"}
+#: The keys of an ``[contributes.actions]`` entry's table form, and of
+#: ``[settings]``.
+ACTION_ENTRY_KEYS = ("entry", "description")
+SETTINGS_KEYS = ("defaults", "config_class")
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 _REF_RE = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_]\w*$")
 
@@ -570,8 +574,9 @@ def check_manifest(manifest: Manifest, *, others: Iterable[Manifest] = (),
         if not isinstance(settings, dict):
             err("settings", "must be a table")
         else:
-            for key in set(settings) - {"defaults", "config_class"}:
-                err(f"settings.{key}", "unknown key — known: config_class, defaults")
+            for key in set(settings) - set(SETTINGS_KEYS):
+                err(f"settings.{key}", "unknown key — known: "
+                    f"{', '.join(sorted(SETTINGS_KEYS))}")
             if not isinstance(settings.get("defaults"), str):
                 err("settings.defaults", "required: the class holding the "
                     "defaults, as 'package.module:Settings'")
@@ -937,11 +942,12 @@ def _check_contribution(kind: str, key: str, value, action_names: set) -> Option
         if isinstance(value, str):
             return None if ":" in value else "must be 'module:function'"
         if isinstance(value, dict):
-            extra = set(value) - {"entry", "description"}
+            extra = set(value) - set(ACTION_ENTRY_KEYS)
             if "entry" not in value:
                 return "needs entry = 'module:function'"
             if extra:
-                return f"unknown keys {', '.join(sorted(extra))} — known: description, entry"
+                return (f"unknown keys {', '.join(sorted(extra))} — known: "
+                        f"{', '.join(sorted(ACTION_ENTRY_KEYS))}")
             return None
         return "must be 'module:function' or { entry = ..., description = ... }"
     if kind == "menus":

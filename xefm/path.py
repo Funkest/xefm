@@ -34,6 +34,13 @@ KNOWN_CAPABILITIES = frozenset({
     'cache_for_search',        # that fetch is expensive enough to keep
 })
 
+#: The capabilities :meth:`Path.supports` answers for as stable API — the ones
+#: a caller outside XeFM has a use for. The rest of :data:`KNOWN_CAPABILITIES`
+#: tune XeFM's own search and may change.
+STABLE_CAPABILITIES = frozenset({
+    'write_operations', 'directory_rename', 'file_editing', 'streaming_read',
+})
+
 #: The values ``SEARCH_STRATEGY`` may take. ``'streaming'`` reads line by line,
 #: ``'buffered'`` downloads to a buffer first, ``'extracted'`` unpacks the whole
 #: entry before searching it.
@@ -901,6 +908,19 @@ class Path:
     
     This class acts as a facade that delegates operations to specific storage
     implementations (LocalPathImpl, S3PathImpl, etc.) based on the path scheme.
+
+    **Every public member is stable API.** Extensions are handed a ``Path`` as
+    ``EntryInfo.path`` and ``PaneApi.path``, so what it answers to is a promise
+    under ``xefm.user_api.API_VERSION`` (doc/dev/STABLE_API_PLAN.md §2.1): the
+    pathlib-compatible members below, ``str(path)`` — a filesystem path for a
+    local file, a URI (``ssh://…``, ``s3://…``, ``archive://…#…``) otherwise —
+    and four additions, :attr:`scheme`, :meth:`supports` (for the names in
+    :data:`STABLE_CAPABILITIES`), :meth:`target` and :meth:`is_remote`. A write
+    may raise ``OSError`` where the storage is read-only. A pathlib member not
+    here yet may arrive later. What XeFM does with a path that is not part of
+    that promise lives in module functions (:func:`copy_to`,
+    :func:`listdir_attrs`, …), and the API snapshot test fails the moment a
+    public member is added or removed here.
     """
     
     def __init__(self, *args):

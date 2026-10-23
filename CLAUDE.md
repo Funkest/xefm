@@ -121,6 +121,22 @@ except Exception as e:
 
 Before adding an import, check whether the module is already imported at the top of the file.
 
+### The public API (`xefm.user_api`, `xefm.path_base`)
+
+`API_VERSION` 1 has a stable part; what is not stable is marked `@preview`
+(see `doc/dev/STABLE_API_PLAN.md`). Two tests hold the stable part still:
+
+- `test/test_api_snapshot.py` fails on **any** change to a public name,
+  signature, table key or manifest key. Regenerate with `make api-snapshot`
+  and commit the snapshot with the change; the tool refuses a breaking change
+  to the stable part unless `API_VERSION` was bumped.
+- `test/test_stable_api_contract.py` states what the stable APIs mean.
+  **Changing an expectation in it is a breaking change to the stable API** —
+  undo the change, or bump `API_VERSION` and call it out in the release notes.
+  Adding a test there is always fine.
+
+A new public API starts as `@preview` unless the user decides otherwise.
+
 ### File permissions
 
 Python files should NOT be executable. Run them via `python3 script.py`, not `./script.py`. Shell scripts in `xefm/tools/` (end-user external programs) may be executable.
