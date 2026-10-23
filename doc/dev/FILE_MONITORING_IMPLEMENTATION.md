@@ -824,7 +824,7 @@ class PollingObserver(BaseObserver):
 
 FileMonitorManager decides per-path whether native monitoring, polling, or no
 monitoring applies. The primary signal is the storage scheme reported by the
-XeFM `Path` abstraction (`get_scheme()`); string heuristics are a fallback for
+XeFM `Path` abstraction (`path.scheme`); string heuristics are a fallback for
 plain `str`/`pathlib` paths that don't expose it.
 
 ```python
@@ -839,15 +839,13 @@ def _detect_monitoring_mode(self, path: Path) -> str:
     """
     # Preferred: watchdog only understands local ('file') paths; disable
     # monitoring for every other backend (s3, ssh, scp, ftp, archive, …).
-    get_scheme = getattr(path, "get_scheme", None)
-    if callable(get_scheme):
-        scheme = get_scheme()
-        if scheme is not None and scheme != "file":
-            return "disabled"
+    scheme = getattr(path, "scheme", None)
+    if isinstance(scheme, str) and scheme != "file":
+        return "disabled"
 
     path_str = str(path)
 
-    # Fallback heuristics for plain str/pathlib paths without get_scheme().
+    # Fallback heuristics for plain str/pathlib paths, which have no scheme.
     if path_str.startswith(('s3:', '/s3/', 'ssh:', 'sftp:', 'scp:', 'ftp:', 'archive:')):
         return "disabled"
 

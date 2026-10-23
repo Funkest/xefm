@@ -180,7 +180,7 @@ Three things follow from declaring them instead:
 ### Reading Them Back
 
 ```python
-path.get_scheme()                    # 's3'
+path.scheme                          # 's3'
 path.is_remote()                     # True
 path.supports('write_operations')    # True
 path.supports('directory_rename')    # False
