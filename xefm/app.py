@@ -673,17 +673,34 @@ _THEME_OVERRIDE_MAP = {
 _THEME_SUBDICT_KEYS = frozenset({"syntax", "file_types", "cursor"})
 
 
+def _tuple_colors(val):
+    """``val`` with every color written as a list — ``[r, g, b]`` or
+    ``[r, g, b, a]`` — turned into the tuple PuiKit expects, at the top level
+    and inside nested dicts. A theme contributed as a TOML table can only spell
+    a color as a list, and PuiKit hashes colors, so a list one crashed the first
+    draw after the theme was selected (#708). Other values pass through."""
+    if isinstance(val, dict):
+        return {k: _tuple_colors(v) for k, v in val.items()}
+    if isinstance(val, list):
+        if len(val) in (3, 4) and all(
+                isinstance(c, (int, float)) and not isinstance(c, bool) for c in val):
+            return tuple(val)
+        return [_tuple_colors(v) for v in val]
+    return val
+
+
 def _merge_theme_override(spec: dict, override: dict) -> dict:
     """Merge one user theme's overrides (config.py, friendly keys) onto a base
     theme ``spec`` (``_theme`` keywords). Colors replace; the sub-dict palettes
     (``syntax``, ``file_types``) deep-merge so the user recolors only the entries
     they name (keeping the base's other choices). ``base`` is consumed by the
-    caller; unknown keys are ignored."""
+    caller; unknown keys are ignored. Colors written as lists (the only form a
+    TOML manifest has) become tuples."""
     merged = dict(spec)
     for key, kw in _THEME_OVERRIDE_MAP.items():
         if key not in override:
             continue
-        val = override[key]
+        val = _tuple_colors(override[key])
         if kw in _THEME_SUBDICT_KEYS and isinstance(val, dict) and isinstance(merged.get(kw), dict):
             merged[kw] = {**merged[kw], **val}
         else:
@@ -5478,6 +5495,10 @@ class XeFMApp:
         # Before the keymap, which needs them registered to know where a key
         # bound to one of them is reached (#662).
         self._load_user_entries(new_config)
+        # The theme list as well, before the menu that lists it is rebuilt:
+        # a theme added in config.py or by a newly installed extension joins
+        # the picker and the cycle without a restart (#708).
+        self._reload_themes(new_config)
         # Rebuild the keymap from the (possibly rebound) KEY_BINDINGS, with
         # the keymap preset laid over it again.
         self._rebuild_keymap()
@@ -5487,10 +5508,19 @@ class XeFMApp:
                        self.left_view, self.right_view):
             holder.config = new_config
 
-        self.log_info("Configuration reloaded — key bindings and file settings "
-                      "applied; theme, layout and font changes take effect on "
+        self.log_info("Configuration reloaded — key bindings, themes and file "
+                      "settings applied; layout and font changes take effect on "
                       "the next launch.")
         self.panel.render()
+
+    def _reload_themes(self, config) -> None:
+        """Rebuild ``self.themes`` from ``config`` and stay on the active theme by
+        name, re-applied so edits to it show at once. A theme that is gone falls
+        back to the first one, as a launch would."""
+        name = self.themes[self._theme_index][0]
+        self.themes = _build_theme_list(config)
+        index = next((i for i, (n, _t) in enumerate(self.themes) if n == name), 0)
+        self._apply_theme(index)
 
     def file_details(self) -> None:
         """Show stat details for the focused entry — or an aggregate summary plus
