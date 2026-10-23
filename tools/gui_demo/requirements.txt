@@ -1,0 +1,4 @@
+# The recorder's own environment (not XeFM's): the VNC client and stills.
+numpy
+cryptography
+Pillow
