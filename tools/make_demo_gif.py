@@ -405,6 +405,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-gif", action="store_true",
                         help="record and retime only (read the screens)")
     parser.add_argument("--font-size", type=int, default=14)
+    # 1.125, not agg's 1.4: at 120x40 it makes the GIF 16:10, the shape of
+    # the GUI video it sits beside in the README, so the two match in height.
+    parser.add_argument("--line-height", type=float, default=1.125)
     args = parser.parse_args(argv)
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
@@ -436,6 +439,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     gif = out / "demo.gif"
     subprocess.run(["agg", "--quiet", "--font-size", str(args.font_size),
+                    "--line-height", str(args.line_height),
                     "--idle-time-limit", "60", "--last-frame-duration", "0",
                     str(cast), str(gif)], check=True)
     print(f"gif: {gif} ({gif.stat().st_size / 1e6:.1f} MB)")
