@@ -27,6 +27,7 @@ def bindings() -> dict:
     KEY_BINDINGS = {
         # === Application Control ===
         'quit': ['Q'],                         # Exit XeFM application
+        'quit_app': [],                        # Cmd-Q / Alt-F4 in the desktop app (below)
         # F1, not '?': Shift-/ is the directory context menu below, and a
         # terminal cannot tell Shift-/ from '?' -- both arrive as the glyph.
         'help': ['F1'],                        # Show help dialog with all key bindings
@@ -486,6 +487,10 @@ def bindings() -> dict:
             # Finder's and every Mac browser's Back / Forward.
             KEY_BINDINGS['go_back'] = ['Command-LEFT_BRACKET', 'Alt-LEFT']
             KEY_BINDINGS['go_forward'] = ['Command-RIGHT_BRACKET', 'Alt-RIGHT']
+            # Quitting the way every app quits, from anywhere -- a dialog or a
+            # viewer open too -- and asking only while a task runs.
+            KEY_BINDINGS['quit_app'] = ['Command-Q']
         elif sys.platform == 'win32':
             KEY_BINDINGS['open_with_os'] = ['Ctrl-ENTER', 'Ctrl-O']
+            KEY_BINDINGS['quit_app'] = ['Alt-F4']
     return KEY_BINDINGS

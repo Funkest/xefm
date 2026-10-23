@@ -3820,7 +3820,7 @@ class XeFMApp:
             self._handlers = {
                 # --- application ---
                 "quit": (self.confirm_quit, False),
-                "quit_unless_busy": (lambda: self.confirm_quit(only_if_busy=True), False),
+                "quit_app": (lambda: self.confirm_quit(only_if_busy=True), False),
                 "help": (self.show_help, False),
                 "command_palette": (self.show_command_palette, False),
                 "quick_view": (self.quick_view, True),
@@ -6050,21 +6050,21 @@ class XeFMApp:
 
     def _quit_shortcut(self) -> str | None:
         """The keymap's first key for the platform's way to quit
-        (``quit_unless_busy``), as the macOS application menu's Quit item shows
+        (``quit_app``), as the macOS application menu's Quit item shows
         it — ``Cmd-Q`` under the OS native preset — or None when nothing binds
         it."""
-        keys, _ = self.keys.get_keys_for_action("quit_unless_busy", _ctx.FILER)
+        keys, _ = self.keys.get_keys_for_action("quit_app", _ctx.FILER)
         return self.keys.format_key_for_display(keys[0]) if keys else None
 
     def _on_quit_request(self) -> None:
-        """The platform asked to quit: the application menu's Quit, the Dock,
-        the window's close button, Alt-F4. It is ``quit_unless_busy``, whatever
-        keys the keymap gives it: it asks only while a task runs, and always
+        """The platform asked to quit — the application menu's Quit, the Dock,
+        the window's close button — or a ``quit_app`` key was pressed (Cmd-Q,
+        Alt-F4), whatever was open. It asks only while a task runs, and always
         saves the state on the way out. A second request while the confirm is
         up is the same question."""
         if self._quit_confirming:
             return
-        self.dispatch("quit_unless_busy")
+        self.confirm_quit(only_if_busy=True)
         self.panel.render()
 
     def _busy_tasks(self) -> list:
@@ -6077,7 +6077,7 @@ class XeFMApp:
     def confirm_quit(self, only_if_busy: bool = False) -> None:
         """A modal confirm before quitting — the canonical message-box pattern.
 
-        ``quit`` always asks. ``quit_unless_busy`` — the platform's Cmd-Q,
+        ``quit`` always asks. ``quit_app`` — the platform's Cmd-Q,
         Alt-F4 and close button — asks only when quitting would stop a task,
         and otherwise quits at once (the state is saved either way).
 
@@ -11654,6 +11654,14 @@ class XeFMApp:
             # out). GUI emits these; the TUI does not, so it's a GUI-only affordance.
             self.panel.dispatch_event(event)
             self.panel.render()
+            return
+        # quit_app (Cmd-Q, Alt-F4) is the window's close button as a key: it
+        # works over a dialog or a viewer too, so it is answered before any
+        # layer sees the key.
+        if (event.type is EventType.KEY
+                and self.keys.is_action_for_event(event, "quit_app", context=_ctx.FILER)):
+            self.key_sequence.cancel()
+            self._on_quit_request()
             return
         # A modal layer (message box, menu popup) owns events while open: route
         # everything to it and let XeFM's global keymap stand down.

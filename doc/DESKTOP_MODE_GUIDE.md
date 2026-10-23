@@ -318,9 +318,10 @@ Press `F1` at any time for the keys your config is using.
   - `Cmd-Q` on macOS and `Alt-F4` on Windows.
 - When a task is running and you quit anyway, XeFM stops it cleanly first.
   It saves the panes' state on every way out.
-- On macOS, `Cmd-Q` follows your keymap: the OS native preset binds it, and
-  under a preset that does not, it does nothing. The application menu's Quit
-  item shows `Cmd-Q` when it is bound.
+- `Cmd-Q` and `Alt-F4` work under every keymap preset, and they work with a
+  dialog or a viewer open, as the close button does. They are the
+  `quit_app` action, so `KEY_BINDINGS` can move them, or turn them off with
+  `'quit_app': []`.
 
 ## Troubleshooting
 

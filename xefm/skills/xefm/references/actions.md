@@ -15,7 +15,6 @@ the user picked in **Tools ▸ Advanced ▸ Keymap**; ask which if `KEY_PRESET` 
 
 | Action | What it does | AFX style | Orthodox |
 |---|---|---|---|
-| `quit_unless_busy` | Quit XeFM, asking first only while a task is running | — | `Alt-F4` |
 | `cursor_up` | Move the cursor up one item | `UP` | `UP` |
 | `cursor_down` | Move the cursor down one item | `DOWN` | `DOWN` |
 | `page_up` | Move the cursor up one page | `PAGE_UP` | `PAGE_UP` |
@@ -135,7 +134,8 @@ the user picked in **Tools ▸ Advanced ▸ Keymap**; ask which if `KEY_PRESET` 
 | `extensions` | List the extension packages and whether they loaded | — | — |
 | `check_extension_updates` | Look for newer versions of the installed extension packages | — | — |
 | `sync_python_packages` | Install the Python packages ~/.xefm/requirements.txt lists | — | — |
-| `quit` | Quit XeFM — or close the open viewer | `Q` | — |
+| `quit` | Quit XeFM — or close the open viewer | `Q` | `Alt-F4` |
+| `quit_app` | Quit XeFM from anywhere, asking first only while a task is running | — | — |
 | `help` | Show the key bindings for what is on screen | `F1` | `F1` |
 | `isearch` | Incremental search | `F` | — |
 | `edit_file` | Edit in the configured text editor | `E` | `F4` |
@@ -154,11 +154,15 @@ send them). These replace the row above in that app:
 - `go_forward` (AFX style): `Command-RIGHT_BRACKET`, `Alt-RIGHT`
 - `open_with_os` (AFX style): `Command-ENTER`, `Ctrl-O`
 - `open_with_os` (Orthodox): `Command-ENTER`, `Ctrl-O`
+- `quit_app` (AFX style): `Command-Q`
+- `quit_app` (Orthodox): `Command-Q`
 
 **Windows desktop app:**
 
 - `open_with_os` (AFX style): `Ctrl-ENTER`, `Ctrl-O`
 - `open_with_os` (Orthodox): `Ctrl-ENTER`, `Ctrl-O`
+- `quit_app` (AFX style): `Alt-F4`
+- `quit_app` (Orthodox): `Alt-F4`
 
 ## Inside viewers and dialogs
 
@@ -183,6 +187,7 @@ viewer only.
 | `text_viewer.scroll_left` | Scroll left (unwrapped only) | `LEFT` |
 | `text_viewer.scroll_right` | Scroll right (unwrapped only) | `RIGHT` |
 | `quit` | Quit XeFM — or close the open viewer | `Q` |
+| `quit_app` | Quit XeFM from anywhere, asking first only while a task is running | — |
 | `help` | Show the key bindings for what is on screen | `F1` |
 | `isearch` | Incremental search | `F` |
 | `edit_file` | Edit in the configured text editor | `E` |
@@ -203,6 +208,7 @@ viewer only.
 | `image_viewer.first` | First image in the file list | `HOME` |
 | `image_viewer.last` | Last image in the file list | `END` |
 | `quit` | Quit XeFM — or close the open viewer | `Q` |
+| `quit_app` | Quit XeFM from anywhere, asking first only while a task is running | — |
 | `help` | Show the key bindings for what is on screen | `F1` |
 | `isearch` | Incremental search | `F` |
 | `edit_file` | Edit in the configured text editor | `E` |
@@ -222,6 +228,7 @@ viewer only.
 | `file_diff.scroll_left` | Scroll left | `LEFT` |
 | `file_diff.scroll_right` | Scroll right | `RIGHT` |
 | `quit` | Quit XeFM — or close the open viewer | `Q` |
+| `quit_app` | Quit XeFM from anywhere, asking first only while a task is running | — |
 | `help` | Show the key bindings for what is on screen | `F1` |
 | `isearch` | Incremental search | `F` |
 | `edit_file` | Edit in the configured text editor | `E` |
@@ -253,6 +260,7 @@ viewer only.
 | `dir_diff.cycle_sync_action` | Change the focused node's sync action | `SPACE` |
 | `dir_diff.toggle_identical` | Show or hide the items that are the same on both sides | `d` |
 | `quit` | Quit XeFM — or close the open viewer | `Q` |
+| `quit_app` | Quit XeFM from anywhere, asking first only while a task is running | — |
 | `help` | Show the key bindings for what is on screen | `F1` |
 | `isearch` | Incremental search | `F` |
 | `edit_file` | Edit in the configured text editor | `E` |
@@ -269,6 +277,7 @@ viewer only.
 | `isearch.accept` | Stop at the current match | `ENTER` |
 | `isearch.cancel` | Cancel and restore the cursor | `ESCAPE` |
 | `quit` | Quit XeFM — or close the open viewer | `Q` |
+| `quit_app` | Quit XeFM from anywhere, asking first only while a task is running | — |
 | `help` | Show the key bindings for what is on screen | `F1` |
 | `isearch` | Incremental search | `F` |
 | `edit_file` | Edit in the configured text editor | `E` |
@@ -280,6 +289,7 @@ viewer only.
 | `remove_list_item` | Remove the highlighted entry from the list | `Shift-DELETE` |
 | `describe_list_item` | Show help for the highlighted entry | `F1` |
 | `quit` | Quit XeFM — or close the open viewer | `Q` |
+| `quit_app` | Quit XeFM from anywhere, asking first only while a task is running | — |
 | `help` | Show the key bindings for what is on screen | `F1` |
 | `isearch` | Incremental search | `F` |
 | `edit_file` | Edit in the configured text editor | `E` |
@@ -297,6 +307,7 @@ viewer only.
 | `toggle_modified` | Change: Modified | — |
 | `toggle_size` | Change: Size | — |
 | `quit` | Quit XeFM — or close the open viewer | `Q` |
+| `quit_app` | Quit XeFM from anywhere, asking first only while a task is running | — |
 | `help` | Show the key bindings for what is on screen | `F1` |
 | `isearch` | Incremental search | `F` |
 | `edit_file` | Edit in the configured text editor | `E` |
@@ -306,6 +317,7 @@ viewer only.
 | Action | What it does | Keys |
 |---|---|---|
 | `quit` | Quit XeFM — or close the open viewer | `Q` |
+| `quit_app` | Quit XeFM from anywhere, asking first only while a task is running | — |
 | `help` | Show the key bindings for what is on screen | `F1` |
 | `isearch` | Incremental search | `F` |
 | `edit_file` | Edit in the configured text editor | `E` |

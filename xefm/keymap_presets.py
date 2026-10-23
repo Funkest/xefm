@@ -106,9 +106,7 @@ _ORTHODOX = Preset(
         "help": ["F1"],
         "reread": ["F2", "Ctrl-R"],
         "menu": ["F9", "F10", "ALT"],
-        # Alt-F4 closes a window: it asks only while a task runs.
-        "quit": [],
-        "quit_unless_busy": ["Alt-F4"],
+        "quit": ["Alt-F4"],
         "redraw": [],
         "programs": [],
         "context_menu": ["Shift-F10", "APPS"],
@@ -241,6 +239,8 @@ def _native_bindings() -> dict:
         "reveal_in_os": [],                     # Ctrl-R rereads here
         "redraw": [],                           # F5 copies here
         "command_palette": ["Ctrl-K"],
+        # Ctrl-Q always asks. Cmd-Q / Alt-F4 (quit_app) come with the AFX
+        # table's desktop keys, which every preset starts from.
         "quit": ["Ctrl-Q"],
     }
     from xefm.backend_detector import is_desktop_mode
@@ -272,9 +272,6 @@ def _native_bindings() -> dict:
             "find_files": ["Command-F", "Ctrl-F"],
             "toggle_hidden": ["Command-Shift-.", "."],
             "command_palette": ["Command-Shift-P", "Ctrl-K"],
-            # Cmd-Q quits as a Mac app does, asking only while a task runs;
-            # Ctrl-Q, like every preset's quit key, always asks.
-            "quit_unless_busy": ["Command-Q"],
         })
     elif sys.platform == "win32":
         keys.update({
@@ -282,8 +279,6 @@ def _native_bindings() -> dict:
             "copy_paths": ["Ctrl-Shift-C", "Ctrl-P"],
             "file_details": ["Alt-ENTER", "Alt-I"],
             "command_palette": ["Ctrl-Shift-P", "Ctrl-K"],
-            # Alt-F4 closes the window, asking only while a task runs.
-            "quit_unless_busy": ["Alt-F4"],
         })
     return keys
 

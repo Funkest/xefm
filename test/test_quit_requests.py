@@ -2,7 +2,7 @@
 
 The ``quit`` action (Q, the File menu's Quit) always asks. The platform's own
 ways — the macOS application menu's Quit and the Dock's, the window's close
-button, and keys bound to ``quit_unless_busy`` (Cmd-Q on macOS and Alt-F4 on
+button, and keys bound to ``quit_app`` (Cmd-Q on macOS and Alt-F4 on
 Windows under the OS native preset) — ask only while a task is running, in
 front or in the background, and otherwise quit at once. Either way XeFM goes
 out through ``_quit``: hooks, job cancel, state save.
@@ -108,9 +108,9 @@ def test_quitting_runs_once(app_with):
 def test_the_menu_shows_the_key_for_quitting_the_platform_way(app_with):
     app, _tmp = app_with()
     assert app.backend._quit_shortcut == app._quit_shortcut()
-    app.keys = KeyBindings({"quit_unless_busy": ["Command-Q"], "quit": ["Ctrl-Q"]})
+    app.keys = KeyBindings({"quit_app": ["Command-Q"], "quit": ["Ctrl-Q"]})
     assert app._quit_shortcut() == "Cmd-Q"
-    app.keys = KeyBindings({"quit_unless_busy": []})
+    app.keys = KeyBindings({"quit_app": []})
     assert app._quit_shortcut() is None
 
 
@@ -119,3 +119,44 @@ def test_a_keymap_rebuild_updates_the_menus_quit_key(app_with):
     with patch.object(app, "_quit_shortcut", return_value="Cmd-Q"):
         app._rebuild_keymap()
     assert app.backend._quit_shortcut == "Cmd-Q"
+
+
+# --------------------------------------------------------------------------- #
+# quit_app keys work over a dialog or a viewer, as the close button does
+# --------------------------------------------------------------------------- #
+
+def _cmd_q():
+    from puikit import Event, EventType
+    return Event(type=EventType.KEY, key="q", char=None, modifiers=frozenset({"cmd"}))
+
+
+def _with_cmd_q(app):
+    from xefm.keymap_afx import bindings
+    app.keys = KeyBindings(dict(bindings(), quit_app=["Command-Q"]))
+
+
+def test_cmd_q_quits_over_an_open_dialog(app_with):
+    app, _tmp = app_with()
+    _with_cmd_q(app)
+    app.dispatch("help")
+    assert app.panel.has_layers
+    with patch.object(app, "_quit") as quit_:
+        app.on_event(_cmd_q())
+    assert quit_.called
+
+
+def test_cmd_q_over_a_dialog_still_asks_while_busy(app_with):
+    app, _tmp = app_with()
+    _with_cmd_q(app)
+    app.dispatch("help")
+    with _busy(app), patch.object(app, "_quit") as quit_:
+        app.on_event(_cmd_q())
+    assert not quit_.called and app._quit_confirming
+
+
+def test_cmd_q_does_nothing_where_the_keymap_does_not_bind_it(app_with):
+    app, _tmp = app_with()
+    app.keys = KeyBindings({"quit_app": []})
+    with patch.object(app, "_quit") as quit_:
+        app.on_event(_cmd_q())
+    assert not quit_.called

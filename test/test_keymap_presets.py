@@ -84,8 +84,7 @@ class Apply(unittest.TestCase):
             "help": ["F1"], "reread": ["F2", "Ctrl-R"], "view_file": ["F3"],
             "edit_file": ["F4"], "copy_files": ["F5"], "move_files": ["F6"],
             "create_directory": ["F7"], "delete_files": ["F8", "DELETE"],
-            "quit": [], "quit_unless_busy": ["Alt-F4"],
-            "rename": ["Shift-F6", "Ctrl-M"],
+            "quit": ["Alt-F4"], "rename": ["Shift-F6", "Ctrl-M"],
             "duplicate_files": ["Shift-F5"], "compare_selection": ["Shift-F2"],
             "find_files": ["Alt-F7"], "create_archive": ["Alt-F5"],
             "history": ["Alt-DOWN"], "favorites": ["Ctrl-D"],
@@ -284,8 +283,9 @@ def _key(key, char=None, mods=()):
     return Event(type=EventType.KEY, key=key, char=char, modifiers=frozenset(mods))
 
 
-def _native_case(platform_name, backend):
-    """The OS native table as one of the three cases builds it."""
+def _native_case(platform_name, backend, preset=keymap_presets.NATIVE):
+    """A preset's table — OS native unless told otherwise — as one of the
+    three cases builds it."""
     from contextlib import contextmanager
     from xefm import backend_detector
 
@@ -296,7 +296,7 @@ def _native_case(platform_name, backend):
         os.environ["XEFM_BACKEND"] = backend
         backend_detector._cached_backend = None
         try:
-            yield keymap_presets.table(keymap_presets.NATIVE)
+            yield keymap_presets.table(preset)
         finally:
             sys.platform = saved_platform
             if saved_backend is None:
@@ -330,12 +330,12 @@ class Native(unittest.TestCase):
             self.assertEqual(self._keys(t, "create_directory")[0], "Command-Shift-N")
             self.assertEqual(self._keys(t, "quick_view")[0], "SPACE")
             self.assertEqual(self._keys(t, "go_parent")[0], "Command-UP")
-            self.assertEqual(self._keys(t, "quit_unless_busy"), ["Command-Q"])
+            self.assertEqual(self._keys(t, "quit_app"), ["Command-Q"])
             self.assertEqual(self._keys(t, "quit"), ["Ctrl-Q"])
         with _native_case("win32", "gui") as t:
             self.assertEqual(self._keys(t, "create_directory")[0], "Ctrl-Shift-N")
             self.assertEqual(self._keys(t, "file_details")[0], "Alt-ENTER")
-            self.assertEqual(self._keys(t, "quit_unless_busy"), ["Alt-F4"])
+            self.assertEqual(self._keys(t, "quit_app"), ["Alt-F4"])
             self.assertEqual(self._keys(t, "quit"), ["Ctrl-Q"])
         for platform_name in ("darwin", "win32", "linux"):
             with _native_case(platform_name, "vt") as t:
@@ -391,6 +391,29 @@ class Native(unittest.TestCase):
                                      f"{action}: {expr}")
                     self.assertFalse(ident == "enter" and mods & {"ctrl", "alt"},
                                      f"{action}: {expr}")
+
+
+class QuitAppEverywhere(unittest.TestCase):
+    """Cmd-Q in the macOS app and Alt-F4 in the Windows app quit under every
+    preset (quit_app). A terminal has no quit_app key at all: closing the
+    terminal window is its own business."""
+
+    def _quit_app(self, platform_name, backend, preset):
+        with _native_case(platform_name, backend, preset) as t:
+            value = t.get("quit_app")
+            return value["keys"] if isinstance(value, dict) else value
+
+    def test_the_desktop_app_gets_the_platform_key_under_every_preset(self):
+        for preset in keymap_presets.PRESETS:
+            with self.subTest(preset=preset):
+                self.assertEqual(self._quit_app("darwin", "gui", preset), ["Command-Q"])
+                self.assertEqual(self._quit_app("win32", "gui", preset), ["Alt-F4"])
+
+    def test_a_terminal_gets_none(self):
+        for platform_name in ("darwin", "linux", "win32"):
+            for preset in keymap_presets.PRESETS:
+                self.assertEqual(self._quit_app(platform_name, "vt", preset), [],
+                                 (platform_name, preset))
 
 
 class InTheApp(unittest.TestCase):
