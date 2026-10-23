@@ -84,3 +84,34 @@ def test_a_read_only_backend_is_recorded_only_for_its_preview_members(lines):
          "    CAPABILITIES = frozenset()\n", namespace)
     assert lines == ["config.py uses Preview API ReadOnlyPathImpl.CAPABILITIES — "
                      "it may change in any release"]
+
+
+# --------------------------------------------------------------------------- #
+# Deprecated
+# --------------------------------------------------------------------------- #
+
+def test_a_deprecated_function_keeps_working_and_warns_once(lines):
+    warned = []
+
+    @preview.deprecated("use new_thing")
+    def old_thing(x):
+        """Does the thing."""
+        return x * 2
+
+    with patch.object(preview.logger, "warning", warned.append), \
+            patch.dict(preview.DEPRECATED_APIS):
+        namespace = {"__name__": "user_config", "old_thing": old_thing}
+        for _ in range(2):
+            exec("result = old_thing(21)", namespace)
+        assert namespace["result"] == 42
+        assert old_thing.__doc__.startswith("Deprecated — use new_thing.")
+        assert preview.is_deprecated(f"{__name__}.{old_thing.__qualname__}") == "use new_thing"
+    assert len(warned) == 1
+    assert "config.py uses deprecated API" in warned[0]
+    assert "use new_thing" in warned[0]
+
+
+def test_a_deprecated_class_covers_its_members():
+    with patch.dict(preview.DEPRECATED_APIS, {"xefm.user_api.Old": "use New"}):
+        assert preview.is_deprecated("xefm.user_api.Old.member") == "use New"
+        assert preview.is_deprecated("xefm.user_api.New") is None

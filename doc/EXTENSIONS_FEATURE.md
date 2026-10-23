@@ -331,7 +331,9 @@ them:
   using it is an error too — the message lists the names you may use. Such
   code works today and breaks on any release.
 - **Warning:** `print()`, which never reaches you (use `ctx.message`), and
-  changing `sys.path`.
+  changing `sys.path`. Also any use of a deprecated API: it still works, the
+  warning names what replaces it, and it is removed no earlier than the next
+  minor XeFM release.
 
 Files under a `_vendor/` folder are skipped.
 

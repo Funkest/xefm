@@ -135,7 +135,10 @@ Before adding an import, check whether the module is already imported at the top
   undo the change, or bump `API_VERSION` and call it out in the release notes.
   Adding a test there is always fine.
 
-A new public API starts as `@preview` unless the user decides otherwise.
+A new public API starts as `@preview` unless the user decides otherwise. A
+stable API is never removed or changed incompatibly in one step: mark it
+`@deprecated("use … instead")`, keep it for at least one minor release, then
+remove it with an `API_VERSION` bump (`doc/dev/STABLE_API_PLAN.md` §9).
 
 ### File permissions
 

@@ -4,13 +4,14 @@ The snapshot, ``test/data/api_snapshot.txt``, is one line per item — every
 public name in ``xefm.user_api`` and ``xefm.path_base`` with its signature, the
 ``Path`` members extensions are handed, the ``ReadOnlyPathImpl`` tiers, the
 compatibility import paths, the keys each ``config.py`` table and manifest
-section accepts, and the promised capabilities — each marked ``stable`` or
-``preview``. ``test/test_api_snapshot.py`` regenerates it in memory and fails
+section accepts, and the promised capabilities — each marked ``stable``,
+``preview`` or ``deprecated``. ``test/test_api_snapshot.py`` regenerates it in memory and fails
 on any difference, so every API change shows up as a diff of this file.
 
 Regenerating is the deliberate step, and it is where a breaking change to the
 stable part is caught: ``--write`` refuses one unless ``API_VERSION`` was
-bumped in the same change.
+bumped in the same change. Deprecating a stable API is not breaking; removing
+it is, and removing one that was never deprecated says so.
 
 Usage (from the repo root):
     PYTHONPATH=. python tools/api_snapshot.py --check   # exit 1 on any difference
@@ -93,13 +94,14 @@ def build() -> dict[str, tuple[str, str, str]]:
     import xefm.path_base as path_base
     import xefm.user_api as user_api
     from xefm import extensions as ext
-    from xefm.preview import is_preview
+    from xefm.preview import is_deprecated, is_preview
 
     items: dict[str, tuple[str, str, str]] = {}
 
     def put(name: str, kind: str, detail: str = "", *, status=None) -> None:
         if status is None:
-            status = "preview" if is_preview(name) else "stable"
+            status = ("deprecated" if is_deprecated(name) is not None
+                      else "preview" if is_preview(name) else "stable")
         items[name] = (status, kind, detail)
 
     put("xefm.user_api.API_VERSION", "version", str(user_api.API_VERSION),
@@ -227,24 +229,37 @@ def _keys_break(old: str, new: str) -> list[str]:
     return [f"'{key}' removed" for key in sorted(gone)]
 
 
+#: The statuses a caller may rely on: a deprecated API still works.
+_PROMISED = ("stable", "deprecated")
+
+
 def classify(old, new) -> list[tuple[str, str, str]]:
     """Every difference as ``(category, name, why)`` — category ``breaking``
-    (to a stable API), ``addition`` (to a stable API) or ``preview``."""
+    (to a promised API), ``addition`` (to a stable API), ``deprecation`` or
+    ``preview``. Promised means stable or deprecated."""
     out = []
     for name in sorted(set(old) | set(new)):
         before, after = old.get(name), new.get(name)
         if before == after or (before and before[1] == "version"):
             continue
         if after is None:
-            out.append(("breaking" if before[0] == "stable" else "preview",
-                        name, "removed"))
+            if before[0] == "stable":
+                out.append(("breaking", name,
+                            "removed without being deprecated first"))
+            else:
+                out.append(("breaking" if before[0] == "deprecated" else "preview",
+                            name, "removed"))
         elif before is None:
-            out.append(("addition" if after[0] == "stable" else "preview",
+            out.append(("addition" if after[0] in _PROMISED else "preview",
                         name, "added"))
-        elif before[0] == "stable" and after[0] == "preview":
-            out.append(("breaking", name, "demoted from stable to Preview"))
-        elif before[0] == "preview" and after[0] == "stable":
-            out.append(("addition", name, "promoted from Preview to stable"))
+        elif before[0] == "stable" and after[0] == "deprecated":
+            out.append(("deprecation", name, "deprecated"))
+        elif before[0] == "deprecated" and after[0] == "stable":
+            out.append(("addition", name, "no longer deprecated"))
+        elif before[0] in _PROMISED and after[0] == "preview":
+            out.append(("breaking", name, f"demoted from {before[0]} to Preview"))
+        elif before[0] == "preview" and after[0] in _PROMISED:
+            out.append(("addition", name, f"promoted from Preview to {after[0]}"))
         elif before[0] == "preview":
             out.append(("preview", name, f"{before[1:]} → {after[1:]}"))
         else:

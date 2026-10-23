@@ -613,6 +613,7 @@ def check_manifest(manifest: Manifest, *, others: Iterable[Manifest] = (),
                      "in this XeFM — the extension will not load here")
 
     problems.extend(lint_code(manifest.root))
+    problems.extend(deprecated_uses(manifest))
 
     own = python_top_level(manifest.root)
     if manifest.runs_code and not own:
@@ -786,67 +787,83 @@ def lint_code(root: Path) -> list[Problem]:
 #: What a ``preview`` finding's message ends with.
 _PREVIEW_NOTE = "Preview, may change in any release"
 
+#: Says, for an API's qualified name, why a use of it is worth reporting — or
+#: None when it is not.
+Marked = Callable[[str], Optional[str]]
 
-def _preview_members(cls_name: str) -> set[str]:
-    """The public members of ``xefm.user_api.<cls_name>`` that are Preview."""
+
+def _preview_note(name: str) -> Optional[str]:
     from xefm.preview import is_preview
+    return _PREVIEW_NOTE if is_preview(name) else None
+
+
+def _deprecated_note(name: str) -> Optional[str]:
+    from xefm.preview import is_deprecated
+    instead = is_deprecated(name)
+    return (f"deprecated — {instead}; it will be removed in a later release"
+            if instead is not None else None)
+
+
+def _marked_members(cls_name: str, marked: Marked) -> dict[str, str]:
+    """The public members of ``xefm.user_api.<cls_name>`` that ``marked``
+    reports, with what it says about each."""
     import xefm.user_api as user_api
     cls = getattr(user_api, cls_name)
-    return {name for name in dir(cls) if not name.startswith("_")
-            and is_preview(f"xefm.user_api.{cls_name}.{name}")}
-
-
-def preview_sections(manifest: Manifest) -> list[str]:
-    """The Preview parts of the manifest the package uses, named the way a
-    finding's ``where`` names them: ``contributes.menus``, ``settings``,
-    ``extension.updates``."""
-    from xefm.preview import is_preview
-    data = manifest.data
-    found = [f"contributes.{kind}" for kind in data.get("contributes", {}) or {}
-             if is_preview(f"manifest.contributes.{kind}")]
-    found += [section for section in ("settings", "requires")
-              if data.get(section) is not None and is_preview(f"manifest.{section}")]
-    if "updates" in (data.get("extension") or {}) \
-            and is_preview("manifest.extension.updates"):
-        found.append("extension.updates")
+    found = {}
+    for name in dir(cls):
+        note = None if name.startswith("_") else marked(f"xefm.user_api.{cls_name}.{name}")
+        if note:
+            found[name] = note
     return found
 
 
-def preview_uses(manifest: Manifest) -> list[Problem]:
-    """Every use of a Preview API in the package, as ``preview`` findings —
-    not faults: a package with only these installs and loads. ``xefm ext
-    check`` lists them so the author knows which parts may need updating after
-    an XeFM release, and ``--stable-only`` makes them errors.
+def _marked_sections(manifest: Manifest, marked: Marked) -> list[tuple[str, str]]:
+    """``(section, note)`` for the parts of the manifest the package uses that
+    ``marked`` reports, each named the way a finding's ``where`` names it:
+    ``contributes.menus``, ``settings``, ``extension.updates``."""
+    data = manifest.data
+    candidates = [(f"contributes.{kind}", f"manifest.contributes.{kind}")
+                  for kind in data.get("contributes", {}) or {}]
+    candidates += [(section, f"manifest.{section}") for section in ("settings", "requires")
+                   if data.get(section) is not None]
+    if "updates" in (data.get("extension") or {}):
+        candidates.append(("extension.updates", "manifest.extension.updates"))
+    return [(where, note) for where, name in candidates if (note := marked(name))]
+
+
+def preview_sections(manifest: Manifest) -> list[str]:
+    """The Preview parts of the manifest the package uses (see
+    :func:`_marked_sections`)."""
+    return [where for where, _note in _marked_sections(manifest, _preview_note)]
+
+
+def _marked_uses(manifest: Manifest, marked: Marked) -> list[tuple[str, Optional[str], str]]:
+    """``(where, what, note)`` for every use in the package of an API that
+    ``marked`` reports. ``what`` is None for a manifest section, whose
+    ``where`` already names it.
 
     Read from the manifest and the syntax trees, never by running anything:
-    the sections it uses, the Preview names it takes from the public modules,
-    the Preview ``ReadOnlyPathImpl`` members a backend defines, and the
-    Preview members it reads off ``ctx`` / ``ctx.pane`` — where ``ctx`` is a
-    function's first parameter or a name ``ctx``, which is how every action,
-    hook and ``on_done`` callback is written. What is Preview is read from
-    :data:`xefm.user_api.PREVIEW_APIS`, so this never needs a list of its
-    own."""
-    from xefm.preview import is_preview
+    the sections it uses, the names it takes from the public modules, the
+    ``ReadOnlyPathImpl`` members a backend defines, and the members it reads
+    off ``ctx`` / ``ctx.pane`` — where ``ctx`` is a function's first parameter
+    or a name ``ctx``, which is how every action, hook and ``on_done`` callback
+    is written."""
     import xefm.path_base as path_base
-    found: list[Problem] = []
+    found: list[tuple[str, Optional[str], str]] = [
+        (where, None, note) for where, note in _marked_sections(manifest, marked)]
 
-    def note(where: str, what: Optional[str] = None) -> None:
-        message = f"{what} — {_PREVIEW_NOTE}" if what else _PREVIEW_NOTE
-        found.append(Problem("preview", where, message))
-
-    # In the manifest, ``where`` already names the section.
-    for section in preview_sections(manifest):
-        note(section)
-
-    ctx_members = _preview_members("ActionContext")
-    pane_members = _preview_members("PaneApi")
-    backend_members = {name for name in path_base.TIERS["overridable"]
-                       if is_preview(f"xefm.path_base.ReadOnlyPathImpl.{name}")}
+    ctx_members = _marked_members("ActionContext", marked)
+    pane_members = _marked_members("PaneApi", marked)
+    backend_members = {}
+    for name in path_base.TIERS["overridable"] + path_base.TIERS["helpers"]:
+        note = marked(f"xefm.path_base.ReadOnlyPathImpl.{name}")
+        if note:
+            backend_members[name] = note
     for rel, tree in _package_trees(manifest.root):
-        hits: dict[tuple[int, str], ast.AST] = {}
+        hits: dict[tuple[int, str], str] = {}
 
-        def hit(node: ast.AST, what: str) -> None:
-            hits.setdefault((node.lineno, what), node)
+        def hit(node: ast.AST, what: str, note: str) -> None:
+            hits.setdefault((node.lineno, what), note)
 
         bound = _public_modules_bound(tree)
         # Local names for what the public modules export: ``ReadOnlyPathImpl``
@@ -860,12 +877,12 @@ def preview_uses(manifest: Manifest) -> list[Problem]:
                         continue
                     qualified = f"{node.module}.{alias.name}"
                     imported[alias.asname or alias.name] = qualified
-                    if is_preview(qualified):
-                        hit(node, f"{node.module.split('.')[-1]}.{alias.name}")
+                    if note := marked(qualified):
+                        hit(node, f"{node.module.split('.')[-1]}.{alias.name}", note)
             elif isinstance(node, ast.Attribute) and not node.attr.startswith("_"):
                 module = bound.get(_dotted(node.value) or "")
-                if module and is_preview(f"{module}.{node.attr}"):
-                    hit(node, f"{module.split('.')[-1]}.{node.attr}")
+                if module and (note := marked(f"{module}.{node.attr}")):
+                    hit(node, f"{module.split('.')[-1]}.{node.attr}", note)
 
         receivers = {"ctx"}
         for node in ast.walk(tree):
@@ -876,22 +893,44 @@ def preview_uses(manifest: Manifest) -> list[Problem]:
         for node in ast.walk(tree):
             if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) \
                     and node.value.id in receivers and node.attr in ctx_members:
-                hit(node, f"ctx.{node.attr}")
+                hit(node, f"ctx.{node.attr}", ctx_members[node.attr])
             elif isinstance(node, ast.Attribute) and node.attr in pane_members \
                     and isinstance(node.value, ast.Attribute) \
                     and node.value.attr in ("pane", "other", "left", "right") \
                     and isinstance(node.value.value, ast.Name) \
                     and node.value.value.id in receivers:
-                hit(node, f"ctx.{node.value.attr}.{node.attr}")
+                hit(node, f"ctx.{node.value.attr}.{node.attr}", pane_members[node.attr])
             elif isinstance(node, ast.ClassDef) and "xefm.path_base.ReadOnlyPathImpl" in {
                     _public_name(base, imported, bound) for base in node.bases}:
                 for item in node.body:
                     for name in _defined_names(item):
                         if name in backend_members:
-                            hit(item, f"ReadOnlyPathImpl.{name}")
-        for lineno, what in sorted(hits):
-            note(f"{_CODE}{rel.as_posix()}:{lineno}", what)
+                            hit(item, f"ReadOnlyPathImpl.{name}", backend_members[name])
+        for (lineno, what), note in sorted(hits.items()):
+            found.append((f"{_CODE}{rel.as_posix()}:{lineno}", what, note))
     return found
+
+
+def _findings(severity: str, uses) -> list[Problem]:
+    return [Problem(severity, where, f"{what} — {note}" if what else note)
+            for where, what, note in uses]
+
+
+def preview_uses(manifest: Manifest) -> list[Problem]:
+    """Every use of a Preview API in the package, as ``preview`` findings —
+    not faults: a package with only these installs and loads. ``xefm ext
+    check`` lists them so the author knows which parts may need updating after
+    an XeFM release, and ``--stable-only`` makes them errors. What is Preview
+    is read from :data:`xefm.user_api.PREVIEW_APIS`, so this never needs a list
+    of its own."""
+    return _findings("preview", _marked_uses(manifest, _preview_note))
+
+
+def deprecated_uses(manifest: Manifest) -> list[Problem]:
+    """Every use of a deprecated API in the package, as warnings that say what
+    replaces it (:data:`xefm.user_api.DEPRECATED_APIS`). Part of
+    :func:`check_manifest`: unlike a Preview use, this is something to fix."""
+    return _findings("warning", _marked_uses(manifest, _deprecated_note))
 
 
 def _public_name(expr: ast.AST, imported: dict[str, str],

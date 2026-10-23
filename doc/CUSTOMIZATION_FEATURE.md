@@ -2,9 +2,11 @@
 
 > **Stable, with some parts in Preview.** The API on this page is at version
 > 1 (`xefm.user_api.API_VERSION`). The stable parts keep working across XeFM
-> releases: a change that would break them comes with a new `API_VERSION`
-> and a line in the release notes. Parts marked **(Preview)** may still
-> change in any release.
+> releases. A stable API that is going away is first deprecated: it keeps
+> working for at least one more minor release, XeFM logs a warning naming
+> its replacement when you use it, and the release notes say so. Only then
+> is it removed, with a new `API_VERSION`. Parts marked **(Preview)** may
+> still change in any release.
 >
 > Stable: `ACTIONS`, `SORT_KEYS`, `FILTERS`, `PATH_SCHEMES` (except
 > replacing a built-in scheme); the panes and entries your function is given;

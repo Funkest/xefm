@@ -23,8 +23,15 @@ extension by its id, or ``config.py`` — and what. :func:`record_use` is that
 line, and ``xefm.path_base`` calls it for a backend that subclasses a Preview
 class or defines a Preview member.
 
+Deprecated is the other mark, and the first step of removing a stable API
+(doc/dev/STABLE_API_PLAN.md §9): ``@deprecated("use … instead")`` keeps the
+API working, opens its docstring saying so, lists it in
+:data:`DEPRECATED_APIS`, logs its first use from outside XeFM, and makes
+``xefm ext check`` warn. It is removed no earlier than the next minor release,
+and the removal bumps ``API_VERSION``.
+
 This module is XeFM's own. Extensions read the result as
-``xefm.user_api.PREVIEW_APIS``.
+``xefm.user_api.PREVIEW_APIS`` and ``xefm.user_api.DEPRECATED_APIS``.
 """
 
 from __future__ import annotations
@@ -42,6 +49,11 @@ logger = getLogger("PreviewAPI")
 
 #: ``(who, api)`` pairs already logged, so each is said once per session.
 _recorded: set[tuple[str, str]] = set()
+
+#: Every deprecated API by name, as :data:`PREVIEW_APIS` spells names, mapped
+#: to what to use instead. An entry for a class covers its members. Empty
+#: while nothing stable is on its way out.
+DEPRECATED_APIS: dict[str, str] = {}
 
 #: The module name ``config.py`` is executed under (:mod:`xefm.config`).
 _CONFIG_MODULE = "user_config"
@@ -94,10 +106,35 @@ def preview(obj: T) -> T:
     return recorded  # type: ignore[return-value]
 
 
-def record_use(api: str, module: str) -> None:
+def deprecated(instead: str):
+    """Mark a stable function, method, property getter or class as on its way
+    out, saying what replaces it: ``@deprecated("use ctx.pane.select")``. It
+    keeps working; a function or method comes back wrapped so its first call
+    from outside XeFM is logged as a warning (:func:`record_use`)."""
+    def mark(obj: T) -> T:
+        DEPRECATED_APIS[f"{obj.__module__}.{obj.__qualname__}"] = instead
+        note = f"Deprecated — {instead}. Removed in a later API_VERSION."
+        doc = obj.__doc__ or ""
+        obj.__doc__ = f"{note}\n\n{doc}" if doc else note
+        if inspect.isclass(obj) or not callable(obj):
+            return obj
+        api = obj.__qualname__
+
+        @functools.wraps(obj)
+        def recorded(*args, **kwargs):
+            record_use(api, sys._getframe(1).f_globals.get("__name__", ""),
+                       deprecated=instead)
+            return obj(*args, **kwargs)
+
+        return recorded  # type: ignore[return-value]
+    return mark
+
+
+def record_use(api: str, module: str, *, deprecated: str | None = None) -> None:
     """Log, once per session, that ``module`` used the Preview API ``api``
-    (``ActionContext.run_task``). XeFM's own modules are not reported: XeFM
-    calls some Preview APIs itself."""
+    (``ActionContext.run_task``) — or, with ``deprecated`` (what to use
+    instead), a deprecated one, as a warning. XeFM's own modules are not
+    reported: XeFM calls some of these APIs itself."""
     if module == "xefm" or module.startswith("xefm."):
         return
     if module == _CONFIG_MODULE:
@@ -109,7 +146,11 @@ def record_use(api: str, module: str) -> None:
     if (who, api) in _recorded:
         return
     _recorded.add((who, api))
-    logger.info(f"{who} uses Preview API {api} — it may change in any release")
+    if deprecated is not None:
+        logger.warning(f"{who} uses deprecated API {api} — {deprecated}; it "
+                       f"will be removed in a later release")
+    else:
+        logger.info(f"{who} uses Preview API {api} — it may change in any release")
 
 
 def is_preview(name: str) -> bool:
@@ -117,3 +158,14 @@ def is_preview(name: str) -> bool:
     is Preview, itself or through the class that holds it."""
     parts = name.split(".")
     return any(".".join(parts[:i]) in PREVIEW_APIS for i in range(1, len(parts) + 1))
+
+
+def is_deprecated(name: str) -> str | None:
+    """What replaces the API called ``name``, if it is deprecated — itself or
+    through the class that holds it — else ``None``."""
+    parts = name.split(".")
+    for i in range(len(parts), 0, -1):
+        instead = DEPRECATED_APIS.get(".".join(parts[:i]))
+        if instead is not None:
+            return instead
+    return None
