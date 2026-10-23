@@ -56,7 +56,7 @@ def _keys(value):
 def test_it_is_a_letter_layout_with_no_type_ahead():
     preset = keymap_presets.PRESETS[keymap_presets.VIM]
     assert preset.free_letters and not preset.type_ahead
-    assert (preset.button or preset.label) == "Vim style"
+    assert preset.label == "Vim style"
 
 
 def test_every_binding_names_an_action_this_xefm_has():

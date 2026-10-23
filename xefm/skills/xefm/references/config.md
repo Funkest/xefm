@@ -80,7 +80,7 @@ Every key comes from a **keymap preset**: `'afx'` (single letters: `C` copy,
 on macOS, Explorer's elsewhere, with `F5` / `F6` for the other pane; letters
 search) or `'vim'` (Vim-style keys: `hjkl`, `gg`, `yy` / `dd` / `p`, `/`, `ZZ`;
 two-key commands are key sequences). The user picks one at first launch or in
-**Tools ▸ Advanced ▸ Keymap**; `KEY_PRESET = 'afx'`, `'orthodox'`, `'native'`
+**Tools ▸ Advanced ▸ Keymap…**; `KEY_PRESET = 'afx'`, `'orthodox'`, `'native'`
 or `'vim'` in `config.py` overrides that choice. `None` (the default) leaves it to the menu.
 
 `KEY_BINDINGS` holds **only the user's changes** to the preset. An entry

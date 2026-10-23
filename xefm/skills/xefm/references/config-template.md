@@ -269,9 +269,9 @@ class Config:
     TRANSFER_CONCURRENCY = "auto"
 
     # Keymap preset: the whole keymap, chosen at first launch and changed from
-    # Tools > Advanced > Keymap. The presets are peers; none is the default.
+    # Tools > Advanced > Keymap…. The presets are peers; none is the default.
     #   None        -- whatever you chose at first launch or in
-    #                  Tools > Advanced > Keymap
+    #                  Tools > Advanced > Keymap…
     #   'afx'       -- letters: C copy, K delete, M move ... The single-key
     #                  style of the X68000 filers and AFX (あふ). 'default' is
     #                  accepted as an old name for it.
@@ -286,7 +286,7 @@ class Config:
     #   'vim'       -- Vim-style keys: hjkl to move, gg / G, yy / dd / p, cw
     #                  rename, / and n to search, ZZ to quit. Two-key commands
     #                  are key sequences (see KEY_SEQUENCE_TIMEOUT below).
-    # Setting this wins over the Tools > Advanced > Keymap menu. KEY_BINDINGS
+    # Setting this wins over the Tools > Advanced > Keymap… dialog. KEY_BINDINGS
     # below is laid over whichever preset is in force. See
     # doc/KEYMAP_PRESETS_FEATURE.md.
     KEY_PRESET = None

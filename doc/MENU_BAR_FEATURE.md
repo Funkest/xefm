@@ -182,7 +182,7 @@ the mouse for the first, take the whole buffer with the second. See
 | Subshell Here | `subshell` *(desktop mode: in a terminal window)* |
 | Edit Configuration… | `edit_config` *(ships unbound)* |
 | Reload Configuration | `reload_config` *(ships unbound)* |
-| Advanced ▸ Keymap ▸ | AFX style / Orthodox — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md) |
+| Advanced ▸ Keymap… | Choose AFX style, Orthodox, OS native or Vim style, each described — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md) |
 | Advanced ▸ Extensions… | `extensions` *(ships unbound)* — see [Extension Packages](EXTENSIONS_FEATURE.md) |
 | Advanced ▸ Check for Extension Updates… | `check_extension_updates` *(ships unbound)* |
 | Advanced ▸ Install Extension… | `install_extension` *(ships unbound)* — a folder, `.zip`, URL or `github:owner/repo` |
