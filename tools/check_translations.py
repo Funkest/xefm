@@ -17,8 +17,8 @@ reports:
 - ``**bold**`` that will not close: a closing ``**`` or ``*`` after
   punctuation (``)``, a backtick, ``」``) must be followed by a space or
   punctuation, which Japanese text, having no spaces, often is not
-- a translation whose source changed after it did (stale): by last commit, or
-  by modification time for a file with uncommitted changes
+- a translation whose source changed after it did (stale): by last commit,
+  with uncommitted changes counting as newer than any commit
 
 The exit status is 1 when anything other than a warning was found.
 
@@ -171,14 +171,15 @@ def stuck_emphasis(line: str) -> bool:
 
 
 def changed_at(path: Path) -> float:
-    """When ``path`` last changed: its mtime when it has uncommitted changes,
-    else its last commit's time."""
+    """When ``path`` last changed: its last commit's time, or infinity while
+    it has uncommitted changes. Two pages edited together therefore never
+    look stale, and an English edit with no Japanese one does at once."""
     rel = str(path.relative_to(REPO_ROOT))
     dirty = subprocess.run(
         ["git", "status", "--porcelain", "--", rel],
         cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout
     if dirty.strip():
-        return path.stat().st_mtime
+        return float("inf")
     stamp = subprocess.run(
         ["git", "log", "-1", "--format=%ct", "--", rel],
         cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout

@@ -87,8 +87,8 @@ A page with no translation gets none of this and stays English.
   translation (a warning until every page is in — `--strict` makes it an
   error), a pair missing its switcher line, links to an English page that has
   a translation, anchors that match no heading in their target, and
-  translations whose source changed after them (by last commit; by modification
-  time while a file has uncommitted changes).
+  translations whose source changed after them (by last commit; uncommitted
+  changes count as newer than any commit, so a pair edited together passes).
 
 ## Style
 
