@@ -308,14 +308,19 @@ Press `F1` at any time for the keys your config is using.
 - Launch multiple instances for multiple windows
 
 **Quitting**:
-- The window's close button, **Quit XeFM** in the application menu, the
-  Dock's Quit, and on Windows `Alt-F4` all quit the same way as XeFM's own
-  quit key: XeFM asks first, stops background jobs cleanly, and saves the
-  panes' state.
-- On macOS, `Cmd-Q` follows your keymap. The application menu's Quit item
-  shows the key that quits under it: `Cmd-Q` with the OS native preset, `Q`
-  with AFX style. Under a preset that does not bind `Cmd-Q`, `Cmd-Q` does
-  nothing.
+- **XeFM's quit key** (`Q` in AFX style, `Ctrl-Q` in OS native) and
+  **File ▸ Quit** always ask first.
+- **The platform's ways to quit** ask only while a task (a copy, a search,
+  anything with a progress dialog, in front or in the background) is
+  running, and otherwise quit at once. These are:
+  - the window's close button;
+  - **Quit XeFM** in the application menu and the Dock's Quit;
+  - `Cmd-Q` on macOS and `Alt-F4` on Windows.
+- When a task is running and you quit anyway, XeFM stops it cleanly first.
+  It saves the panes' state on every way out.
+- On macOS, `Cmd-Q` follows your keymap: the OS native preset binds it, and
+  under a preset that does not, it does nothing. The application menu's Quit
+  item shows `Cmd-Q` when it is bound.
 
 ## Troubleshooting
 

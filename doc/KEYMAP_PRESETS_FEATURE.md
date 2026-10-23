@@ -72,7 +72,7 @@ command.
 | `F8` / `Del` | Delete (to the Trash where there is one) |
 | `Shift-F8` / `Shift-Del` | Delete for good |
 | `F9` / `F10` / `Alt` | Menu |
-| `Alt-F4` | Quit |
+| `Alt-F4` | Quit (asks only while a task is running) |
 | `Shift-F10` | Context menu |
 | `Alt-Enter` | Details (properties) |
 | `Alt-F1` / `Alt-F2` | Drives |
@@ -154,7 +154,8 @@ both Finder and Explorer select a file by name.
 | Show hidden files | `Cmd-Shift-.` | `.` | `.` |
 | New tab / close tab | `Cmd-T` / `Cmd-W` | `Ctrl-T` / `Ctrl-W` | `Ctrl-T` / `Ctrl-W` |
 | Command palette | `Cmd-Shift-P` | `Ctrl-Shift-P` | `Ctrl-K` |
-| Quit | `Cmd-Q` | `Alt-F4` | `Ctrl-Q` |
+| Quit, asking only while a task runs | `Cmd-Q` | `Alt-F4` | — |
+| Quit, always asking | `Ctrl-Q` | `Ctrl-Q` | `Ctrl-Q` |
 
 The desktop columns also accept the terminal column's keys.
 

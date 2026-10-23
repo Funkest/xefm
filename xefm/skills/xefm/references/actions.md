@@ -15,6 +15,7 @@ the user picked in **Tools ▸ Advanced ▸ Keymap**; ask which if `KEY_PRESET` 
 
 | Action | What it does | AFX style | Orthodox |
 |---|---|---|---|
+| `quit_unless_busy` | Quit XeFM, asking first only while a task is running | — | `Alt-F4` |
 | `cursor_up` | Move the cursor up one item | `UP` | `UP` |
 | `cursor_down` | Move the cursor down one item | `DOWN` | `DOWN` |
 | `page_up` | Move the cursor up one page | `PAGE_UP` | `PAGE_UP` |
@@ -134,7 +135,7 @@ the user picked in **Tools ▸ Advanced ▸ Keymap**; ask which if `KEY_PRESET` 
 | `extensions` | List the extension packages and whether they loaded | — | — |
 | `check_extension_updates` | Look for newer versions of the installed extension packages | — | — |
 | `sync_python_packages` | Install the Python packages ~/.xefm/requirements.txt lists | — | — |
-| `quit` | Quit XeFM — or close the open viewer | `Q` | `Alt-F4` |
+| `quit` | Quit XeFM — or close the open viewer | `Q` | — |
 | `help` | Show the key bindings for what is on screen | `F1` | `F1` |
 | `isearch` | Incremental search | `F` | — |
 | `edit_file` | Edit in the configured text editor | `E` | `F4` |

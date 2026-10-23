@@ -84,7 +84,8 @@ class Apply(unittest.TestCase):
             "help": ["F1"], "reread": ["F2", "Ctrl-R"], "view_file": ["F3"],
             "edit_file": ["F4"], "copy_files": ["F5"], "move_files": ["F6"],
             "create_directory": ["F7"], "delete_files": ["F8", "DELETE"],
-            "quit": ["Alt-F4"], "rename": ["Shift-F6", "Ctrl-M"],
+            "quit": [], "quit_unless_busy": ["Alt-F4"],
+            "rename": ["Shift-F6", "Ctrl-M"],
             "duplicate_files": ["Shift-F5"], "compare_selection": ["Shift-F2"],
             "find_files": ["Alt-F7"], "create_archive": ["Alt-F5"],
             "history": ["Alt-DOWN"], "favorites": ["Ctrl-D"],
@@ -329,10 +330,13 @@ class Native(unittest.TestCase):
             self.assertEqual(self._keys(t, "create_directory")[0], "Command-Shift-N")
             self.assertEqual(self._keys(t, "quick_view")[0], "SPACE")
             self.assertEqual(self._keys(t, "go_parent")[0], "Command-UP")
+            self.assertEqual(self._keys(t, "quit_unless_busy"), ["Command-Q"])
+            self.assertEqual(self._keys(t, "quit"), ["Ctrl-Q"])
         with _native_case("win32", "gui") as t:
             self.assertEqual(self._keys(t, "create_directory")[0], "Ctrl-Shift-N")
             self.assertEqual(self._keys(t, "file_details")[0], "Alt-ENTER")
-            self.assertEqual(self._keys(t, "quit")[0], "Alt-F4")
+            self.assertEqual(self._keys(t, "quit_unless_busy"), ["Alt-F4"])
+            self.assertEqual(self._keys(t, "quit"), ["Ctrl-Q"])
         for platform_name in ("darwin", "win32", "linux"):
             with _native_case(platform_name, "vt") as t:
                 self.assertEqual(self._keys(t, "create_directory"), ["F7"])

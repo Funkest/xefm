@@ -884,6 +884,9 @@ _COMMON_ACTIONS = [
 ]
 
 _FILER_ACTIONS = [
+    # The platform's way to quit (Cmd-Q, Alt-F4, the close button): no question
+    # unless quitting would stop a task. ``quit`` always asks.
+    _a("quit_unless_busy", FILER, "Quit XeFM, asking first only while a task is running"),
     # Navigation
     _a("cursor_up", FILER, "Move the cursor up one item"),
     _a("cursor_down", FILER, "Move the cursor down one item"),

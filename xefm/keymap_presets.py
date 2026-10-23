@@ -106,7 +106,9 @@ _ORTHODOX = Preset(
         "help": ["F1"],
         "reread": ["F2", "Ctrl-R"],
         "menu": ["F9", "F10", "ALT"],
-        "quit": ["Alt-F4"],
+        # Alt-F4 closes a window: it asks only while a task runs.
+        "quit": [],
+        "quit_unless_busy": ["Alt-F4"],
         "redraw": [],
         "programs": [],
         "context_menu": ["Shift-F10", "APPS"],
@@ -270,7 +272,9 @@ def _native_bindings() -> dict:
             "find_files": ["Command-F", "Ctrl-F"],
             "toggle_hidden": ["Command-Shift-.", "."],
             "command_palette": ["Command-Shift-P", "Ctrl-K"],
-            "quit": ["Command-Q", "Ctrl-Q"],
+            # Cmd-Q quits as a Mac app does, asking only while a task runs;
+            # Ctrl-Q, like every preset's quit key, always asks.
+            "quit_unless_busy": ["Command-Q"],
         })
     elif sys.platform == "win32":
         keys.update({
@@ -278,7 +282,8 @@ def _native_bindings() -> dict:
             "copy_paths": ["Ctrl-Shift-C", "Ctrl-P"],
             "file_details": ["Alt-ENTER", "Alt-I"],
             "command_palette": ["Ctrl-Shift-P", "Ctrl-K"],
-            "quit": ["Alt-F4", "Ctrl-Q"],
+            # Alt-F4 closes the window, asking only while a task runs.
+            "quit_unless_busy": ["Alt-F4"],
         })
     return keys
 

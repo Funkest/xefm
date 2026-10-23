@@ -177,6 +177,10 @@ Decisions the table encodes:
 - **F5 / F6 copy and move to the other pane, and F3 / F4 / F7 / F8 follow.**
   Finder and Explorer have no two-pane operations; these are the keys every
   two-pane manager uses. So `redraw` loses F5, as in Orthodox.
+- **Two quits.** `Cmd-Q` (macOS app) and `Alt-F4` (Windows app, and
+  Orthodox everywhere) are bound to `quit_unless_busy`, the platform's way to
+  quit, which asks only while a task runs. `Ctrl-Q` is `quit`, which always
+  asks.
 - **Quick view.** On macOS it is Space, Quick Look's key, so marking moves to
   Ctrl-Space, which every backend delivers. Elsewhere it is Alt-P, Explorer's
   preview pane, and Space marks.
