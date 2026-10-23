@@ -1,12 +1,22 @@
-# Customization — Preview
+# Customization
 
-> **Preview.** Everything on this page is subject to change. The objects your
-> functions receive and the shape of the `ACTIONS`, `EVENT_HOOKS`, `SORT_KEYS`,
-> `FILTERS`, `IMAGE_DECODERS`, `PATH_SCHEMES`, `LEXERS` and `MENU_ITEMS` variables may change in any release. Preview is
-> marked per API: each one that may still change says "Preview" at the top of
-> its docstring and is listed in `xefm.user_api.PREVIEW_APIS`, and today that
-> is nearly all of them. XeFM writes one line to the log pane saying so
-> whenever a config uses them. Nothing else in `config.py` is affected.
+> **Stable, with some parts in Preview.** The API on this page is at version
+> 1 (`xefm.user_api.API_VERSION`). The stable parts keep working across XeFM
+> releases: a change that would break them comes with a new `API_VERSION`
+> and a line in the release notes. Parts marked **(Preview)** may still
+> change in any release.
+>
+> Stable: `ACTIONS`, `SORT_KEYS`, `FILTERS`, `PATH_SCHEMES` (except
+> replacing a built-in scheme); the panes and entries your function is given;
+> `ctx.pane` / `other` / `left` / `right`, `ctx.invoke`, `ctx.run_program`,
+> `ctx.message`, `ctx.action_names`; and `xefm_tool`, `xefm_python` and
+> `is_desktop_mode` for `PROGRAMS`.
+>
+> Preview: `EVENT_HOOKS`, `MENU_ITEMS`, `IMAGE_DECODERS`, `LEXERS`, the
+> prompts (`ctx.input` / `choose` / `confirm`), `ctx.run_task`,
+> `ctx.show_markdown`, `ctx.copy_text` and `pane.open_list`. A config that
+> uses a Preview table gets one line in the log pane saying so, and the first
+> call to a Preview function logs one line naming it.
 
 `~/.xefm/config.py` is real Python that XeFM executes at startup, so it has
 always been able to hold logic — `if sys.platform == 'win32':` blocks, computed
@@ -259,12 +269,12 @@ summary with no further page.
 | `ctx.left`, `ctx.right` | the panes by position |
 | `ctx.invoke(name)` | run another action — built-in or your own |
 | `ctx.message(text)` | write one line to the log pane |
-| `ctx.show_markdown(title, source)` | show Markdown in a scrollable dialog, with a Copy button on each code block — see below |
-| `ctx.copy_text(text)` | put text on the clipboard |
-| `ctx.run_task(title, work, on_done=fn)` | run slow work in the background, with a progress dialog — see below |
-| `ctx.input(prompt, default, on_accept=fn)` | ask for a line of text |
-| `ctx.choose(title, items, on_result=fn)` | pick from a list (index, or `None`); `type='filter'` for a searchable one |
-| `ctx.confirm(prompt, on_result=fn)` | yes / no |
+| `ctx.show_markdown(title, source)` | (Preview) show Markdown in a scrollable dialog, with a Copy button on each code block — see below |
+| `ctx.copy_text(text)` | (Preview) put text on the clipboard |
+| `ctx.run_task(title, work, on_done=fn)` | (Preview) run slow work in the background, with a progress dialog — see below |
+| `ctx.input(prompt, default, on_accept=fn)` | (Preview) ask for a line of text |
+| `ctx.choose(title, items, on_result=fn)` | (Preview) pick from a list (index, or `None`); `type='filter'` for a searchable one |
+| `ctx.confirm(prompt, on_result=fn)` | (Preview) yes / no |
 | `ctx.run_program(command, terminal=False)` | run an external program — see below |
 | `ctx.action_names()` | every name `invoke()` accepts |
 
@@ -284,18 +294,23 @@ And each pane:
 | `pane.unselect(predicate)` | remove matches; no predicate clears it |
 | `pane.cd(path, focus_name=None)` | go somewhere |
 | `pane.refresh()` | re-read the directory |
-| `pane.open_list(paths, title=...)` | open a list of paths in place of a directory — see below |
+| `pane.open_list(paths, title=...)` | (Preview) open a list of paths in place of a directory — see below |
 
 And each entry: `.name`, `.path`, `.suffix`, `.stem`, `.is_dir`, `.is_file`,
 `.is_link`, `.size`, `.mtime`. `.path` is a `pathlib.Path`-alike that also
 addresses files inside archives and on S3 / SFTP, so `entry.path.read_text()`
-works wherever the pane does.
+works wherever the pane does. Besides the `pathlib` methods it has
+`.scheme` (`'file'`, `'s3'`, `'ssh'`, `'archive'`, …), `.is_remote()`,
+`.supports(capability)` — `'write_operations'`, `'directory_rename'`,
+`'file_editing'` or `'streaming_read'` — and `.target()`, the real file an
+entry of a tree file stands for. Writing may raise `OSError` where the
+storage is read-only, such as inside an archive.
 
 `.size` and `.mtime` read from disk the first time you ask; the rest are free.
 A predicate that only looks at names therefore costs no filesystem access at
 all, which matters in a large directory.
 
-### Showing a result
+### Showing a result (Preview)
 
 `ctx.show_markdown` opens the dialog Help and File Details use, with your
 Markdown in it. Every fenced code block gets a **Copy** button — reach it with
@@ -321,7 +336,7 @@ stays `a_b*.txt` rather than turning half of it italic.
 
 To copy without showing anything, `ctx.copy_text(text)`.
 
-### Slow work: `ctx.run_task`
+### Slow work: `ctx.run_task` (Preview)
 
 Your action runs on the UI thread, and the window waits for it. Work that takes
 a while — reading whole files, a remote folder — goes to `ctx.run_task`, which
@@ -377,7 +392,7 @@ def sha256_selection(ctx):
   one at a time, so a task started during a long background copy would wait for
   it; a read-only one runs beside it instead.
 
-### Putting an action in a menu: `MENU_ITEMS`
+### Putting an action in a menu: `MENU_ITEMS` (Preview)
 
 An action can sit in the **File** menu, in the **context menu** a row opens
 (right-click, or the Menu key), or both:
@@ -439,7 +454,7 @@ the terminal, and a program that draws on it or reads the keyboard behind
 XeFM's back leaves the screen garbled — or both of them waiting for the same
 key.
 
-### Opening your own list of files
+### Opening your own list of files (Preview)
 
 `pane.open_list()` puts any list of paths in a pane, the way a search's results
 land there: every file operation works on the rows, and `go_parent` returns to
@@ -475,7 +490,7 @@ action: a command that takes seconds freezes the window for those seconds.
 
 ---
 
-## Reacting to events: `EVENT_HOOKS`
+## Reacting to events: `EVENT_HOOKS` (Preview)
 
 ```python
 def log_visit(ctx, event):
@@ -684,7 +699,7 @@ arithmetic, strings and quick filesystem questions.
 
 ---
 
-## Your own picture formats: `IMAGE_DECODERS`
+## Your own picture formats: `IMAGE_DECODERS` (Preview)
 
 The image viewer already reads more than XeFM ships a decoder for, because it
 asks your machine: on macOS the system decoder handles HEIC, JPEG XL and camera
@@ -745,7 +760,7 @@ More, including the format table per platform, in
 
 ---
 
-## Your own syntax highlighting: `LEXERS`
+## Your own syntax highlighting: `LEXERS` (Preview)
 
 The text viewer colors a file with [Pygments](https://pygments.org/), which
 knows hundreds of languages and picks one from the file name. `LEXERS` is for
@@ -848,7 +863,7 @@ class Config:
 
 Five methods is the whole requirement — path arithmetic, parents, names,
 globbing and refusing writes come with the base class. Full walkthrough,
-including a registry browser, in
+including a registry browser and which overrides are stable, in
 [`doc/VIRTUAL_FOLDERS_FEATURE.md`](VIRTUAL_FOLDERS_FEATURE.md).
 
 ---

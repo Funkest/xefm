@@ -106,20 +106,22 @@ __all__ = ["ReadOnlyPathImpl", "UriPathImpl", "UriStatResult"]
 #: the API snapshot, ``xefm ext check`` — and it is not itself API.
 TIERS = {
     "required": ("SCHEME", "exists", "is_dir", "iterdir", "stat", "open"),
-    "overridable": ("READ_ONLY_MESSAGE", "IS_REMOTE", "DISPLAY_PREFIX",
-                    "get_display_title", "target",
+    "overridable": ("READ_ONLY_MESSAGE", "IS_REMOTE", "target",
                     # Preview, below
+                    "DISPLAY_PREFIX", "get_display_title",
                     "parse_uri", "root_prefix", "CAPABILITIES",
                     "SEARCH_STRATEGY", "listdir_attrs", "get_extended_metadata",
                     "forget_cached_metadata", "LISTING_CONCURRENCY"),
     "helpers": ("child", "at", "key"),
 }
 
-#: The tier members that are Preview: the URI hooks, which few backends need,
-#: and the ones whose shape is still XeFM's internal one (a capability
-#: vocabulary mixed with search tuning, the listing record, the info-dialog
-#: dict, the cache and concurrency knobs).
-_PREVIEW_MEMBERS = ("parse_uri", "root_prefix", "CAPABILITIES",
+#: The tier members that are Preview: the display hooks, which nothing in
+#: XeFM reads yet, so there is no behaviour to promise; the URI hooks, which
+#: few backends need; and the ones whose shape is still XeFM's internal one (a
+#: capability vocabulary mixed with search tuning, the listing record, the
+#: info-dialog dict, the cache and concurrency knobs).
+_PREVIEW_MEMBERS = ("DISPLAY_PREFIX", "get_display_title",
+                    "parse_uri", "root_prefix", "CAPABILITIES",
                     "SEARCH_STRATEGY", "listdir_attrs", "get_extended_metadata",
                     "forget_cached_metadata", "LISTING_CONCURRENCY")
 

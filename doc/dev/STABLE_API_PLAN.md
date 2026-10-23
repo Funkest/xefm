@@ -1,7 +1,9 @@
 # Stable API plan — `API_VERSION` 1
 
-**Status: plan, not started.** Settled in conversation on 2026-10-23. Nothing in
-here is implemented yet.
+**Status: implemented (#713).** Settled in conversation on 2026-10-23. One
+change while implementing: `DISPLAY_PREFIX` and `get_display_title()` turned
+out to be read nowhere in XeFM, so they are Preview rather than stable
+overrides (§3.1).
 
 The per-API Preview mechanism from #632 (`xefm/preview.py`, `@preview`,
 `PREVIEW_APIS`, the `STABLE` test in `test/test_user_task_api.py`) is already in
@@ -187,9 +189,9 @@ PROGRAMS depends on these, and nothing else does their job. They become Stable.
 
 | Member | Confidence | Status |
 |---|---|---|
-| `READ_ONLY_MESSAGE`, `IS_REMOTE`, `DISPLAY_PREFIX` | high | Stable |
-| `get_display_title()` (default `str(self)`) | high | Stable |
+| `READ_ONLY_MESSAGE`, `IS_REMOTE` | high | Stable |
 | `target()` (default `None`) | high | Stable |
+| `DISPLAY_PREFIX`, `get_display_title()` | — nothing in XeFM reads them (found while implementing), so there is no behaviour to promise | Preview |
 | `parse_uri(uri)` / `root_prefix()` (the URI parsing hooks) | mid | Preview |
 | `CAPABILITIES`, `SEARCH_STRATEGY` | low: the vocabulary mixes in search tuning | Preview |
 | `listdir_attrs()` | low: internal record shape | Preview |

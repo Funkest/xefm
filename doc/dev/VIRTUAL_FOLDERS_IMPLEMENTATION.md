@@ -97,11 +97,19 @@ the same source over itself — which is exactly what a reload does — does not
 stack, so the covered entry stays the one that was there before that source
 first arrived.
 
-## Preview Status
+## Stable and Preview
 
-`PATH_SCHEMES` is covered by `user_api.API_VERSION`, which is `0`. A config that
-defines one gets the existing one-line preview notice in the log pane, now
-counting `N path scheme(s)` alongside actions, hooks, sort keys and filters.
+`PATH_SCHEMES` is stable under `user_api.API_VERSION` 1 (#713), and so is the
+`ReadOnlyPathImpl` contract as `path_base.TIERS` states it: the members a
+subclass must write, may override and may call. The tier members marked
+Preview — the display hooks nothing reads yet, the URI hooks, the capability
+and search tuning, `listdir_attrs`, the info-dialog dict, the cache and
+concurrency knobs — are listed in `PREVIEW_APIS` by the loop at the foot of
+`path_base`. `UriPathImpl` is Preview as a whole; a class built on `PathImpl`
+directly loads with a warning. Replacing a built-in scheme (`"override":
+True`) is the Preview part of the table, and the only one the log notice
+counts. The reasoning is in
+[`STABLE_API_PLAN.md`](STABLE_API_PLAN.md) §3.
 
 The surface this promise is actually about is `ReadOnlyPathImpl`, not
 `PATH_SCHEMES` — see "Why the Published Base Is Not `PathImpl`" in
@@ -114,7 +122,8 @@ that has to outlive anyone remembering it.
 `PATH_SCHEMES` is designed around `ReadOnlyPathImpl`. Nothing stops a config
 from registering a writable `UriPathImpl` subclass — the registry's contract is
 `PathImpl` — but the nine write operations are then the config's problem, and
-the preview does not promise anything about how file operations drive them.
+that route (`UriPathImpl`) is Preview: nothing is promised about how file
+operations drive it beyond the generic `read_bytes` → `write_bytes` copy.
 
 The cases asking for this (#413's registry browser, a bookmark database, a
 device list) are all browse-and-hand-off: the editing goes to the tool that owns

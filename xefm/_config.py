@@ -9,11 +9,10 @@ You can modify any of these settings to customize XeFM behavior.
 import platform
 import sys
 
-# Import xefm_tool function and xefm_python variable for external program configuration
-from xefm.external_programs import xefm_tool, xefm_python
-
-# Import backend detector for runtime backend detection
-from xefm.backend_detector import is_desktop_mode
+# xefm_tool and xefm_python, for PROGRAMS; is_desktop_mode, to tell the desktop
+# window from the terminal. (Older configs import them from
+# xefm.external_programs and xefm.backend_detector, which keeps working.)
+from xefm.user_api import is_desktop_mode, xefm_python, xefm_tool
 
 class Config:
     """User configuration for XeFM"""
@@ -322,7 +321,7 @@ class Config:
 
 
     # -----------------------------------------------------------------------
-    # In-process customization -- PREVIEW
+    # In-process customization
     # -----------------------------------------------------------------------
     # This config file is executed Python, so it can define functions as well as
     # settings. ACTIONS binds your own functions to action names (which
@@ -334,10 +333,14 @@ class Config:
     # is not a folder, LEXERS lets you color a language the text viewer
     # does not know, and MENU_ITEMS puts an action in a menu.
     #
-    # PREVIEW: this is not a stable API yet. The objects passed to your functions
-    # and the shape of these eight variables may change in any release until
-    # xefm.user_api.API_VERSION reaches 1. XeFM logs one line saying so when a
-    # config uses either variable. Everything else in this file is unaffected.
+    # STABLE AND PREVIEW: this is API version 1 (xefm.user_api.API_VERSION).
+    # ACTIONS, SORT_KEYS, FILTERS and PATH_SCHEMES, and the panes and entries
+    # your functions are handed, are stable: a change that would break them
+    # comes with a new API_VERSION and a line in the release notes. EVENT_HOOKS,
+    # MENU_ITEMS, IMAGE_DECODERS, LEXERS and a few ctx methods (run_task,
+    # show_markdown, the prompts) are Preview and may change in any release;
+    # XeFM logs one line when a config uses them. doc/CUSTOMIZATION_FEATURE.md
+    # has the full list.
     #
     # Both reload with the rest of the config ('reload_config'), so iterating on
     # an action is edit-then-reload -- no restart.

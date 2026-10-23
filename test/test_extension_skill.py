@@ -305,8 +305,8 @@ class PreviewUses(_Tmp):
             class Mine(ReadOnlyPathImpl):
                 SCHEME = "mine"
                 CAPABILITIES = frozenset()
-                def get_display_title(self):
-                    return "x"
+                def target(self):
+                    return None
                 def listdir_attrs(self):
                     return []
 

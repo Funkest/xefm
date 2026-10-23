@@ -34,10 +34,11 @@ Three places on disk, all under ``~/.xefm/``:
 - ``extension-data/<id>/`` — a package's own files, out of reach of a
   reinstall.
 
-Code-bearing contributions run against :data:`xefm.user_api.API_VERSION`,
-which is still ``0`` (Preview): a package declares the ``api_version`` it was
-written for, and one asking for a newer version than this XeFM has is not
-loaded, with the reason given.
+Code-bearing contributions run against :data:`xefm.user_api.API_VERSION`
+(1, the first with a stable part): a package declares the ``api_version`` it
+was written for, and one asking for a newer version than this XeFM has is not
+loaded, with the reason given. One written for an older version loads with a
+warning. :func:`preview_uses` lists the Preview parts a package relies on.
 """
 
 from __future__ import annotations

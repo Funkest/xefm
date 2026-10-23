@@ -1,9 +1,11 @@
-# Virtual folders — Preview
+# Virtual folders
 
-> **Preview.** Everything on this page is subject to change until
-> `xefm.user_api.API_VERSION` reaches `1` (it is `0` today). XeFM writes one
-> line to the log pane saying so whenever a config defines a virtual folder.
-> Nothing else in `config.py` is affected.
+> **Stable, with some parts in Preview.** `PATH_SCHEMES` and the
+> `ReadOnlyPathImpl` way of writing a virtual folder are stable API (version
+> 1): the five methods, `self.key`, `self.child()`, `UriStatResult`, and the
+> overrides listed under [What you may override](#what-you-may-override).
+> Replacing a built-in scheme, a few tuning overrides and the writable route
+> (`UriPathImpl`) are Preview and may still change.
 
 XeFM browses the local disk, archives, S3 and SSH. A **virtual folder** lets
 your `config.py` add a fifth kind: anything you can present as directories and
@@ -127,6 +129,35 @@ class RegistryPathImpl(ReadOnlyPathImpl):
 
 Copying *out* of a virtual folder works as soon as `open()` does: the file is
 read through it like any other remote file.
+
+---
+
+## What you may override
+
+Beyond the five methods, a `ReadOnlyPathImpl` subclass may set or override
+these. Anything else on the class — names, parents, comparisons, the
+refusals — is XeFM's and should be left alone.
+
+| member | what it does | status |
+|---|---|---|
+| `READ_ONLY_MESSAGE` | what a refused write says | stable |
+| `IS_REMOTE` | `False` if the folder is as cheap to read as the local disk | stable |
+| `target()` | the real file an entry stands for, if it is a reference to one | stable |
+| `DISPLAY_PREFIX`, `get_display_title()` | a storage marker and a title for display; nothing shows them yet | Preview |
+| `parse_uri(uri)` / `root_prefix()` | for a URI with more in it than `scheme://key` (a host, a bucket) | Preview |
+| `CAPABILITIES`, `SEARCH_STRATEGY` | how XeFM reads and searches the content | Preview |
+| `listdir_attrs()` | list a directory and its sizes and times in one call | Preview |
+| `get_extended_metadata()` | storage-specific details; nothing shows them yet | Preview |
+| `forget_cached_metadata()`, `LISTING_CONCURRENCY` | caching and parallel listing | Preview |
+
+`xefm ext check` names a Preview override when an extension defines one, and
+XeFM logs one line the first time such a class is defined.
+
+**A writable folder** inherits `UriPathImpl` instead and implements the
+write operations too. That route is Preview. **Inheriting `PathImpl`
+directly** is not supported: it has dozens of abstract methods and gains new
+ones between releases, so such a class loads with a warning and breaks
+whenever XeFM's storage interface grows.
 
 ---
 
@@ -307,10 +338,11 @@ from `PATH_SCHEMES` stops resolving on the next reload.
 thread for a pane listing, and the UI thread for smaller questions. Treat them
 as you would a sort key: no UI access, and no unbounded waiting.
 
-**It is read-only in this version.** `ReadOnlyPathImpl` is what `PATH_SCHEMES`
+**Read-only is the stable route.** `ReadOnlyPathImpl` is what `PATH_SCHEMES`
 is designed around. A writable virtual folder means implementing the nine write
-operations on `UriPathImpl` instead, which is possible but not what this
-preview promises.
+operations on `UriPathImpl` instead, which works but is Preview: copying into
+such a folder from another storage reads the whole file into memory and shows
+no progress.
 
 **One config, both platforms.** Nothing here mentions a widget or a backend, so
 a virtual folder behaves identically in the terminal and in the desktop window.

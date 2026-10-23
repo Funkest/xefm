@@ -268,7 +268,7 @@ Solarized Light. A theme with no `base` builds on the built-in of the same
 name, else on Dark+. Every key a theme may set is listed in the comment
 above `THEMES` in `references/config-template.md`.
 
-### Actions: `ACTIONS` (Preview API)
+### Actions: `ACTIONS` (stable API)
 
 A short function of the user's own, bound to a key:
 
