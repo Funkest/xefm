@@ -1,0 +1,79 @@
+name: Bug report
+description: Something in XeFM does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. English or Japanese are both fine (日本語でも大丈夫です).
+        If the problem only happens with an extension installed, please report it to that extension's author first.
+  - type: input
+    id: version
+    attributes:
+      label: XeFM version
+      description: "**Help ▸ About XeFM**, or `xefm --version` in a terminal."
+      placeholder: "1.9.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How XeFM was installed
+      options:
+        - Microsoft Store (Windows desktop app)
+        - Portable zip (Windows desktop app)
+        - DMG (macOS desktop app)
+        - pip / pipx / uv (terminal app)
+        - Homebrew (terminal app)
+        - From source
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Windows 11 26H2 / macOS 26.1 / Ubuntu 24.04"
+    validations:
+      required: true
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal and shell (terminal app only)
+      placeholder: "Windows Terminal 1.24 + PowerShell 7.5 / iTerm2 3.6 + zsh"
+  - type: dropdown
+    id: keymap
+    attributes:
+      label: Keymap
+      description: "**Tools ▸ Advanced ▸ Keymap** shows it."
+      options:
+        - AFX style (letters)
+        - Orthodox (function keys)
+        - Not sure
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, step by step, and what you saw.
+      placeholder: |
+        1. Open an `ssh://` folder
+        2. Select two files and press C
+        3. An error appears: …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: "**Edit ▸ Copy All Logs** copies the log pane. Paste the part around the problem; remove anything private."
+      render: text
+  - type: textarea
+    id: extensions
+    attributes:
+      label: Extensions and config
+      description: "Installed extensions (`xefm ext list`, or **Tools ▸ Advanced ▸ Extensions…**), and anything unusual in `~/.xefm/config.py`."
