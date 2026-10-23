@@ -1,5 +1,9 @@
 # XeFM — a dual-pane file manager for the desktop and the terminal
 
+<!-- pypi-exclude-start -->
+English \| [日本語](README.ja.md)
+<!-- pypi-exclude-end -->
+
 XeFM — short for *Xenolith File Manager* — is a keyboard-driven dual-pane file manager that runs as a native desktop application on **Windows and macOS**, and in the terminal on **Windows, macOS, and Linux**. SSH servers, S3 buckets and archives open like any folder, and almost everything is yours to change in Python: install [ready-made extensions](https://github.com/crftwr/xefm/wiki/Extensions), write your own, or ask an AI coding agent to write one with [the XeFM skill](doc/AGENT_SKILL_FEATURE.md).
 
 <!-- pypi-exclude-start -->

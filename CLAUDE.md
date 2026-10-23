@@ -69,6 +69,18 @@ Use `--no-pager` for any git command that may page output: `diff`, `log`, `show`
 - Don't put implementation details in end-user docs; don't put basic usage in developer docs.
 - Only create docs when the user asks or the change clearly warrants it — don't generate docs for every edit.
 
+### Japanese translations
+
+`README.md` and `doc/*.md` have Japanese translations next to them as `.ja.md`
+(`doc/dev/` does not). English is the source; the Japanese is a translation of it.
+
+- When `README.md` or a `doc/*.md` with a `.ja.md` changes, update the `.ja.md`
+  **in the same commit**. A new user doc gets its `.ja.md` too.
+- Links in a `.ja.md` point to the other page's `.ja.md` when one exists, with
+  anchors matching the Japanese headings.
+- Follow the style rules and glossary in `doc/dev/TRANSLATION.md`; run
+  `make check-docs` before committing doc changes.
+
 ---
 
 ## Coding standards
