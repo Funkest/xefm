@@ -24,7 +24,12 @@
 # PuiKit is XeFM's UI/rendering framework (the TUI/GUI backend layer), published
 # on PyPI as of 1.0. For co-development against a local checkout, ``make venv``
 # additionally installs it editable from ../puikit, which overrides this pin.
-# 1.13.0 is the floor, and a hard one: every Markdown dialog -- Help, file
+# 1.14.0 is the floor, and a hard one: XeFM hands the platform's quit
+# requests -- the macOS application menu's Quit and the Dock's, the window's
+# close button -- to its own quit action with ``panel.set_quit_handler``, an
+# AttributeError on any older PuiKit, so XeFM would not start. Before it, those
+# requests ended XeFM with no confirm and no state save.
+# 1.13.0 was the previous floor, and a hard one: every Markdown dialog -- Help, file
 # details, an extension's ctx.show_markdown result -- builds its MarkdownView
 # with ``code_copy=True`` and reads ``focus_stop_kinds`` for its footer, a
 # TypeError / AttributeError on any older PuiKit, so none of them would open
@@ -180,7 +185,7 @@
 # itself from under a covering confirm box -- issue #333), and
 # ``MenuBar.open_menu`` / ``open_menu_mnemonic`` (keyboard menu activation --
 # issue #304).
-puikit>=1.13.0
+puikit>=1.14.0
 pygments
 boto3
 watchdog
