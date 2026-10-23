@@ -1885,6 +1885,14 @@ class XeFMApp:
             call_later=self.panel.call_later,
             on_timeout=self._sequence_timed_out,
             on_change=self.panel.render)
+        #: True while the quit confirm is up, so a second request (the close
+        #: button pressed again) does not stack a second one.
+        self._quit_confirming = False
+        # The platform's own ways to quit -- the macOS application menu's Quit
+        # and the Dock's, the window's close button -- go through the quit action
+        # like the keymap's quit key: asked, background jobs stopped, state saved.
+        # The menu's Quit item shows, and answers to, the keymap's key for it.
+        self.panel.set_quit_handler(self._on_quit_request, self._quit_shortcut())
         # The file clipboard (#577): XeFM's own, with the OS one as a bridge
         # where the backend has it (macOS / Windows desktop).
         self.clipboard = FileClipboard(self.panel)
@@ -5414,6 +5422,7 @@ class XeFMApp:
         'D' while the bar and the menu still said 'K' (issue #382)."""
         self._apply_keymap_preset()
         self.key_sequence.cancel()
+        self.panel.set_quit_handler(self._on_quit_request, self._quit_shortcut())
         self.status.invalidate()
         self.menu_bar.set_menu(self._build_menu())
 
@@ -5995,24 +6004,48 @@ class XeFMApp:
         self.log_info(f"Sort: {self.flm.get_sort_description(pane)}")
         self.panel.render()
 
+    def _quit_shortcut(self) -> str | None:
+        """The keymap's first key for quitting, as the macOS application
+        menu's Quit item shows it — ``Cmd-Q`` under the OS native preset, ``Q``
+        under AFX — or None when nothing quits by key."""
+        keys, _ = self.keys.get_keys_for_action("quit", _ctx.FILER)
+        return self.keys.format_key_for_display(keys[0]) if keys else None
+
+    def _on_quit_request(self) -> None:
+        """The platform asked to quit: the application menu's Quit, the Dock,
+        the window's close button. It is the quit action, whatever keys the
+        keymap gives it, so nothing quits without the confirm and the state
+        save. A second request while the confirm is up is the same question."""
+        if self._quit_confirming:
+            return
+        self.dispatch("quit")
+        self.panel.render()
+
     def confirm_quit(self) -> None:
         """A modal confirm before quitting — the canonical message-box pattern.
 
         With background jobs running or queued it says so, and defaults to
         Cancel: quitting stops a copy part-way, which is not what a reflexive
         Enter should do."""
+        self._quit_confirming = True
         jobs = self.tasks.background_tasks()
         if not jobs:
+            def answered(label: str) -> None:
+                self._quit_confirming = False
+                if label == "Quit":
+                    self._quit()
+
             show_message_box(
                 self.panel, "Quit XeFM?", title="Confirm", icon="warning",
                 buttons=("Quit", "Cancel"), default=0, cancel=1,
-                on_result=lambda label: self._quit() if label == "Quit" else None,
+                on_result=answered,
             )
             self.panel.render()
             return
         n = len(jobs)
 
         def on_result(label: str) -> None:
+            self._quit_confirming = False
             if label == "Quit":
                 # Let each worker reach its next checkpoint and remove the
                 # file it was half-way through, rather than die mid-write.
