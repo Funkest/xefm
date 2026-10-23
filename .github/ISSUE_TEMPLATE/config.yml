@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/crftwr/xefm/discussions/categories/q-a
+    about: How do I…? Is this expected? Questions go to Q&A in Discussions.
+  - name: Propose a bigger idea
+    url: https://github.com/crftwr/xefm/discussions/categories/ideas
+    about: A design that needs discussion before anyone builds it goes to Ideas in Discussions.
+  - name: Share an extension or a recipe
+    url: https://github.com/crftwr/xefm/discussions/categories/show-and-tell
+    about: Post it in Show and tell, and it can be listed on the wiki's Extensions page.
+  - name: Report a security problem
+    url: https://github.com/crftwr/xefm/blob/main/SECURITY.md
+    about: Please do not open a public issue. See SECURITY.md.
