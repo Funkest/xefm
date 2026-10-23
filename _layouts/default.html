@@ -49,5 +49,21 @@
       <a href="https://sites.google.com/site/craftware/">craftware</a>
     </footer>
   </div>
+  <script>
+    // GitHub turns a bare user-attachments URL in a README into a video
+    // player; Jekyll leaves it as text. Do the same here, for a cell or a
+    // paragraph that holds nothing but such a URL.
+    document.querySelectorAll('.markdown-body td, .markdown-body p').forEach(function (el) {
+      var url = el.textContent.trim();
+      if (!/^https:\/\/github\.com\/user-attachments\/assets\/[0-9a-f-]+$/.test(url)) return;
+      var video = document.createElement('video');
+      video.src = url;
+      video.controls = video.muted = video.loop = video.autoplay = video.playsInline = true;
+      video.style.maxWidth = '100%';
+      video.style.display = 'block';
+      el.textContent = '';
+      el.appendChild(video);
+    });
+  </script>
 </body>
 </html>
