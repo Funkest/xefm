@@ -34,7 +34,8 @@ from puikit.widgets.base import Widget
 from xefm.actions import ISEARCH
 from xefm.actions import TEXT_VIEWER as _CONTEXT
 from xefm.choice_dialog import show_choice_dialog
-from xefm.config import (find_action_for_event, format_key_for_display,
+from xefm import key_sequence
+from xefm.config import (config_manager, find_action_for_event, format_key_for_display,
                          get_config, get_keys_for_action)
 from xefm.dialog_geometry import OPEN_MS_VIEWER, animate_open
 from xefm.isearch_bar import ViewerISearch, match_scroll_top
@@ -650,6 +651,7 @@ class TextViewer(Widget):
         #: Raw-mode action handlers, built on first key (see _raw_handlers).
         self._handlers: dict | None = None
         self._panel: Any = None
+        self._key_sequence: key_sequence.KeySequencer | None = None
         self._child_z = 90  # z for the help overlay; raised above this viewer in show_
         self.top = 0.0       # first visible display row (vertical scroll)
         self.left = 0.0      # horizontal scroll, columns — float for smooth pan
@@ -1276,7 +1278,15 @@ class TextViewer(Widget):
             return True
         if event.type is not EventType.KEY:
             return True  # modal: swallow other non-key events
-        key = event.key
+        # Bindings of more than one key ('g g', #587) are answered first; a key
+        # that begins none goes to the single-key lookup below.
+        outcome, sequence_action = self._sequence().feed(event)
+        if outcome == key_sequence.WAIT:
+            return True
+        if outcome == key_sequence.ACT:
+            return self._act(sequence_action, event)
+        if sequence_action is not None:
+            self._act(sequence_action, None)
         # Every key this viewer understands is a named action in the
         # ``text_viewer`` context (xefm.actions), so all of them — the scroll
         # keys included, which used to be hardcoded here — honour the user's
@@ -1285,7 +1295,40 @@ class TextViewer(Widget):
         # other context's actions are not in this table at all. Esc is the
         # universal modal dismiss and stays hardcoded. While a search is open the
         # ISearchBar is the top layer and receives keys, so this isn't reached.
-        action = find_action_for_event(event, context=_CONTEXT)
+        return self._act(find_action_for_event(event, context=_CONTEXT), event)
+
+    def _sequence(self) -> key_sequence.KeySequencer:
+        """This viewer's key-sequence state, built on first use (the panel it
+        schedules its timeout on is only known once the viewer is shown)."""
+        if self._key_sequence is None:
+            def timed_out(action: str) -> None:
+                self._act(action, None)
+                if self._panel is not None:
+                    self._panel.render()
+
+            self._key_sequence = key_sequence.KeySequencer(
+                config_manager.get_key_bindings, _CONTEXT,
+                timeout=lambda: getattr(get_config(), "KEY_SEQUENCE_TIMEOUT",
+                                        key_sequence.DEFAULT_TIMEOUT),
+                call_later=lambda secs, fn: self._panel.call_later(secs, fn),
+                on_timeout=timed_out)
+        return self._key_sequence
+
+    #: The key the rich renderer understands for each navigation action, so a
+    #: rebound key ('j', or a sequence like 'g g') still moves it: the renderer
+    #: reads keys, not this viewer's action names.
+    _RICH_KEYS = {
+        "text_viewer.scroll_down": "down", "text_viewer.scroll_up": "up",
+        "text_viewer.page_down": "pagedown", "text_viewer.page_up": "pageup",
+        "text_viewer.scroll_top": "home", "text_viewer.scroll_bottom": "end",
+        "text_viewer.scroll_left": "left", "text_viewer.scroll_right": "right",
+    }
+
+    def _act(self, action: str | None, event: Event | None) -> bool:
+        """Run ``action`` — resolved from ``event``, or completed by a key
+        sequence (``event`` is then its last key, or None when a timeout ran
+        it)."""
+        key = event.key if event is not None else None
         # Quit / help / the view-mode toggle apply in both raw and rich modes.
         if key == "escape" or action == "quit":
             self._close()
@@ -1322,11 +1365,14 @@ class TextViewer(Widget):
             if action == "toggle_wrap" and hasattr(self._rich_widget, "toggle_wrap"):
                 self._rich_widget.toggle_wrap()
                 return True
-            self._rich_widget.handle_event(event)
+            if action in self._RICH_KEYS:
+                event = Event(type=EventType.KEY, key=self._RICH_KEYS[action])
+            if event is not None:
+                self._rich_widget.handle_event(event)
             return True
         # From here on it is raw text mode. Cmd/Ctrl+C copies the selected text
         # (plain, the raw source); Cmd/Ctrl+A selects the whole document.
-        if event.modifiers & {"ctrl", "cmd"} and key in ("c", "a"):
+        if event is not None and event.modifiers & {"ctrl", "cmd"} and key in ("c", "a"):
             if key == "c":
                 self._copy_selection()
             else:

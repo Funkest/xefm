@@ -1,6 +1,6 @@
 # Keymap Presets
 
-XeFM has three complete keymaps, called **presets**. None is the default:
+XeFM has four complete keymaps, called **presets**. None is the default:
 the first time XeFM starts, it asks which one you want.
 
 | Preset | Bare letters | Commands are on |
@@ -8,6 +8,7 @@ the first time XeFM starts, it asks which one you want.
 | **AFX style** | run commands | letters (`C`, `M`, `K`, `V`, …) |
 | **Orthodox** | search for a file | function keys (`F3`, `F5`, `F8`, …) |
 | **OS native** | search for a file | Finder's or Explorer's keys (`Cmd`/`Ctrl`-`C`, `F2`, `Delete`, …) |
+| **Vim style** | run commands | vifm's keys (`hjkl`, `gg`, `yy`, `dd`, `/`, …) |
 
 **Tools → Advanced → Keymap** switches at any time. The change applies at once: the help
 dialog (`F1`), the menus and the status bar show the new keys, and XeFM
@@ -167,6 +168,65 @@ the terminal. A terminal cannot send `Command`, and cannot tell
 `Ctrl-Shift-N` from `Ctrl-N`, so there the preset uses the stand-ins in the
 last column. Everything else is the same.
 
+## Vim style
+
+The keys of [vifm](https://vifm.info), the Vim-like file manager: `hjkl` to
+move, two-key commands such as `gg`, `yy` and `dd`, and `/` to search. Letters
+run commands, as in AFX style, and typing a letter never searches.
+
+| Keys | Action |
+|---|---|
+| `j` / `k` | Down / up |
+| `h` / `l` | Parent folder / open (enter a folder, view a file) |
+| `gg` / `G` | First / last item |
+| `Ctrl-F` / `Ctrl-B` | Page down / up |
+| `Ctrl-D` / `Ctrl-U` | Half a screen down / up |
+| `Tab`, `Space` | Switch pane |
+| `Ctrl-O` | Back to the previous folder |
+| `t` | Mark or unmark the item, without moving |
+| `v` | Mark from the nearest marked item to the cursor |
+| `Esc` | Clear the marks |
+| `yy` | Copy the marked items (or the item) to the file clipboard |
+| `x` | Cut them |
+| `p` | Paste here |
+| `dd` / `DD` | Delete to the Trash / delete for good |
+| `cw` | Rename |
+| `/`, then `n` / `N` | Search; next / previous match of the last search |
+| `za` | Show or hide hidden files |
+| `=` / `zr` | Filter / clear the filter |
+| `e` / `w` | View the file / quick view in the other pane |
+| `gx` | Open with the OS application |
+| `gp` | Go to a path |
+| `'` | Favorites |
+| `s` / `S` | Shell / sort |
+| `Ctrl-G` | File details |
+| `Ctrl-L` | Reread both panes |
+| `:` | Command palette |
+| `ZZ` / `ZQ` | Quit (XeFM asks first) |
+| `F3`–`F8` | View, edit, copy and move to the other pane, new folder, delete |
+
+`F3`–`F8`, `w`, `s` and `S` come from the sample configuration vifm gives a
+new install. The text viewer moves the same way: `j` / `k` / `h` / `l`,
+`gg` / `G`, `Ctrl-F` / `Ctrl-B` (and `Ctrl-D` / `Ctrl-U`, `Space`) by the page,
+`/` to search, and `q` or `ZZ` to close it.
+
+The two-key commands are [key sequences](KEY_BINDINGS_FEATURE.md#key-sequences).
+While one is half typed, the status bar shows the first key (`g …`); `Esc`
+drops it. None of the first keys runs anything on its own, so nothing waits
+for `KEY_SEQUENCE_TIMEOUT`.
+
+Where XeFM differs from vifm:
+
+- `v` does not start a visual mode. It marks the range from the nearest
+  marked item to the cursor, so mark the start with `t`, move, and press `v`.
+- `dd` moves to the system Trash, not to vifm's own trash folder, and `p`
+  pastes what `yy` copied or `x` cut. vifm's `P` (move what was yanked) is
+  `x` then `p` here.
+- `q` alone does nothing in the file list, as in vifm. In the text viewer it
+  closes the viewer.
+- `/` is XeFM's incremental search, not a regular expression, and it does not
+  mark its matches.
+
 ## Your own key bindings come on top
 
 `KEY_BINDINGS` in `config.py` holds **your changes** to the preset. Every
@@ -206,7 +266,7 @@ never changed a key, delete them all and leave `KEY_BINDINGS = {}`.
 ## Choosing it in config.py
 
 ```python
-KEY_PRESET = 'orthodox'   # or 'afx', or 'native'
+KEY_PRESET = 'orthodox'   # or 'afx', 'native', or 'vim'
 ```
 
 `'default'`, the name this preset had first, still works and means `'afx'`.

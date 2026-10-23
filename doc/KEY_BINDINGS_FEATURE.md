@@ -134,7 +134,8 @@ separated by spaces:
 
 While a sequence is unfinished, the status bar shows the keys pressed so far
 (`g …`). `Esc` drops them. A key that does not continue any sequence ends it
-and does its usual job. Sequences work in the file list.
+and does its usual job. Sequences work in the file list and in the text viewer
+(where nothing shows the pending keys).
 
 When one binding is the start of another (`g` alone and `g g`), XeFM waits
 for the next key. `KEY_SEQUENCE_TIMEOUT` in `config.py` decides how long:
