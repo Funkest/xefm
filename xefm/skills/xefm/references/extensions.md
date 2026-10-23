@@ -93,7 +93,7 @@ updates = "github:me/hello-xefm"    # where newer versions are tagged; no @ref
 directory_changed = "hello_xefm.hooks:on_cd"   # or a list of references
 
 [contributes.themes."Hello Dark"]   # data, no code
-base = "dark"
+base = "Dark+"
 
 [contributes.filters.pictures]      # data form…
 globs = ["*.png", "*.jpg"]

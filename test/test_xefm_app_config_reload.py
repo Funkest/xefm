@@ -186,6 +186,20 @@ class ReloadConfig(ConfigReloadBase):
         self.assertIn("Config warning", logged)
         self.assertEqual(self.app.config.DEFAULT_SORT_MODE, 'bogus')
 
+    def test_a_new_theme_joins_the_list_without_a_restart(self):
+        # #708: the theme list was built once at launch, so a theme added by
+        # config.py or a newly installed extension was missing until restart.
+        active = self.app.themes[self.app._theme_index][0]
+        self._write_config("""
+            class Config:
+                THEMES = {'Reloaded': {'base': 'Dark+', 'background': [0, 0, 128]}}
+        """)
+        self.app.reload_config()
+        names = [n for n, _t in self.app.themes]
+        self.assertIn('Reloaded', names)
+        self.assertEqual(self.app.themes[self.app._theme_index][0], active)
+        self.assertIn('Reloaded', [i.label for i in self.app._theme_menu().items])
+
 
 class ReloadRefreshesKeyLabels(ConfigReloadBase):
     """Issue #382. Two surfaces quote a key name rather than reading one on
