@@ -1,12 +1,13 @@
 # Keymap Presets
 
-XeFM has two complete keymaps, called **presets**. Neither is the default:
+XeFM has three complete keymaps, called **presets**. None is the default:
 the first time XeFM starts, it asks which one you want.
 
 | Preset | Bare letters | Commands are on |
 |--------|--------------|-----------------|
 | **AFX style** | run commands | letters (`C`, `M`, `K`, `V`, …) |
 | **Orthodox** | search for a file | function keys (`F3`, `F5`, `F8`, …) |
+| **OS native** | search for a file | Finder's or Explorer's keys (`Cmd`/`Ctrl`-`C`, `F2`, `Delete`, …) |
 
 **Tools → Advanced → Keymap** switches at any time. The change applies at once: the help
 dialog (`F1`), the menus and the status bar show the new keys, and XeFM
@@ -125,6 +126,47 @@ keep some of them. On macOS, Terminal.app sends `Alt-<key>` only with **Use
 Option as Meta key** turned on, and a laptop keyboard may need `fn` for the
 function keys. If one does nothing, rebind it.
 
+## OS native
+
+The keys Finder uses on macOS and Explorer uses on Windows. Use it if you
+come to XeFM from those rather than from another file manager. As in
+Orthodox, no letter runs a command: typing a letter searches, which is how
+both Finder and Explorer select a file by name.
+
+| Action | macOS app | Windows app | Terminal (any OS) |
+|---|---|---|---|
+| Copy / cut / paste files | `Cmd-C` / `Cmd-X` / `Cmd-V` | `Ctrl-C` / `Ctrl-X` / `Ctrl-V` | `Ctrl-C` / `Ctrl-X` / `Ctrl-V` |
+| Open | `Enter`, `Cmd-↓` | `Enter` | `Enter` |
+| Parent folder | `Cmd-↑`, `Backspace` | `Backspace`, `Alt-↑` | `Backspace`, `Alt-↑` |
+| Back / forward | `Cmd-[` / `Cmd-]` | `Alt-←` / `Alt-→` | `Alt-←` / `Alt-→` |
+| Rename | `F2` | `F2` | `F2` |
+| Delete (to the Trash) | `Cmd-Backspace`, `Delete` | `Delete` | `Delete` |
+| Delete for good | `Cmd-Opt-Backspace` | `Shift-Delete` | `Shift-Delete` |
+| New folder | `Cmd-Shift-N` | `Ctrl-Shift-N` | `F7` |
+| Select all | `Cmd-A` | `Ctrl-A` | `Ctrl-A` |
+| Mark the item | `Ctrl-Space` | `Space` | `Space` |
+| Quick view | `Space` | `Alt-P` | `Alt-P` |
+| File details | `Cmd-I` | `Alt-Enter` | `Alt-I` |
+| Find files | `Cmd-F` | `Ctrl-F` | `Ctrl-F` |
+| Go to path | `Cmd-Shift-G` | `Ctrl-L`, `Alt-D` | `Ctrl-L`, `Alt-D` |
+| Copy the path | `Cmd-Opt-C` | `Ctrl-Shift-C` | `Ctrl-P` |
+| Show hidden files | `Cmd-Shift-.` | `.` | `.` |
+| New tab / close tab | `Cmd-T` / `Cmd-W` | `Ctrl-T` / `Ctrl-W` | `Ctrl-T` / `Ctrl-W` |
+| Command palette | `Cmd-Shift-P` | `Ctrl-Shift-P` | `Ctrl-K` |
+| Quit | `Cmd-Q` | `Alt-F4` | `Ctrl-Q` |
+
+The desktop columns also accept the terminal column's keys.
+
+Finder and Explorer have nothing for the two-pane operations, so they use
+the function keys every two-pane file manager uses: `F3` view, `F4` edit,
+`F5` copy and `F6` move to the other pane, `F8` delete. On macOS, `Enter`
+opens, as in every other preset, rather than renaming as in Finder.
+
+**In a terminal.** The preset you choose applies to both the desktop app and
+the terminal. A terminal cannot send `Command`, and cannot tell
+`Ctrl-Shift-N` from `Ctrl-N`, so there the preset uses the stand-ins in the
+last column. Everything else is the same.
+
 ## Your own key bindings come on top
 
 `KEY_BINDINGS` in `config.py` holds **your changes** to the preset. Every
@@ -164,7 +206,7 @@ never changed a key, delete them all and leave `KEY_BINDINGS = {}`.
 ## Choosing it in config.py
 
 ```python
-KEY_PRESET = 'orthodox'   # or 'afx'
+KEY_PRESET = 'orthodox'   # or 'afx', or 'native'
 ```
 
 `'default'`, the name this preset had first, still works and means `'afx'`.

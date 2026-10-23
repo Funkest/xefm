@@ -75,10 +75,12 @@ class Config:
 ### Keys: `KEY_PRESET` and `KEY_BINDINGS`
 
 Every key comes from a **keymap preset**: `'afx'` (single letters: `C` copy,
-`M` move, `K` delete …) or `'orthodox'` (function keys: `F5` copy, `F6` move,
-`F8` delete; letters start an incremental search). The user picks one at
-first launch or in **Tools ▸ Advanced ▸ Keymap**; `KEY_PRESET = 'afx'` or `'orthodox'` in
-`config.py` overrides that choice. `None` (the default) leaves it to the menu.
+`M` move, `K` delete …), `'orthodox'` (function keys: `F5` copy, `F6` move,
+`F8` delete; letters start an incremental search) or `'native'` (Finder's keys
+on macOS, Explorer's elsewhere, with `F5` / `F6` for the other pane; letters
+search). The user picks one at first launch or in **Tools ▸ Advanced ▸
+Keymap**; `KEY_PRESET = 'afx'`, `'orthodox'` or `'native'` in `config.py`
+overrides that choice. `None` (the default) leaves it to the menu.
 
 `KEY_BINDINGS` holds **only the user's changes** to the preset. An entry
 replaces that action's keys under every preset; an action not listed keeps the

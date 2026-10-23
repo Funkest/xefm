@@ -252,7 +252,7 @@ class Config:
     TRANSFER_CONCURRENCY = "auto"
 
     # Keymap preset: the whole keymap, chosen at first launch and changed from
-    # Tools > Advanced > Keymap. The presets are peers; neither is the default.
+    # Tools > Advanced > Keymap. The presets are peers; none is the default.
     #   None        -- whatever you chose at first launch or in
     #                  Tools > Advanced > Keymap
     #   'afx'       -- letters: C copy, K delete, M move ... The single-key
@@ -261,6 +261,11 @@ class Config:
     #   'orthodox'  -- function keys: F3 view, F4 edit, F5 copy, F6 move,
     #                  F7 new folder, F8 delete. No bare letter runs anything;
     #                  typing a letter starts incremental search.
+    #   'native'    -- Finder's keys on macOS, Explorer's elsewhere: Cmd/Ctrl-C,
+    #                  X, V for files, F2 rename, Delete. F5 / F6 copy and move
+    #                  to the other pane; typing a letter searches. In a
+    #                  terminal, chords it cannot send (Command, Ctrl-Shift)
+    #                  have Ctrl / function-key stand-ins.
     # Setting this wins over the Tools > Advanced > Keymap menu. KEY_BINDINGS
     # below is laid over whichever preset is in force. See
     # doc/KEYMAP_PRESETS_FEATURE.md.
