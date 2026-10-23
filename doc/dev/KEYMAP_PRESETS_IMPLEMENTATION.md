@@ -8,8 +8,9 @@ in [`doc/KEYMAP_PRESETS_FEATURE.md`](../KEYMAP_PRESETS_FEATURE.md).
 ## Shape
 
 `xefm/keymap_presets.py` holds `Preset` (name, label, description,
-`bindings`, `free_letters`, `type_ahead`) and the `PRESETS` table: `afx`,
-`orthodox` and `native`. Discussion #343 asked for one mechanism with several presets on
+`bindings`, `free_letters`, `type_ahead`, `button`) and the `PRESETS` table:
+`afx`, `orthodox`, `native` and `vim`. `button` is the first-launch dialog's
+short name: four full labels side by side overflow an 80-column terminal. Discussion #343 asked for one mechanism with several presets on
 it, not a special-cased beginner mode, and that is the reason for this shape.
 
 Since [#597](https://github.com/crftwr/xefm/issues/597) the presets are
@@ -191,6 +192,46 @@ Decisions the table encodes:
 
 `test_no_key_runs_two_file_list_actions` checks every case for clashes.
 
+### The Vim table
+
+`vim` (discussion #587) follows vifm 0.15's normal mode and the sample vifmrc
+a new vifm install copies (F3–F8, `w`, `s`, `S`), wherever XeFM has the
+action. It is the first preset whose keys are sequences (`'g g'`, `'y y'`,
+`'Shift-Z Shift-Z'`, see `xefm.key_sequence`). It is also the first that
+reaches past the file list: `text_viewer.*` actions and a context-qualified
+`text_viewer.quit`. `table()` therefore accepts any name `_known` recognizes:
+an action of any context, or `<context>.<action>` as `KEY_BINDINGS` spells a
+scoped rebind. `free_letters` strips AFX's letters; `type_ahead` stays off,
+since letters are commands and `/` searches.
+
+New actions it needed, all unbound under the other presets:
+
+- `half_page_down` / `half_page_up`: half of `_display_height()`.
+- `search_next` / `search_prev`: the last pattern the search bar closed on
+  (`_last_isearch_pattern`), matched with `find_matches` as the bar does,
+  wrapping.
+- `toggle_select_in_place`: vifm's `t`, the context menu's toggle.
+
+Choices worth keeping:
+
+- **No first key is a binding of its own.** `g`, `y`, `d`, `z`, `c`, `Z` and
+  `D` only begin sequences, so no key waits out `KEY_SEQUENCE_TIMEOUT`.
+  `test_no_prefix_is_also_a_key_of_its_own` holds that.
+- **Moved off their AFX keys:**
+  - `open_with_os` from Ctrl-O (back, here) to `g x`, Vim's gx;
+  - `diff_files` from `=` (the filter, here) to nothing;
+  - `context_menu` from `/` (search) to Apps / Shift-F10;
+  - `index_search` from Ctrl-F (page down) to nothing;
+  - `jobs` from Ctrl-G (file details, vifm's) to nothing.
+- **`v` is `select_range`, not a visual mode.** It fills from the nearest
+  mark, which is what a visual block ends as.
+- **`dd` is the Trash, and `p` pastes the file clipboard.** vifm's `P` (move a
+  yank) is `x` then `p`.
+
+In the text viewer, `_act` translates a navigation action into the key the
+rich renderer understands (`_RICH_KEYS`), so `j` or `gg` move a Markdown or
+JSON view too. The renderer reads keys, not actions.
+
 `resolve(config, chosen)` returns `KEY_PRESET` from the config when it names a
 preset, else the saved choice (state key `keymap.preset`), else **None**:
 nothing has been chosen. Old names are mapped through `canonical`. `get(None)`
@@ -257,8 +298,8 @@ The I-Search key (`enter_isearch()` with no argument) is unchanged.
 
 ## Not done
 
-The Vim-style preset and the key sequences it needs (discussion #587),
-and presets as data packages (#543).
+A visual mode (vifm's `v` with motions), counts (`5j`), and presets as
+data packages (#543).
 
 ## Tests
 

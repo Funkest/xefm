@@ -589,13 +589,17 @@ class InTheApp(unittest.TestCase):
         self.assertIsNone(self.app.state_manager.get_state("keymap.preset"))
         asked = []
         with patch.object(xefm_app, "show_message_box",
-                          lambda *a, **k: asked.append(k)):
+                          lambda *a, **k: asked.append(dict(k, text=a[1]))):
             self.app._ask_keymap_preset()
         self.assertEqual(asked[0]["buttons"],
-                         ("AFX style (letters)", "Orthodox (function keys)",
-                          "OS native"))
+                         ("AFX style", "Orthodox", "OS native", "Vim style"))
+        # The buttons are short; each preset's full label and description is
+        # in the text above them.
+        for preset in keymap_presets.PRESETS.values():
+            self.assertIn(preset.label, asked[0]["text"])
+            self.assertIn(preset.description, asked[0]["text"])
         self.assertFalse(asked[0]["dismissable"], "there is no Cancel")
-        asked[0]["on_result"]("Orthodox (function keys)")
+        asked[0]["on_result"]("Orthodox")
         self.assertEqual(self.app._keymap_preset, "orthodox")
         self.assertEqual(self._action(_key("f5")), "copy_files")
 

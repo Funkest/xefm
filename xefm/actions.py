@@ -889,6 +889,9 @@ _FILER_ACTIONS = [
     _a("cursor_down", FILER, "Move the cursor down one item"),
     _a("page_up", FILER, "Move the cursor up one page"),
     _a("page_down", FILER, "Move the cursor down one page"),
+    # Vim's Ctrl-D / Ctrl-U (#587): half of what the pane shows.
+    _a("half_page_up", FILER, "Move the cursor up half a screen"),
+    _a("half_page_down", FILER, "Move the cursor down half a screen"),
     _a("cursor_top", FILER, "Move the cursor to the first item"),
     _a("cursor_bottom", FILER, "Move the cursor to the last item"),
     _a("open_item", FILER, "Open the file, or enter the directory"),
@@ -906,6 +909,8 @@ _FILER_ACTIONS = [
        aliases=("select_file",)),
     _a("toggle_select_up", FILER, "Toggle selection and move up",
        aliases=("select_file_up",)),
+    # vifm's t (#587): mark or unmark, and stay.
+    _a("toggle_select_in_place", FILER, "Toggle selection without moving the cursor"),
     _a("select_all", FILER, "Select every item"),
     _a("unselect_all", FILER, "Clear the selection"),
     _a("toggle_select_files", FILER, "Toggle selection of every file",
@@ -923,6 +928,10 @@ _FILER_ACTIONS = [
     # console, where the gesture is a convention users already have, are worth
     # more than a key no surface reads as "range".
     _a("select_range", FILER, "Select from the nearest selected item to the cursor"),
+    # Vim's n / N (#587): the last incremental search's pattern, again, with
+    # the bar closed.
+    _a("search_next", FILER, "Go to the next match of the last incremental search"),
+    _a("search_prev", FILER, "Go to the previous match of the last incremental search"),
     # #544. ' and " (Shift-') are cfiler's keys for the same thing, next to the
     # filter's ; and : — see the File Selection block of _config.py.
     _a("select_by_pattern", FILER, "Select the files matching a pattern"),

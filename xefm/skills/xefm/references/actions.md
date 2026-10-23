@@ -19,6 +19,8 @@ the user picked in **Tools ▸ Advanced ▸ Keymap**; ask which if `KEY_PRESET` 
 | `cursor_down` | Move the cursor down one item | `DOWN` | `DOWN` |
 | `page_up` | Move the cursor up one page | `PAGE_UP` | `PAGE_UP` |
 | `page_down` | Move the cursor down one page | `PAGE_DOWN` | `PAGE_DOWN` |
+| `half_page_up` | Move the cursor up half a screen | — | — |
+| `half_page_down` | Move the cursor down half a screen | — | — |
 | `cursor_top` | Move the cursor to the first item | `Ctrl-HOME` | `HOME`, `Ctrl-HOME` |
 | `cursor_bottom` | Move the cursor to the last item | `Ctrl-END` | `END`, `Ctrl-END` |
 | `open_item` | Open the file, or enter the directory | `ENTER` | `ENTER`, `Ctrl-PAGE_DOWN` |
@@ -33,11 +35,14 @@ the user picked in **Tools ▸ Advanced ▸ Keymap**; ask which if `KEY_PRESET` 
 | `focus_right` | Focus the right pane | — | — |
 | `toggle_select_down` | Toggle selection and move down | `SPACE` | `INSERT`, `SPACE` |
 | `toggle_select_up` | Toggle selection and move up | — | — |
+| `toggle_select_in_place` | Toggle selection without moving the cursor | — | — |
 | `select_all` | Select every item | `HOME` | `Ctrl-A` |
 | `unselect_all` | Clear the selection | `END` | `Ctrl-MINUS` |
 | `toggle_select_files` | Toggle selection of every file | `A` | `*` |
 | `toggle_select_items` | Toggle selection of every item | `Shift-A` | — |
 | `select_range` | Select from the nearest selected item to the cursor | `Shift-SPACE` | `Shift-SPACE` |
+| `search_next` | Go to the next match of the last incremental search | — | — |
+| `search_prev` | Go to the previous match of the last incremental search | — | — |
 | `select_by_pattern` | Select the files matching a pattern | `'` | `+` |
 | `unselect_by_pattern` | Unselect the files matching a pattern | `"` | `-` |
 | `select_same_extension` | Select every file with the cursor file's extension | — | `Alt-+` |

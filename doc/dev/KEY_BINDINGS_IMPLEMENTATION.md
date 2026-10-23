@@ -218,8 +218,9 @@ themselves) and a generation counter that makes a stale timer harmless.
 when a fallback runs without another key. The app keeps one sequencer for the
 file list. `on_event` feeds it before its own lookup, a modal layer or a keymap
 rebuild cancels it, and `StatusBar._text` shows `pending_text()` while it is
-pending. The text viewer gets one with the Vim-style preset, which needs it
-there.
+pending. The text viewer keeps one of its own, built on first use: its
+`handle_event` feeds it, then hands the action to `_act`, and nothing shows
+the pending keys there.
 
 #### `format_key_for_display(key_expr) -> str`
 Formats a token for UI display: single literals pass through; named tokens map to

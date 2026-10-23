@@ -1860,6 +1860,8 @@ class XeFMApp:
         self._isearch_active = False
         self._isearch_origin = 0
         self._isearch_matches: list[int] = []
+        #: The last pattern the search bar closed on, for search_next/_prev.
+        self._last_isearch_pattern = ""
         #: Whether the pane being searched holds a name Migemo could match at
         #: all (any non-ASCII one), captured when the bar opens.
         self._isearch_migemo = True
@@ -3825,6 +3827,10 @@ class XeFMApp:
                 "cursor_down": (self._act_cursor_down, True),
                 "page_up": (self._act_page_up, True),
                 "page_down": (self._act_page_down, True),
+                "half_page_up": (lambda: self._act_half_page(-1), True),
+                "half_page_down": (lambda: self._act_half_page(+1), True),
+                "search_next": (lambda: self._act_search_again(+1), True),
+                "search_prev": (lambda: self._act_search_again(-1), True),
                 "cursor_top": (self._act_cursor_top, True),
                 "cursor_bottom": (self._act_cursor_bottom, True),
                 "cursor_next_selected": (
@@ -3834,6 +3840,7 @@ class XeFMApp:
                 # --- selection (reuses FileListManager) ---
                 "toggle_select_down": (self._act_select_file, True),
                 "toggle_select_up": (self._act_select_file_up, True),
+                "toggle_select_in_place": (self._toggle_select_in_place, True),
                 "select_range": (self._act_select_range, True),
                 "toggle_select_files": (self._act_select_all_files, True),
                 "toggle_select_items": (self._act_select_all_items, True),
@@ -4027,6 +4034,35 @@ class XeFMApp:
         last = max(0, len(pane["files"]) - 1)
         pane["focused_index"] = min(last, pane["focused_index"] + 10)
 
+    def _act_half_page(self, direction: int) -> None:
+        """Vim's Ctrl-D / Ctrl-U: half the rows the pane shows."""
+        pane = self.active_pane()
+        step = max(1, self._display_height() // 2)
+        last = max(0, len(pane["files"]) - 1)
+        pane["focused_index"] = max(0, min(last, pane["focused_index"] + direction * step))
+
+    def _act_search_again(self, direction: int) -> None:
+        """Vim's n / N: the next (or previous) entry matching the last
+        incremental search, wrapping at the ends, with the bar closed. The
+        match is the bar's own (``find_matches``), so romaji still finds
+        Japanese."""
+        pattern = self._last_isearch_pattern
+        if not pattern:
+            self.log_info("No previous search")
+            return
+        pane = self.active_pane()
+        matches = self.flm.find_matches(
+            pane, pattern, match_all=True, return_indices_only=True)
+        if not matches:
+            self.log_info(f"Not found: {pattern}")
+            return
+        cur = pane["focused_index"]
+        if direction > 0:
+            pane["focused_index"] = next((m for m in matches if m > cur), matches[0])
+        else:
+            pane["focused_index"] = next((m for m in reversed(matches) if m < cur),
+                                         matches[-1])
+
     def _act_cursor_top(self) -> None:
         self.active_pane()["focused_index"] = 0
 
@@ -4045,10 +4081,10 @@ class XeFMApp:
             self.active_pane(), move_cursor=True, direction=-1))
 
     def _toggle_select_in_place(self) -> None:
-        """The context menu's Select / Deselect: toggle the item the menu was
-        opened on and leave the cursor on it. SPACE moves down so a run of
-        presses marks a run of rows; a menu names one row, and stepping off it
-        made the menu's subject look like the next one."""
+        """The context menu's Select / Deselect, and ``toggle_select_in_place``
+        (vifm's ``t``): toggle the item and leave the cursor on it. SPACE moves
+        down so a run of presses marks a run of rows; a menu names one row, and
+        stepping off it made the menu's subject look like the next one."""
         self._log_result(self.flm.toggle_selection(self.active_pane(), move_cursor=False))
         self.panel.render()
 
@@ -5432,20 +5468,21 @@ class XeFMApp:
         default, so there is no Cancel and Esc does nothing; one must be
         chosen. Quit before choosing, and the next launch asks again."""
         names = list(keymap_presets.PRESETS)
-        labels = [keymap_presets.LABELS[n] for n in names]
+        presets = [keymap_presets.PRESETS[n] for n in names]
+        buttons = [p.button or p.label for p in presets]
         lines = ["Choose how XeFM's keys work. **Tools > Advanced > Keymap** changes it "
                  "at any time.", ""]
-        for name, label in zip(names, labels):
-            lines.append(f"**{label}** — {keymap_presets.PRESETS[name].description}")
+        for preset in presets:
+            lines.append(f"**{preset.label}** — {preset.description}")
             lines.append("")
 
         def answered(label: str) -> None:
-            self.set_keymap_preset(names[labels.index(label)])
+            self.set_keymap_preset(names[buttons.index(label)])
             self.panel.render()
 
         show_message_box(
             self.panel, "\n".join(lines).rstrip(), title="Keymap",
-            icon="question", buttons=tuple(labels), default=0,
+            icon="question", buttons=tuple(buttons), default=0,
             on_result=answered, markdown=True, dismissable=False)
         self.panel.render()
 
@@ -10447,6 +10484,9 @@ class XeFMApp:
 
     def _isearch_close(self) -> None:
         """Tear down the isearch overlay and clear the pane's match highlights."""
+        if self._isearch_bar is not None and self._isearch_bar.pattern:
+            # What search_next / search_prev (Vim's n / N) search for again.
+            self._last_isearch_pattern = self._isearch_bar.pattern
         self._isearch_active = False
         self._isearch_quick = False
         self._isearch_matches = []

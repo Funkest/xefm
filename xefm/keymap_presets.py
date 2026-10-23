@@ -7,6 +7,8 @@ an upgrade from before presets alike — asks which one to use.
 - **AFX** (:mod:`xefm.keymap_afx`) — one letter runs one command.
 - **Orthodox** — function keys, and typing a letter searches.
 - **OS native** — Finder's keys on macOS, Explorer's elsewhere (#587).
+- **Vim style** — Vim-style keys: ``hjkl``, ``gg`` / ``G``, ``yy`` / ``dd``
+  / ``p``, ``/`` and ``n`` (#587).
 
 A preset is **a key table plus behavior flags**:
 
@@ -54,6 +56,7 @@ logger = getLogger("Keymap")
 AFX = "afx"
 ORTHODOX = "orthodox"
 NATIVE = "native"
+VIM = "vim"
 #: The table in force for the moment a launch with no preset chosen spends
 #: before its question is answered. Not a default: nothing is stored.
 FALLBACK = AFX
@@ -75,6 +78,10 @@ class Preset:
     bindings: Union[dict, Callable[[], dict]] = field(default_factory=dict)
     free_letters: bool = False
     type_ahead: bool = False
+    #: The first-launch dialog's button: four full labels side by side do not
+    #: fit an 80-column terminal, so the button is short and the label goes
+    #: in the text above it. Empty means the label.
+    button: str = ""
 
 
 #: The function-key layout shared by the "orthodox" two-pane file managers —
@@ -82,6 +89,7 @@ class Preset:
 _ORTHODOX = Preset(
     name=ORTHODOX,
     label="Orthodox (function keys)",
+    button="Orthodox",
     description=("F3 view, F4 edit, F5 copy, F6 move, F7 new folder, F8 "
                  "delete; typing a letter searches."),
     free_letters=True,
@@ -287,14 +295,104 @@ _NATIVE = Preset(
     type_ahead=True,
 )
 
+#: vifm's normal-mode keys (vifm 0.15 manual, and the sample vifmrc a new
+#: install gets: F3-F8, w, s, S), wherever XeFM has the action. Like AFX it
+#: is a letter layout, so every letter AFX had is freed first and nothing is
+#: typed ahead: search is '/', as in Vim. Sequences ('g g', 'y y') are
+#: KEY_BINDINGS key sequences, waiting KEY_SEQUENCE_TIMEOUT where a prefix is
+#: also a key of its own.
+_VIM_BINDINGS = {
+    # Moving: h is the parent directory and l opens, as in vifm, not a column
+    # step; the arrows keep AFX's meaning.
+    "cursor_down": ["j", "DOWN"],
+    "cursor_up": ["k", "UP"],
+    "go_parent": ["h", "g h", "BACKSPACE"],
+    "open_item": ["l", "g l", "ENTER"],
+    "cursor_top": ["g g", "HOME", "Ctrl-HOME"],
+    "cursor_bottom": ["Shift-G", "END", "Ctrl-END"],
+    "page_down": ["Ctrl-F", "PAGE_DOWN"],
+    "page_up": ["Ctrl-B", "PAGE_UP"],
+    "half_page_down": ["Ctrl-D"],
+    "half_page_up": ["Ctrl-U"],
+    "switch_pane": ["TAB", "SPACE"],
+    "go_back": ["Ctrl-O", "Alt-LEFT"],
+    "go_forward": ["Alt-RIGHT"],               # vifm's Ctrl-I is Tab here
+    "jump_to_path": ["g p"],
+    "favorites": ["'"],                        # vifm's marks
+    # Selecting. vifm's v starts a visual block; here it fills from the
+    # nearest mark to the cursor, which is what a block ends as.
+    "toggle_select_in_place": ["t"],
+    "toggle_select_down": ["INSERT"],
+    "select_range": ["v", "Shift-SPACE"],
+    "select_all": [],
+    "unselect_all": ["ESCAPE"],                # vifm: Esc clears the selection
+    "select_by_pattern": [],                   # ' is marks here
+    # Files: yank / delete / put. dd goes to the Trash and DD past it, as in
+    # vifm; p pastes what yy yanked, and x cuts (vifm's P moves a yank; here a
+    # cut and a paste do).
+    "clipboard_copy": ["y y", "Ctrl-C"],
+    "clipboard_cut": ["x", "Ctrl-X"],
+    "clipboard_paste": ["p", "Ctrl-V"],
+    "delete_files": ["d d", "DELETE", "F8"],
+    "delete_permanently": ["Shift-D Shift-D", "Shift-DELETE", "Shift-F8"],
+    "rename": ["c w"],
+    "view_file": ["e", "F3"],
+    "open_with_os": ["g x"],                   # Vim's gx; Ctrl-O goes back here
+    "diff_files": [],                          # '=' filters here
+    "edit_file": ["F4"],
+    "copy_files": ["F5"],
+    "move_files": ["F6"],
+    "create_directory": ["F7"],
+    "quick_view": ["w"],
+    "file_details": ["Ctrl-G"],
+    "jobs": [],                                # Ctrl-G is file details here
+    # Search, hidden files, filters
+    "isearch": ["/"],
+    "search_next": ["n"],
+    "search_prev": ["Shift-N"],
+    "index_search": [],                        # Ctrl-F pages here
+    "toggle_hidden": ["z a"],
+    "filter": ["="],
+    "clear_filter": ["z r"],
+    "sort": ["Shift-S"],
+    # Application
+    "command_palette": [":", "Ctrl-T"],
+    "context_menu": ["APPS", "Shift-F10"],     # '/' searches here
+    "subshell": ["s"],
+    "reread": ["Ctrl-L"],
+    "redraw": [],                              # F5 copies here
+    "quit": ["Shift-Z Shift-Z", "Shift-Z Shift-Q"],
+    # The text viewer, as vifm's view mode with Vim's motions
+    "text_viewer.scroll_down": ["j", "DOWN"],
+    "text_viewer.scroll_up": ["k", "UP"],
+    "text_viewer.scroll_left": ["h", "LEFT"],
+    "text_viewer.scroll_right": ["l", "RIGHT"],
+    "text_viewer.page_down": ["Ctrl-F", "Ctrl-D", "PAGE_DOWN", "SPACE"],
+    "text_viewer.page_up": ["Ctrl-B", "Ctrl-U", "PAGE_UP"],
+    "text_viewer.scroll_top": ["g g", "HOME"],
+    "text_viewer.scroll_bottom": ["Shift-G", "END"],
+    "text_viewer.quit": ["q", "Shift-Z Shift-Z"],
+}
+
+_VIM = Preset(
+    name=VIM,
+    label="Vim style",
+    description=("hjkl to move, gg / G, yy / dd / p, cw rename, / and n to "
+                 "search, ZZ to quit."),
+    bindings=_VIM_BINDINGS,
+    free_letters=True,
+)
+
 _AFX = Preset(
     name=AFX,
     label="AFX style (letters)",
+    button="AFX style",
     description=("C copy, M move, K delete, V view, E edit; one letter runs "
                  "one command."),
 )
 
-PRESETS: dict[str, Preset] = {AFX: _AFX, ORTHODOX: _ORTHODOX, NATIVE: _NATIVE}
+PRESETS: dict[str, Preset] = {AFX: _AFX, ORTHODOX: _ORTHODOX, NATIVE: _NATIVE,
+                               VIM: _VIM}
 
 LABELS = {name: preset.label for name, preset in PRESETS.items()}
 
@@ -364,15 +462,27 @@ def table(name: Optional[str]) -> dict:
                                   else kept)
     # A preset's keys are a plain list, dropping any selection gate: an
     # orthodox F5 copies the cursor item when nothing is marked.
-    from xefm.actions import FILER, registry
     bindings = preset.bindings() if callable(preset.bindings) else preset.bindings
     for action, keys in bindings.items():
         # A preset may name actions of features this XeFM does not have yet;
         # binding them would only claim their keys for nothing.
-        if registry.resolve(FILER, action) is None:
+        if not _known(action):
             continue
         result[action] = list(keys)
     return result
+
+
+def _known(action: str) -> bool:
+    """Whether a preset may bind ``action``: an action of any context — a
+    viewer's own ('text_viewer.scroll_down') as much as the file list's, since
+    the Vim style moves the text viewer too — or a context-qualified rebind
+    ('text_viewer.quit'), the same spelling ``KEY_BINDINGS`` takes."""
+    from xefm.actions import CONTEXTS, registry
+    if any(registry.resolve(context, action) for context in CONTEXTS):
+        return True
+    context, _, name = action.partition(".")
+    return context in CONTEXTS and bool(name) and \
+        registry.canonical(context, name) is not None
 
 
 def _current_name(name: str) -> str:
