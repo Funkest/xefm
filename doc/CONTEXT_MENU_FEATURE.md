@@ -47,11 +47,10 @@ archives.
 
 ## Help moved to F1
 
-`?` used to open the help. It is the directory menu now, and the help is on
-**F1** (also
+`?` opens the directory menu, and the help is on **F1** (also
 **Help ▸ Keyboard Shortcuts…**).
 
-A config written before this change still says `'help': ['?']`, and keeps
+A config written when `?` opened the help may still say `'help': ['?']`, and keeps
 working that way: your own line wins over the new default. To move to the new
 keys, change it to `'help': ['F1']`.
 

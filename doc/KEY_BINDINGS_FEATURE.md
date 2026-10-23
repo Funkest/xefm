@@ -349,6 +349,7 @@ the log pane at startup. Rename when convenient; nothing breaks if you don't.
 | `search_content` | `find_in_files` |
 | `sort_menu` | `sort` |
 | `drives_dialog` | `drives` |
+| `connect_to_server` | `connect_server` |
 | `rename_file` | `rename` |
 | `select_file` | `toggle_select_down` |
 | `select_file_up` | `toggle_select_up` |

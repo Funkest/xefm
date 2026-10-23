@@ -74,16 +74,13 @@ if len(selected) != 2:          # or: require a real selection
     sys.exit("select exactly two files")
 ```
 
-> **Changed since XeFM 1.1.0.** Up to that release, `*_SELECTED` substituted
-> the file under the cursor when nothing was selected, so a program could not
-> tell one deliberately selected file from a cursor that happened to sit on it.
-> It now reports the selection alone. A tool that wants the old behaviour gets
-> it with the `selected or focused` line above.
+`*_SELECTED` reports the selection alone, so a program can tell one
+deliberately selected file from a cursor that happens to sit on it.
 
 Note this is the *environment's* contract. The filenames appended to the
-program's **command line** still follow the older, single-answer rule — the
-selection when there is one, the focused entry otherwise — because one argument
-list cannot express both.
+program's **command line** follow a single-answer rule instead — the selection
+when there is one, the focused entry otherwise — because one argument list
+cannot express both.
 
 ## Usage
 

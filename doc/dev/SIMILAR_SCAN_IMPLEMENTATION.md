@@ -15,7 +15,8 @@ what it wrote.
 
 The two share **only files**, with no pipe and no signal. That makes it work
 the same on every platform, and across XeFM quitting and starting again.
-similar-files 0.2 added the options this needs (its `doc/STATUS_FORMAT.md`,
+similar-files 0.2 added the options this needs (its
+[`doc/STATUS_FORMAT.md`](https://github.com/crftwr/similar-files/blob/main/doc/STATUS_FORMAT.md),
 and `--format tree` / `--snapshot-interval`):
 
 - `--status FILE`: progress as JSON, replaced whole on each write, rewritten

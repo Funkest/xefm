@@ -309,7 +309,7 @@ s3://eu-west-bucket/file.txt
 
 For large files:
 - The progress dialog fills as the bytes actually move, in both directions, so a
-  slow transfer no longer looks stalled at 0%
+  slow transfer does not look stalled at 0%
 - A large object is streamed to or from disk rather than held in memory, so its
   size is not limited by available RAM
 - Uploads use multipart upload for files >5MB

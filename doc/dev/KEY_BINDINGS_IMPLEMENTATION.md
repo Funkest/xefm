@@ -238,7 +238,7 @@ Module-level wrappers in `xefm/config.py` delegate to the `ConfigManager`'s cach
 from xefm.config import find_action_for_event, get_keys_for_action, format_key_for_display
 
 action = find_action_for_event(event, has_selection)   # -> 'quit' | None
-keys, sel_req = get_keys_for_action('delete_files')     # -> (['DELETE', 'Command-Backspace'], 'required')
+keys, sel_req = get_keys_for_action('delete_files')     # -> (['K', 'DELETE'], 'required') under AFX
 label = format_key_for_display('Command-Shift-X')       # -> 'Cmd-Shift-X'
 ```
 
@@ -535,8 +535,10 @@ which is what a footer overlay is for.
 ## Error handling
 
 Parsing is defensive — an unknown modifier or key token logs a warning and is
-skipped rather than crashing; a missing `KEY_BINDINGS` config falls back to
-`DefaultConfig.KEY_BINDINGS`.
+skipped rather than crashing. A config with no `KEY_BINDINGS` gets the template's
+(`xefm/_config.py`, examples only) through `_copy_missing_fields`, and
+`keymap_presets.apply` lays it over the preset in force, so the keymap is the
+preset's own.
 
 ## Testing
 

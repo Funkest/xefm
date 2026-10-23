@@ -101,7 +101,8 @@ is puikit `mouse-modifiers`.
 
 - Right-drag menu (needs right-button drag in PuiKit).
 - Rubber-band selection.
-- Mouse gestures as bindings (`KEY_BINDINGS` vs `MOUSE_BINDINGS`).
+- Mouse gestures as bindings — whether they would join `KEY_BINDINGS` or get
+  a separate setting of their own (no such setting exists yet).
 - A click on the StatusBar's clipboard area (#578 is not merged).
 
 ## Tests

@@ -42,6 +42,7 @@ class Config:
 | `SHOW_HIDDEN_FILES` | bool | `False` | Show hidden files by default (dot-names, plus the Windows hidden attribute) |
 | `DEFAULT_LEFT_PANE_RATIO` | float | `0.5` | Left pane width ratio (0.1-0.9) |
 | `DEFAULT_LOG_HEIGHT_RATIO` | float | `0.25` | Log pane height ratio (0.1-0.5) |
+| `DATE_FORMAT` | str | `'short'` | `'short'` (YY-MM-DD HH:mm) or `'full'` (YYYY-MM-DD HH:mm:ss) |
 
 ### Sorting Settings
 
@@ -54,23 +55,32 @@ class Config:
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
+| `THEMES` | dict | one example theme (`'Phosphor'`) | Extra named themes, `{name: overrides}`, added to the built-in PuiKit themes (see `COLOR_SCHEMES_IMPLEMENTATION.md`) |
+
+There is no setting that picks the theme: XeFM starts on Dark+ and remembers the
+theme last chosen (View → Theme / Next Theme) across restarts.
 
 ### Behavior Settings
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `CONFIRM_DELETE` | bool | `True` | Show confirmation for delete operations |
+| `CONFIRM_TRASH` | bool | `True` | Show confirmation before moving files to the Trash / Recycle Bin |
+| `DELETE_TO_TRASH` | bool | `True` | `delete_files` sends local files to the Trash where the drive has one; `False` deletes permanently |
 | `CONFIRM_QUIT` | bool | `True` | Show confirmation when quitting |
 | `CONFIRM_COPY` | bool | `True` | Show confirmation for copy operations |
 | `CONFIRM_MOVE` | bool | `True` | Show confirmation for move operations |
+| `CONFIRM_DUPLICATE` | bool | `True` | Show confirmation for duplicate operations |
 | `CONFIRM_EXTRACT_ARCHIVE` | bool | `True` | Show confirmation for archive extraction |
+| `CONFIRM_ARCHIVE_CREATE` | bool | `True` | Show confirmation for archive creation |
+| `TRANSFER_CONCURRENCY` | str/int | `"auto"` | Files in flight per copy/move/extract: `"auto"` (per storage), `"none"` (sequential), or an integer |
 
-### Directory Settings
+### Startup Directories
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `STARTUP_LEFT_PATH` | str/None | `None` | Left pane startup path (None = current dir) |
-| `STARTUP_RIGHT_PATH` | str/None | `None` | Right pane startup path (None = home dir) |
+There is no config setting for the startup directories. Each pane opens on the
+directory passed with `--left` / `--right`, else on the directory it had when
+XeFM last quit (`XeFMApp._restore_one_pane`, if that directory still exists),
+else on the launch directory (`main()` passes `"."`).
 
 ### Performance Settings
 
@@ -78,97 +88,52 @@ class Config:
 |---------|------|---------|-------------|
 | `MAX_LOG_MESSAGES` | int | `1000` | Maximum log messages to keep |
 
-### Info Dialog Settings
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `INFO_DIALOG_WIDTH_RATIO` | float | `0.8` | Info dialog width as screen ratio |
-| `INFO_DIALOG_HEIGHT_RATIO` | float | `0.8` | Info dialog height as screen ratio |
-| `INFO_DIALOG_MIN_WIDTH` | int | `20` | Minimum dialog width |
-| `INFO_DIALOG_MIN_HEIGHT` | int | `10` | Minimum dialog height |
+These tables cover the general settings. `xefm/_config.py` is the complete,
+commented list — fonts, `TEXT_ENCODINGS`, `KEY_PRESET` / `KEY_SEQUENCE_TIMEOUT`,
+the customization tables (`ACTIONS`, `EVENT_HOOKS`, `SORT_KEYS`, `FILTERS`, …),
+`FAVORITES`, `PROGRAMS`, `FILE_ASSOCIATIONS`, editor/terminal commands, cache
+TTLs, file monitoring and Migemo search. The info-dialog sizes
+(`INFO_DIALOG_*`) are constants in `xefm/const.py`, not config settings.
 
 ## Key Bindings Configuration
 
-### Comprehensive Key Bindings System
+### Keymap Presets and `KEY_BINDINGS`
 
-XeFM now features a fully configurable key binding system where all keyboard shortcuts can be customized through the configuration file. Each action has a descriptive name and can be assigned multiple keys.
+The keymap comes from a **preset** (`afx`, `orthodox`, `native`, `vim`), chosen
+at first launch or in Tools → Advanced → Keymap…, or fixed with `KEY_PRESET`.
+`KEY_BINDINGS` in `config.py` is laid over that preset action by action: an
+entry replaces that action's keys under every preset, and an action not listed
+keeps the preset's. The shipped `KEY_BINDINGS` is empty apart from commented
+examples. `keymap_presets.apply()` writes the merged table back into
+`config.KEY_BINDINGS`, so every reader sees one table (see
+`KEYMAP_PRESETS_IMPLEMENTATION.md`). The keys themselves are listed only in
+`doc/KEYMAP_PRESETS_FEATURE.md`.
 
 ```python
 KEY_BINDINGS = {
-    # Application Control
-    'quit': ['q', 'Q'],                 # Exit XeFM application
-    'help': ['F1'],                     # Show help dialog with all key bindings
-    
-    # Display & Navigation
-    'toggle_hidden': ['.'],             # Toggle visibility of hidden files (dotfiles, Windows hidden attribute)
-    'toggle_color_scheme': ['t'],       # Switch between dark and light color schemes
-    
-    # Search & Filter
-    'isearch': ['f'],                   # Enter incremental search mode (isearch)
-    'find_files': ['F'],                # Show filename search dialog
-    'find_in_files': ['G'],             # Show content search dialog (grep)
-    'filter': [';'],                    # Enter filter mode to show only matching files
-    'clear_filter': [':'],              # Clear current file filter
-    
-    # Sorting
-    'sort': ['s', 'S'],                 # Open the sort dialog (key + order)
-    'quick_sort_name': ['1'],           # Quick sort by filename
-    'quick_sort_ext': ['2'],            # Quick sort by file extension
-    'quick_sort_size': ['3'],           # Quick sort by file size
-    'quick_sort_date': ['4'],           # Quick sort by modification date
-    
-    # File Selection
-    'toggle_select_down': [' '],        # Toggle selection of current file (Space)
-    'toggle_select_files': ['a'],       # Toggle selection of all files in current pane
-    'toggle_select_items': ['A'],       # Toggle selection of all items (files + dirs)
-    
-    # Pane Management
-    'sync_current_to_other': ['o'],     # Sync current pane directory to other pane
-    'sync_other_to_current': ['O'],     # Sync other pane directory to current pane
-    'adjust_pane_left': ['['],          # Make left pane smaller (move boundary left)
-    'adjust_pane_right': [']'],           # Make left pane larger (move boundary right)
-    'adjust_log_up': ['{'],             # Make log pane larger (Shift+[)
-    'adjust_log_down': ['}'],           # Make log pane smaller (Shift+])
-    'reset_log_height': ['_'],          # Reset log pane height to default (Shift+-)
-    
-    # File Operations
-    'view_text': ['v', 'V'],            # View text file in built-in viewer
-    'edit_file': ['e'],                 # Edit selected file with configured text editor
-    'create_file': ['E'],               # Create new file (prompts for filename)
-    'copy_files': ['c', 'C'],           # Copy selected files to other pane
-    'move_files': ['m', 'M'],           # Move selected files to other pane
-    'delete_files': ['k', 'K'],         # Delete selected files/directories
-    'rename': ['r', 'R'],               # Rename selected file/directory
-    
-    # Advanced Features
-    'file_details': ['i', 'I'],         # Show detailed file information dialog
-    'favorites': ['j', 'J'],            # Show the favorites dialog
-    'subshell': ['X'],                  # Enter subshell (command line) mode
-    'programs': ['x'],                  # Show external programs menu
-    'create_archive': ['p', 'P'],       # Create archive from selected files
-    'extract_archive': ['u', 'U'],      # Extract selected archive file
-    'compare_selection': ['w', 'W'],    # Show file and directory comparison options
+    'reload_config': ['F12'],                     # simple format
+    'quit': [],                                   # an empty list unbinds
+    'delete_permanently': {'keys': ['Shift-DELETE'], 'selection': 'required'},
+    'text_viewer.page_down': ['SPACE'],           # one viewer's context only
+    'go_root': ['g r'],                           # a key sequence
 }
 ```
 
 ### Key Binding Features
 
 - **Multiple Keys**: Each action can have multiple key bindings
-- **Case Sensitive**: Separate bindings for uppercase/lowercase
-- **Special Keys**: Support for space and other special characters
-- **Descriptive Names**: Each action has a clear, descriptive name
-- **Full Configurability**: All keyboard shortcuts can be customized
-- **Validation**: Invalid key bindings are ignored with warnings
-- **Comprehensive Coverage**: Covers all XeFM functionality including pane management
+- **Key Expressions**: Characters, named keys (`ENTER`, `PAGE_UP`, `F10`), punctuation names, modifier chords (`Ctrl-O`, `Command-ENTER`) and sequences (`'g h'`) — see `KEY_BINDINGS_IMPLEMENTATION.md`
+- **Selection Requirements**: The extended format restricts an action to `'required'` / `'none'` / `'any'` selection state
+- **Context Prefixes**: `text_viewer.`, `isearch.`, … scope an entry to one surface
+- **Old Names**: A renamed action's old name still works, and a one-line notice names it (`deprecated_names_notice`)
+- **Validation**: An unknown key name logs `Unknown key in expression: …` and that binding never fires
 
-### New Pane Adjustment Keys
+### Pane Adjustment Actions
 
-XeFM now includes dedicated keys for adjusting pane boundaries:
-
-- **Horizontal Adjustment**: `[` and `]` keys adjust the boundary between left and right panes
-- **Vertical Adjustment**: `{` and `}` keys adjust the log pane height
-- **Reset Functions**: `-` resets horizontal split to 50/50, `_` resets log height to default
-- **Intuitive Design**: Keys visually represent the direction of adjustment
+`adjust_pane_left` / `adjust_pane_right` move the boundary between the panes,
+`adjust_log_up` / `adjust_log_down` change the log pane height, and
+`reset_pane_boundary` / `reset_log_height` restore the 50/50 split and the
+configured log height.
 
 ## Architecture and Loading Flow
 
@@ -249,7 +214,7 @@ config to pick up newly added settings.
 ### Configuration API
 
 ```python
-from xefm import config
+import xefm.config
 
 # Get current configuration
 config = xefm.config.get_config()
@@ -259,42 +224,26 @@ xefm.config.reload_config()
 
 # Check key bindings
 is_bound = xefm.config.is_key_bound_to('q', 'quit')
-
-# Get startup paths
-left_path, right_path = xefm.config.get_startup_paths()
 ```
 
 ## Customization Examples
 
-### Example 1: Change Default Directories
+### Example 1: Customize Key Bindings
+
+Each entry replaces that action's keys from the preset; unlisted actions keep
+theirs.
 
 ```python
 class Config:
-    # Start left pane in projects directory
-    STARTUP_LEFT_PATH = "~/projects"
-    
-    # Start right pane in downloads
-    STARTUP_RIGHT_PATH = "~/Downloads"
-```
-
-### Example 2: Customize Key Bindings
-
-```python
-class Config:
+    KEY_PRESET = 'afx'
     KEY_BINDINGS = {
-        'quit': ['q'],                  # Remove 'Q' binding
-        'file_details': ['i', 'I', 'd'],  # Add 'd' for details
-        'isearch': ['/', 'f'],          # Add '/' for search
-        'sync_current_to_other': ['o', '>'],  # Add '>' for sync
-        'sync_other_to_current': ['O', '<'],  # Add '<' for reverse sync
-        'adjust_pane_left': ['[', 'h'],  # Add 'h' for left adjustment
-        'adjust_pane_right': [']', 'l'],  # Add 'l' for right adjustment
-        'toggle_color_scheme': ['t', 'c'],  # Add 'c' for color toggle
-        # ... other bindings
+        'file_details': ['I', 'F3'],    # Add F3 for details
+        'toggle_color_scheme': ['F11'], # Cycle themes from the keyboard
+        'reload_config': ['F12'],       # A key for an action that has none
     }
 ```
 
-### Example 3: Adjust Display Settings
+### Example 2: Adjust Display Settings
 
 ```python
 class Config:
@@ -318,19 +267,15 @@ class Config:
     CONFIRM_EXTRACT_ARCHIVE = True
 ```
 
-### Example 4: Performance Tuning
+### Example 3: Performance Tuning
 
 ```python
 class Config:
     # Keep more log messages
     MAX_LOG_MESSAGES = 5000
-    
-    # Larger info dialogs
-    INFO_DIALOG_WIDTH_RATIO = 0.9
-    INFO_DIALOG_HEIGHT_RATIO = 0.9
 ```
 
-### Example 5: Confirmation Settings
+### Example 4: Confirmation Settings
 
 ```python
 class Config:
@@ -366,7 +311,12 @@ class Config:
 - `DEFAULT_LEFT_PANE_RATIO`: Must be between 0.1 and 0.9
 - `DEFAULT_LOG_HEIGHT_RATIO`: Must be between 0.1 and 0.5
 - `DEFAULT_SORT_MODE`: Must name a sort — 'filename', 'extension', 'size', 'timestamp', an old spelling of one, or a key a config registered
-- `COLOR_SCHEME`: Must be 'default', 'dark', or 'light'
+- `FONT_SIZE`: An integer between 8 and 72; `UI_FONT_NAME` / `MONO_FONT_NAME`: a non-empty string or `None`
+- `MIGEMO_ROMAJI_TABLE`: Must be 'default' or 'azik'; the `FILE_MONITORING_*`, `MIGEMO_*`, `REDUCED_MOTION`, `TEXT_ENCODINGS` and `WIDE_CHARS` fields are type/range-checked too
+- `ACTIONS`, `EVENT_HOOKS`, `SORT_KEYS`, `FILTERS`, …: each entry is shape-checked by `xefm.user_api.validate_user_entries`
+
+`validate_config()` returns the problems as a list; `XeFMApp.reload_config()`
+logs each one as `Config warning: …` and applies the config anyway.
 
 ## Error Handling
 
@@ -423,8 +373,6 @@ The `_config.py` template includes:
 
 - **GUI Configuration Editor**: Visual configuration editor
 - **Multiple Profiles**: Support for different configuration profiles
-- **Plugin System**: Configuration for custom plugins
-- **Theme System**: Advanced color theme configuration
 
 ## Troubleshooting
 
@@ -437,7 +385,7 @@ The `_config.py` template includes:
 
 2. **Invalid Key Bindings**:
    - Check key binding format
-   - Ensure keys are single characters
+   - Check the log for `Unknown key in expression: …`
    - Verify action names are correct
 
 3. **Path Issues**:
@@ -472,58 +420,16 @@ class Config:
     CONFIRM_MOVE = True
     CONFIRM_EXTRACT_ARCHIVE = False
     
-    # Startup directories
-    STARTUP_LEFT_PATH = \"~/projects\"
-    STARTUP_RIGHT_PATH = \"~/Downloads\"
-    
-    # Custom key bindings
+    # Keymap: the AFX preset, with a few keys changed
+    KEY_PRESET = 'afx'
     KEY_BINDINGS = {
-        # Application control
-        'quit': ['q'],
-        'help': ['F1'],
-        
-        # Navigation and display
-        'toggle_hidden': ['.'],
-        'toggle_color_scheme': ['t'],
-        
-        # Search and filter
-        'isearch': ['/', 'f'],          # Add '/' for search
-        'find_files': ['F'],
-        'filter': [';'],
-        'clear_filter': [':'],
-        
-        # File operations
-        'file_details': ['i', 'd'],     # Add 'd' for details
-        'edit_file': ['e'],
-        'view_text': ['v'],
-        'copy_files': ['c'],
-        'move_files': ['m'],
-        'delete_files': ['k'],
-        
-        # Pane management
-        'sync_current_to_other': ['o'],
-        'sync_other_to_current': ['O'],
-        'adjust_pane_left': ['['],
-        'adjust_pane_right': [']'],
-        'adjust_log_up': ['{'],
-        'adjust_log_down': ['}'],
-        'reset_log_height': ['_'],
-        
-        # Selection
-        'toggle_select_down': [' '],
-        'toggle_select_files': ['a'],
-        'toggle_select_items': ['A'],
-        
-        # Sorting
-        'sort': ['s'],
-        'quick_sort_name': ['1'],
-        'quick_sort_size': ['2'],
-        'quick_sort_date': ['3'],
+        'file_details': ['I', 'F3'],    # Add F3 for details
+        'toggle_color_scheme': ['F11'], # Cycle themes from the keyboard
+        'quit': [],                     # Unbind quit (still in the menu)
     }
     
     # Performance
     MAX_LOG_MESSAGES = 2000
-    INFO_DIALOG_WIDTH_RATIO = 0.85
 ```
 
 The configuration system provides extensive customization while maintaining simplicity and reliability through automatic defaults and comprehensive error handling.

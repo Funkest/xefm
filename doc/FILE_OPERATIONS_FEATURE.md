@@ -255,10 +255,10 @@ video/trip.mov                    310.5M / 1.4G
 ```
 
 - **The overall bar** tracks the whole operation by *bytes* as well as file
-  count, so one huge file among many small ones no longer parks the bar near
+  count, so one huge file among many small ones does not park the bar near
   the end while most of the actual work is still ahead.
 - **12 / 100 items** counts files that have *finished*. When several files copy
-  in parallel, starting four files no longer reads as four files done.
+  in parallel, starting four files does not read as four files done.
 - **350.2M / 2.1G** — bytes moved so far out of the operation's total, in
   human-readable units (B, K, M, G, T).
 - **One row per file in flight** — parallel copies show each worker's current

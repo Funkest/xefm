@@ -13,7 +13,7 @@ The file monitoring system enables XeFM to automatically detect and reflect file
 - **FileMonitorManager** (`xefm/file_monitor_manager.py`) - Central coordinator for filesystem monitoring
 - **FileMonitorObserver** (`xefm/file_monitor_observer.py`) - Per-directory watcher wrapping watchdog library
 - **XeFMFileSystemEventHandler** (`xefm/file_monitor_observer.py`) - Event handler for processing watchdog events
-- **FileManager Integration** (`xefm/app.py`) - Main application integration and reload handling
+- **XeFMApp Integration** (`xefm/app.py`) - Main application integration and reload handling
 
 ### Dependencies
 
@@ -26,21 +26,21 @@ The file monitoring system enables XeFM to automatically detect and reflect file
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        FileManager                           │
+│                          XeFMApp                             │
 │                     (Main Application)                       │
 │  - reload_queue: Queue                                       │
-│  - file_monitor_manager: FileMonitorManager                  │
+│  - file_monitor: FileMonitorManager                          │
 └────────────┬────────────────────────────────┬───────────────┘
              │                                 │
-             │ creates/manages                 │ triggers reload
+             │ creates/manages                 │ re-lists (_list_pane)
              │                                 │
              ▼                                 ▼
 ┌────────────────────────┐          ┌──────────────────────────┐
 │   FileMonitorManager   │          │   FileListManager        │
 │  (Monitoring Control)  │          │   (File List Ops)        │
-│  - monitors: dict      │          └──────────────────────────┘
-│  - reload_timers: dict │
-│  - rate_limit_times    │
+│  - monitoring_state    │          └──────────────────────────┘
+│  - coalesce_timers     │
+│  - reload_times        │
 └────────┬───────────────┘
          │
          │ manages (one per pane)
@@ -77,17 +77,19 @@ The file monitoring system enables XeFM to automatically detect and reflect file
 - Enforces rate limiting to prevent UI thrashing
 - Handles monitoring mode selection (native vs fallback/polling)
 - Provides configuration-based enable/disable control
-- Posts reload requests to `file_manager.reload_queue` (thread-safe)
+- Posts reload requests to the app's `reload_queue` (thread-safe) and calls
+  its `_wake_pump()`
 - Implements error recovery with retry logic and fallback mechanisms
 
 **State Management**:
 ```python
-self.monitors = {
-    "left": MonitorState,   # Left pane monitoring state
-    "right": MonitorState   # Right pane monitoring state
+self.monitoring_state = {   # Per pane: path, observer, attempt, error/retry counts, ...
+    'left': {...},
+    'right': {...}
 }
-self.reload_timers = {}     # Coalescing timers per pane
-self.rate_limit_times = {}  # Rate limiting timestamps per pane
+self.coalesce_timers = {'left': None, 'right': None}  # Coalescing timers per pane
+self.reload_times = {'left': [], 'right': []}         # Rate limiting timestamps per pane
+self.suppressed_paths = {}  # str(path) -> refcount, see suppress_path()
 ```
 
 **Configuration Properties**:
@@ -152,61 +154,61 @@ def _is_immediate_child(self, event_path: str) -> bool:
 - `on_modified()` → "modified"
 - `on_moved()` → "created" (move-in) or "deleted" (move-out)
 
-#### FileManager Integration
+#### XeFMApp Integration
 
 **Location**: `xefm/app.py`
 
-**Purpose**: Integrates monitoring into main application event loop.
+**Purpose**: Integrates monitoring into the application's pump.
 
 **Key Integration Points**:
 
-1. **Initialization** (`__init__`):
+1. **Initialization** (`XeFMApp.__init__`):
 ```python
-# Create thread-safe queue for reload requests
-self.reload_queue = queue.Queue()
+self.reload_queue: queue.Queue = queue.Queue()
+self._result_queue: queue.Queue = queue.Queue()   # completed async listings
+self.file_monitor = FileMonitorManager(self.config, self)
+self._fileops.monitor = self.file_monitor          # see Suppression During ...
+self._monitored = {"left": None, "right": None}
+self._sync_monitored_dirs()
+```
+The app never calls `start_monitoring()`. `_sync_monitored_dirs()` sees both
+panes' paths differ from `_monitored` and calls `update_monitored_directory()`
+for each, which posts the start to the monitor worker (see The Monitor Worker).
 
-# Initialize and start monitoring
-self.file_monitor_manager = FileMonitorManager(self.config, self)
-self.file_monitor_manager.start_monitoring(
-    self.pane_manager.left_pane['path'],
-    self.pane_manager.right_pane['path']
-)
+2. **The pump** (`_pump_monitoring`): one method drains everything that worker
+threads produce. It is called from `on_event` (every input event), and either
+from `_on_pump_wake` (event-driven backends, woken by `_wake_pump()`) or from
+the `_reload_tick` animation tick (poll-loop backends such as the TUI, which
+cannot dispatch to the main thread), plus `_loading_tick` while a listing is in
+flight:
+```python
+def _pump_monitoring(self) -> bool:
+    self._sync_monitored_dirs()
+    self.file_monitor.check_observer_health()
+    self._process_reload_queue()        # side effect only; see Absorbing Spurious Reloads
+    listed = self._process_result_queue()
+    ...
+    return listed or loading or ...      # True -> caller re-renders
 ```
 
-2. **Main Event Loop** (`run`):
+3. **Directory Navigation**: no navigation site knows about monitoring.
+`_sync_monitored_dirs()`, on every pump, re-points a pane's watcher when its
+path changed:
 ```python
-while True:
-    # Check reload queue BEFORE processing events
-    try:
-        while True:
-            pane_name = self.reload_queue.get_nowait()
-            self._handle_reload_request(pane_name)
-            self.mark_dirty()  # Trigger redraw
-    except queue.Empty:
-        pass
-    
-    # Process events (blocks waiting for input)
-    self.renderer.run_event_loop_iteration(timeout_ms=timeout_ms)
-    
-    # Draw interface
-    self.draw_interface()
+def _sync_monitored_dirs(self):
+    if not self.file_monitor.is_monitoring_enabled():
+        return
+    for name in ("left", "right"):
+        path = self.pane(name)["path"]
+        if path != self._monitored[name]:
+            self._monitored[name] = path
+            self.file_monitor.update_monitored_directory(name, path)
 ```
 
-3. **Directory Navigation**:
+4. **Cleanup** (`_quit`):
 ```python
-def navigate_to_dir(self, pane_data, new_path):
-    # ... navigation logic ...
-    
-    # Update monitoring for this pane
-    pane_name = "left" if pane_data == self.pane_manager.left_pane else "right"
-    self.file_monitor_manager.update_monitored_directory(pane_name, new_path)
-```
-
-4. **Cleanup** (`run` exit):
-```python
-# Stop file monitoring before cleanup
-if hasattr(self, 'file_monitor_manager'):
-    self.file_monitor_manager.stop_monitoring()
+if getattr(self, "file_monitor", None) is not None:
+    self.file_monitor.stop_monitoring()
 ```
 
 
@@ -214,75 +216,72 @@ if hasattr(self, 'file_monitor_manager'):
 
 ### XeFM's Event Loop Architecture
 
-XeFM's main thread runs a blocking event loop that waits for user input:
+The main (UI) thread runs the PuiKit backend's event loop; XeFM does not own a
+loop of its own. Work from other threads reaches it through `_pump_monitoring()`,
+which runs on the UI thread in one of two ways, chosen in `XeFMApp.__init__` by
+`self._event_driven = self.panel.dispatches_to_main_thread`:
 
-```python
-# Main thread in FileManager.run()
-while True:
-    # Process events (blocks waiting for keyboard/mouse input)
-    self.renderer.run_event_loop_iteration(timeout_ms=timeout_ms)
-    
-    # Redraw interface
-    self.draw_interface()
-```
+- **Event-driven backends** (GUI): there is no idle timer. A producer thread
+  calls `_wake_pump()`, which coalesces a burst of signals into one
+  `panel.call_on_main_thread(self._on_pump_wake)`; `_on_pump_wake` clears the
+  pending flag, pumps, and renders (`_pump_render`) if something changed.
+- **Poll-loop backends** (TUI): `panel.request_animation_ticks(self._reload_tick)`
+  pumps every frame.
 
-When an event arrives (keyboard, mouse, resize), `run_event_loop_iteration()` immediately invokes callbacks synchronously on the main thread before returning. This means callbacks execute within the event processing, not as separate scheduled tasks.
+`on_event` also pumps before handling each input event.
 
 ### Thread-Safe Communication
 
 Since the monitor thread cannot directly call UI methods, we use a thread-safe queue:
 
 ```
-Main Thread                           Monitor Thread
+UI Thread                             Monitor / timer threads
     │                                      │
-    │ Check reload_queue                  │
-    │ (at start of each loop)             │
-    │                                      │
-    │ navigate_to_dir()                   │
-    ├─────────────────────────────────────>│
-    │                                      │ start_watching()
+    │ _sync_monitored_dirs()              │
+    │   update_monitored_directory() ─────>│ start observer (monitor worker)
     │                                      │
     │                                      │ [filesystem change detected]
-    │                                      │
+    │                                      │ coalesce timer → _post_reload_request()
     │                                      │ reload_queue.put(pane_name)
-    │ <─────────────────────────────────────┤
-    │ reload_queue.get_nowait()           │
-    │ _handle_reload_request(pane_name)   │
-    │ refresh_files()                      │
-    │                                      │
-    │ run_event_loop_iteration()          │
-    │ draw_interface()                     │
-    │                                      │
+    │ <──────────────────────────── _wake_pump()
+    │ _pump_monitoring()                  │
+    │   _process_reload_queue()           │
+    │     _handle_reload_request(pane)    │
+    │       _list_pane(keep_visible=True) ─> listing worker
+    │   _process_result_queue()  <──────── result
+    │ render if the listing changed       │
 ```
 
 ### Implementation Details
 
-**Queue Creation** (`FileManager.__init__`):
+**Queue Creation** (`XeFMApp.__init__`):
 ```python
-import queue
-self.reload_queue = queue.Queue()  # Thread-safe queue for reload requests
+self.reload_queue: queue.Queue = queue.Queue()
 ```
+`FileMonitorManager.__init__` keeps a reference to it (`self.reload_queue =
+file_manager.reload_queue`).
 
-**Main Loop Processing** (`FileManager.run`):
+**Draining** (`XeFMApp._process_reload_queue`, called from `_pump_monitoring`):
 ```python
-while True:
-    # Check reload queue BEFORE processing events
-    try:
-        while True:
+def _process_reload_queue(self) -> bool:
+    reloaded = False
+    while True:
+        try:
             pane_name = self.reload_queue.get_nowait()
-            self._handle_reload_request(pane_name)
-            self.mark_dirty()  # Trigger redraw
-    except queue.Empty:
-        pass
-    
-    # ... rest of event loop ...
+        except queue.Empty:
+            break
+        if self._handle_reload_request(pane_name):
+            reloaded = True
+    return reloaded
 ```
 
-**Monitor Thread Callback** (safe to call from any thread):
+**Monitor-side posting** (`FileMonitorManager._post_reload_request`, on a
+coalesce-timer thread):
 ```python
-def _on_filesystem_change(self, pane_name: str):
-    # Just post to queue - no UI operations
-    self.file_manager.reload_queue.put(pane_name)
+self.reload_queue.put(pane_name)
+wake = getattr(self.file_manager, "_wake_pump", None)
+if wake is not None:
+    wake()
 ```
 
 ### The Monitor Worker
@@ -352,7 +351,7 @@ and look at `state['observer']` on the next line.
 - `queue.Queue` is thread-safe for put/get operations
 - Monitor thread only posts pane names to queue (no UI access)
 - Main thread is sole consumer of queue (processes reloads)
-- All UI operations (`refresh_files`, `draw_interface`) occur on main thread
+- All UI operations (`_handle_reload_request`, installing listings, rendering) occur on the main thread
 - FileMonitorManager uses locks only for its own state management
 - No observer is started or stopped on the UI thread, and `state_lock` is never
   held while one is (#410)
@@ -382,7 +381,7 @@ External Change → watchdog → XeFMFileSystemEventHandler → FileMonitorManag
                                                     reload_queue.put(pane_name)
                                                                 │
                                                                 ▼
-                                                    FileManager._handle_reload_request()
+                                                    XeFMApp._handle_reload_request()   
                                                                 │
                                                                 ▼
                                                     ┌───────────────────────┐
@@ -420,41 +419,43 @@ External Change → watchdog → XeFMFileSystemEventHandler → FileMonitorManag
        # Log the event
        self.logger.info(f"Filesystem event: {event_type} - {filename} in {pane_name} pane")
        
-       # Check if suppressed
-       if time.time() < self.suppress_until:
+       # Drop events for a directory one of XeFM's own file operations is
+       # mutating (see Suppression During XeFM's Own File Operations)
+       if str(state['path']) in self.suppressed_paths:
            return
        
-       # Set up coalescing timer (200ms)
-       if pane_name in self.reload_timers:
-           self.reload_timers[pane_name].cancel()
-       
-       timer = threading.Timer(coalesce_delay_s, self._post_reload_request, args=[pane_name])
-       self.reload_timers[pane_name] = timer
+       # Per pane watching this directory: check the rate limit, then
+       # (re)arm the coalescing timer (200ms)
+       if self.coalesce_timers[pane] is not None:
+           self.coalesce_timers[pane].cancel()
+       timer = threading.Timer(coalesce_delay_s, coalesced_reload)
+       self.coalesce_timers[pane] = timer
        timer.start()
    ```
 
 4. **Coalescing Timer Fires**
    ```python
    def _post_reload_request(self, pane_name: str):
-       # Check rate limit
-       if not self._check_rate_limit(pane_name):
-           return  # Too many reloads, skip this one
-       
-       # Post to queue
-       self.file_manager.reload_queue.put(pane_name)
+       # Drop it if the directory became suppressed meanwhile
+       # Record the reload time for rate limiting, then post to queue
+       self.reload_queue.put(pane_name)
+       self.file_manager._wake_pump()   # wake the UI thread
    ```
 
 5. **Main Thread Processes Reload**
    ```python
    def _handle_reload_request(self, pane_name):
-       # Get pane data
-       pane_data = self.pane_manager.left_pane if pane_name == "left" else self.pane_manager.right_pane
+       pane = self.pm.left_pane if pane_name == "left" else self.pm.right_pane
+       if pane.get("virtual") or pane.get("loading"):
+           return False   # search results / a listing already in flight
 
        # Store current context
-       anchor = self._cursor_anchor(pane_data)
+       anchor = self._cursor_anchor(pane)
 
        # Re-list on a worker, restoring the cursor when the result lands
-       # ... (see Context Preservation section)
+       self._list_pane(pane_name, on_ready=lambda p: self._apply_cursor_anchor(p, anchor),
+                       keep_visible=True)
+       return True
    ```
 
 
@@ -874,13 +875,12 @@ File monitoring configuration is defined in `xefm/_config.py`:
 FILE_MONITORING_ENABLED = True                      # Enable/disable automatic file list reloading
 FILE_MONITORING_COALESCE_DELAY_MS = 200            # Event coalescing window in milliseconds
 FILE_MONITORING_MAX_RELOADS_PER_SECOND = 5         # Maximum reloads per second (rate limiting)
-FILE_MONITORING_SUPPRESS_AFTER_ACTION_MS = 1000    # Suppress automatic reloads after user actions (milliseconds)
 FILE_MONITORING_FALLBACK_POLL_INTERVAL_S = 5       # Polling interval for fallback mode (seconds)
 ```
 
 ### Configuration Validation
 
-Configuration validation is performed in `xefm/config.py`:
+Configuration validation is performed in `xefm/config.py` (`ConfigManager.validate_config`; excerpt):
 
 ```python
 def validate_config(config):
@@ -900,11 +900,6 @@ def validate_config(config):
        config.FILE_MONITORING_MAX_RELOADS_PER_SECOND < 1:
         errors.append("FILE_MONITORING_MAX_RELOADS_PER_SECOND must be a positive integer")
     
-    # Validate suppress after action
-    if not isinstance(config.FILE_MONITORING_SUPPRESS_AFTER_ACTION_MS, int) or \
-       config.FILE_MONITORING_SUPPRESS_AFTER_ACTION_MS < 0:
-        errors.append("FILE_MONITORING_SUPPRESS_AFTER_ACTION_MS must be a non-negative integer")
-    
     # Validate fallback poll interval
     if not isinstance(config.FILE_MONITORING_FALLBACK_POLL_INTERVAL_S, (int, float)) or \
        config.FILE_MONITORING_FALLBACK_POLL_INTERVAL_S <= 0:
@@ -915,26 +910,13 @@ def validate_config(config):
 
 ### Runtime Configuration Changes
 
-Monitoring can be toggled at runtime without restarting XeFM:
-
-```python
-# In FileManager
-def toggle_file_monitoring(self):
-    """Toggle file monitoring on/off at runtime."""
-    if self.file_monitor_manager.is_monitoring_enabled():
-        # Currently enabled - disable it
-        self.file_monitor_manager.stop_monitoring()
-        self.config.FILE_MONITORING_ENABLED = False
-        self.logger.info("File monitoring disabled")
-    else:
-        # Currently disabled - enable it
-        self.config.FILE_MONITORING_ENABLED = True
-        self.file_monitor_manager.start_monitoring(
-            self.pane_manager.left_pane['path'],
-            self.pane_manager.right_pane['path']
-        )
-        self.logger.info("File monitoring enabled")
-```
+There is no runtime on/off toggle. `FileMonitorManager.__init__` reads
+`FILE_MONITORING_ENABLED` once into `self.enabled`. `XeFMApp.reload_config`
+re-points `self.file_monitor.config` at the reloaded config, so the values the
+manager reads on demand (`FILE_MONITORING_COALESCE_DELAY_MS` and
+`FILE_MONITORING_MAX_RELOADS_PER_SECOND` per event,
+`FILE_MONITORING_FALLBACK_POLL_INTERVAL_S` when an observer is next started)
+follow the new config; turning monitoring on or off takes a restart.
 
 
 ## Testing Approach
@@ -948,7 +930,7 @@ The file monitoring feature uses both unit tests and property-based tests for co
 - Platform-specific monitoring initialization
 - Configuration loading and validation
 - Error handling for specific error conditions
-- Integration between FileMonitorManager and FileManager
+- Integration between FileMonitorManager and XeFMApp
 - UI state preservation during reloads
 
 **Property-Based Tests** (`test/test_*.py` with `@given` decorator):
@@ -1021,7 +1003,7 @@ def test_property_1_filesystem_event_detection(filenames):
 - `test/test_file_monitor_error_handling.py` - Error recovery
 - `test/test_file_monitoring_config.py` - Configuration validation
 - `test/test_polling_interval.py` - Polling mode behavior
-- `test/test_reload_context_preservation.py` - Cursor/scroll preservation
+- `test/test_xefm_app_file_monitoring.py` - App wiring: reload queue, cursor/scroll preservation (`ContextPreservation`)
 
 ### Running Tests
 
@@ -1051,10 +1033,10 @@ python -m pytest test/test_*file_monitor*.py --cov=xefm --cov-report=html
 ### File Structure
 
 ```
-src/
-├── xefm/file_monitor_manager.py      # Central monitoring coordinator
-├── xefm/file_monitor_observer.py     # Per-directory watcher
-├── xefm/app.py                       # FileManager integration
+xefm/
+├── file_monitor_manager.py           # Central monitoring coordinator
+├── file_monitor_observer.py          # Per-directory watcher
+├── app.py                            # XeFMApp integration
 └── _config.py                        # Configuration defaults
 
 test/
@@ -1065,7 +1047,7 @@ test/
 ├── test_file_monitor_error_handling.py             # Error recovery tests
 ├── test_file_monitoring_config.py                  # Configuration tests
 ├── test_polling_interval.py                        # Polling mode tests
-└── test_reload_context_preservation.py             # Context preservation tests
+└── test_xefm_app_file_monitoring.py                # App wiring + context preservation tests
 
 doc/
 ├── FILE_MONITORING_FEATURE.md       # End-user documentation
@@ -1086,7 +1068,8 @@ doc/
 - `stop_monitoring()` - Stop all monitoring
 - `is_monitoring_enabled()` - Check if monitoring is enabled
 - `get_monitoring_mode(path)` - Get monitoring mode for path
-- `suppress_reloads(duration_ms)` - Temporarily suppress reloads
+- `suppress_path(path)` / `release_path(path)` - Drop events for a directory
+  while one of XeFM's own file operations mutates it (refcounted)
 - `check_observer_health()` - Check and recover dead observers
 - `is_in_fallback_mode()` - Check if any pane is in fallback mode
 
@@ -1201,22 +1184,20 @@ Prevents excessive reloads during high-frequency events:
 - Some intermediate states may not be visible
 - Eventual consistency (all changes reflected, but not immediately)
 
-#### Suppression After User Actions
+#### Suppression During File Operations
 
-Prevents redundant reloads after user-initiated operations:
-
-```python
-# User creates file → XeFM reloads immediately
-# Monitor detects same change → Suppressed for 1 second
-```
+Prevents redundant reloads while XeFM's own copy/move/delete runs: the
+mutated directories are suppressed for the operation's duration and the
+operation's completion refresh reconciles the panes (see Suppression During
+XeFM's Own File Operations).
 
 **Benefits**:
 - Eliminates duplicate reloads
-- Improves perceived performance
-- Reduces unnecessary work
+- Keeps re-lists from competing with the operation for disk I/O
 
 **Trade-offs**:
-- External changes within suppression window are delayed
+- An external change to a suppressed directory shows up only at the
+  operation's completion refresh
 
 ### Performance Tuning
 
@@ -1308,13 +1289,13 @@ INFO [FileMonitor] Monitoring mode changed: native -> polling (reason: connectio
 **Diagnosis**:
 1. Check coalescing delay: `FILE_MONITORING_COALESCE_DELAY_MS`
 2. Check if rate limited: Look for "Rate limit exceeded" in logs
-3. Check if suppressed: Look for "Reload suppressed" in logs
+3. Check if suppressed: a file operation into that directory is still running
+   (debug log "Suppressing filesystem events for ...")
 4. Check if in polling mode: Polling has inherent delay
 
 **Solutions**:
 - Decrease coalescing delay: `FILE_MONITORING_COALESCE_DELAY_MS = 100`
 - Increase rate limit: `FILE_MONITORING_MAX_RELOADS_PER_SECOND = 10`
-- Decrease suppression time: `FILE_MONITORING_SUPPRESS_AFTER_ACTION_MS = 500`
 - Use native monitoring instead of polling
 
 #### Issue: Cursor Jumps After Reload
@@ -1335,24 +1316,24 @@ INFO [FileMonitor] Monitoring mode changed: native -> polling (reason: connectio
 **Check monitoring status**:
 ```python
 # In XeFM Python console or debug session
-file_monitor_manager.is_monitoring_enabled()
-file_monitor_manager.get_monitoring_mode(Path("/path/to/dir"))
-file_monitor_manager.is_in_fallback_mode()
+app.file_monitor.is_monitoring_enabled()
+app.file_monitor.get_monitoring_mode(Path("/path/to/dir"))
+app.file_monitor.is_in_fallback_mode()
 ```
 
 **Check observer health**:
 ```python
-file_monitor_manager.check_observer_health()
+app.file_monitor.check_observer_health()
 ```
 
 **Manually trigger reload**:
 ```python
-file_manager.reload_queue.put("left")
+app.reload_queue.put("left"); app._wake_pump()
 ```
 
 **Check queue status**:
 ```python
-file_manager.reload_queue.qsize()  # Number of pending reloads
+app.reload_queue.qsize()  # Number of pending reloads
 ```
 
 
@@ -1569,7 +1550,8 @@ If upgrading from a version without file monitoring:
 4. **Testing Considerations**
    - Automated tests may need adjustment
    - Tests that create files should account for automatic reloads
-   - Use `suppress_reloads()` in tests if needed
+   - Use `suppress_path()` / `release_path()` in tests if needed, or fake the
+     monitor (as `test/test_xefm_app_file_monitoring.py` does with `FakeMonitor`)
 
 
 ## References
@@ -1577,15 +1559,12 @@ If upgrading from a version without file monitoring:
 ### Related Documentation
 
 - **End-User Documentation**: `doc/FILE_MONITORING_FEATURE.md`
-- **Design Document**: `.kiro/specs/automatic-file-list-reloading/design.md`
-- **Requirements Document**: `.kiro/specs/automatic-file-list-reloading/requirements.md`
-- **Tasks Document**: `.kiro/specs/automatic-file-list-reloading/tasks.md`
 
 ### Source Files
 
 - **FileMonitorManager**: `xefm/file_monitor_manager.py`
 - **FileMonitorObserver**: `xefm/file_monitor_observer.py`
-- **FileManager Integration**: `xefm/app.py`
+- **XeFMApp Integration**: `xefm/app.py`
 - **Configuration**: `xefm/_config.py`
 - **Configuration Manager**: `xefm/config.py`
 
@@ -1598,7 +1577,7 @@ If upgrading from a version without file monitoring:
 - **Error Handling**: `test/test_file_monitor_error_handling.py`
 - **Configuration**: `test/test_file_monitoring_config.py`
 - **Polling Interval**: `test/test_polling_interval.py`
-- **Context Preservation**: `test/test_reload_context_preservation.py`
+- **App Wiring / Context Preservation**: `test/test_xefm_app_file_monitoring.py`
 
 ### External Dependencies
 

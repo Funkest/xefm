@@ -7,7 +7,7 @@ to add one. End-user documentation is in
 ## One renderer
 
 Every scene XeFM offers is a fragment shader, evaluated per pixel on the GPU. There
-used to be two kinds — a CPU path in `xefm/background_animations.py` that returned
+used to be two kinds — a CPU path in Python that returned
 line segments for the backend to stroke, and this one — and the CPU path was retired
 because it lost on every axis that mattered:
 
@@ -25,8 +25,7 @@ regardless of how little the scene itself drew — measured at 0.5ms of scene ag
 advances without marking the view dirty. Idle, that took the wave from ~52% of a core
 to ~4%.
 
-The removed code is in git history if you ever need it (`xefm/background_animations.py`,
-`test/test_background_animations.py`). Don't reintroduce it.
+The removed code is in git history if you ever need it. Don't reintroduce it.
 
 ## Where the pieces live
 

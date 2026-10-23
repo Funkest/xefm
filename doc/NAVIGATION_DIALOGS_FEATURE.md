@@ -236,12 +236,6 @@ Mounted volumes, SSH hosts and S3 buckets are not configured here — they are
 read from the machine every time the dialog opens. The SSH rows come from your
 `~/.ssh/config`, so a host you no longer use is removed by editing that file.
 
-Visual indicators:
-
-- Home directory
-- Local filesystem directory
-- S3 bucket
-
 ### S3 buckets
 
 When `boto3` is installed and AWS credentials are configured, the drives dialog
@@ -253,8 +247,7 @@ To enable S3 listing, configure AWS credentials with any of: AWS CLI
 variables, or an `~/.aws/credentials` file.
 
 If buckets do not appear, check that credentials work (`aws s3 ls`), network
-connectivity, and your IAM permissions for `ListBuckets`. A "No credentials
-configured" message points at the step above.
+connectivity, and your IAM permissions for `ListBuckets`.
 
 ### Disconnecting and ejecting
 
