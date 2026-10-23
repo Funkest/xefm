@@ -8,7 +8,7 @@ the first time XeFM starts, it asks which one you want.
 | **AFX style** | run commands | letters (`C`, `M`, `K`, `V`, …) |
 | **Orthodox** | search for a file | function keys (`F3`, `F5`, `F8`, …) |
 | **OS native** | search for a file | Finder's or Explorer's keys (`Cmd`/`Ctrl`-`C`, `F2`, `Delete`, …) |
-| **Vim style** | run commands | vifm's keys (`hjkl`, `gg`, `yy`, `dd`, `/`, …) |
+| **Vim style** | run commands | Vim-style keys (`hjkl`, `gg`, `yy`, `dd`, `/`, …) |
 
 **Tools → Advanced → Keymap** switches at any time. The change applies at once: the help
 dialog (`F1`), the menus and the status bar show the new keys, and XeFM
@@ -170,8 +170,8 @@ last column. Everything else is the same.
 
 ## Vim style
 
-The keys of [vifm](https://vifm.info), the Vim-like file manager: `hjkl` to
-move, two-key commands such as `gg`, `yy` and `dd`, and `/` to search. Letters
+Vim-style keys, as Vim-like file managers use them: `hjkl` to move, two-key
+commands such as `gg`, `yy` and `dd`, and `/` to search. Letters
 run commands, as in AFX style, and typing a letter never searches.
 
 | Keys | Action |
@@ -205,8 +205,7 @@ run commands, as in AFX style, and typing a letter never searches.
 | `ZZ` / `ZQ` | Quit (XeFM asks first) |
 | `F3`–`F8` | View, edit, copy and move to the other pane, new folder, delete |
 
-`F3`–`F8`, `w`, `s` and `S` come from the sample configuration vifm gives a
-new install. The text viewer moves the same way: `j` / `k` / `h` / `l`,
+`F3`–`F8` follow the two-pane file managers' function keys. The text viewer moves the same way: `j` / `k` / `h` / `l`,
 `gg` / `G`, `Ctrl-F` / `Ctrl-B` (and `Ctrl-D` / `Ctrl-U`, `Space`) by the page,
 `/` to search, and `q` or `ZZ` to close it.
 
@@ -215,14 +214,13 @@ While one is half typed, the status bar shows the first key (`g …`); `Esc`
 drops it. None of the first keys runs anything on its own, so nothing waits
 for `KEY_SEQUENCE_TIMEOUT`.
 
-Where XeFM differs from vifm:
+Where it differs from Vim and Vim-like file managers:
 
 - `v` does not start a visual mode. It marks the range from the nearest
   marked item to the cursor, so mark the start with `t`, move, and press `v`.
-- `dd` moves to the system Trash, not to vifm's own trash folder, and `p`
-  pastes what `yy` copied or `x` cut. vifm's `P` (move what was yanked) is
-  `x` then `p` here.
-- `q` alone does nothing in the file list, as in vifm. In the text viewer it
+- `dd` moves to the system Trash, and `p` pastes what `yy` copied or `x`
+  cut. There is no `P` that moves what was yanked: cut with `x`, then `p`.
+- `q` alone does nothing in the file list; `ZZ` quits. In the text viewer it
   closes the viewer.
 - `/` is XeFM's incremental search, not a regular expression, and it does not
   mark its matches.

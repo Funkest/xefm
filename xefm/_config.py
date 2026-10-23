@@ -266,9 +266,9 @@ class Config:
     #                  to the other pane; typing a letter searches. In a
     #                  terminal, chords it cannot send (Command, Ctrl-Shift)
     #                  have Ctrl / function-key stand-ins.
-    #   'vim'       -- vifm's keys: hjkl, gg / G, yy / dd / p, cw rename, / and
-    #                  n to search, ZZ to quit. Two-key commands are key
-    #                  sequences (see KEY_SEQUENCE_TIMEOUT below).
+    #   'vim'       -- Vim-style keys: hjkl to move, gg / G, yy / dd / p, cw
+    #                  rename, / and n to search, ZZ to quit. Two-key commands
+    #                  are key sequences (see KEY_SEQUENCE_TIMEOUT below).
     # Setting this wins over the Tools > Advanced > Keymap menu. KEY_BINDINGS
     # below is laid over whichever preset is in force. See
     # doc/KEYMAP_PRESETS_FEATURE.md.

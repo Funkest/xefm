@@ -7,8 +7,8 @@ an upgrade from before presets alike — asks which one to use.
 - **AFX** (:mod:`xefm.keymap_afx`) — one letter runs one command.
 - **Orthodox** — function keys, and typing a letter searches.
 - **OS native** — Finder's keys on macOS, Explorer's elsewhere (#587).
-- **Vim style** — vifm's keys: ``hjkl``, ``gg`` / ``G``, ``yy`` / ``dd`` /
-  ``p``, ``/`` and ``n`` (#587).
+- **Vim style** — Vim-style keys: ``hjkl``, ``gg`` / ``G``, ``yy`` / ``dd``
+  / ``p``, ``/`` and ``n`` (#587).
 
 A preset is **a key table plus behavior flags**:
 
@@ -376,10 +376,9 @@ _VIM_BINDINGS = {
 
 _VIM = Preset(
     name=VIM,
-    label="Vim style (vifm)",
-    button="Vim style",
-    description=("vifm's keys: hjkl, gg / G, yy / dd / p, cw rename, / and n "
-                 "to search, ZZ to quit."),
+    label="Vim style",
+    description=("hjkl to move, gg / G, yy / dd / p, cw rename, / and n to "
+                 "search, ZZ to quit."),
     bindings=_VIM_BINDINGS,
     free_letters=True,
 )
