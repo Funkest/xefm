@@ -48,7 +48,11 @@ https://github.com/user-attachments/assets/f121401d-990b-445d-aa79-526d34e4a44e
 - **AWS S3 support** for cloud storage operations
 - **Connect to Server** - Find file servers on the network, browse their shares, and mount one from inside XeFM, with no Finder or Explorer detour (macOS and Windows)
 - **Advanced search** with real-time filtering, background processing, and multi-selection bulk operations
+- **OS index search** - Search Spotlight (macOS) or Windows Search from the search dialog and work with the hits as a file list ([details](doc/OS_INDEX_SEARCH_FEATURE.md))
+- **Favorites & tags** - Bookmark directories and files; read and write the tags your system already keeps, so tags set in Finder show up in XeFM and back ([details](doc/FILE_TAGS_FEATURE.md))
 - **Rich built-in viewers** - Syntax-highlighted text, images, Markdown, JSON, and CSV/TSV
+- **Compare & sync** - Side-by-side text diff down to the exact characters that changed; recursive directory compare, and a one-step sync (update or mirror) with the whole plan shown before anything is written ([diff](doc/DIFF_VIEWER_FEATURE.md), [sync](doc/DIRECTORY_SYNC_FEATURE.md))
+- **Find similar files** - Find duplicates, and images, videos and audio that are the same media resized, re-encoded or retagged ([details](doc/FIND_SIMILAR_FILES_FEATURE.md))
 - **Themes & visual effects** - A dozen built-in themes; desktop mode adds GPU background animations, CRT/phosphor screen effects, and text-reveal animations
 - **Customizable** - Fully configurable key bindings, settings, and external program launchers; a command palette finds every action by name
 - **Extensions** - Install packages that add actions, themes, filters, syntax highlighting and more — [browse the list](https://github.com/crftwr/xefm/wiki/Extensions) — or let an AI agent write one with the XeFM skill
