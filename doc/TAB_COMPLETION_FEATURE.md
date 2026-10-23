@@ -61,8 +61,12 @@ turning hidden files on.
 
 ## Notes and limits
 
-- Completion reads the **local filesystem** only. In a remote (S3 / SSH) pane,
-  TAB simply offers no candidates rather than stalling.
+- Completion works on **remote locations** too: in an SSH or S3 pane, inside
+  an archive, or for a path such as `ssh://host/srv/` typed into Jump to
+  Path. Remote paths always use `/`; inside an archive, the part after `#`
+  completes too. Nothing is looked up until the host or bucket is typed, so
+  `ssh://ho` offers nothing yet. A host that cannot be reached also offers
+  nothing, rather than an error.
 - The directory listing behind the candidates is read **in one pass** (the same
   fast enumeration the file panes use) and runs **in the background**: on a slow
   location (a network mount, a spun-down disk) the prompt keeps taking

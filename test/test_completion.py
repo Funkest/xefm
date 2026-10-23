@@ -163,6 +163,119 @@ def test_completion_start_pos(tmp_path):
 
 # --- CompletionController ----------------------------------------------------
 
+# --- remote paths (#674) ------------------------------------------------------
+
+from xefm import path_schemes  # noqa: E402
+from xefm.path_base import ReadOnlyPathImpl, UriStatResult  # noqa: E402
+
+TREE = {"": ["docs", "notes.txt", ".hidden"], "docs": ["guide.md", "sub"],
+        "docs/sub": []}
+LISTED = []
+
+
+class MemPathImpl(ReadOnlyPathImpl):
+    """``mem://<host>/<key>``: a host part, as ssh and s3 have, then a tree."""
+
+    SCHEME = "mem"
+
+    def parse_uri(self, uri):
+        rest = uri[len("mem://"):]
+        self.host, _, key = rest.partition("/")
+        return key
+
+    def root_prefix(self):
+        return f"mem://{self.host}/"
+
+    def exists(self):
+        return self.key in TREE or any(self.key == f"{d}/{n}".lstrip("/")
+                                       for d, ns in TREE.items() for n in ns)
+
+    def is_dir(self):
+        return self.key in TREE
+
+    def iterdir(self):
+        LISTED.append(str(self))
+        if self.host == "down":
+            raise ConnectionError("host unreachable")
+        for name in TREE.get(self.key, []):
+            yield self.child(name)
+
+    def stat(self):
+        return UriStatResult(is_dir=self.is_dir())
+
+    def open(self, *args, **kwargs):
+        raise OSError("no content")
+
+
+@pytest.fixture
+def mem():
+    LISTED.clear()
+    path_schemes.register("mem", MemPathImpl, source="test-completion")
+    yield
+    path_schemes.unregister_source("test-completion")
+
+
+def complete(completer, text):
+    return completer.get_candidates(text, len(text))
+
+
+def test_remote_uri_completes_through_the_storage_layer(mem):
+    c = FilepathCompleter(base_directory="/tmp")
+    assert complete(c, "mem://h/") == [".hidden", "docs/", "notes.txt"]
+    assert complete(c, "mem://h/do") == ["docs/"]          # "/" whatever os.sep is
+    assert complete(c, "mem://h/docs/") == ["guide.md", "sub/"]
+    assert c.get_completion_start_pos("mem://h/docs/gu", 15) == len("mem://h/docs/")
+
+
+def test_a_relative_token_under_a_remote_base(mem):
+    c = FilepathCompleter(base_directory="mem://h/docs")
+    assert complete(c, "g") == ["guide.md"]
+    assert complete(c, "sub/") == []
+    assert c.get_completion_start_pos("sub/x", 5) == 4
+    root = FilepathCompleter(base_directory="mem://h/")
+    assert complete(root, "docs/s") == ["sub/"]
+
+
+def test_an_absolute_local_token_under_a_remote_base_stays_local(mem, tmp_path):
+    (tmp_path / "local.txt").write_text("x")
+    c = FilepathCompleter(base_directory="mem://h/docs")
+    assert complete(c, str(tmp_path) + SEP + "lo") == ["local.txt"]
+
+
+def test_nothing_is_listed_until_the_token_names_a_host(mem):
+    c = FilepathCompleter(base_directory="/tmp")
+    assert complete(c, "mem://") == []
+    assert complete(c, "mem://ho") == []
+    assert LISTED == []
+
+
+def test_remote_hidden_and_directories_only_follow_the_local_rules(mem):
+    shown = FilepathCompleter(base_directory="/tmp", show_hidden=False)
+    assert complete(shown, "mem://h/") == ["docs/", "notes.txt"]
+    assert complete(shown, "mem://h/.") == [".hidden"]
+    dirs = FilepathCompleter(base_directory="/tmp", directories_only=True)
+    assert complete(dirs, "mem://h/") == ["docs/"]
+
+
+def test_an_unreachable_host_offers_nothing(mem):
+    c = FilepathCompleter(base_directory="/tmp")
+    assert complete(c, "mem://down/") == []
+
+
+def test_archive_members_complete_after_the_hash(tmp_path):
+    import zipfile
+    archive = tmp_path / "t.zip"
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("docs/readme.txt", "x")
+        z.writestr("top.txt", "y")
+    root = f"archive://{archive}#"
+    c = FilepathCompleter(base_directory=str(tmp_path))
+    assert complete(c, root) == ["docs/", "top.txt"]
+    assert complete(c, root + "do") == ["docs/"]
+    assert c.get_completion_start_pos(root + "do", len(root) + 2) == len(root)
+    assert complete(FilepathCompleter(base_directory=root + "docs"), "r") == ["readme.txt"]
+
+
 class StubCompleter:
     """A deterministic completer for controller-state tests: the token is the
     whole text before the caret, matched against a fixed candidate list."""
