@@ -91,8 +91,10 @@ def links(text: str) -> list[str]:
     """Every link target in the prose, inline code spans left out."""
     found = []
     for line in prose_lines(text):
-        line = INLINE_CODE.sub("", line)
-        found += MD_LINK.findall(line) + HTML_HREF.findall(line)
+        code = [m.span() for m in INLINE_CODE.finditer(line)]
+        for pattern in (MD_LINK, HTML_HREF):
+            found += [m.group(1) for m in pattern.finditer(line)
+                      if not any(a <= m.start() < b for a, b in code)]
     return found
 
 
@@ -309,11 +311,18 @@ def fix() -> int:
                 return target
             return new_file + (hashmark + map_anchor(source, translated, anchor) if anchor else "")
 
-        def rewrite(segment: str) -> str:
-            segment = MD_LINK.sub(lambda m: m.group(0)[:m.start(1) - m.start()]
-                                  + retarget(m.group(1)) + ")", segment)
-            return HTML_HREF.sub(lambda m: m.group(0)[:m.start(1) - m.start()]
-                                 + retarget(m.group(1)) + '"', segment)
+        def rewrite(line: str) -> str:
+            # A link inside a code span is code; one whose text holds a code
+            # span is still a link, so only where the match starts counts.
+            code = [m.span() for m in INLINE_CODE.finditer(line)]
+
+            def repl(m: re.Match, close: str) -> str:
+                if any(a <= m.start() < b for a, b in code):
+                    return m.group(0)
+                return m.group(0)[:m.start(1) - m.start()] + retarget(m.group(1)) + close
+
+            line = MD_LINK.sub(lambda m: repl(m, ")"), line)
+            return HTML_HREF.sub(lambda m: repl(m, '"'), line)
 
         text = ja.read_text(encoding="utf-8")
         out, fenced = [], False
@@ -323,8 +332,7 @@ def fix() -> int:
             if fenced or FENCE.match(line) or line == ja_line:
                 out.append(line)
                 continue
-            parts = re.split(r"(`+[^`]*`+)", line)
-            out.append("".join(p if i % 2 else rewrite(p) for i, p in enumerate(parts)))
+            out.append(rewrite(line))
         new = "\n".join(out)
         if ja_line not in new:
             new = with_switcher(new, ja_line)

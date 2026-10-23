@@ -61,8 +61,9 @@ class TestStuckEmphasis:
 
 
 def test_links_skip_code():
-    text = "[a](A.md) `[b](B.md)`\n```\n[c](C.md)\n```\n<a href=\"D.md#x\">d</a>\n"
-    assert ct.links(text) == ["A.md", "D.md#x"]
+    text = ("[a](A.md) `[b](B.md)` [`e`](E.md)\n```\n[c](C.md)\n```\n"
+            "<a href=\"D.md#x\">d</a>\n")
+    assert ct.links(text) == ["A.md", "E.md", "D.md#x"]
 
 
 class TestFix:
@@ -80,7 +81,7 @@ class TestFix:
                                   encoding="utf-8")
         (doc / "A.ja.md").write_text(
             "# A\n\n## はじめに\n\n## 準備\n\n[B](B.md#x) と [準備](#setup)、"
-            "`[code](A.md)`、[README](../README.md)\n", encoding="utf-8")
+            "`[code](A.md)`、[README](../README.md)、[`B`](#intro)\n", encoding="utf-8")
         (doc / "B.md").write_text("# B\n\n## X\n", encoding="utf-8")
         return tmp_path
 
@@ -96,6 +97,7 @@ class TestFix:
         assert "[準備](#準備)" in page                 # its own anchor, mapped
         assert "`[code](A.md)`" in page               # code is left alone
         assert "[README](../README.ja.md)" in page
+        assert "[`B`](#はじめに)" in page               # code in the link text
 
     def test_the_english_page_gets_its_switcher_under_the_title(self, tmp_path, monkeypatch):
         root = self.make_repo(tmp_path, monkeypatch)
