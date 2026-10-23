@@ -34,14 +34,32 @@ edited.
   `directories_only` drops files. `show_hidden=False` (issue #258) drops
   dot-entries **unless the token itself starts with `.`** — the shell convention,
   so an explicitly typed dot still reaches `.config` while hidden files are off;
-  the app passes the panes' `flm.show_hidden` at each of the five call sites.
+  the app passes the panes' `flm.show_hidden` at each of the six call sites.
   It also drops entries whose `attrs["hidden"]` is set (the Windows hidden
   attribute, issue #284) — with no dot-escape, since the attribute has no
   spelling in the typed token.
   Filesystem errors (`FileNotFoundError`, `PermissionError`, `NotADirectoryError`,
-  `OSError`) return `[]` — so a not-yet-existing or non-local path is a no-op, not
-  a crash. The completer itself stays synchronous; *threading is the
-  controller's job* (below).
+  `OSError`) return `[]` — so a not-yet-existing path is a no-op, not a crash.
+  The completer itself stays synchronous; *threading is the controller's job*
+  (below).
+
+  **Remote tokens (#674).** A token that is a URI (`path_schemes.is_uri`), or a
+  relative token under a URI `base_directory` (the six call sites pass
+  `str(pane path)`, which is the URI for a remote pane), takes
+  `_remote_candidates` instead. It splits at the last `/`, or at the `#` that
+  ends an archive file's own path; joins a relative token to the base with `/`;
+  and lists through `xefm.path.listdir_attrs(Path(dir))`, the call the panes
+  make. That way SSH's and S3's listing caches (30 s / 60 s) apply, and so does
+  any `PATH_SCHEMES` backend. Directories get `/`, not `os.sep`; the hidden and
+  `directories_only` rules match the local ones.
+
+  Nothing is listed while the directory has no location after `://`, so typing
+  a host name does not try to connect to its prefixes. Any exception means
+  "no candidates": backends fail in their own ways (`ConnectionError`,
+  botocore errors). It runs on the controller's worker like a local listing,
+  so the prompt keeps taking keys, and the controller's generation and
+  snapshot rules drop a result the text has moved past. SSH sessions run with
+  options that never prompt, so a worker cannot stop on a password.
 - `CompletionController(edit, completer, threaded=False)` — the **reusable
   seam**. It reads/writes only `edit.text` / `edit.cursor` (and clears
   `edit._anchor`), so it depends on no particular dialog. State: `active`,

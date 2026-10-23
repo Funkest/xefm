@@ -34,8 +34,10 @@ import queue
 import threading
 from typing import Any, List, Protocol, runtime_checkable
 
+from xefm import path_schemes
 from xefm.dir_scan import scan_dir
 from xefm.log_manager import getLogger
+from xefm.path import Path, listdir_attrs
 
 
 def calculate_common_prefix(candidates: List[str]) -> str:
@@ -117,6 +119,17 @@ class FilepathCompleter:
     Errors reaching the filesystem (missing directory, permission denied, or a
     non-local path that ``os`` can't stat) yield ``[]`` — completing a path that
     does not exist yet is a no-op, never a crash.
+
+    **Remote paths** (#674) — ``ssh://``, ``s3://``, ``archive://`` and any
+    scheme a ``PATH_SCHEMES`` backend registered — complete too: when the typed
+    token is a URI, or is relative and ``base_directory`` is one. The directory
+    is listed through the storage layer the panes use
+    (:func:`xefm.path.listdir_attrs`), so the backends' own listing caches apply,
+    and the separator is ``/`` whatever ``os.sep`` is (``#`` too, after an
+    archive file). Nothing is listed until the token names a location — a host,
+    a bucket — so typing ``ssh://ho`` never tries to reach a host called ``""``.
+    The listing runs on the controller's worker thread like a local one; SSH
+    sessions never prompt, so it cannot stop for a password.
     """
 
     def __init__(self, base_directory: str | None = None, directories_only: bool = False,
@@ -126,8 +139,67 @@ class FilepathCompleter:
         self.show_hidden = show_hidden
         self.logger = getLogger("Completion")
 
+    def _is_remote(self, text_to_cursor: str) -> bool:
+        """Whether this token completes against a remote location: a URI
+        itself, or a relative token under a remote base directory."""
+        if path_schemes.is_uri(text_to_cursor):
+            return True
+        relative = not (os.path.isabs(text_to_cursor) or text_to_cursor.startswith("~"))
+        return relative and path_schemes.is_uri(self.base_directory)
+
+    @staticmethod
+    def _remote_split(token: str) -> int:
+        """Where a remote token's directory part ends: its last ``/``, or the
+        ``#`` that ends an archive file's own path, whichever is later."""
+        return max(token.rfind("/"), token.rfind("#"))
+
+    def _remote_directory(self, text_to_cursor: str) -> tuple[str | None, str]:
+        """``(directory URI, prefix)`` for a remote token, the directory None
+        while the token does not yet name a location to list."""
+        split = self._remote_split(text_to_cursor)
+        if path_schemes.is_uri(text_to_cursor):
+            directory, prefix = text_to_cursor[: split + 1], text_to_cursor[split + 1:]
+        else:
+            base = self.base_directory
+            joint = "" if base.endswith(("/", "#")) else "/"
+            if split == -1:
+                directory, prefix = base, text_to_cursor
+            else:
+                directory = base + joint + text_to_cursor[: split + 1]
+                prefix = text_to_cursor[split + 1:]
+        _scheme, _sep, location = directory.partition("://")
+        return (directory if location.strip("/") else None), prefix
+
+    def _remote_candidates(self, text_to_cursor: str) -> List[str]:
+        directory, prefix = self._remote_directory(text_to_cursor)
+        if directory is None:
+            return []
+        hide_dotfiles = not self.show_hidden and not prefix.startswith(".")
+        candidates: List[str] = []
+        try:
+            for entry, attrs in listdir_attrs(Path(directory)):
+                name = entry.name
+                if not name.startswith(prefix):  # case-sensitive
+                    continue
+                if hide_dotfiles and name.startswith("."):
+                    continue
+                if not self.show_hidden and attrs.get("hidden"):
+                    continue
+                is_directory = bool(attrs.get("is_dir"))
+                if self.directories_only and not is_directory:
+                    continue
+                candidates.append(name + "/" if is_directory else name)
+        except Exception as exc:  # noqa: BLE001 — any backend's failure means "nothing"
+            # A host that cannot be reached, a bucket that is not there, a path
+            # typed halfway: offer nothing, as the local case does.
+            self.logger.debug(f"No completions for '{directory}': {exc}")
+            return []
+        return sorted(candidates)
+
     def get_candidates(self, text: str, cursor_pos: int) -> List[str]:
         text_to_cursor = text[:cursor_pos]
+        if self._is_remote(text_to_cursor):
+            return self._remote_candidates(text_to_cursor)
 
         # Expand a leading ~ / ~user for the directory lookup only. os.path
         # .expanduser is a no-op when there's nothing to expand, so it is safe to
@@ -181,6 +253,8 @@ class FilepathCompleter:
         # Position after the last separator in the ORIGINAL (un-expanded) text —
         # this indexes the field's real buffer, which is what the controller slices
         # when it inserts a completion.
+        if self._is_remote(text[:cursor_pos]):
+            return self._remote_split(text[:cursor_pos]) + 1
         last_sep_pos = text[:cursor_pos].rfind(os.sep)
         return last_sep_pos + 1 if last_sep_pos != -1 else 0
 
