@@ -27,7 +27,7 @@ usual.
 |---|---|
 | `--ext SOURCE` | install this extension package: a folder, a `.zip`, an `https://` zip or `github:owner/repo`. Repeat it for more than one |
 | `--config FILE` | use this `config.py` instead of XeFM's template. XeFM uses a copy, so your file is not changed |
-| `--keymap afx` / `--keymap orthodox` | the keymap preset (default: `afx`) |
+| `--keymap afx` / `orthodox` / `native` / `vim` | the [keymap preset](KEYMAP_PRESETS_FEATURE.md) (default: `afx`) |
 | `--left DIR`, `--right DIR` | open these folders instead of the samples |
 | `--keep-home` | keep the temporary home, and print where it is |
 
@@ -49,6 +49,9 @@ ends, so nothing is left waiting. The script is a JSON list of steps:
 ]
 ```
 
+- The keys a script sends are the preset's keys: `Ctrl-T` opens the command
+  palette in AFX style, the default here, but not in every preset (see
+  [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side)).
 - Keys are written like `Ctrl-T`, `Shift-Down`, `Enter`, `Esc`, `F5` or `a`.
   `{"text": "..."}` types text, and `{"pause": 2}` waits two seconds.
 - After its keys, a step waits until the screen stops changing, for up to 10

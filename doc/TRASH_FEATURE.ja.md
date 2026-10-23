@@ -2,12 +2,14 @@
 
 [English](TRASH_FEATURE.md) \| 日本語
 
-`K`（または `Delete`）はファイルをシステムの**ゴミ箱**（Windows ではごみ箱）へ移動するので、誤って削除しても元に戻せます。ほかの場所で削除したファイルと同じように、Finder（*戻す*）、ごみ箱、またはデスクトップのゴミ箱から復元してください。
+**File → Move to Trash…**（`delete_files`、`Delete` キーでも実行できます）はファイルをシステムの**ゴミ箱**（Windows ではごみ箱）へ移動するので、誤って削除しても元に戻せます。ほかの場所で削除したファイルと同じように、Finder（*戻す*）、ごみ箱、またはデスクトップのゴミ箱から復元してください。
 
-| キー | 動作 |
-|---|---|
-| `K`、`Delete` | 選択項目（またはカーソル位置の項目）をゴミ箱へ移動 |
-| `Shift-K`、`Shift-Delete` | ゴミ箱を使わずに完全に削除 |
+| アクション | メニュー | 動作 |
+|---|---|---|
+| `delete_files` | **File → Move to Trash…**（Windows では **Move to Recycle Bin…**） | 選択項目（またはカーソル位置の項目）をゴミ箱へ移動 |
+| `delete_permanently` | **File → Delete Permanently…** | ゴミ箱を使わずに完全に削除 |
+
+`Delete` と `Shift-Delete` はどのプリセットでもこの 2 つを実行します。それ以外のキーはキーマッププリセットによって異なります。[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照してください。
 
 どちらも先に確認を求めます。ゴミ箱への移動は元に戻せるので、その確認ダイアログの既定のボタンは *Move to Trash* です。完全な削除の既定は *Cancel* です。**File** メニューと右クリックメニューの両方に、どちらのコマンドもあります。
 
@@ -19,7 +21,7 @@
 - アーカイブ内のファイル
 - Windows では、USB ドライブやネットワークドライブ（Windows 自身も完全に削除する場所）
 
-そうした場所では `K` は完全に削除し、何かが起こる前に、確認ダイアログで *There is no Trash here, so these are deleted for good*（ここにはゴミ箱がないので、完全に削除されます）と示されます。
+そうした場所では `delete_files` は完全に削除し、何かが起こる前に、確認ダイアログで *There is no Trash here, so these are deleted for good*（ここにはゴミ箱がないので、完全に削除されます）と示されます。
 
 ## どのゴミ箱か
 
@@ -36,5 +38,5 @@
 ```python
 CONFIRM_TRASH = True     # ask before moving to the Trash
 CONFIRM_DELETE = True    # ask before deleting for good
-DELETE_TO_TRASH = True   # False: K deletes for good, like Shift-K
+DELETE_TO_TRASH = True   # False: delete_files deletes for good, like delete_permanently
 ```

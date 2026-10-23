@@ -2,7 +2,7 @@
 
 [English](QUICK_VIEW_FEATURE.md) \| 日本語
 
-`Shift-V`（**View → Quick View**）を押すと、**反対側のペインが、カーソル位置の項目のプレビューになります**。カーソルを動かすとプレビューもついてきます。もう一度 `Shift-V` を押すか、`Esc` を押すと閉じます。
+**View → Quick View**（`quick_view`）を実行すると、**反対側のペインが、カーソル位置の項目のプレビューになります**。カーソルを動かすとプレビューもついてきます。もう一度実行するか、`Esc` を押すと閉じます。キーはキーマッププリセットによって異なります。[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照してください。
 
 | カーソル位置の項目 | プレビューの表示内容 |
 |-----------------------|-------------------|
@@ -31,5 +31,5 @@
 
 ## 関連項目
 
-- [テキストビューアー](TEXT_VIEWER_FEATURE.ja.md)と[画像ビューアー](IMAGE_VIEWER_FEATURE.ja.md)：フル機能のビューアー（`V`）
-- [ファイルの詳細](FILE_DETAILS_FEATURE.ja.md)：ディスク上のサイズなど（`I`）
+- [テキストビューアー](TEXT_VIEWER_FEATURE.ja.md)と[画像ビューアー](IMAGE_VIEWER_FEATURE.ja.md)：フル機能のビューアー（**File → View File**）
+- [ファイルの詳細](FILE_DETAILS_FEATURE.ja.md)：ディスク上のサイズなど（**File → Details…**）

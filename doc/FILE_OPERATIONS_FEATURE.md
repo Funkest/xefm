@@ -6,15 +6,17 @@ XeFM's core file operations — copy, move, duplicate, and rename — all share 
 same conflict handling and progress display. This document covers how each one
 works and the options you can configure.
 
-For the complete list of key bindings, see the
-[XeFM User Guide](XEFM_USER_GUIDE.md) or press **?** in XeFM.
+The keys for these operations depend on your keymap preset — see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side), or press
+**F1** in XeFM for the keys you have.
 
 ## Copy
 
 Copy the selected file(s) to the other pane.
 
-1. Select one or more items (**Space** to toggle, **A** to select all files).
-2. Press **C**.
+1. Select one or more items (`toggle_select_down` to toggle one,
+   `toggle_select_files` for all files).
+2. Choose **File → Copy to Other Pane** (`copy_files`).
 3. Confirm the destination when prompted.
 
 Directories are copied recursively. If a name already exists at the
@@ -32,10 +34,11 @@ CONFIRM_COPY = False   # default: True
 Move the selected file(s) to the other pane.
 
 1. Select one or more items.
-2. Press **M**.
+2. Choose **File → Move to Other Pane** (`move_files`).
 3. Confirm the destination when prompted.
 
-(With nothing selected, **M** instead prompts for a new directory name — see
+(In AFX style, `move_files` and `create_directory` share one key: with nothing
+selected, it prompts for a new directory name instead — see
 [Create File Operations](#create-file-operations).)
 
 XeFM confirms before moving by default:
@@ -69,11 +72,12 @@ first when setting up a new storage backend.
 
 ## Copy / Move to a typed directory
 
-**Shift-C** and **Shift-M** copy or move the selected file(s) somewhere other
-than the other pane, without navigating there first.
+**File → Copy to…** (`copy_files_to`) and **File → Move to…**
+(`move_files_to`) copy or move the selected file(s) somewhere other than the
+other pane, without navigating there first.
 
 1. Select one or more items.
-2. Press **Shift-C** (copy) or **Shift-M** (move).
+2. Choose **File → Copy to…** or **File → Move to…**.
 3. Edit the destination and press **Enter**. The prompt starts with the other
    pane's directory; **Tab** completes directory names.
 
@@ -83,7 +87,7 @@ work as in Jump to Path, as do `s3://…` / `ssh://…` locations. The destinati
 must be an existing directory; anything else is refused in the prompt. From
 there it is an ordinary copy or move — the same confirmation, conflict handling
 and progress — and copying into the current directory itself duplicates, as
-**C** does.
+**Copy to Other Pane** does.
 
 The menu bar's File menu and the item context menu carry these as **Copy to…**
 and **Move to…**.
@@ -103,14 +107,15 @@ Select one or more items (or just place the cursor on one), then choose
 When nothing is explicitly selected, the entry under the cursor is duplicated;
 afterward the cursor lands on the new copy.
 
-There is **no default keyboard shortcut**. To add one, bind the
-`duplicate_files` action in your config, e.g.:
+AFX style ships it with **no keyboard shortcut** (Orthodox has one — see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side)). To add one,
+bind the `duplicate_files` action in your config, e.g.:
 
 ```python
 KEY_BINDINGS['duplicate_files'] = ['Shift-D']
 ```
 
-**Copy to Other Pane** (**C**) also duplicates: when both panes show the same
+**Copy to Other Pane** (`copy_files`) also duplicates: when both panes show the same
 directory, copying auto-renames exactly like Duplicate instead of erroring.
 (Move still refuses a same-directory target.)
 
@@ -147,10 +152,11 @@ against duplicating a large tree by accident.
 
 ## Delete
 
-`K` (or `Delete`) moves the selection, or the item under the cursor, to the
-**Trash**, called the Recycle Bin on Windows. You can restore it from Finder,
-Explorer or your desktop's file manager. `Shift-K` (or `Shift-Delete`) deletes
-for good, without the Trash. Each asks first. See
+**File → Move to Trash…** (`delete_files`, also on `Delete`) moves the
+selection, or the item under the cursor, to the **Trash**, called the Recycle
+Bin on Windows. You can restore it from Finder, Explorer or your desktop's file
+manager. **File → Delete Permanently…** (`delete_permanently`, also on
+`Shift-Delete`) deletes for good, without the Trash. Each asks first. See
 [Deleting to the Trash](TRASH_FEATURE.md).
 
 ## Conflict resolution
@@ -179,7 +185,7 @@ marked, so you can decide without leaving the dialog:
 | `u` | **Overwrite older** | Replace the existing item only if it is older than the source; otherwise skip it. For a folder, the merge decides file by file. |
 | `s` | **Skip** | Leave the existing item alone and go on (the default — Enter). |
 | `k` | **Keep both** | Copy under a free name instead: `report (1).pdf`. |
-| `d` or `=` | **Compare** | Open the two files in the [diff viewer](DIFF_VIEWER_FEATURE.md). Close it (`q` / Esc) to come back to the same dialog. Shown only when both sides are files. |
+| `d` or `=` | **Compare** | Open the two files in the [diff viewer](DIFF_VIEWER_FEATURE.md). Close it (Esc) to come back to the same dialog. Shown only when both sides are files. |
 | `c` / Esc | **Cancel** | Stop the whole operation. |
 
 `a` or Space toggles **Apply to all remaining**. Checked, your choice answers
@@ -286,9 +292,11 @@ always on and adapts automatically to file size, file count, and terminal width.
 
 ## Create file operations
 
-- **Create directory**: `create_directory` (the same key as `move_files`, with
-  nothing selected), type a name, and press **Enter**.
-- **Create file**: `create_file`, type a filename, and press **Enter**. The
+- **Create directory**: **File → New Folder…** (`create_directory`; in AFX
+  style the same key as `move_files`, with nothing selected), type a name, and
+  press **Enter**.
+- **Create file**: **File → New File…** (`create_file`), type a filename, and
+  press **Enter**. The
   new empty file opens immediately in your configured text editor.
 
 Both check that the current directory is writable and refuse to overwrite an
@@ -314,7 +322,7 @@ did not make itself: a file appearing or vanishing in a directory another progra
 is writing to moves the rows, not your cursor.
 
 The one place the cursor deliberately does return to the top is a **filter**
-change (**;**), which clears the selection and starts the narrowed listing fresh.
+change (**View → Filter…**, `filter`), which clears the selection and starts the narrowed listing fresh.
 
 ## See Also
 

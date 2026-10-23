@@ -20,25 +20,25 @@ their applications as before.
 
 ## Opening one
 
-`Enter` or `V` on the file opens it in the viewer. A large or remote
+`Enter` or **File → View File** (`view_file`) on the file opens it in the viewer. A large or remote
 document first shows a progress dialog while it is read. `Esc` stops the
 reading.
 
-The viewer has two modes, as for Markdown files. `M` switches between them,
+The viewer has two modes, as for Markdown files. `M` (`toggle_view_mode`) switches between them,
 and XeFM remembers your choice for each kind of file:
 
 - **Rendered** (the first time): headings, lists, tables, and a heading for
   each page, slide, sheet or chapter.
 - **Text**: the plain text, line by line, as search sees it.
 
-Search (`F`), selection and copy work in both. The header names the document
+Search (`isearch`), selection and copy work in both. The header names the document
 kind and its size, for example "PowerPoint · 12 slides".
 
 ## What you see, and what you don't
 
 The viewer shows the text, not the page. Layout, fonts, pictures and charts
 are not drawn. To see what a document looks like, open it in its application
-with `Ctrl-O` (`Cmd-Enter` on macOS).
+with **File → Open with Default App** (`open_with_os`).
 
 - **A scanned PDF** has no text, only a picture of each page. The viewer says
   so instead of showing an empty page. XeFM does no OCR.
@@ -51,13 +51,13 @@ with `Ctrl-O` (`Cmd-Enter` on macOS).
 
 ## Searching inside documents
 
-**Search Content** (`Shift-G`) reads these documents through the same text,
+**View → Search Content…** (`find_in_files`) reads these documents through the same text,
 so a word in a PDF or a slide deck is found like a word in a text file. Each
 hit shows its line of the extracted text.
 
-## If V still opens Preview or Word
+## If viewing still opens Preview or Word
 
-XeFM's shipped configuration sends `V` on these files to the built-in viewer.
+XeFM's shipped configuration sends `view_file` on these files to the built-in viewer.
 A `config.py` created before this feature still says otherwise, and it
 wins. Change the `'view'` of the PDF and Office entries in
 `FILE_ASSOCIATIONS` to `None`:
@@ -72,6 +72,8 @@ wins. Change the `'view'` of the PDF and Office entries in
 ```
 
 `Enter` already uses the built-in viewer, whatever `'view'` says.
+
+Keys depend on your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 ## Requirements
 

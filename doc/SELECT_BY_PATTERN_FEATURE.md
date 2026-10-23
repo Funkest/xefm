@@ -4,19 +4,19 @@ English \| [日本語](SELECT_BY_PATTERN_FEATURE.ja.md)
 
 Three ways to select many files at once without filtering the pane first.
 
-| Action | Key | Menu | What it does |
-|--------|-----|------|--------------|
-| `select_by_pattern` | `'` | Select → Select by Pattern… | Asks for a pattern and adds every matching file to the selection |
-| `unselect_by_pattern` | `"` | Select → Unselect by Pattern… | Asks for a pattern and removes every matching file from the selection |
-| `select_same_extension` | — | Select → Select Same Extension | Adds every file with the same extension as the one under the cursor |
+| Action | Menu | What it does |
+|--------|------|--------------|
+| `select_by_pattern` | Select → Select by Pattern… | Asks for a pattern and adds every matching file to the selection |
+| `unselect_by_pattern` | Select → Unselect by Pattern… | Asks for a pattern and removes every matching file from the selection |
+| `select_same_extension` | Select → Select Same Extension | Adds every file with the same extension as the one under the cursor |
 
-All three are also in the command palette (`Ctrl-T`). The two pattern keys sit
-next to **Filter**'s `;` and `:` — the same patterns, one key over.
-`select_same_extension` ships without a key; see [Keys](#keys).
+Keys depend on your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
+All three are also in the command palette (**Tools → Command Palette…**).
+Most presets give `select_same_extension` no key; see [Keys](#keys).
 
 ## Patterns
 
-A pattern is written exactly as for **Filter** (`;`):
+A pattern is written exactly as for **Filter** (**View → Filter…**):
 
 - A wildcard pattern: `*.jpg`, `report_202?.*`, `[ab]*`.
 - Several at once, separated by spaces (or `;`): `*.jpg *.png *.gif`. A file
@@ -37,8 +37,7 @@ history is shared with **Filter**: a pattern typed in either is offered in both.
 ## What gets selected
 
 - Only files. Directories are never selected or unselected by a pattern, even
-  one like `*` that their names match — use `toggle_select_items` (`Shift-A`)
-  for those.
+  one like `*` that their names match — use `toggle_select_items` for those.
 - **Select** only adds and **Unselect** only removes. Everything else keeps the
   selection it had, so several patterns in a row add up: select `*.jpg`, then
   `*.png`, then unselect `thumb_*`.
@@ -53,14 +52,14 @@ selects the other files without one. On a directory it does nothing.
 
 ## Keys
 
-`'` and `"` are characters, so they work the same in the desktop app and in any
-terminal, whatever the keyboard layout: press whichever key types them (on a
-Japanese keyboard, `Shift-7` and `Shift-2`).
+Each preset puts these actions on its own keys; the
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side) page lists
+them. A key that is a character, such as `'` or `"`, works the same in the
+desktop app and in any terminal, whatever the keyboard layout: press whichever
+key types it (on a Japanese keyboard, `Shift-7` for `'` and `Shift-2` for `"`).
 
-Total Commander puts these on `Num+`, `Num−` and `Alt+Num+`. XeFM cannot tell
-the numeric keypad from the main keys, and `+` and `-` already compare
-directories and reset the pane split. To change the keys, or give
-`select_same_extension` one, set them in `config.py`:
+To change the keys, or give `select_same_extension` one, set them in
+`config.py`:
 
 ```python
 KEY_BINDINGS = {

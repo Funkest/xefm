@@ -3,13 +3,14 @@
 English \| [日本語](FLAT_VIEW_FEATURE.ja.md)
 
 Flat view swaps the pane's listing for **every file below the current
-directory**, in one flat list. Press the key again to go back.
+directory**, in one flat list. Run it again to go back.
 
-| Action | Key | Menu |
-|--------|-----|------|
-| `flat_view` | `Shift-B` | View → Flat View |
+| Action | Menu |
+|--------|------|
+| `flat_view` | View → Flat View |
 
-It is also in the command palette (`Ctrl-T`).
+Keys depend on your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
+It is also in the command palette (**Tools → Command Palette…**).
 
 ```
 Photos/                          2024/trip/a.jpg
@@ -23,9 +24,9 @@ Photos/                          2024/trip/a.jpg
 
 Anything you can do with a list works on the whole tree at once:
 
-- **Find what takes the space** — sort by size (`3`).
-- **See what changed recently** — sort by date (`4`).
-- **Collect files of one kind** — filter by `*.jpg` (`;`), select them all, and
+- **Find what takes the space** — sort by size (**View → Sort By → Size**).
+- **See what changed recently** — sort by date (**View → Sort By → Date**).
+- **Collect files of one kind** — filter by `*.jpg` (**View → Filter…**), select them all, and
   copy them to the other pane.
 
 You can also view, edit, rename, delete, compare and get details as usual.
@@ -37,7 +38,8 @@ You can also view, edit, rename, delete, compare and get details as usual.
 - Each row is named by its path below the directory you started from, such as
   `2024/trip/a.jpg`. Sort, filter and incremental search use that path, so
   `2024/*` filters to one year.
-- **Hidden files follow the pane.** Anything the pane hides (`.` toggles it) is
+- **Hidden files follow the pane.** Anything the pane hides (**View → Show Hidden Files**
+  toggles it) is
   neither listed nor looked into.
 - **Symbolic links to directories are not followed**, so a link that points
   back up the tree can't make the list endless. A link to a file is listed.
@@ -45,10 +47,10 @@ You can also view, edit, rename, delete, compare and get details as usual.
 
 ## Flattening only part of the tree
 
-If items are selected when you press `Shift-B`, only those are flattened. Each
+If items are selected when you turn on flat view, only those are flattened. Each
 selected directory contributes everything below it, and each selected file
 appears as itself. To flatten the whole directory, clear the selection first
-(`End`).
+(**Select → Clear Selection**).
 
 ## Large and remote trees
 
@@ -59,7 +61,7 @@ any other location.
 
 ## Going back
 
-`Shift-B` again, or `Backspace`, returns to the directory with the cursor on
+**View → Flat View** again, or `Backspace`, returns to the directory with the cursor on
 the item it was on.
 
 ## Things to know
@@ -80,12 +82,12 @@ the item it was on.
 KEY_BINDINGS['flat_view'] = ['Ctrl-B']
 ```
 
-`Ctrl-B` is not the default because it is tmux's prefix key, so inside tmux it
-never reaches XeFM. See [Key Bindings](KEY_BINDINGS_FEATURE.md).
+Inside tmux, `Ctrl-B` is tmux's prefix key and never reaches XeFM, so choose
+another key there. See [Key Bindings](KEY_BINDINGS_FEATURE.md).
 
 ## Related
 
-- [Search options](SEARCH_OPTIONS_FEATURE.md): `Shift-F` with `*` finds files
+- [Search options](SEARCH_OPTIONS_FEATURE.md): **View → Search Files…** with `*` finds files
   by name across a tree, when you want to pick which ones.
 - [File lists](FILE_LIST_IMPORT_FEATURE.md): a list of paths from the
   clipboard, a command or a file.

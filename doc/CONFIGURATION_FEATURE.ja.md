@@ -82,7 +82,7 @@ WIDE_CHARS = '○□★●'   # a string, or a list of single characters
 
 ### テーマ／色
 
-XeFM には内蔵テーマ（Dark+、Monokai、Dracula、Nord、Solarized、Gruvbox Dark、Light+、Solarized Light）が付属しています。実行中に **View → Theme** または `T` キーで切り替えられます。XeFM は Dark+ で起動し、最後に使ったテーマを再起動後も覚えています。`COLOR_SCHEME` のような文字列の設定項目はありません。代わりに、名前を付けた独自のテーマを登録します。
+XeFM には内蔵テーマ（Dark+、Monokai、Dracula、Nord、Solarized、Gruvbox Dark、Light+、Solarized Light）が付属しています。実行中に **View → Theme** または **View → Next Theme** で切り替えられます。XeFM は Dark+ で起動し、最後に使ったテーマを再起動後も覚えています。`COLOR_SCHEME` のような文字列の設定項目はありません。代わりに、名前を付けた独自のテーマを登録します。
 
 ```python
 THEMES = {
@@ -98,7 +98,7 @@ THEMES = {
 ## 表示とレイアウト
 
 ```python
-SHOW_HIDDEN_FILES       = False  # show hidden files (toggle at runtime with '.')
+SHOW_HIDDEN_FILES       = False  # show hidden files (toggle at runtime with toggle_hidden)
 DEFAULT_LEFT_PANE_RATIO = 0.5    # left pane width as a ratio (0.1 - 0.9)
 DEFAULT_LOG_HEIGHT_RATIO = 0.25  # log pane height as a ratio (0.1 - 0.5)
 DATE_FORMAT             = 'short'  # 'short' (YY-MM-DD HH:mm) or 'full' (YYYY-MM-DD HH:mm:ss)
@@ -106,7 +106,7 @@ SEPARATE_EXTENSIONS     = True   # show extensions in their own column
 MAX_EXTENSION_LENGTH    = 5      # longer extensions stay with the filename
 ```
 
-実行中は `[`／`]` でペインの分割位置を、`{`／`}` でログペインの高さを調整できます。`DEFAULT_LOG_HEIGHT_RATIO` は、ドラッグや `{`／`}` で調整していない間のログペインの高さを決めます。手で設定した高さは再起動後も保持され、設定より優先されます。`_` を押すと設定した既定に戻ります（高さも再び設定に従うようになります）。レイアウトの比率は起動時に読み込まれるので、設定で変更したものは次の起動時に反映されます。
+実行中は `[`／`]` でペインの分割位置を、`{`／`}` でログペインの高さを調整できます。`DEFAULT_LOG_HEIGHT_RATIO` は、ドラッグや `{`／`}` で調整していない間のログペインの高さを決めます。手で設定した高さは再起動後も保持され、設定より優先されます。`reset_log_height` アクションで設定した既定に戻ります（高さも再び設定に従うようになります）。レイアウトの比率は起動時に読み込まれるので、設定で変更したものは次の起動時に反映されます。
 
 `DATE_FORMAT` は、ファイルペインでの更新日時の表示形式を選びます。`'short'` は `YY-MM-DD HH:mm`（コンパクトで秒なし）、`'full'` は `YYYY-MM-DD HH:mm:ss`（4 桁の年と秒あり）です。どちらも ISO-8601 の順序で、長い形式では日付の列が自動で広がります。設定項目を編集したあと、**Tools → Reload Configuration** を実行すれば再起動せずに反映されます。
 
@@ -134,7 +134,7 @@ DEFAULT_SORT_MODE    = 'filename'  # 'filename', 'extension', 'size', 'timestamp
 DEFAULT_SORT_REVERSE = False
 ```
 
-実行中は、ソートメニュー（`s`）やクイックソートのキーでソートを変更できます。
+実行中は、**View → Sort By ▸**、ソートダイアログ（`sort`）、`quick_sort_*` アクションでソートを変更できます。
 
 名前のソートは**自然順**（英数字順）です。名前に含まれる数字は数値として比較されるので、`file2` は `file10` より前に並び、先頭にゼロが付いた名前（`Report001`、`Report010`）も期待どおりの順になります。大文字と小文字は区別せず、`'filename'` のソートモードでは常に適用され、無効にはできません。`'size'` と `'timestamp'` のモードには影響しません。ソートモードにかかわらず、ディレクトリは常にファイルより前に表示されます。
 
@@ -171,7 +171,7 @@ KEY_BINDINGS = {
 }
 ```
 
-選択モードは `'any'`（既定）、`'required'`（選択項目があるときのみ）、`'none'`（選択項目がないときのみ）です。アクションの一覧は[キーバインド](KEY_BINDINGS_FEATURE.ja.md)を参照してください。
+選択モードは `'any'`（既定）、`'required'`（選択項目があるときのみ）、`'none'`（選択項目がないときのみ）です。アクションの一覧は[キーバインド](KEY_BINDINGS_FEATURE.ja.md)を参照してください。各アクションに最初から割り当てられているキーはキーマッププリセットによって異なります。[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照してください。
 
 モーダルなビューアーの*中*のキーも名前の付いたアクションで、同じ方法で割り当て直せます。キーに自分の関数を割り当てることもできます。どちらも[カスタマイズ](CUSTOMIZATION_FEATURE.ja.md)で説明しています。
 
@@ -194,7 +194,7 @@ FAVORITES = [
 ]
 ```
 
-お気に入りは `J` キーで開きます。[ナビゲーションダイアログ](NAVIGATION_DIALOGS_FEATURE.ja.md)を参照してください。
+お気に入りは **Go → Go to Favorite…**（`favorites`）で開きます。[ナビゲーションダイアログ](NAVIGATION_DIALOGS_FEATURE.ja.md)を参照してください。
 
 ## ドライブの場所
 
@@ -202,7 +202,7 @@ FAVORITES = [
 DRIVE_LOCATIONS = None   # built-in: Home, Root, Documents, Downloads, Desktop
 ```
 
-ドライブダイアログ（`D`）の上部に並ぶ固定の場所です。リストを設定すると独自の場所に置き換わり、`[]` にするとマウント済みのボリュームだけが表示されます。
+ドライブダイアログ（**Go → Drives…**）の上部に並ぶ固定の場所です。リストを設定すると独自の場所に置き換わり、`[]` にするとマウント済みのボリュームだけが表示されます。
 
 ```python
 DRIVE_LOCATIONS = [
@@ -249,7 +249,7 @@ PROGRAMS = [
 ]
 ```
 
-各エントリは `name`、`command`（リストまたは文字列）、省略可能な `options`（`vim` や `less` のような全画面のプログラムには `{'terminal': True}` など）を持ちます。プログラムは `x` で開きます。[外部プログラム](EXTERNAL_PROGRAMS_FEATURE.ja.md)を参照してください。
+各エントリは `name`、`command`（リストまたは文字列）、省略可能な `options`（`vim` や `less` のような全画面のプログラムには `{'terminal': True}` など）を持ちます。プログラムは **Tools → External Programs…**（`programs`）で開きます。[外部プログラム](EXTERNAL_PROGRAMS_FEATURE.ja.md)を参照してください。
 
 ### ファイルの関連付け
 

@@ -22,7 +22,7 @@ XeFM はこのターミナルで開きます。キーマッププリセットは
 |---|---|
 | `--ext SOURCE` | この拡張パッケージをインストールします。フォルダー、`.zip`、`https://` の zip、`github:owner/repo` のいずれかです。複数指定するには繰り返します |
 | `--config FILE` | XeFM のテンプレートの代わりにこの `config.py` を使います。XeFM はコピーを使うので、元のファイルは変更されません |
-| `--keymap afx` / `--keymap orthodox` | キーマッププリセット（既定：`afx`） |
+| `--keymap afx` / `orthodox` / `native` / `vim` | [キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md)（既定：`afx`） |
 | `--left DIR`、`--right DIR` | サンプルの代わりにこれらのフォルダーを開きます |
 | `--keep-home` | 一時的なホームを残し、その場所を表示します |
 
@@ -42,6 +42,7 @@ xefm try --ext ./hello-xefm --keys steps.json --screens out/ --record demo.cast
 ]
 ```
 
+- スクリプトが送るキーはプリセットのキーです。`Ctrl-T` は、ここでの既定である AFX スタイルではコマンドパレットを開きますが、どのプリセットでもそうとは限りません（[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照）。
 - キーは `Ctrl-T`、`Shift-Down`、`Enter`、`Esc`、`F5`、`a` のように書きます。`{"text": "..."}` はテキストを入力し、`{"pause": 2}` は 2 秒待ちます。
 - 各ステップは、キーを送ったあと、画面の変化が止まるまで最大 10 秒待ちます。`"patience": 30` とするともっと長く待ちます。
 - `intent` はそのステップの目的を書くものです。ステップと一緒に保存され、録画ではチャプターのタイトルになります。

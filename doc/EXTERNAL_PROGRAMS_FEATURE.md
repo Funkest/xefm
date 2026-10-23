@@ -8,14 +8,16 @@ The External Programs feature allows you to execute custom external programs dir
 
 ## Key Bindings
 
-- **X**: Open the external programs dialog
+- `programs` (**Tools → External Programs…**): Open the external programs dialog
 - `subshell`: Enter sub-shell (command line) mode — a separate feature
 
-The programs menu and the sub-shell are two different tools: **X** runs one of
+Keys depend on your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
+
+The programs menu and the sub-shell are two different tools: `programs` runs one of
 your configured `PROGRAMS` and returns to XeFM, while `subshell` drops you into
 an interactive shell in the current pane's directory.
 
-To run a program from a key of its own instead of from the **X** picker, call
+To run a program from a key of its own instead of from the `programs` picker, call
 `ctx.run_program()` from an action — see
 [Running an external program from a key](CUSTOMIZATION_FEATURE.md#running-an-external-program-from-a-key).
 
@@ -50,7 +52,7 @@ When you run external programs, XeFM provides information about your current sta
 - `XEFM_THIS_DIR` / `XEFM_OTHER_DIR`: Current / other pane directory
 - `XEFM_LEFT_DIR` / `XEFM_RIGHT_DIR`: Left / right pane directory
 - `XEFM_THIS_SELECTED` / `XEFM_OTHER_SELECTED` / `XEFM_LEFT_SELECTED` /
-  `XEFM_RIGHT_SELECTED`: The files selected with **Space** in the respective
+  `XEFM_RIGHT_SELECTED`: The files selected (marked) in the respective
   pane (space-separated, double-quoted). **Empty when nothing is selected.**
 - `XEFM_THIS_FOCUSED` / `XEFM_OTHER_FOCUSED` / `XEFM_LEFT_FOCUSED` /
   `XEFM_RIGHT_FOCUSED`: The single item under that pane's cursor, quoted the
@@ -85,7 +87,7 @@ list cannot express both.
 
 ## Usage
 
-1. Press **X** to open the programs dialog
+1. Choose **Tools → External Programs…** (`programs`) to open the programs dialog
 2. Use the searchable list to find and select a program
 3. Press Enter to launch it
 
@@ -224,7 +226,7 @@ command in PATH* from the command palette.
 
 ## Quick Reference
 
-- **X**: Open external programs dialog
+- `programs` (**Tools → External Programs…**): Open external programs dialog
 - `subshell`: Open sub-shell mode (different feature)
 - Use external programs for quick, specific tasks
 - Use sub-shell mode for interactive command-line work

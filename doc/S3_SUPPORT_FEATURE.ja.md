@@ -94,7 +94,7 @@ S3 バケットはローカルのディレクトリと同じように移動で�
 - **Enter**：プレフィックス（仮想ディレクトリ）を開く、またはファイルをダウンロード
 - **Backspace**：1 つ上の階層に移動
 - **矢印キー**：ファイルとプレフィックスの間を移動
-- **Home/End**：最初／最後の項目に移動
+- **Ctrl-Home/Ctrl-End**：最初／最後の項目に移動
 
 ### 仮想ディレクトリ
 
@@ -129,14 +129,16 @@ XeFM は、アクティブなペインで選択したファイルを、**反対�
 #### S3 からローカルへ
 
 1. 片方のペインで S3 のファイルのディレクトリを、もう片方でローカルのコピー先を開きます
-2. S3 のペインで `Space` を押してファイルを選択します
-3. `C` を押すと、反対側（ローカル）のペインにコピーされます
+2. S3 のペインでファイルを選択します
+3. **File → Copy to Other Pane**（反対側のペインへコピー、`copy_files`）を使うと、反対側（ローカル）のペインにコピーされます
 
 #### ローカルから S3 へ
 
 1. 片方のペインでローカルのファイルのディレクトリを、もう片方で S3 のコピー先（例：`s3://my-bucket/uploads/`）を開きます
-2. `Space` でファイルを選択します
-3. `C` を押すと、S3 のペインにコピーされます
+2. ファイルを選択します
+3. **File → Copy to Other Pane**（`copy_files`）を使うと、S3 のペインにコピーされます
+
+キーはキーマッププリセットによって異なります。[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照してください。
 
 #### S3 上の場所の間で
 
@@ -157,7 +159,7 @@ XeFM は、アクティブなペインで選択したファイルを、**反対�
 S3 のオブジェクトを削除します。
 
 1. ファイルに移動します（または選択します）
-2. 削除キー（`K` または `Delete`）を押します
+2. **File → Move to Trash…**（`delete_files`、`Delete` キーでも実行できます）を使います。S3 にはゴミ箱がないので、完全に削除されます
 3. 削除を確認します
 
 **警告：** バケットでバージョニングが有効になっていない限り、削除した S3 のオブジェクトは復元できません。
@@ -167,7 +169,7 @@ S3 のオブジェクトを削除します。
 S3 のファイルの内容を表示します。
 
 1. ファイルに移動します
-2. 表示キー（`V`）を押します
+2. **File → View File**（`view_file`）を使います
 3. XeFM がファイルを一時的な場所にダウンロードし、ビューアーを開きます
 
 **注意：** 大きなファイルはダウンロードに時間がかかることがあります。
@@ -210,7 +212,7 @@ S3_CACHE_TTL = 60
 
 1. **本当のディレクトリはない**：S3 が使うのはプレフィックスで、本物のディレクトリではありません
 2. **名前変更はない**：S3 は名前変更に対応していません（XeFM はコピーと削除で行います）
-3. **編集はコピーを通じて**：`E` はローカルのコピーを編集し、保存のたびにアップロードします（[リモート編集](REMOTE_EDIT_FEATURE.ja.md)を参照）。保存のたびにオブジェクト全体が書き直されます
+3. **編集はコピーを通じて**：**File → Edit File**（`edit_file`）はローカルのコピーを編集し、保存のたびにアップロードします（[リモート編集](REMOTE_EDIT_FEATURE.ja.md)を参照）。保存のたびにオブジェクト全体が書き直されます
 4. **API のレート制限**：大量の操作では、AWS がリクエストを抑制することがあります
 5. **コスト**：S3 の操作には AWS の料金（リクエストとデータ転送）がかかります
 
@@ -388,7 +390,7 @@ S3_MULTIPART_CHUNKSIZE = 5 * 1024 * 1024  # 5MB
 xefm
 
 # Open the local directory in one pane and s3://my-backup-bucket/ in the other
-# Select files in the local pane, then press C to copy them to the S3 pane
+# Select files in the local pane, then run copy_files to copy them to the S3 pane
 ```
 
 ### 例 2：S3 のファイルをダウンロードする
@@ -398,7 +400,7 @@ xefm
 xefm s3://my-bucket/downloads/
 
 # Open the S3 directory in one pane and the local destination in the other
-# Select files, then press C to copy them to the local pane
+# Select files, then run copy_files to copy them to the local pane
 ```
 
 ### 例 3：S3 のオブジェクトを整理する
@@ -406,7 +408,7 @@ xefm s3://my-bucket/downloads/
 ```bash
 # Navigate to s3://my-bucket/
 # Select files to move
-# Press move key
+# Run move_files
 # Navigate to s3://my-bucket/organized/
 # Confirm move
 ```

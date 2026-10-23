@@ -6,13 +6,15 @@ Each pane can hold several **tabs**, and each tab keeps its own place open.
 Use them for the handful of directories a task moves between, or to keep a
 search result or an imported list while you browse somewhere else.
 
-| Action | Key | Menu |
-|--------|-----|------|
-| `new_tab` | `T` | Go → New Tab |
-| `open_in_new_tab` | `Shift-T` | Go → Open in New Tab |
-| `close_tab` | `Ctrl-W` | Go → Close Tab |
-| `next_tab` | `Ctrl-PageDown` | Go → Next Tab |
-| `prev_tab` | `Ctrl-PageUp` | Go → Previous Tab |
+| Action | Menu |
+|--------|------|
+| `new_tab` | Go → New Tab |
+| `open_in_new_tab` | Go → Open in New Tab |
+| `close_tab` | Go → Close Tab |
+| `next_tab` | Go → Next Tab |
+| `prev_tab` | Go → Previous Tab |
+
+Keys depend on your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 All of them act on the **active pane**. The left and right panes have separate
 tabs.
@@ -54,7 +56,7 @@ A directory tab is re-read when you switch back to it. Anything that changed
 while it was hidden (including changes made from the other pane) shows up
 without a flicker.
 
-**History is shared.** `H` lists the directories you have visited in any tab.
+**History is shared.** **Go → History…** lists the directories you have visited in any tab.
 
 ## Between sessions
 
@@ -73,5 +75,5 @@ KEY_BINDINGS['next_tab'] = ['Ctrl-PAGE_DOWN', 'Ctrl-TAB']
 KEY_BINDINGS['prev_tab'] = ['Ctrl-PAGE_UP', 'Ctrl-Shift-TAB']
 ```
 
-`Ctrl-Tab` is not a default because terminals don't send it. Add it yourself
-if you only use the desktop app. See [Key Bindings](KEY_BINDINGS_FEATURE.md).
+Terminals don't send `Ctrl-Tab`, so a binding on it works only in the desktop
+app. See [Key Bindings](KEY_BINDINGS_FEATURE.md).

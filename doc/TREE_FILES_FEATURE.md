@@ -30,7 +30,8 @@ for anyone writing such a program.
   file.
 - Each entry shows the size and date **recorded in the file**, so a group of
   files on a slow server lists instantly.
-- `V` views an entry, `=` compares two, and copying to the other pane works,
+- Viewing an entry (**File → View File**), comparing two
+  (**Select → Compare Selected Files…**) and copying to the other pane work,
   all reading the real file.
 - `Enter` on an entry that stands for a folder goes to that folder.
 
@@ -39,17 +40,22 @@ for anyone writing such a program.
 Entries in the tree are references. They can't be deleted or renamed there,
 because the tree is a record of what was found. To work on the real files:
 
-- **`Shift-O`** opens the real location of the entry under the cursor in the
+- **`sync_other_to_current`** opens the real location of the entry under the cursor in the
   other pane, with the cursor on the file. The tree stays where it is.
-- **Select several entries (or whole groups) and press `Shift-O`**. The other
+- **Select several entries (or whole groups) and run `sync_other_to_current`**. The other
   pane shows all their real files as one list, wherever they live. Delete,
   move or compare them there. This is the quick way to clean up duplicates
   spread over many folders.
-- `O` from the other pane goes to the real location of the entry highlighted
+- `sync_current_to_other` from the other pane goes to the real location of the entry highlighted
   in the tree.
 - Whatever leaves XeFM gets the **real file**: opening an entry in its
-  application (`Cmd-Enter` on macOS, `Ctrl-O`), revealing it in Finder or
-  Explorer, editing it (`E`), and copying its path.
+  application (**File → Open with Default App**), revealing it in Finder or
+  Explorer (**File → Reveal in File Manager**), editing it
+  (**File → Edit File**), and copying its path.
+
+The two `sync_…` actions have no menu item; run them from the command palette
+(**Tools → Command Palette…**) or on their key. Keys depend on your keymap
+preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 ## Trees that are still being written
 
@@ -61,7 +67,7 @@ looking before it finishes. While it is still running:
 - a group may gain or lose files, or change its name. XeFM keeps you in the
   same group when it can, and returns to the top of the tree (saying so in
   the log) when the group is gone;
-- `Shift-O` on a selection asks before opening the files, because the groups
+- `sync_other_to_current` on a selection asks before opening the files, because the groups
   you selected may still change.
 
 Groups of identical files are final as soon as they appear. Only similar-file

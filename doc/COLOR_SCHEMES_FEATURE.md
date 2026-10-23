@@ -72,7 +72,7 @@ Every theme changes:
 
 ### Hidden Files
 
-With hidden files shown (the `.` key by default), a hidden entry is drawn in its
+With hidden files shown (`toggle_hidden`, **View → Show Hidden Files**), a hidden entry is drawn in its
 own type color faded toward the background, so it still reads as a folder or a
 link while being visibly set apart from everything else in the pane. On Windows
 this is the only thing that tells you: hidden there is a file attribute, not a

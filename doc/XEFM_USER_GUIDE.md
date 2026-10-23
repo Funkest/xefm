@@ -112,8 +112,9 @@ already in *Applications* can be handed over to Homebrew with
   (or `uvx` ran it without installing). Upgrade with the tool you installed
   with — see the table above
 
-**First run:** arrow keys navigate, `Tab` switches panes, `F1` opens help, `Q`
-quits.
+**First run:** XeFM asks which keymap preset you want (see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md)). Then arrow keys navigate, `Tab`
+switches panes, `F1` opens help, and **File → Quit** quits.
 
 ---
 
@@ -237,7 +238,7 @@ When you first run XeFM, you'll see:
 
 Press `F1` (`help`) first: that dialog is built from your own `KEY_BINDINGS`, so
 it is the one list of keys that is always right for your config.
-- **Q**: Quit XeFM
+- `quit`: Quit XeFM (**File → Quit**)
 
 ---
 
@@ -254,7 +255,7 @@ it is the one list of keys that is always right for your config.
 
 ### Display and Visualization
 - **File Information**: Size, date, permissions display
-- **Hidden Files Toggle**: Show/hide hidden files with '.' key — dot-names on
+- **Hidden Files Toggle**: Show/hide hidden files with `toggle_hidden` — dot-names on
   every platform, plus files and folders carrying the hidden attribute on Windows
 - **Color Schemes**: Dark and Light themes with runtime switching
 - **Status Bar**: Current path, file count, operation status
@@ -328,8 +329,8 @@ KEY_BINDINGS = {
 
 ### Advanced Operations
 - **Batch Rename**: Regex-based renaming for multiple files
-- **Archive Creation**: Create ZIP, TAR.GZ, TGZ archives (P key)
-- **Archive Extraction**: Extract archives to opposite pane (U key)
+- **Archive Creation**: Create ZIP, TAR.GZ, TGZ archives (`create_archive`)
+- **Archive Extraction**: Extract archives to opposite pane (`extract_archive`)
 - **File Comparison**: Compare selected files between panes
 
 **See detailed documentation**: [Batch Rename Feature](BATCH_RENAME_FEATURE.md)
@@ -407,8 +408,8 @@ Japanese only once it is `nih` — see [Migemo Search](MIGEMO_SEARCH_FEATURE.md)
 
 Space types a space — it separates the pattern's words (`re 24` finds
 `report_2024.txt`), which is why marking a file here is `Ctrl-Space` rather than
-the file list's bare Space: Space selects, and Ctrl is what makes a command of a
-key that would otherwise type. Marking *backwards* has no default key in either
+the bare Space that marks a file in the file list under most presets: Space
+types here, and Ctrl is what makes a command of a key that would otherwise type. Marking *backwards* has no default key in either
 surface; bind `isearch.toggle_select_up` if you want it.
 `isearch.select_matches` marks the whole set the counter on the right is showing:
 type `.log`, run it, and every log file is selected. Files selected outside the search are left alone, so a second search
@@ -552,11 +553,11 @@ s3://my-bucket/path/to/files/
 # Copy local files to S3
 # 1. Select files in left pane (local directory)
 # 2. Navigate right pane to s3://bucket/path
-# 3. Press 'c' to copy
+# 3. Run copy_files (File → Copy to Other Pane)
 
 # View S3 text file
 # 1. Navigate to s3://bucket/file.txt
-# 2. Press 'v' to view (editing needs a local copy)
+# 2. Run view_file (File → View File); editing needs a local copy
 ```
 
 ---
@@ -663,7 +664,7 @@ KEY_BINDINGS = {
 ### Themes
 XeFM ships with several built-in themes (Dark+, Light+, Monokai, Dracula, Nord,
 Solarized, Gruvbox Dark, Solarized Light) and remembers the last one you used.
-Cycle themes at runtime with the **T** key, or pick one from **View → Theme**.
+Cycle themes at runtime with **View → Next Theme**, or pick one from **View → Theme**.
 Define your own with the `THEMES` dict in config.
 
 **See detailed documentation**: [Color Schemes Feature](COLOR_SCHEMES_FEATURE.md)
@@ -773,8 +774,8 @@ Check file permissions and disk space
 
 ### Getting Help
 - Press **F1** for built-in help
-- Press **Ctrl-T** for the [command palette](COMMAND_PALETTE_FEATURE.md): find
-  any action by name, see its key, and run it
+- Open **Tools → Command Palette…** (the [command palette](COMMAND_PALETTE_FEATURE.md)):
+  find any action by name, see its key, and run it
 - Check feature documentation below
 - Use `--help` command line option
 - The [XeFM wiki](https://github.com/crftwr/xefm/wiki) collects recipes and community extensions
@@ -913,8 +914,8 @@ See the [Configuration](#customization) section and [Key Bindings Feature](KEY_B
 
 ### Efficiency Tips
 1. **Use Tab frequently**: Quick pane switching is key to efficiency
-2. **Learn multi-selection**: Select multiple files with Space, then operate
-3. **Use incremental search**: Press 'f' and start typing to filter files
+2. **Learn multi-selection**: Select multiple files with `toggle_select_down`, then operate
+3. **Use incremental search**: Run `isearch` (**View → Find…**) and start typing to filter files
 4. **Customize key bindings**: Adapt XeFM to your workflow
 5. **Use favorites**: Set up bookmarks for frequently accessed directories
 
@@ -923,13 +924,13 @@ See the [Configuration](#customization) section and [Key Bindings Feature](KEY_B
 #### File Organization
 1. Navigate to source directory in left pane
 2. Navigate to destination in right pane
-3. Select files with Space
-4. Press 'c' to copy or 'm' to move
+3. Select files with `toggle_select_down`
+4. Copy them with **File → Copy to Other Pane**, or move them with **File → Move to Other Pane**
 
 #### Development Workflow
 1. Set up favorites for project directories
 2. Use external programs for git operations
-3. Edit files with 'e' key
+3. Edit files with `edit_file` (**File → Edit File**)
 4. Use content search to find code
 
 #### S3 Data Management

@@ -82,7 +82,7 @@ brew install crftwr/tap/xefm
 - pip から `error: externally-managed-environment` と表示される — [PEP 668](https://peps.python.org/pep-0668/) がシステムの Python（Homebrew、Debian/Ubuntu）を保護しています。pipx、uv、または virtualenv を使ってください
 - `uv tool upgrade xefm` から `` `xefm` is not installed `` と表示される — uv が管理するのは `uv tool install` でインストールしたものだけなので、そのコピーは pipx か pip の管理下にあります（または `uvx` がインストールせずに実行しました）。インストールしたときと同じツールでアップグレードしてください。上の表を参照してください
 
-**初回起動時：** 矢印キーで移動、`Tab` でペインの切り替え、`F1` でヘルプ、`Q` で終了です。
+**初回起動時：** XeFM が使うキーマッププリセットを尋ねます（[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md)を参照）。そのあとは矢印キーで移動、`Tab` でペインの切り替え、`F1` でヘルプ、**File → Quit** で終了です。
 
 ---
 
@@ -194,7 +194,7 @@ XeFM を初めて起動すると、次のものが表示されます。
 - `help`：ヘルプダイアログを表示。ほかのすべてのアクションのキーもここでわかります
 
 最初に `F1`（`help`）を押してください。このダイアログは自分の `KEY_BINDINGS` から作られるので、常にその設定に合ったキーの一覧です。
-- **Q**：XeFM を終了
+- `quit`：XeFM を終了（**File → Quit**）
 
 ---
 
@@ -211,7 +211,7 @@ XeFM を初めて起動すると、次のものが表示されます。
 
 ### 表示
 - **ファイルの情報**：サイズ、日付、パーミッションを表示
-- **隠しファイルの切り替え**：'.' キーで隠しファイルの表示／非表示を切り替え。どのプラットフォームでもドットで始まる名前が対象で、Windows では隠し属性を持つファイルやフォルダーも対象になります
+- **隠しファイルの切り替え**：`toggle_hidden` で隠しファイルの表示／非表示を切り替え。どのプラットフォームでもドットで始まる名前が対象で、Windows では隠し属性を持つファイルやフォルダーも対象になります
 - **配色**：ダーク系とライト系のテーマを実行中に切り替え
 - **ステータスバー**：現在のパス、ファイル数、操作の状態
 - **ログペイン**：システムメッセージや出力を表示する下部のペイン
@@ -268,8 +268,8 @@ KEY_BINDINGS = {
 
 ### 高度な操作
 - **一括リネーム**：正規表現で複数のファイルの名前を変更
-- **アーカイブの作成**：ZIP、TAR.GZ、TGZ のアーカイブを作成（P キー）
-- **アーカイブの展開**：アーカイブを反対側のペインに展開（U キー）
+- **アーカイブの作成**：ZIP、TAR.GZ、TGZ のアーカイブを作成（`create_archive`）
+- **アーカイブの展開**：アーカイブを反対側のペインに展開（`extract_archive`）
 - **ファイルの比較**：ペイン間で選択したファイルを比較
 
 **詳しいドキュメント**：[一括リネーム](BATCH_RENAME_FEATURE.ja.md)
@@ -336,7 +336,7 @@ KEY_BINDINGS = {
 
 検索はマッチがあるところで止まります。入力するとマッチがなくなってしまう文字は受け付けられないので、パターンは空のリストに進むことなく、最後に見つかったファイルにとどまります。Backspace を押せばいつでも戻れます。（ローマ字で日本語を入力するときは数文字の余裕があります。`ni` は `nih` になって初めて日本語にマッチするからです。[Migemo 検索](MIGEMO_SEARCH_FEATURE.ja.md)を参照してください。）
 
-Space はスペースを入力します。スペースはパターンの単語を区切ります（`re 24` で `report_2024.txt` が見つかります）。そのため、ここでファイルに印を付けるキーは、ファイルリストでの Space だけではなく `Ctrl-Space` です。Space は選択に使われていて、Ctrl を付けることで、普通なら文字を入力するキーがコマンドになります。*逆方向*に印を付けるキーは、どちらにも既定では割り当てられていません。使いたい場合は `isearch.toggle_select_up` を割り当ててください。
+Space はスペースを入力します。スペースはパターンの単語を区切ります（`re 24` で `report_2024.txt` が見つかります）。そのため、ここでファイルに印を付けるキーは、多くのプリセットでファイルリストの印付けに使う Space だけではなく `Ctrl-Space` です。ここでは Space は文字を入力するので、Ctrl を付けることで、普通なら文字を入力するキーがコマンドになります。*逆方向*に印を付けるキーは、どちらにも既定では割り当てられていません。使いたい場合は `isearch.toggle_select_up` を割り当ててください。
 `isearch.select_matches` は、右側のカウンターが示しているマッチ全体に印を付けます。`.log` と入力してこれを実行すれば、すべてのログファイルが選択されます。検索の外で選択したファイルはそのままなので、2 回目の検索の結果はそれに追加されます。これらのキーはすべて割り当て直せます。[カスタマイズ](CUSTOMIZATION_FEATURE.ja.md#インクリメンタルサーチバー)を参照してください。
 
 ### 検索のヒント
@@ -437,11 +437,11 @@ s3://my-bucket/path/to/files/
 # Copy local files to S3
 # 1. Select files in left pane (local directory)
 # 2. Navigate right pane to s3://bucket/path
-# 3. Press 'c' to copy
+# 3. Run copy_files (File → Copy to Other Pane)
 
 # View S3 text file
 # 1. Navigate to s3://bucket/file.txt
-# 2. Press 'v' to view (editing needs a local copy)
+# 2. Run view_file (File → View File); editing needs a local copy
 ```
 
 ---
@@ -536,7 +536,7 @@ KEY_BINDINGS = {
 **詳しいドキュメント**：[キーバインド](KEY_BINDINGS_FEATURE.ja.md)
 
 ### テーマ
-XeFM には複数の内蔵テーマ（Dark+、Light+、Monokai、Dracula、Nord、Solarized、Gruvbox Dark、Solarized Light）が付属していて、最後に使ったテーマを覚えています。実行中は **T** キーで順に切り替えるか、**View → Theme** から選びます。独自のテーマは設定の `THEMES` 辞書で定義します。
+XeFM には複数の内蔵テーマ（Dark+、Light+、Monokai、Dracula、Nord、Solarized、Gruvbox Dark、Solarized Light）が付属していて、最後に使ったテーマを覚えています。実行中は **View → Next Theme** で順に切り替えるか、**View → Theme** から選びます。独自のテーマは設定の `THEMES` 辞書で定義します。
 
 **詳しいドキュメント**：[配色](COLOR_SCHEMES_FEATURE.ja.md)
 
@@ -641,7 +641,7 @@ AWS の認証情報とバケットの権限を確認してください
 
 ### ヘルプ
 - **F1** を押すと内蔵のヘルプが表示されます
-- **Ctrl-T** を押すと[コマンドパレット](COMMAND_PALETTE_FEATURE.ja.md)が開きます。どのアクションも名前で探して、キーを確かめ、実行できます
+- **Tools → Command Palette…** で[コマンドパレット](COMMAND_PALETTE_FEATURE.ja.md)が開きます。どのアクションも名前で探して、キーを確かめ、実行できます
 - 下の機能ドキュメントを確認してください
 - コマンドラインオプションの `--help` を使ってください
 - [XeFM wiki](https://github.com/crftwr/xefm/wiki) にはレシピとコミュニティの拡張機能がまとめられています
@@ -769,8 +769,8 @@ KEY_BINDINGS = {
 
 ### 効率よく使うためのヒント
 1. **Tab をよく使う**：ペインのすばやい切り替えが効率の鍵です
-2. **複数選択を覚える**：Space で複数のファイルを選択してから操作します
-3. **インクリメンタルサーチを使う**：'f' を押して入力を始めると、ファイルが絞り込まれます
+2. **複数選択を覚える**：`toggle_select_down` で複数のファイルを選択してから操作します
+3. **インクリメンタルサーチを使う**：`isearch`（**View → Find…**）を実行して入力を始めると、ファイルが絞り込まれます
 4. **キーバインドをカスタマイズする**：XeFM を自分の作業の流れに合わせます
 5. **お気に入りを使う**：よく開くディレクトリをブックマークしておきます
 
@@ -779,13 +779,13 @@ KEY_BINDINGS = {
 #### ファイルの整理
 1. 左ペインで移動元のディレクトリに移動します
 2. 右ペインで移動先に移動します
-3. Space でファイルを選択します
-4. 'c' でコピー、'm' で移動します
+3. `toggle_select_down` でファイルを選択します
+4. **File → Copy to Other Pane** でコピー、**File → Move to Other Pane** で移動します
 
 #### 開発の作業
 1. プロジェクトのディレクトリをお気に入りに登録します
 2. git の操作には外部プログラムを使います
-3. 'e' キーでファイルを編集します
+3. `edit_file`（**File → Edit File**）でファイルを編集します
 4. 内容検索でコードを探します
 
 #### S3 のデータ管理

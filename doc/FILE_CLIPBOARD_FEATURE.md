@@ -6,24 +6,29 @@ Copy or cut files now, then paste them **wherever you go next**: a third
 folder, the other pane after you have moved it somewhere, or (on macOS and
 Windows) Finder or Explorer.
 
-| Action | Keys | Menu |
-|--------|------|------|
-| `clipboard_copy` | `Y`, `Ctrl-C` (`Cmd-C` on macOS) | Edit → Copy |
-| `clipboard_cut` | `Shift-Y`, `Ctrl-X` (`Cmd-X`) | Edit → Cut |
-| `clipboard_paste` | `G`, `Ctrl-V` (`Cmd-V`) | Edit → Paste |
-| `clipboard_clear` | — | Edit → Clear Clipboard |
+| Action | Menu |
+|--------|------|
+| `clipboard_copy` | **Edit → Copy** |
+| `clipboard_cut` | **Edit → Cut** |
+| `clipboard_paste` | **Edit → Paste** |
+| `clipboard_clear` | **Edit → Clear Clipboard** |
+
+`Ctrl-C`, `Ctrl-X` and `Ctrl-V` copy, cut and paste under every preset. Other
+keys depend on your keymap preset — see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 ## Clipboard or C / M?
 
 Both copy and move files, but they answer different questions:
 
-| | `C` / `M` | Clipboard |
+| | Copy / Move to Other Pane | Clipboard |
 |---|---|---|
 | Where to | the **other pane**, which you can see now | the folder **you are in when you paste** |
 | Steps | one | two: copy or cut, then paste |
 | Reaches | the two panes | any folder, and other applications |
 
-`C` and `M` stay the quick way between the two panes. The clipboard is for
+**File → Copy to Other Pane** (`copy_files`) and **File → Move to Other Pane**
+(`move_files`) stay the quick way between the two panes. The clipboard is for
 everything else: collecting files from several folders, or putting them
 somewhere neither pane shows yet.
 
@@ -32,8 +37,8 @@ somewhere neither pane shows yet.
 - **Copy** or **Cut** takes the selected files, or the one under the cursor.
   Nothing on disk changes yet.
 - **Paste** copies them, or moves them after a cut, into the folder of the
-  active pane. It asks before overwriting, with the same dialog as `C` and
-  `M`.
+  active pane. It asks before overwriting, with the same dialog as copying or
+  moving to the other pane.
 - A **copy** stays on the clipboard after pasting, so you can paste it again
   elsewhere. A **cut** is used up by its paste.
 - Pasting a cut into the folder it came from does nothing.
@@ -90,8 +95,9 @@ on Linux.
 ## Keys from an older config.py
 
 A `config.py` written before this feature binds `Ctrl-C` to
-`copy_log_selection`, and that binding comes first. `Y`, `Shift-Y` and `G`
-still work. To give `Ctrl-C` to the clipboard, change the line to:
+`copy_log_selection`, and that binding comes first. The clipboard actions
+keep whatever other keys your preset gives them (in AFX style, `Y`, `Shift-Y`
+and `G`). To give `Ctrl-C` to the clipboard, change the line to:
 
 ```python
 'copy_log_selection': [],

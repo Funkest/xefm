@@ -15,9 +15,9 @@ ever *adds* matches.
 
 Migemo applies to every incremental-search surface:
 
-- **File pane incremental search** (`F`) — each space-separated token matches
+- **File pane incremental search** (**View → Find…**, `isearch`) — each space-separated token matches
   by substring *or* by Migemo, so `tenki yohou` finds `天気予報.csv`.
-- **Text viewer search** (`F` inside the viewer) — matching lines are
+- **Text viewer search** (`isearch` inside the viewer) — matching lines are
   highlighted, including the Japanese text a romaji pattern matched.
 - **Diff viewer search** — both sides of every row.
 - **Rich view modes** (Markdown / JSON / CSV) — the embedded renderer's search
@@ -25,6 +25,9 @@ Migemo applies to every incremental-search surface:
 - **Filter-list dialogs** — favorites, history, drives, external programs:
   the filter field takes the same query as the pane (space-separated tokens,
   wildcards), so typing romaji finds Japanese labels.
+
+The `isearch` key depends on your keymap preset — see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 ## How patterns behave
 

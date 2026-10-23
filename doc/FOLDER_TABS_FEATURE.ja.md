@@ -4,13 +4,15 @@
 
 各ペインは複数の**タブ**を持つことができ、タブはそれぞれ自分の場所を開いたまま保ちます。作業中に行き来する数個のディレクトリに使ったり、別の場所をブラウズしている間に検索結果や読み込んだ一覧を残しておいたりするのに使います。
 
-| アクション | キー | メニュー |
-|--------|-----|------|
-| `new_tab` | `T` | Go → New Tab |
-| `open_in_new_tab` | `Shift-T` | Go → Open in New Tab |
-| `close_tab` | `Ctrl-W` | Go → Close Tab |
-| `next_tab` | `Ctrl-PageDown` | Go → Next Tab |
-| `prev_tab` | `Ctrl-PageUp` | Go → Previous Tab |
+| アクション | メニュー |
+|--------|------|
+| `new_tab` | Go → New Tab |
+| `open_in_new_tab` | Go → Open in New Tab |
+| `close_tab` | Go → Close Tab |
+| `next_tab` | Go → Next Tab |
+| `prev_tab` | Go → Previous Tab |
+
+キーはキーマッププリセットによって異なります。[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照してください。
 
 どれも**アクティブなペイン**に対して働きます。左右のペインはそれぞれ別のタブを持ちます。
 
@@ -40,7 +42,7 @@
 
 ディレクトリのタブは、切り替えて戻ったときに読み直されます。隠れている間に変わったもの（反対側のペインから加えた変更も含む）は、ちらつきなしに反映されます。
 
-**履歴は共有されます。** `H` は、どのタブで訪れたディレクトリも一覧表示します。
+**履歴は共有されます。** **Go → History…** は、どのタブで訪れたディレクトリも一覧表示します。
 
 ## セッションをまたいで
 
@@ -55,4 +57,4 @@ KEY_BINDINGS['next_tab'] = ['Ctrl-PAGE_DOWN', 'Ctrl-TAB']
 KEY_BINDINGS['prev_tab'] = ['Ctrl-PAGE_UP', 'Ctrl-Shift-TAB']
 ```
 
-ターミナルは `Ctrl-Tab` を送らないため、これは既定になっていません。デスクトップアプリしか使わない場合は自分で追加してください。[キーバインド](KEY_BINDINGS_FEATURE.ja.md)を参照してください。
+ターミナルは `Ctrl-Tab` を送らないため、`Ctrl-Tab` への割り当てはデスクトップアプリでだけ働きます。[キーバインド](KEY_BINDINGS_FEATURE.ja.md)を参照してください。

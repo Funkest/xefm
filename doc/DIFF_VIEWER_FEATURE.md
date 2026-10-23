@@ -10,12 +10,15 @@ recursively. Both open full-window, without leaving XeFM.
 
 ### Selecting & launching
 
-Select exactly **two** files, then press `=`. The two files may live in the
-same pane or one in each pane — XeFM gathers the selection from both panes:
+Select exactly **two** files, then use **Select → Compare Selected Files…**
+(`diff_files`). The two files may live in the same pane or one in each pane —
+XeFM gathers the selection from both panes:
 
-1. Put the cursor on a file and press `Space` to select it.
+1. Put the cursor on a file and select it (**Select → Toggle Selection**).
 2. Select the second file the same way (in either pane).
-3. Press `=` to open the side-by-side diff.
+3. Choose **Select → Compare Selected Files…** to open the side-by-side diff.
+
+Keys depend on your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 Directories in the selection are ignored; if you don't end up with exactly two
 files, XeFM tells you (`Select exactly 2 files to compare`).
@@ -23,7 +26,7 @@ files, XeFM tells you (`Select exactly 2 files to compare`).
 ### Binary files
 
 When either file is binary (an image, an executable, an archive…), there is no
-text to diff. Instead of the diff viewer, `=` compares the two files byte for
+text to diff. Instead of the diff viewer, `diff_files` compares the two files byte for
 byte and tells you the answer in a message box: both sizes, then **Identical**,
 **Different (sizes differ)**, or the offset of the first byte that differs.
 
@@ -61,19 +64,23 @@ active theme (a darker band on a dark theme, a pastel one on a light theme):
 | `Home` / `End` | Jump to the top / bottom |
 | `←` `→` | Scroll horizontally |
 | `n` / `N` | Jump to the next / previous change block |
-| `F` | Incremental search — then `↑` / `↓` step between matches |
+| `isearch` | Incremental search — then `↑` / `↓` step between matches |
 | Drag the centre gutter | Move the divider between the two panes |
 | `F1` | Key help |
-| `Q` / `Esc` | Close the viewer |
+| `Esc`, or `quit` | Close the viewer |
+
+`isearch` and `quit` are on the same keys as in the file list, which depend on
+your keymap preset; the other keys here are the same in every preset.
 
 The footer shows the total row and change counts and the key hints. Tabs are
 expanded to 8-column stops, matching the text viewer.
 
 ## Directory diff
 
-Press `Shift+=` to compare the **left pane's current directory** against the
-**right pane's current directory**, recursively. No file selection is needed —
-just navigate each pane to the directory you want and press the key.
+Use **Select → Compare Directories…** (`diff_directories`) to compare the
+**left pane's current directory** against the **right pane's current
+directory**, recursively. No file selection is needed — just navigate each pane
+to the directory you want and run it.
 
 Useful for comparing a backup against the live directory, verifying two trees
 are in sync, or reviewing what changed after an update or migration.
@@ -118,18 +125,23 @@ the same rule the copy conflict dialog's **Overwrite older** uses.
 | `Tab` | Switch the active side |
 | `[` / `]` | Move the centre split (or drag the gutter) |
 | Click / double-click | Focus a side · open a directory / file diff |
-| `C` | Copy the focused item to the other side |
-| `M` | Move the focused item to the other side |
-| `K` / `Del` | Delete the focused item (on the active side) |
-| `E` | Merge the two sides in your configured `TEXT_DIFF` tool |
+| `copy_files` | Copy the focused item to the other side |
+| `move_files` | Move the focused item to the other side |
+| `delete_files` | Delete the focused item (on the active side) |
+| `edit_file` | Merge the two sides in your configured `TEXT_DIFF` tool |
 | `s` | Sync: plan copying from the active side, then press again to run — see [Directory Sync](DIRECTORY_SYNC_FEATURE.md) |
 | `d` | Show only the differences, or everything |
 | `r` | Rescan |
-| `Q` / `Esc` | Close the viewer |
+| `Esc`, or `quit` | Close the viewer |
+
+The rows that name an action (`copy_files`, `move_files`, `delete_files`,
+`edit_file`, `quit`) use that action's keys from the file list, so they depend
+on your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
+The other keys are the same in every preset.
 
 The copy / move / delete keys mirror the main file manager's and run through the
-same file-operation engine, so you can reconcile the two trees in place. `E`
-launches the external tool set in `TEXT_DIFF` (for example `vimdiff` in a
+same file-operation engine, so you can reconcile the two trees in place.
+`edit_file` launches the external tool set in `TEXT_DIFF` (for example `vimdiff` in a
 terminal, or `code --diff` in the desktop app).
 
 ## Notes
@@ -138,10 +150,10 @@ terminal, or `code --diff` in the desktop app).
 - Files are read as UTF-8, falling back to Latin-1 then CP1252. A file is
   treated as binary when its first bytes contain a NUL; XeFM keeps no list of
   binary extensions.
-- `E` still launches your `TEXT_DIFF` tool on any pair, so a binary-capable tool
+- `edit_file` still launches your `TEXT_DIFF` tool on any pair, so a binary-capable tool
   can be used explicitly.
-- The `=` and `Shift+=` keys, and the file-operation keys inside the directory
-  diff, are all rebindable in your config's `KEY_BINDINGS`.
+- The keys of `diff_files` and `diff_directories`, and the file-operation keys
+  inside the directory diff, are all rebindable in your config's `KEY_BINDINGS`.
 
 ## See also
 

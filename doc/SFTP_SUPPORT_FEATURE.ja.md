@@ -41,7 +41,7 @@ ssh://server.example.com:2222/opt/data
 
 **方法 2：お気に入り**
 1. 設定ファイル `~/.xefm/config.py` で、SFTP のパスをお気に入りに追加します
-2. `J` を押してお気に入りを開きます
+2. **Go → Go to Favorite…**（`favorites`）を開きます
 3. SFTP のブックマークを選びます
 
 **方法 3：コマンドライン**
@@ -82,7 +82,7 @@ Host prod-*
 
 **SSH 鍵を生成する**（まだ持っていない場合）：
 ```bash
-ssh-gen -t rsa -b 4096 -C "your_email@example.com"
+ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
 ```
 
 **鍵をサーバーにコピーする：**
@@ -103,12 +103,14 @@ SSH 鍵による認証が動作すれば、XeFM は自動的にそれを使い�
 
 標準的なファイル操作は、すべて SFTP のパスで動作します。
 
-- **コピー**（`C`）：ローカルとリモートの間でファイル／ディレクトリをコピーします
-- **移動**（`M`）：リモートサーバー上でファイル／ディレクトリを移動します
-- **削除**（`K`）：リモートのファイル／ディレクトリを削除します
-- **リネーム**（`R`）：リモートのファイル／ディレクトリをリネームします
-- **ディレクトリの作成**（何も選択していないときの `M`）：リモートサーバー上にディレクトリを作成します
-- **ファイルの表示**（`V`）：リモートのテキストファイルをシンタックスハイライト付きで表示します
+- **コピー**（`copy_files`）：ローカルとリモートの間でファイル／ディレクトリをコピーします
+- **移動**（`move_files`）：リモートサーバー上でファイル／ディレクトリを移動します
+- **削除**（`delete_files`）：リモートのファイル／ディレクトリを削除します
+- **リネーム**（`rename`）：リモートのファイル／ディレクトリをリネームします
+- **ディレクトリの作成**（`create_directory`）：リモートサーバー上にディレクトリを作成します
+- **ファイルの表示**（`view_file`）：リモートのテキストファイルをシンタックスハイライト付きで表示します
+
+どれも **File** メニューにあります。キーはキーマッププリセットによって異なります。[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照してください。
 
 ### ストレージをまたいだ操作
 
@@ -140,7 +142,7 @@ Extract: ssh://server/archive.tar.gz → ~/extracted/
 - 検索の進行に合わせて結果がリアルタイムに表示されます
 - ディレクトリを再帰的にたどります
 
-**内容検索**（`G`）：
+**内容検索**（`find_in_files`）：
 - 正規表現のパターンでファイルの内容を検索します
 - テキストファイルを自動的に判別します
 - マッチした行を前後の文脈とともに表示します
@@ -180,10 +182,10 @@ XeFM には、SFTP の操作のための最適化がいくつか入っていま�
 リモートのテキストファイルを、完全なシンタックスハイライト付きで表示できます。
 
 1. SFTP 上のテキストファイルに移動します
-2. `Enter` または `V` を押してビューアーを開きます
+2. `Enter` を押すか **File → View File**（`view_file`）を使って、ビューアーを開きます
 3. 矢印キーでスクロールします
-4. `/` を押してファイル内を検索します
-5. `q` を押してビューアーを閉じます
+4. ファイル内を検索します（`isearch`）
+5. `Esc` を押してビューアーを閉じます
 
 **対応する形式：** Python、JavaScript、JSON、YAML、Markdown、シェルスクリプトのほか、`pygments` がインストールされていれば 20 種類以上。
 
@@ -215,7 +217,7 @@ FAVORITES = [
 ]
 ```
 
-`j` キーで開きます。リストは設定だけから作られるので、どれかを選ぶまで、これらのどこにも接続は開かれません。
+**Go → Go to Favorite…**（`favorites`）で開きます。リストは設定だけから作られるので、どれかを選ぶまで、これらのどこにも接続は開かれません。
 
 ## 高度な使い方
 
@@ -227,9 +229,9 @@ XeFM はサーバーごとに 1 つの `ssh`（`sftp` コマンドが実行す�
 
 複数のファイルを選択して、一括で操作できます。
 
-1. `Space` でファイルを選択します
-2. `A` でディレクトリ内のすべてのファイルを選択します
-3. 操作のキー（コピーは `C`、削除は `K` など）を押します
+1. ファイルを選択します（`toggle_select_down`）
+2. または、ディレクトリ内のすべてのファイルを選択します（`toggle_select_files`）
+3. 操作を実行します（コピーは `copy_files`、削除は `delete_files` など）
 4. 操作を確認します
 5. 完了まで進捗バーを見守ります
 
@@ -238,9 +240,9 @@ XeFM はサーバーごとに 1 つの `ssh`（`sftp` コマンドが実行す�
 **例：複数のディレクトリをバックアップする**
 ```
 1. Navigate to ssh://server/data
-2. Select directories with Space
-3. Press C (Copy)
-4. Navigate to ~/backup
+2. Open ~/backup in the other pane
+3. Select the directories
+4. Copy them across (`copy_files`)
 5. Press Enter to confirm
 ```
 
@@ -363,7 +365,7 @@ rsync -av $XEFM_THIS_DIR/ backup/
 
 **アクセス権を変更するには：**
 ```bash
-# Press X to enter sub-shell
+# Run subshell (Tools → Subshell Here) to enter the sub-shell
 chmod 755 $XEFM_THIS_DIR/script.sh
 exit
 ```
@@ -415,7 +417,7 @@ tar czf archive.tar.gz $XEFM_THIS_DIR/*
 ```
 1. Left pane: ~/local/config
 2. Right pane: ssh://server/etc/app
-3. Use external diff tool: x
+3. Run an external diff tool (`programs`)
 4. Select "Beyond Compare" or "diff"
 5. Review differences
 ```

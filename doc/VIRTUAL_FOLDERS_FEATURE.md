@@ -262,7 +262,7 @@ class Config:
 ```
 
 Jump to Path and `reg://HKEY_CURRENT_USER` now open the registry in a pane. Enter
-walks into a key, Backspace walks back out, `;` filters, and the viewer shows a
+walks into a key, Backspace walks back out, **View → Filter…** filters, and the viewer shows a
 value's content.
 
 To hand a key to `regedit`, bind an action — see

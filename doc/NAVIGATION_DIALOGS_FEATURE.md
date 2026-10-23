@@ -5,7 +5,8 @@ English \| [日本語](NAVIGATION_DIALOGS_FEATURE.ja.md)
 XeFM's directory navigation dialogs all share one searchable-list picker: a
 scrollable list you filter by typing, with the same keys for moving through it
 and choosing an entry. Four actions open four flavors of that picker (press `F1`
-for the keys yours are on, or find them in the **Go** menu):
+for the keys yours are on, or find them in the **Go** menu). Keys depend on your keymap preset — see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 | Action | Dialog | What it lists |
 |--------|--------|---------------|
@@ -37,7 +38,7 @@ Every navigation dialog uses the same list-picker controls:
 - The **remove** key (`remove_list_item`) to drop the highlighted entry, where
   there is something to
   remove: it forgets a directory in History or the Filter prompt, forgets a
-  saved server in Connect to Server, forgets a favorite you added with **B**,
+  saved server in Connect to Server, forgets a favorite you added with **Add to Favorites…**,
   and disconnects or ejects a volume in Drives. Favorites written in your
   config and External Programs are yours to edit there, so the key leaves them
   alone
@@ -50,7 +51,7 @@ bound if you rebound it.
 ### Fields with a history
 
 Two dialogs are for text you type rather than an entry you pick: the **Filter**
-prompt (`;`) and [Open List → From Command](FILE_LIST_IMPORT_FEATURE.md#from-a-command). They
+prompt (**View → Filter…**) and [Open List → From Command](FILE_LIST_IMPORT_FEATURE.md#from-a-command). They
 look like a text prompt — a label and a field, no magnifier — with the history
 listed below, and they work the other way round:
 
@@ -66,9 +67,9 @@ listed below, and they work the other way round:
 - In the Filter prompt, a filter from your config goes into the field as its
   name, and *clear filter* as an empty field — Enter then clears the filter.
 
-## Favorites (J)
+## Favorites
 
-Press **J** to open a searchable list of your favorites and jump to any of them
+Choose **Go ▸ Go to Favorite…** (`favorites`) to open a searchable list of your favorites and jump to any of them
 instantly. A favorite is usually a directory, but it can also be a file: picking
 one opens its directory with the cursor on the file.
 
@@ -89,11 +90,11 @@ or not it is reachable today.
 
 ### Adding and removing favorites
 
-Press **B** (`add_favorite`, also **Go ▸ Add to Favorites…**) to add one. XeFM
+Choose **Go ▸ Add to Favorites…** (`add_favorite`) to add one. XeFM
 asks which of two things you mean:
 
 - **This directory** — the directory the pane is showing. It is first, so
-  **B** then **Enter** adds where you are.
+  choosing **Add to Favorites…** and pressing **Enter** adds where you are.
 - **Under the cursor** — the directory or file the cursor is on.
 
 Then type the name it should be listed under (it starts as the directory's or
@@ -109,15 +110,15 @@ you added them, and are kept in XeFM's own state database — your `config.py` i
 never rewritten. Adding a place that is already a favorite renames it instead of
 listing it twice.
 
-To remove one, highlight it in the **J** list and press the remove key
+To remove one, highlight it in the Favorites list and press the remove key
 (**Shift-Delete** by default). Favorites written in `FAVORITES` are
 not removed there: delete them from your config.
 
 ### Tags in the same dialogs
 
-**B** also tags files: the **B** dialog lists your tags after the favorite
-rows. Finding files by tag is a search, not a place to go, so it is
-**View → Search Tags…**, not **J**. See [File Tags](FILE_TAGS_FEATURE.md).
+**Add to Favorites…** also tags files: its dialog lists your tags after the
+favorite rows. Finding files by tag is a search, not a place to go, so it is
+**View → Search Tags…**, not **Go to Favorite…**. See [File Tags](FILE_TAGS_FEATURE.md).
 
 ### Default favorites
 
@@ -139,7 +140,7 @@ machine you copy your config to — edit `FAVORITES` in your `~/.xefm/config.py`
 `name` (what to call it) and a `path` (where it is; `~` expands to your home
 directory). A `path` may be a file as well as a directory — selecting it opens the
 file's directory with the cursor on the file, just like a file favorite added with
-**B**. You don't say which it is: XeFM finds out when you pick the row, so a list
+**Add to Favorites…**. You don't say which it is: XeFM finds out when you pick the row, so a list
 of paths loaded from elsewhere can go in as it is:
 
 ```python
@@ -187,9 +188,9 @@ handy for a full path copied out of a log or an error message.
 Press **Enter** to go. A path that does not exist keeps the prompt open and says
 so, and **Esc** closes it without moving the pane.
 
-## History (H)
+## History
 
-Press **H** to open a searchable list of directories you have already visited in
+Choose **Go ▸ History…** (`history`) to open a searchable list of directories you have already visited in
 the current pane, and jump back to any of them. Each pane keeps its own history.
 
 The **remove** key forgets the highlighted directory. Every visit to it is
@@ -199,9 +200,9 @@ is not a blocklist: going there again puts it back at the top.
 The number of remembered entries is set by `MAX_HISTORY_ENTRIES` in
 `~/.xefm/config.py` (default 100).
 
-## Drives dialog (D)
+## Drives dialog
 
-Press **D** to open a searchable list of storage locations and jump to one. On
+Choose **Go ▸ Drives…** (`drives`) to open a searchable list of storage locations and jump to one. On
 macOS and Windows its first row is **Connect to Server…**, which opens the
 [Connect to Server](CONNECT_TO_SERVER_FEATURE.md) dialog.
 
@@ -267,10 +268,10 @@ rather than forcing it.
 
 ## Choosing between them
 
-- **Favorites (J)** — instant, for a handful of directories you use constantly
-- **History (H)** — instant, for somewhere you were a moment ago
+- **Favorites** — instant, for a handful of directories you use constantly
+- **History** — instant, for somewhere you were a moment ago
 - **Jump to Path** — for a location you can type or paste
-- **Drives (D)** — for switching between volumes, drives, or S3 buckets, and
+- **Drives** — for switching between volumes, drives, or S3 buckets, and
   for disconnecting or ejecting one
 - **Connect to Server** — for mounting a NAS or file server in the
   first place

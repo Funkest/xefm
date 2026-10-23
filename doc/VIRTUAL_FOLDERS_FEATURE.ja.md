@@ -228,7 +228,7 @@ class Config:
     ]
 ```
 
-これで、Jump to Path に `reg://HKEY_CURRENT_USER` と入力すると、ペインでレジストリが開きます。Enter でキーの中に入り、Backspace で戻り、`;` で絞り込み、ビューアーで値の内容を表示できます。
+これで、Jump to Path に `reg://HKEY_CURRENT_USER` と入力すると、ペインでレジストリが開きます。Enter でキーの中に入り、Backspace で戻り、**View → Filter…** で絞り込み、ビューアーで値の内容を表示できます。
 
 キーを `regedit` に渡すには、アクションを割り当てます。[カスタマイズ](CUSTOMIZATION_FEATURE.ja.md#自分のアクションactions)を参照してください。
 

@@ -2,15 +2,15 @@
 
 English \| [日本語](DIRECTORY_SYNC_FEATURE.ja.md)
 
-The [directory diff](DIFF_VIEWER_FEATURE.md#directory-diff) (`Shift+=`) lets
+The [directory diff](DIFF_VIEWER_FEATURE.md#directory-diff) (`diff_directories`) lets
 you copy, move or delete one item at a time. Sync does the rest in one step:
 it makes the other side match the active side. You see the whole plan before
 anything is written.
 
 ## Running a sync
 
-1. Open the directory diff with `Shift+=` and wait for the comparison to
-   finish.
+1. Open the directory diff with **Select → Compare Directories…** and wait for
+   the comparison to finish.
 2. Put the side you want to copy **from** on the active side. `Tab` switches
    sides, and the active side's header is highlighted.
 3. Press `s` and pick a mode:
@@ -51,8 +51,9 @@ Press `Space` on an item to move it to its next action:
 - **A directory on both sides**: skip it and everything inside it, or decide
   item by item (the default).
 
-While the plan is open, `Enter` still opens the file diff and `E` still opens
-your merge tool. After a merge, the comparison updates and that item's action
+While the plan is open, `Enter` still opens the file diff and `edit_file` still
+opens your merge tool (its key depends on your keymap preset — see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side)). After a merge, the comparison updates and that item's action
 is worked out again. Your other changes are kept.
 
 `Tab` reverses the plan's direction and resets your changes.
@@ -85,7 +86,7 @@ is worked out again. Your other changes are kept.
 - **Hidden files follow the viewer.** When hidden files are not shown, they
   are not compared and the plan leaves them alone. A folder copied or deleted
   as a whole includes everything inside it, hidden files too.
-- The sync runs through the same engine as `C` and `K`, with its progress
+- The sync runs through the same engine as `copy_files` and `delete_files`, with its progress
   dialog. It works across local folders, `ssh://`, `s3://` and mounted
   shares.
 
