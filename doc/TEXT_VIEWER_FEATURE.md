@@ -24,7 +24,7 @@ The viewer draws its own keys along the bottom, and `F1` inside it lists them al
 |--------|--------------|
 | `view_file` | View the focused file in the text viewer |
 | `open_item` | Same, for a file with no other `enter` rule |
-| `↑` `↓` `PgUp` `PgDn` `Home` `End` | Scroll by line, page, or to either end |
+| `↑` `↓` `PgUp` `PgDn` `Home` `End` | Scroll by line, page, or to either end (Vim style adds its own scroll keys) |
 | `←` `→` | Scroll horizontally (when line wrap is off) |
 | `toggle_wrap` | Toggle line wrapping |
 | `isearch` | Incremental search — then `↑` / `↓` step between matches |
@@ -35,6 +35,9 @@ The viewer draws its own keys along the bottom, and `F1` inside it lists them al
 | `Cmd`/`Ctrl` + `A` | Select the whole file |
 | `F1` | Key help |
 | `quit` / `Esc` | Close the viewer |
+
+The keys of `isearch`, `edit_file` and `quit`, and Vim style's extra scroll
+keys, depend on your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 The view/edit keys are rebindable in your config's `KEY_BINDINGS`; the arrow /
 page / home / end scroll keys are viewer-local and always active.

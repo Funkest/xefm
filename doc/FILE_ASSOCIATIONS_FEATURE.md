@@ -67,12 +67,14 @@ FILE_ASSOCIATIONS = [
 
 Each file pattern can configure up to four actions:
 
-| Action | Key | What it does | Value |
+| Action | Run by | What it does | Value |
 |---|---|---|---|
-| **enter** | `Enter` | Casual open — handled **inside XeFM** | A built-in handler name |
+| **enter** | `open_item` (`Enter`) | Casual open — handled **inside XeFM** | A built-in handler name |
 | **open** | `open_with_os` | Deliberate open — hands off to another app | A command |
-| **view** | `V` | View the file | A command |
-| **edit** | `E` | Edit the file | A command |
+| **view** | `view_file` | View the file | A command |
+| **edit** | `edit_file` | Edit the file | A command |
+
+Keys depend on your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 #### Two tiers of "open"
 
@@ -345,8 +347,8 @@ anyway, which shows a binary placeholder.
    from ever being handed to the OS)
 4. Otherwise falls back to the OS default app (`open` / `xdg-open` / `start`)
 
-#### V Key - View File
-When you press V on a file, XeFM uses the **view** action from file associations.
+#### view_file - View File
+When you run `view_file` (**File → View File**) on a file, XeFM uses the **view** action from file associations.
 
 **Behavior**:
 1. Checks file associations for 'view' action
@@ -357,8 +359,8 @@ When you press V on a file, XeFM uses the **view** action from file associations
 Remote and in-archive files always use the built-in viewer — an external
 program has no path on disk it could open.
 
-#### E Key - Edit File
-When you press E, XeFM edits the selected files — or the focused file when
+#### edit_file - Edit File
+When you run `edit_file` (**File → Edit File**), XeFM edits the selected files — or the focused file when
 nothing is selected — using the **edit** action from file associations.
 
 **Behavior** (per file):
@@ -388,8 +390,8 @@ selection they are skipped individually, with a log line each).
 
 **Usage**:
 - Press Enter on `photo.jpg` → Opens in Preview
-- Press V on `photo.jpg` → Opens in Preview (same as Enter)
-- Press E on `photo.jpg` → Opens in Photoshop
+- `view_file` on `photo.jpg` → Opens in Preview (same as Enter)
+- `edit_file` on `photo.jpg` → Opens in Photoshop
 
 #### Videos - Viewer Only
 
@@ -403,8 +405,8 @@ selection they are skipped individually, with a log line each).
 
 **Usage**:
 - Press Enter on `movie.avi` → Opens in VLC
-- Press V on `movie.avi` → Opens in VLC
-- Press E on `movie.avi` → Shows "No editor configured" message
+- `view_file` on `movie.avi` → Opens in VLC
+- `edit_file` on `movie.avi` → Shows "No editor configured" message
 
 #### Text Files - Built-in Viewer for View Action
 
@@ -419,8 +421,8 @@ selection they are skipped individually, with a log line each).
 
 **Usage**:
 - Press Enter on `readme.txt` → Opens in TextEdit
-- Press V on `readme.txt` → Opens in built-in text viewer (with syntax highlighting)
-- Press E on `readme.txt` → Opens in vim
+- `view_file` on `readme.txt` → Opens in built-in text viewer (with syntax highlighting)
+- `edit_file` on `readme.txt` → Opens in vim
 
 **Note**: Omitting the `view` action allows XeFM to use the built-in text viewer for text files, which provides syntax highlighting and is optimized for viewing code and text files.
 
@@ -431,9 +433,9 @@ If a file has no configured association:
 1. **Enter key**: Falls back to the built-in viewer for text files; for a file
    XeFM has no built-in way to render (an image, say) it logs a warning naming
    the key that opens the file externally, rather than showing garbage
-2. **V key**: Opens the built-in text viewer, which reads the bytes — text is
+2. **`view_file`**: Opens the built-in text viewer, which reads the bytes — text is
    shown with syntax highlighting, a binary shows a placeholder
-3. **E key**: Falls back to the `TEXT_EDITOR` config setting
+3. **`edit_file`**: Falls back to the `TEXT_EDITOR` config setting
 
 ### How XeFM decides a file is text
 
@@ -476,8 +478,8 @@ later, more general entry might otherwise supply a command.
 | Action | With association | No association — text | No association — binary |
 |---|---|---|---|
 | **Enter** | Built-in handler or configured open | Built-in viewer | Warns to use the open-externally key |
-| **V (View)** | Configured viewer (or built-in if `None`) | Built-in viewer | Built-in viewer shows placeholder |
-| **E (Edit)** | Configured editor | `TEXT_EDITOR` config | `TEXT_EDITOR` config |
+| **View (`view_file`)** | Configured viewer (or built-in if `None`) | Built-in viewer | Built-in viewer shows placeholder |
+| **Edit (`edit_file`)** | Configured editor | `TEXT_EDITOR` config | `TEXT_EDITOR` config |
 
 ## Open Externally and Reveal in File Manager
 

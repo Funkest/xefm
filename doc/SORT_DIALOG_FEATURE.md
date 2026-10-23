@@ -2,7 +2,9 @@
 
 English \| [日本語](SORT_DIALOG_FEATURE.ja.md)
 
-Press **S** to open the sort dialog over the active pane. It replaces the old
+Run `sort` to open the sort dialog over the active pane (its key depends on
+your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side);
+it is also in the command palette, **Tools → Command Palette…**). It replaces the old
 generic sort menu with a picker made for the job: choose a **sort key**, choose
 an **order**, and read what that order means before you commit.
 
@@ -29,7 +31,8 @@ an **order**, and read what that order means before you commit.
 - **Left/Right** — choose the order: Left is Ascending, Right is Descending
 - **F / E / S / T** — the rows' initials choose that sort key directly and
   apply it immediately (the dialog closes), keeping the current order.
-  Changing the sort is two keystrokes: `S` then a letter.
+  With `sort` on a key, changing the sort is two keystrokes: that key, then a
+  letter.
 - **Enter** — apply the selected key and order
 - **Escape** — cancel; the pane's sort is left untouched
 - **Mouse** — clicking a key row applies it; clicking Ascending/Descending
@@ -53,7 +56,8 @@ updated live as you move:
 
 ## Related keys
 
-The quick-sort keys still work without opening the dialog: **1** (filename),
-**2** (extension), **3** (size), **4** (timestamp); pressing the same key again
-reverses the order. The menu bar's **View → Sort By** submenu offers the same
-four keys, and **View → Reverse Sort** toggles the order.
+The quick-sort actions still work without opening the dialog:
+`quick_sort_name`, `quick_sort_ext`, `quick_sort_size` and `quick_sort_date`;
+running the same one again reverses the order. The menu bar's
+**View → Sort By** submenu offers the same four sort keys, and
+**View → Reverse Sort** toggles the order.

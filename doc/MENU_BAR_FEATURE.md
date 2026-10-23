@@ -68,7 +68,8 @@ on the Windows terminal.
 
 Each item draws the key its action is actually bound to, so the tables below
 name the **action** instead — press `F1` for the keys, or just read them off the
-menu.
+menu. Which actions have a key, and which key, depends on your keymap preset —
+see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 ### File Menu
 
@@ -84,7 +85,7 @@ menu.
 | New File… | `create_file` |
 | Rename… | `rename` |
 | Rename in Editor… | `rename_in_editor` |
-| Duplicate | `duplicate_files` *(ships unbound in AFX style)* |
+| Duplicate | `duplicate_files` |
 | Copy to Other Pane | `copy_files` |
 | Move to Other Pane | `move_files` *(when files are selected)* |
 | Copy to… | `copy_files_to` |
@@ -148,7 +149,7 @@ the mouse for the first, take the whole buffer with the second. See
 | Clear Selection | `unselect_all` |
 | Select by Pattern… | `select_by_pattern` — see [Select by Pattern](SELECT_BY_PATTERN_FEATURE.md) |
 | Unselect by Pattern… | `unselect_by_pattern` |
-| Select Same Extension | `select_same_extension` *(ships unbound)* |
+| Select Same Extension | `select_same_extension` |
 | Compare and Select… | `compare_selection` |
 | Compare Selected Files… | `diff_files` |
 | Compare Directories… | `diff_directories` |
@@ -163,7 +164,7 @@ the mouse for the first, take the whole buffer with the second. See
 | Search Content… | `find_in_files` |
 | Search Spotlight… / Search Windows Search… | `index_search` — see [Searching the OS Index](OS_INDEX_SEARCH_FEATURE.md) |
 | Search Tags… | `find_by_tag` *(ships unbound)* — see [File Tags](FILE_TAGS_FEATURE.md) |
-| Reread | `reread` *(ships unbound in AFX style; F2 in Orthodox)* |
+| Reread | `reread` |
 | Show Hidden Files | `toggle_hidden` |
 | Reverse Sort | *(menu only)* |
 | Sort By ▸ | (submenu: Name / Extension / Size / Date — also the `quick_sort_*` actions) |
@@ -201,9 +202,9 @@ in the command palette.
 | Tip of the Day… | *(menu only)* |
 | About XeFM | *(menu only)* |
 
-> Note: `create_directory` and `move_files` ship on one key, which does whichever
-> fits — a new folder when nothing is selected, a move when files are. That is a
-> property of their bindings, and the menu reflects both.
+> Note: in AFX style, `create_directory` and `move_files` share one key, which
+> does whichever fits — a new folder when nothing is selected, a move when files
+> are. That is a property of their bindings, and the menu reflects both.
 
 ## Menu Item States
 
@@ -221,8 +222,9 @@ single letters appear as-is, special keys are spelled out (`Enter`, `Backspace`,
 `Tab`), and modifier combinations use `Cmd-`, `Shift-`, `Alt-` prefixes. Because
 the hint is read live from the keymap,
 rebinding an action in config automatically updates its menu shortcut — and the
-hint follows the case it is drawn in, so "Open with Default App" reads
-`Cmd-Enter` in the macOS app and `Ctrl-O` in a terminal.
+hint follows the case it is drawn in, so "Open with Default App" can show one
+key in the macOS app and another in a terminal (see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side)).
 
 ### Using shortcuts
 
@@ -232,14 +234,15 @@ The menu is there for discovery and mouse-driven use.
 ## Usage Examples
 
 ### Create a new folder
-Open **File → New Folder…** (or press `M` when nothing is selected), type the
-name, and confirm.
+Open **File → New Folder…** (`create_directory`), type the name, and confirm.
 
 ### Copy files to the other pane
-Select files with `Space`, then **File → Copy to Other Pane** (or press `C`).
+Select files (**Select → Toggle Selection**), then choose **File → Copy to Other
+Pane** (`copy_files`).
 
 ### Change the theme
-Open **View → Theme ▸** and pick one, or press `T` to cycle to the next theme.
+Open **View → Theme ▸** and pick one, or choose **View → Next Theme** to cycle
+to the next theme.
 
 ## Troubleshooting
 

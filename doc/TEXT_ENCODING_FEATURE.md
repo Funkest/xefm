@@ -9,7 +9,7 @@ the encoding explicitly from inside the viewer.
 
 ## Automatic detection
 
-Opening a file in the text viewer (`V`) just works for:
+Opening a file in the text viewer (`view_file`) just works for:
 
 - **UTF-8** — with or without a BOM (the BOM never shows as a stray character)
 - **UTF-16 / UTF-32** — when the file starts with a BOM (both byte orders)
@@ -42,9 +42,11 @@ EUC-JP; the match is shown at the dialog's bottom). `Enter` applies — the
 file is re-decoded in place, keeping your scroll position — and `Esc`
 cancels. The selection opens on whatever is currently in effect.
 
-Plain `E` (`edit_file`) also works inside the viewer: it opens the viewed
-file in your configured editor, exactly as it does from the file list, and
-the viewer re-reads the file when a terminal editor returns.
+`edit_file` also works inside the viewer, on the same key as in the file list
+(it depends on your keymap preset — see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side)): it opens
+the viewed file in your configured editor, exactly as it does from the file
+list, and the viewer re-reads the file when a terminal editor returns.
 
 A manual choice always shows *something*: bytes the chosen encoding can't
 represent appear as replacement marks (`�`) instead of refusing. Choosing

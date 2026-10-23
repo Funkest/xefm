@@ -6,9 +6,10 @@ XeFM reads and writes the tags your system already keeps, so a tag added in
 XeFM shows up in Finder (or Dolphin, or the S3 console), and tags added there
 show up in XeFM. There is no separate XeFM tag list to keep in sync.
 
-## Tagging: B
+## Tagging
 
-Press **B**, the same key that adds a favorite. After the favorite rows, the
+Choose **Go → Add to Favorites…** (`add_favorite`), the same command that adds
+a favorite. After the favorite rows, the
 dialog lists tag rows. They act on the selected items, or on the item under the
 cursor when nothing is selected:
 
@@ -30,8 +31,10 @@ Tag: Edit tags… (notes.txt)
   - a name you add is put on every item;
   - tags that only some of the items have are left alone.
 
-**B** then **Enter** still adds the current directory to your favorites, since
-that row stays first.
+Running it and pressing **Enter** still adds the current directory to your
+favorites, since that row stays first. In AFX style `add_favorite` is on `B`;
+keys depend on your keymap preset — see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 ## Seeing tags
 
@@ -42,7 +45,7 @@ since it has no column for tag names. The dots are read in the background as row
 come into view, so a slow network folder never holds up the list.
 
 Files on S3 and over SSH don't show dots: each lookup there is a separate
-network request. Their tags still work through **B** and **Search Tags**.
+network request. Their tags still work through **Add to Favorites…** and **Search Tags**.
 
 ## Finding by tag: View → Search Tags…
 
@@ -53,7 +56,7 @@ to go back. On macOS, Spotlight answers this instantly. Elsewhere, or when
 Spotlight finds nothing, XeFM searches the folders, and you can press Esc to
 stop.
 
-The action is `find_by_tag`. It has no key in either keymap; bind one in
+The action is `find_by_tag`. It has no key in any keymap preset; bind one in
 `KEY_BINDINGS`, or run it from the command palette.
 
 To take a tag off the list, highlight it and press the remove key
@@ -101,5 +104,5 @@ copied, with a note in the log.
 
 ## See also
 
-- [Navigation dialogs](NAVIGATION_DIALOGS_FEATURE.md) — favorites, J and B
+- [Navigation dialogs](NAVIGATION_DIALOGS_FEATURE.md) — favorites and tagging
 - [Virtual Folders](VIRTUAL_FOLDERS_FEATURE.md) — lists of files from anywhere

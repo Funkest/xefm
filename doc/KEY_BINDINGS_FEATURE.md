@@ -31,8 +31,7 @@ The simplest form - just a single character:
   `'A'` both mean the A key with no modifier.
 - **Writing a capital is not the same as pressing Shift.** A binding written
   `'Q'` does *not* fire when you press Shift+Q — it is still the unshifted key.
-  Write `'Shift-Q'` when you mean the shifted one, which is why the defaults
-  spell out `'Shift-F'` next to `'F'`.
+  Write `'Shift-Q'` when you mean the shifted one.
 - **Punctuation and digits are the glyph they produce**, so `?` and `/` are
   different keys even though they share one physical key.
 
@@ -164,15 +163,13 @@ gave it, so there is no need to empty that action too. See
 ### What a terminal can carry
 
 The same XeFM runs as a desktop app and in a terminal, and a terminal cannot
-send every chord a window can. The defaults are therefore **one common table** —
-every key in it reaches XeFM in the macOS app, the Windows app and any terminal —
-with two per-case additions where a desktop platform owns the gesture outright:
-
-| Case | What is added |
-|---|---|
-| macOS desktop | `Command-ENTER` for `open_with_os`; `Command-C` / `X` / `V` for the [file clipboard](FILE_CLIPBOARD_FEATURE.md) (copy also copies the log's selected text) |
-| Windows desktop | `Ctrl-ENTER` for `open_with_os` |
-| Any terminal | nothing — the common table is the whole keymap |
+send every chord a window can. Each preset is therefore built on **one common
+table** — every key in it reaches XeFM in the macOS app, the Windows app and any
+terminal — with additions in a desktop app where that platform owns the gesture
+outright. In a terminal the common table is the whole keymap. Which keys a preset
+adds, and in which desktop app, is on
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side) (the lines
+headed *macOS app* and *Windows app*).
 
 What a terminal cannot deliver, and why those chords are not in the common table:
 
@@ -218,12 +215,13 @@ simply does nothing. The ones worth knowing:
 ### Defaults that moved
 
 These changed when the keymap became one common table (and `help` later, to
-make room for the context-menu keys). A `config.py` from before then may still
-hold the old keys, and an entry in `KEY_BINDINGS` always wins over the preset.
-XeFM never rewrites the `KEY_BINDINGS` you already have, so edit the lines by
-hand, or delete them to take the preset's keys:
+make room for the context-menu keys), before there were presets; that keymap is
+today's AFX style, so the last column gives AFX style's keys. A `config.py` from
+before then may still hold the old keys, and an entry in `KEY_BINDINGS` always
+wins over the preset. XeFM never rewrites the `KEY_BINDINGS` you already have, so
+edit the lines by hand, or delete them to take the preset's keys:
 
-| Action | Was | Now |
+| Action | Was | Now (AFX style) |
 |---|---|---|
 | `open_with_os` | `Command-ENTER` / `Ctrl-ENTER` (Windows) | `Ctrl-O`, plus the old chord in the desktop app |
 | `reveal_in_os` | `Alt-ENTER` / `Ctrl-Shift-E` (Windows) | `Ctrl-R` |
@@ -285,14 +283,14 @@ list-style bindings keep working unchanged.
 - `'none'` - Action only available when no files are selected
 - `'any'` - Action always available (default)
 
-**Default selection-aware actions.** Out of the box these file operations use
+**Default selection-aware actions.** In AFX style these file operations use
 `'required'` (they act on the selection, so they're hidden when nothing is
-selected): `copy_files` (`C`), `move_files` (`M`), `copy_files_to` (`Shift-C`),
-`move_files_to` (`Shift-M`), `delete_files` (`K` / `DELETE`), and
-`create_archive` (`P`). `create_directory` (`M`) uses `'none'` so it shares
-the `M` key with `move_files` without conflict — XeFM picks whichever action fits
-the current selection state. You can add a `'selection'` requirement to any other
-action the same way.
+selected): `copy_files`, `move_files`, `copy_files_to`, `move_files_to`,
+`delete_files` and `create_archive`. `create_directory` uses `'none'`, so it can
+share a key with `move_files` without conflict — XeFM picks whichever action fits
+the current selection state. The keys are on
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side). You can add a
+`'selection'` requirement to any other action the same way.
 
 ### Viewer keys
 
@@ -320,7 +318,7 @@ to a Python function of your own.
 
 ### Search bar keys
 
-The incremental search bar (`F`) is a surface of its own too, and its keys carry
+The incremental search bar (`isearch`) is a surface of its own too, and its keys carry
 its name the same way — `isearch.next_match`, `isearch.prev_match`,
 `isearch.toggle_select_down`, `isearch.toggle_select_up`,
 `isearch.select_matches`, `isearch.accept`, `isearch.cancel`. They are rebound
@@ -329,8 +327,8 @@ exactly like a viewer's; the defaults and what each one does are in
 
 One rule is specific to this surface: **the key must not be one that types a
 character.** The pattern field is offered every printable key first — that is
-what keeps `Q`, `?` and Space typeable into a pattern while `quit`, `context_menu_dir` and
-`toggle_select_down` own them in the file list — so an isearch action bound to
+what keeps letters, `?` and Space typeable into a pattern even where the file
+list gives them actions — so an isearch action bound to
 `N` can never fire. XeFM notes it in the log pane at startup rather than leaving
 the binding silently dead. `Shift-DOWN`, `Ctrl-N` and `F2` are all fine. Shift
 alone is not enough to make a printable key a command here: `Shift-Space` types a

@@ -83,7 +83,8 @@ A node is an object with a `name` and **at least one of** `children` and
 | `final` | On a group, `true` when it cannot change any more even though the file as a whole is still provisional. Identical-file groups are final as soon as they are written. |
 
 A node with both `children` and `target` is a group that is also a place: it
-opens as a folder, and the pane-sync keys reveal its target.
+opens as a folder, and the pane-sync actions (`sync_current_to_other`,
+`sync_other_to_current`) reveal its target.
 
 `line` on a reference is **reserved** for a position in a text file (a search
 hit). It is not defined yet.

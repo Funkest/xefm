@@ -66,8 +66,10 @@ KEY_BINDINGS = {
 The name is prefixed with the viewer it belongs to. Because each surface only
 ever looks at its own names, a viewer key can share a key with a file-list key
 with no ambiguity — `W` toggling line wrap in the viewer and comparing panes in
-the file list is not a conflict, and never was meant to be. In the example above
-`SPACE` pages the text viewer while still toggling selection in the file list.
+the file list (as it does in AFX style) is not a conflict, and never was meant to
+be. In the example above `SPACE` pages the text viewer while still doing its own
+job in the file list. Which key each preset puts where is on
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 An entry **replaces** the default rather than adding to it, as everywhere else
 in `KEY_BINDINGS`: after that first line, PgDn no longer pages the text viewer.
@@ -128,7 +130,7 @@ same way:
 
 One rule applies here and nowhere else: **the key must not be one that types a
 character.** Everything printable belongs to the pattern you are typing — which
-is why marking a file here is `Ctrl-Space` rather than the file list's own Space,
+is why marking a file here is `Ctrl-Space` rather than Space,
 whose glyph the search reads as the separator between `report 2024` and
 `report*2024*`. Bind an isearch action to `N` and it can never fire; XeFM says so
 in the log pane at startup rather than leaving you to wonder. Shift is not enough
@@ -225,7 +227,7 @@ class Config:
 
 ### Describing an action: the docstring
 
-Every action of yours is in the command palette (Ctrl-T), bound to a key or
+Every action of yours is in the command palette (**Tools → Command Palette…**), bound to a key or
 not, so an action you run once a month needs no key at all. Its docstring is how
 it is described there, split the usual Python way:
 
@@ -254,7 +256,7 @@ ACTIONS = {
              'description': """
                  Clear the selection.
 
-                 The same as Edit ▸ Clear Selection, under a name of its own.
+                 The same as Select ▸ Clear Selection, under a name of its own.
              """},
 }
 ```
@@ -418,7 +420,7 @@ be named too. An entry with a mistake is skipped with a line in the log pane.
 
 ### Running an external program from a key
 
-A `PROGRAMS` entry is launched from the **X** picker; to give a program a key
+A `PROGRAMS` entry is launched from the **Tools → External Programs…** picker; to give a program a key
 of its own, call it from an action with `ctx.run_program()`:
 
 ```python
@@ -538,7 +540,7 @@ log pane naming it.)
 `file_open` is how you route a file type somewhere of your own without touching
 `FILE_ASSOCIATIONS`. It fires for the **open** action (Enter) — not for
 directories, since entering one is navigation rather than opening, and not for
-`view_file` (`V`), `open_with_os` or the viewers, which are explicit requests for
+`view_file`, `open_with_os` or the viewers, which are explicit requests for
 a particular way of opening something.
 
 `directory_changed` fires on an actual change of directory. A refresh, a
@@ -563,8 +565,8 @@ SORT_KEYS = {
 }
 ```
 
-That adds a **Size, then name** row to the sort dialog (`s`) and to the Sort By
-menu, alongside the four built-in ones.
+That adds a **Size, then name** row to the sort dialog (`sort`) and to the
+**View → Sort By** menu, alongside the four built-in ones.
 
 ### What you get, and what you return
 
@@ -632,7 +634,7 @@ you were given.
 
 ## Your own filters: `FILTERS`
 
-The pane filter (`;`) takes wildcard patterns — one, or several separated by
+The pane filter (**View → Filter…**) takes wildcard patterns — one, or several separated by
 spaces (`*.jpg *.png`) — which can only ask about a name. "The images", "anything I touched today", "everything over 100 MB"
 are questions about the *file*, and no pattern spells them. So the filter is
 yours to write too.
@@ -682,13 +684,13 @@ only" is written `"match": lambda e: False`.
 ### Where the name shows up
 
 A filter is remembered by its name, so the status bar reads `Filter: Images`
-rather than the pattern behind it, and a content search (`⇧G`) started while the
+rather than the pattern behind it, and a content search (**View → Search Content…**) started while the
 filter is on narrows to exactly the files the pane is showing — your `match`
 function included. A name may not contain `*`, `?` or `[`: XeFM remembers a *typed* filter as the pattern itself, and one
 that could be read as both would be impossible to tell apart. Put the wildcards
 in `pattern` and give the filter a plain name.
 
-Names you define never enter the `;` prompt's history either — they already have
+Names you define never enter the filter prompt's history either — they already have
 a row, and recording them would list them twice.
 
 ### If it goes wrong

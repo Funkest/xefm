@@ -7,9 +7,11 @@ contents, and much more about them: **Spotlight** on macOS, **Windows
 Search** on Windows. XeFM can search that index and show what it finds as a
 list you can sort, filter, copy, move and delete in.
 
-| Action | Key | Menu |
-|--------|-----|------|
-| `index_search` | `Ctrl-F` | View → Search Spotlight… (macOS) / Search Windows Search… (Windows) |
+| Action | Menu |
+|--------|------|
+| `index_search` | View → Search Spotlight… (macOS) / Search Windows Search… (Windows) |
+
+Keys depend on your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 It opens the **search dialog** in its index mode, next to Search Files and
 Search Content: `Tab` steps between the three. Results appear **as you type**,
@@ -65,7 +67,7 @@ highlighted one.
 
 The matches open in the active pane as a list, titled with the query. Every
 list feature works there: sort by date or size, filter, select, copy, move,
-view, and `Shift-O` to reveal a file where it really lives. `Backspace`
+view, and `sync_other_to_current` to reveal a file where it really lives. `Backspace`
 returns to the folder.
 
 If the index cannot be asked, the reason shows in the dialog's status line.
@@ -83,7 +85,7 @@ after it. Searches you built in Finder become one-key lists here.
   under System Settings → Spotlight → Search Privacy. Windows Search by
   default covers your user folders and libraries, not whole drives, and the
   service can be turned off. A file outside the index won't be found. For
-  that, use **Search Files** (`Shift-F`), which walks the folder itself.
+  that, use **View → Search Files…**, which walks the folder itself.
 - **Local folders only.** A mounted network share is searched only if the
   OS indexes it. `ssh://` and `s3://` folders are refused.
 - **Windows** needs `comtypes` (installed with XeFM). If it is missing, the

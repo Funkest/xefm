@@ -113,8 +113,8 @@ needs PuiKit 1.12 or later; an older PuiKit logs a warning and ignores it.
 ### Themes / colors
 
 XeFM ships with built-in themes (Dark+, Monokai, Dracula, Nord, Solarized, Gruvbox
-Dark, Light+, Solarized Light). Switch at runtime via **View → Theme** or the `T`
-key; XeFM starts on Dark+ and remembers the last theme across restarts. There is no
+Dark, Light+, Solarized Light). Switch at runtime via **View → Theme** or
+**View → Next Theme**; XeFM starts on Dark+ and remembers the last theme across restarts. There is no
 `COLOR_SCHEME` string setting — instead you register your own named themes:
 
 ```python
@@ -132,7 +132,7 @@ See [Color Schemes](COLOR_SCHEMES_FEATURE.md) for the full theme key reference
 ## Display and Layout
 
 ```python
-SHOW_HIDDEN_FILES       = False  # show hidden files (toggle at runtime with '.')
+SHOW_HIDDEN_FILES       = False  # show hidden files (toggle at runtime with toggle_hidden)
 DEFAULT_LEFT_PANE_RATIO = 0.5    # left pane width as a ratio (0.1 - 0.9)
 DEFAULT_LOG_HEIGHT_RATIO = 0.25  # log pane height as a ratio (0.1 - 0.5)
 DATE_FORMAT             = 'short'  # 'short' (YY-MM-DD HH:mm) or 'full' (YYYY-MM-DD HH:mm:ss)
@@ -143,8 +143,8 @@ MAX_EXTENSION_LENGTH    = 5      # longer extensions stay with the filename
 Adjust the pane split at runtime with `[` / `]`, and the log-pane height with
 `{` / `}`. `DEFAULT_LOG_HEIGHT_RATIO` sets the log pane's height as long as you
 haven't dragged or `{`/`}`-adjusted it — a height you set by hand persists
-across restarts and wins over the config. Press `_` to return to the configured
-default (which also makes the height follow the config again). Layout ratios
+across restarts and wins over the config. The `reset_log_height` action returns
+to the configured default (which also makes the height follow the config again). Layout ratios
 are read at launch, so changing them in the config takes effect on the next
 start.
 
@@ -187,7 +187,8 @@ DEFAULT_SORT_MODE    = 'filename'  # 'filename', 'extension', 'size', 'timestamp
 DEFAULT_SORT_REVERSE = False
 ```
 
-Change sorting at runtime via the sort menu (`s`) or the quick-sort keys.
+Change sorting at runtime via **View → Sort By ▸**, the sort dialog (`sort`) or
+the `quick_sort_*` actions.
 
 Name sorting is **natural** (alphanumeric): embedded numbers are compared as
 numbers, so `file2` sorts before `file10`, and leading zeros (`Report001`,
@@ -236,7 +237,8 @@ KEY_BINDINGS = {
 
 Selection modes: `'any'` (default), `'required'` (only with a selection), `'none'`
 (only without one). See [Key Bindings](KEY_BINDINGS_FEATURE.md) for the full
-action list.
+action list. Which keys each action has to begin with depends on your keymap
+preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 The keys *inside* the modal viewers are named actions too, and rebindable the
 same way — as is binding a key to a function of your own. Both are covered in
@@ -265,7 +267,7 @@ FAVORITES = [
 ]
 ```
 
-Access favorites with the `J` key. See [Navigation Dialogs](NAVIGATION_DIALOGS_FEATURE.md).
+Open favorites with **Go → Go to Favorite…** (`favorites`). See [Navigation Dialogs](NAVIGATION_DIALOGS_FEATURE.md).
 
 ## Drive Locations
 
@@ -273,7 +275,7 @@ Access favorites with the `J` key. See [Navigation Dialogs](NAVIGATION_DIALOGS_F
 DRIVE_LOCATIONS = None   # built-in: Home, Root, Documents, Downloads, Desktop
 ```
 
-The fixed locations at the top of the drives dialog (`D`). Set a list to replace
+The fixed locations at the top of the drives dialog (**Go → Drives…**). Set a list to replace
 them with your own, or `[]` to show only the mounted volumes:
 
 ```python
@@ -323,7 +325,7 @@ PROGRAMS = [
 
 Each entry has a `name`, a `command` (list or string), and optional `options`
 (e.g. `{'terminal': True}` for full-screen programs like `vim` or `less`).
-Access programs with `x`. See
+Open programs with **Tools → External Programs…** (`programs`). See
 [External Programs](EXTERNAL_PROGRAMS_FEATURE.md).
 
 ### File Associations

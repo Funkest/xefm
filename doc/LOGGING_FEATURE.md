@@ -155,9 +155,10 @@ or a note.
 
 Drag across the log with the mouse to highlight lines (double-click selects a
 word, triple-click a line, and dragging past the top or bottom edge keeps
-selecting), then press the copy key (`Ctrl-C`, or `Command-C` in the macOS
-app). With text highlighted in the log, that key copies the text. Without, it
-puts files on the [file clipboard](FILE_CLIPBOARD_FEATURE.md). The highlight
+selecting), then press the copy key (`Ctrl-C`; in the macOS app some keymap
+presets also put it on `Command-C` — see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side)). With text
+highlighted in the log, that key copies the text. Without, it puts files on the [file clipboard](FILE_CLIPBOARD_FEATURE.md). The highlight
 clears once the text is on the clipboard.
 
 The chord copies whatever the log has highlighted, whichever pane you were

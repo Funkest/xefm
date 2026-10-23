@@ -43,7 +43,7 @@
 
 XeFM には **File**、**Edit**、**Go**、**Select**、**View**、**Tools**、**Help** の 7 つのメニューがあります。Windows のターミナルでは、どれも Alt とその頭文字で直接開けます。
 
-各項目には、そのアクションに実際に割り当てられているキーが表示されます。そのため、以下の表ではキーの代わりに **アクション** を示しています。キーは `F1` を押すか、メニューを見て確認してください。
+各項目には、そのアクションに実際に割り当てられているキーが表示されます。そのため、以下の表ではキーの代わりに **アクション** を示しています。キーは `F1` を押すか、メニューを見て確認してください。どのアクションにどのキーがあるかはキーマッププリセットによって異なります。[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照してください。
 
 ### File メニュー
 
@@ -59,7 +59,7 @@ XeFM には **File**、**Edit**、**Go**、**Select**、**View**、**Tools**、*
 | New File… | `create_file` |
 | Rename… | `rename` |
 | Rename in Editor… | `rename_in_editor` |
-| Duplicate | `duplicate_files` *（AFX スタイルでは既定でキー未割り当て）* |
+| Duplicate | `duplicate_files` |
 | Copy to Other Pane | `copy_files` |
 | Move to Other Pane | `move_files` *（ファイルを選択しているとき）* |
 | Copy to… | `copy_files_to` |
@@ -121,7 +121,7 @@ XeFM には **File**、**Edit**、**Go**、**Select**、**View**、**Tools**、*
 | Clear Selection | `unselect_all` |
 | Select by Pattern… | `select_by_pattern` — [パターンで選択](SELECT_BY_PATTERN_FEATURE.ja.md)を参照 |
 | Unselect by Pattern… | `unselect_by_pattern` |
-| Select Same Extension | `select_same_extension` *（既定でキー未割り当て）* |
+| Select Same Extension | `select_same_extension` |
 | Compare and Select… | `compare_selection` |
 | Compare Selected Files… | `diff_files` |
 | Compare Directories… | `diff_directories` |
@@ -136,7 +136,7 @@ XeFM には **File**、**Edit**、**Go**、**Select**、**View**、**Tools**、*
 | Search Content… | `find_in_files` |
 | Search Spotlight… / Search Windows Search… | `index_search` — [OS のインデックス検索](OS_INDEX_SEARCH_FEATURE.ja.md)を参照 |
 | Search Tags… | `find_by_tag` *（既定でキー未割り当て）* — [ファイルのタグ](FILE_TAGS_FEATURE.ja.md)を参照 |
-| Reread | `reread` *（AFX スタイルでは既定でキー未割り当て。Orthodox では F2）* |
+| Reread | `reread` |
 | Show Hidden Files | `toggle_hidden` |
 | Reverse Sort | *（メニューのみ）* |
 | Sort By ▸ | （サブメニュー：Name / Extension / Size / Date。`quick_sort_*` アクションでも可） |
@@ -173,7 +173,7 @@ Advanced には、一度だけ、あるいはときどき設定するものが�
 | Tip of the Day… | *（メニューのみ）* |
 | About XeFM | *（メニューのみ）* |
 
-> 注：`create_directory` と `move_files` は既定で 1 つのキーに割り当てられていて、状況に合うほうを実行します。何も選択していなければ新しいフォルダーの作成、ファイルを選択していれば移動です。これはキーバインドの性質であり、メニューは両方を反映しています。
+> 注：AFX スタイルでは、`create_directory` と `move_files` が 1 つのキーを共有していて、状況に合うほうを実行します。何も選択していなければ新しいフォルダーの作成、ファイルを選択していれば移動です。これはキーバインドの性質であり、メニューは両方を反映しています。
 
 ## メニュー項目の状態
 
@@ -183,7 +183,7 @@ Advanced には、一度だけ、あるいはときどき設定するものが�
 
 ### ショートカット表示の作られ方
 
-各メニュー項目には、そのアクションに割り当てられた最初のキーが表示用に整形されて表示されます。1 文字のキーはそのまま、特殊キーは名前で（`Enter`、`Backspace`、`Tab`）、修飾キーの組み合わせは `Cmd-`、`Shift-`、`Alt-` の接頭辞で表されます。表示はキーマップからその場で読み取られるので、設定でアクションのキーを割り当て直すと、メニューのショートカットも自動的に更新されます。また、表示は描画される環境に従うので、"Open with Default App" は macOS アプリでは `Cmd-Enter`、ターミナルでは `Ctrl-O` と表示されます。
+各メニュー項目には、そのアクションに割り当てられた最初のキーが表示用に整形されて表示されます。1 文字のキーはそのまま、特殊キーは名前で（`Enter`、`Backspace`、`Tab`）、修飾キーの組み合わせは `Cmd-`、`Shift-`、`Alt-` の接頭辞で表されます。表示はキーマップからその場で読み取られるので、設定でアクションのキーを割り当て直すと、メニューのショートカットも自動的に更新されます。また、表示は描画される環境に従うので、"Open with Default App" は macOS アプリとターミナルとで違うキーを表示することがあります（[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照）。
 
 ### ショートカットを使う
 
@@ -192,13 +192,13 @@ Advanced には、一度だけ、あるいはときどき設定するものが�
 ## 使用例
 
 ### 新しいフォルダーを作る
-**File → New Folder…** を開き（何も選択していなければ `M` を押しても同じです）、名前を入力して確定します。
+**File → New Folder…**（`create_directory`）を開き、名前を入力して確定します。
 
 ### 反対側のペインにファイルをコピーする
-`Space` でファイルを選択し、**File → Copy to Other Pane** を選びます（`C` を押しても同じです）。
+ファイルを選択し（**Select → Toggle Selection**）、**File → Copy to Other Pane**（`copy_files`）を選びます。
 
 ### テーマを変える
-**View → Theme ▸** を開いて 1 つ選ぶか、`T` を押して次のテーマに切り替えます。
+**View → Theme ▸** を開いて 1 つ選ぶか、**View → Next Theme** を選んで次のテーマに切り替えます。
 
 ## トラブルシューティング
 

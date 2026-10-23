@@ -6,10 +6,13 @@ The file list has two context menus: one for the **item under the cursor**,
 and one for the **directory** the pane is showing. Each opens with the mouse or
 from the keyboard.
 
-| Menu | Keyboard | Mouse |
-|---|---|---|
-| Item | `/`, or the Menu key | Right-click a row |
-| Directory | `?` (Shift-/), or Shift + the Menu key | Right-click the empty space below the last row |
+| Menu | Action | Keyboard | Mouse |
+|---|---|---|---|
+| Item | `context_menu` | the Menu key, plus a preset key | Right-click a row |
+| Directory | `context_menu_dir` | `?`, or Shift + the Menu key | Right-click the empty space below the last row |
+
+The item menu's other key depends on your keymap preset — see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 From the keyboard, the item menu opens just under the cursor row and the
 directory menu hangs from the path bar at the top of the pane — the line that
@@ -20,7 +23,7 @@ closes.
 The **Menu key** is the one between the right Alt and Ctrl on a PC keyboard.
 It works in the Windows desktop app and the Windows terminal, and on macOS with
 a PC keyboard. A terminal on macOS or Linux never passes it on, which is why
-`/` and `?` carry the same actions everywhere.
+both actions also have a key that works everywhere.
 
 ## What is in them
 
@@ -28,9 +31,10 @@ a PC keyboard. A terminal on macOS or Linux never passes it on, which is why
 Move to Other Pane, Copy to… / Move to…, Delete, Copy Name(s), Copy Full Path(s), Open as List, Add
 to Favorites… (that item), Show Hidden Files. Copy, Move and Delete act on the
 marked files when there are any, as their keys do. Select / Deselect leaves the
-cursor on the item, unlike Space, which moves on to the next row.
+cursor on the item, unlike `toggle_select_down`, which moves on to the next row.
 
-An empty directory has no item, so `/` opens the directory menu there instead.
+An empty directory has no item, so `context_menu` opens the directory menu there
+instead.
 
 **Directory menu** — New Directory…, New File…, Add to Favorites… (this
 directory), Copy Full Path, Open in Finder / Explorer, Subshell Here, Sort…,
@@ -43,8 +47,8 @@ archives.
 
 ## Help moved to F1
 
-`?` used to open the help. It is the directory menu now — on the keyboard it is
-Shift-/, the item menu's key with Shift — and the help is on **F1** (also
+`?` used to open the help. It is the directory menu now, and the help is on
+**F1** (also
 **Help ▸ Keyboard Shortcuts…**).
 
 A config written before this change still says `'help': ['?']`, and keeps

@@ -2,9 +2,10 @@
 
 English \| [日本語](QUICK_VIEW_FEATURE.ja.md)
 
-Press `Shift-V` (**View → Quick View**) and the **other pane becomes a
+Choose **View → Quick View** (`quick_view`) and the **other pane becomes a
 preview** of the item under the cursor. Move the cursor and the preview
-follows. Press `Shift-V` again, or `Esc`, to close it.
+follows. Run it again, or press `Esc`, to close it. Its key depends on your
+keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 | Item under the cursor | The preview shows |
 |-----------------------|-------------------|
@@ -45,5 +46,5 @@ In a terminal that can't draw pictures, a picture shows only its details.
 ## See also
 
 - [Text Viewer](TEXT_VIEWER_FEATURE.md) and
-  [Image Viewer](IMAGE_VIEWER_FEATURE.md): the full viewers (`V`)
-- [File Details](FILE_DETAILS_FEATURE.md): size on disk and more (`I`)
+  [Image Viewer](IMAGE_VIEWER_FEATURE.md): the full viewers (**File → View File**)
+- [File Details](FILE_DETAILS_FEATURE.md): size on disk and more (**File → Details…**)

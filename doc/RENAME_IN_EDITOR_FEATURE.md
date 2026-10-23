@@ -9,8 +9,8 @@ in full before anything is renamed.
 
 ## Usage
 
-1. Select the files to rename (or put the cursor on one) and press
-   `Shift-R` — or choose **File ▸ Rename in Editor…**.
+1. Select the files to rename (or put the cursor on one) and choose
+   **File → Rename in Editor…** (`rename_in_editor`).
 2. Your editor (`TEXT_EDITOR`) opens a file listing the names, one per line.
 3. Change the names in place, save, and close the editor.
 4. XeFM lists every change (`old  →  new`). Choose **Rename** to apply them,
@@ -41,9 +41,10 @@ the file, then choose Apply.** Choose **Apply** once you've saved, or
 
 ## Compared with batch rename
 
-`R` on a selection opens [Batch Rename](BATCH_RENAME_FEATURE.md), which renames
+**File → Rename…** (`rename`) on a selection opens [Batch Rename](BATCH_RENAME_FEATURE.md), which renames
 with a regular expression and a replacement pattern. Use batch rename when one
 pattern describes the whole change. Use rename in the editor when the names
-need individual edits, or when a pattern is hard to write. Both are available;
-`Shift-R` can be rebound with the `rename_in_editor` action in
+need individual edits, or when a pattern is hard to write. Both are available.
+Only AFX style gives `rename_in_editor` a key (see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side)); give it one in any preset with
 `KEY_BINDINGS`.

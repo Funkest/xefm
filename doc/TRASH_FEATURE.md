@@ -2,15 +2,18 @@
 
 English \| [日本語](TRASH_FEATURE.ja.md)
 
-`K` (or `Delete`) moves files to your system's **Trash**, called the Recycle
-Bin on Windows, so a mistaken delete can be undone. Restore them from Finder
+**File → Move to Trash…** (`delete_files`, also on `Delete`) moves files to
+your system's **Trash**, called the Recycle Bin on Windows, so a mistaken delete can be undone. Restore them from Finder
 (*Put Back*), the Recycle Bin, or your desktop's Trash, the same way as files
 deleted anywhere else.
 
-| Key | What it does |
-|---|---|
-| `K`, `Delete` | Move the selection (or the item under the cursor) to the Trash |
-| `Shift-K`, `Shift-Delete` | Delete for good, without the Trash |
+| Action | Menu | What it does |
+|---|---|---|
+| `delete_files` | **File → Move to Trash…** (**Move to Recycle Bin…** on Windows) | Move the selection (or the item under the cursor) to the Trash |
+| `delete_permanently` | **File → Delete Permanently…** | Delete for good, without the Trash |
+
+`Delete` and `Shift-Delete` run these two under every preset; their other keys
+depend on your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 Both ask first. The Trash confirmation's default button is *Move to Trash*,
 because the move can be undone. The permanent delete's default is *Cancel*.
@@ -25,7 +28,7 @@ Some places have no Trash:
 - on Windows, USB and network drives, where Windows itself would delete for
   good.
 
-There, `K` deletes for good, and its confirmation says *There is no Trash here,
+There, `delete_files` deletes for good, and its confirmation says *There is no Trash here,
 so these are deleted for good* before anything happens.
 
 ## Which Trash
@@ -43,5 +46,5 @@ A folder goes to the Trash whole, as one item.
 ```python
 CONFIRM_TRASH = True     # ask before moving to the Trash
 CONFIRM_DELETE = True    # ask before deleting for good
-DELETE_TO_TRASH = True   # False: K deletes for good, like Shift-K
+DELETE_TO_TRASH = True   # False: delete_files deletes for good, like delete_permanently
 ```

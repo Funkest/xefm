@@ -8,12 +8,14 @@
 
 ## キーバインド
 
-- **X**：外部プログラムのダイアログを開く
+- `programs`（**Tools → External Programs…**）：外部プログラムのダイアログを開く
 - `subshell`：サブシェル（コマンドライン）モードに入る（別の機能です）
 
-プログラムメニューとサブシェルは別々の道具です。**X** は設定した `PROGRAMS` の 1 つを実行して XeFM に戻り、`subshell` は現在のペインのディレクトリで対話的なシェルに入ります。
+キーはキーマッププリセットによって異なります。[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照してください。
 
-**X** の選択画面からではなく専用のキーでプログラムを実行するには、アクションから `ctx.run_program()` を呼び出します。[キーから外部プログラムを実行する](CUSTOMIZATION_FEATURE.ja.md#キーから外部プログラムを実行する)を参照してください。
+プログラムメニューとサブシェルは別々の道具です。`programs` は設定した `PROGRAMS` の 1 つを実行して XeFM に戻り、`subshell` は現在のペインのディレクトリで対話的なシェルに入ります。
+
+`programs` の選択画面からではなく専用のキーでプログラムを実行するには、アクションから `ctx.run_program()` を呼び出します。[キーから外部プログラムを実行する](CUSTOMIZATION_FEATURE.ja.md#キーから外部プログラムを実行する)を参照してください。
 
 ## 設定
 
@@ -42,7 +44,7 @@ PROGRAMS = [
 - `XEFM_THIS_DIR` / `XEFM_OTHER_DIR`：現在のペイン／反対側のペインのディレクトリ
 - `XEFM_LEFT_DIR` / `XEFM_RIGHT_DIR`：左／右のペインのディレクトリ
 - `XEFM_THIS_SELECTED` / `XEFM_OTHER_SELECTED` / `XEFM_LEFT_SELECTED` /
-  `XEFM_RIGHT_SELECTED`：それぞれのペインで **Space** によって選択したファイル（スペース区切り、ダブルクォート付き）。**何も選択していないときは空です。**
+  `XEFM_RIGHT_SELECTED`：それぞれのペインで選択した（印を付けた）ファイル（スペース区切り、ダブルクォート付き）。**何も選択していないときは空です。**
 - `XEFM_THIS_FOCUSED` / `XEFM_OTHER_FOCUSED` / `XEFM_LEFT_FOCUSED` /
   `XEFM_RIGHT_FOCUSED`：そのペインのカーソル位置にある 1 つの項目。同じ方法でクォートされます。選択とは関係なく、空になるのはペインが空のときだけです。
 - `XEFM_ACTIVE`：XeFM の下で実行しているときは `1` になります。シェルの rc ファイルでこれを見て、たとえばサブシェルのプロンプトに印を付けられます（[ユーザーガイド](XEFM_USER_GUIDE.ja.md)の Subshell の節を参照してください）
@@ -65,7 +67,7 @@ if len(selected) != 2:          # or: require a real selection
 
 ## 使い方
 
-1. **X** を押してプログラムのダイアログを開きます
+1. **Tools → External Programs…**（`programs`）でプログラムのダイアログを開きます
 2. 検索できる一覧でプログラムを探して選びます
 3. Enter を押して起動します
 
@@ -164,7 +166,7 @@ XeFM には、実際の外部ツールをメニューに組み込む方法を示
 
 ## クイックリファレンス
 
-- **X**：外部プログラムのダイアログを開く
+- `programs`（**Tools → External Programs…**）：外部プログラムのダイアログを開く
 - `subshell`：サブシェルモードを開く（別の機能）
 - 手早く済む特定の作業には外部プログラムを使う
 - 対話的なコマンドライン作業にはサブシェルモードを使う

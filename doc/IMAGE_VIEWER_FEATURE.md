@@ -127,7 +127,7 @@ among them with no Store package installed for it.)
 **XeFM only ever offers a format something on your machine can read.** If a
 `.heic` opens in the image viewer, you get a picture — never a "cannot show
 this" card. On a machine with no HEIC decoder the file simply is not treated as
-an image, and `V` falls back to whatever else you have set up for it (see
+an image, and `view_file` falls back to whatever else you have set up for it (see
 *Opening in an external viewer instead*, below).
 
 ### Adding a format yourself
@@ -177,7 +177,7 @@ temporary file for the life of the viewer and removed when it closes.)
 ## Opening in an external viewer instead
 
 By default `view_file` uses the built-in viewer and `open_with_os` hands the
-file to your OS app. To send `V` to an external program too, point the
+file to your OS app. To send `view_file` to an external program too, point the
 `view` entry at it in your config's `FILE_ASSOCIATIONS`:
 
 ```python
@@ -193,7 +193,7 @@ FILE_ASSOCIATIONS = [
 Setting `'view': None` (the default) selects the built-in viewer.
 
 > **Upgrading:** XeFM's shipped default used to send `view` to Preview. Your
-> existing config keeps whatever it has — change that entry as above if `V`
+> existing config keeps whatever it has — change that entry as above if `view_file`
 > still opens Preview and you would rather stay in XeFM.
 
 ## Customizing keys

@@ -36,14 +36,14 @@ same model.
 | Click below the last row | Makes the pane active without moving the cursor. |
 
 A plain click never clears your marks, because marks often take a while to
-build up. To clear them, use **Select ▸ Unselect All** or the context menu.
+build up. To clear them, use **Select ▸ Clear Selection** or the context menu.
 
 On macOS, **Control-click** is the secondary click, as in every Mac app. It
 opens the context menu, so use **Command**-click to mark.
 
 **In the terminal**, Ctrl-click works in most terminals. Many terminals keep
 Shift-click for their own text selection and don't pass it on. Where Shift-click
-doesn't arrive, use Space and the context menu's Select / Deselect instead.
+doesn't arrive, use `toggle_select_down` and the context menu's Select / Deselect instead.
 
 ## Scrolling
 
@@ -67,14 +67,16 @@ doesn't arrive, use Space and the context menu's Select / Deselect instead.
 Each pane remembers the folders it has shown. Go back and forward through them
 like in a browser:
 
-| | Keys | Mouse |
-|---|---|---|
-| Back | `Alt-←` (and `Cmd-[` in the macOS app) | the back button |
-| Forward | `Alt-→` (and `Cmd-]` in the macOS app) | the forward button |
+| | Action | Keys | Mouse |
+|---|---|---|---|
+| Back | `go_back` (**Go → Back**) | `Alt-←` in every preset | the back button |
+| Forward | `go_forward` (**Go → Forward**) | `Alt-→` in every preset | the forward button |
+
+Some presets add more keys for these — see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 This is different from Backspace, which goes to the parent folder, and from
-**H**, which lists recently used folders. The same commands are in the **Go**
-menu.
+`history` (**Go → History…**), which lists recently used folders.
 
 ## Dragging files
 
@@ -113,16 +115,18 @@ from the keyboard.
 
 ## Keys for everything
 
-| Mouse | Keys |
+| Mouse | Keyboard |
 |---|---|
 | Click a row | arrow keys |
-| Cmd/Ctrl-click | Space (mark and move down) |
-| Shift-click | Shift-Space, or Space while moving |
+| Cmd/Ctrl-click | `toggle_select_down` (mark and move down) |
+| Shift-click | Shift-Space (`select_range`), or `toggle_select_down` while moving |
 | Double-click | Enter |
-| Click a folder in the path | Backspace (one level), J / H (favorites, history) |
+| Click a folder in the path | Backspace (one level), `favorites` / `history` |
 | Back / forward buttons | Alt-← / Alt-→ |
-| Scrollbar | Page Up / Page Down, Home / End |
-| Drag between panes | `C` (copy) / `M` (move) |
+| Scrollbar | Page Up / Page Down, `cursor_top` / `cursor_bottom` |
+| Drag between panes | `copy_files` / `move_files` (**File → Copy to Other Pane** / **Move to Other Pane**) |
+
+Keys depend on your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 ## See also
 

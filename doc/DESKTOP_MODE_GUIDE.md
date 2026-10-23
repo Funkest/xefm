@@ -310,7 +310,9 @@ Press `F1` at any time for the keys your config is using.
 - Launch multiple instances for multiple windows
 
 **Quitting**:
-- **XeFM's quit key** (`Q` in AFX style, `Ctrl-Q` in OS native) and
+- **XeFM's quit key** (the `quit` action; which key that is depends on your
+  keymap preset — see
+  [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side)) and
   **File ▸ Quit** always ask first.
 - **The platform's ways to quit** ask only while a task (a copy, a search,
   anything with a progress dialog, in front or in the background) is
@@ -421,7 +423,7 @@ Press `F1` at any time for the keys your config is using.
 
 **Solutions**:
 1. Adjust color scheme in configuration
-2. Cycle through themes with the `T` key
+2. Cycle through themes with **View → Next Theme**, or pick one from **View → Theme**
 3. Colors should be more accurate in desktop mode, not worse
 
 ### Text Rendering Issues
@@ -520,7 +522,7 @@ only when running from the command line.
 
 You rarely need them there: each pane's directory is saved to `~/.xefm/state.db`
 on exit and restored on the next launch, so the desktop app reopens where you
-left off. For jumping elsewhere, use the favorites dialog (`J`).
+left off. For jumping elsewhere, use the favorites dialog (**Go → Go to Favorite…**).
 
 ## Getting Help
 

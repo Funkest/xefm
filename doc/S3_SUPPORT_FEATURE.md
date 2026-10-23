@@ -95,7 +95,7 @@ Navigate S3 buckets like local directories:
 - **Enter**: Open prefix (virtual directory) or download file
 - **Backspace**: Go up one level
 - **Arrow Keys**: Navigate through files and prefixes
-- **Home/End**: Jump to first/last item
+- **Ctrl-Home/Ctrl-End**: Jump to first/last item
 
 ### Virtual Directories
 
@@ -131,14 +131,17 @@ pane's current directory — there is no separate clipboard/paste step.
 #### From S3 to Local
 
 1. Open the S3 file's directory in one pane and the local destination in the other
-2. Select the file(s) in the S3 pane with `Space`
-3. Press `C` to copy them to the other (local) pane
+2. Select the file(s) in the S3 pane
+3. Use **File → Copy to Other Pane** (`copy_files`) to copy them to the other (local) pane
 
 #### From Local to S3
 
 1. Open the local file's directory in one pane and the S3 destination (e.g. `s3://my-bucket/uploads/`) in the other
-2. Select the file(s) with `Space`
-3. Press `C` to copy them to the S3 pane
+2. Select the file(s)
+3. Use **File → Copy to Other Pane** (`copy_files`) to copy them to the S3 pane
+
+The keys for these depend on your keymap preset — see
+[Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 #### Between S3 Locations
 
@@ -159,7 +162,7 @@ Move works like copy — it sends the selection to the other pane's directory:
 Delete S3 objects:
 
 1. Navigate to (or select) the file
-2. Press the delete key (`K` or `Delete`)
+2. Use **File → Move to Trash…** (`delete_files`, also on `Delete`) — S3 has no Trash, so this deletes for good
 3. Confirm deletion
 
 **Warning:** Deleted S3 objects cannot be recovered unless versioning is enabled on the bucket.
@@ -169,7 +172,7 @@ Delete S3 objects:
 View S3 file contents:
 
 1. Navigate to the file
-2. Press the view key (`V`)
+2. Use **File → View File** (`view_file`)
 3. XeFM downloads the file to a temporary location and opens the viewer
 
 **Note:** Large files may take time to download.
@@ -215,7 +218,7 @@ bucket) appear once `S3_CACHE_TTL` expires — up to 60 seconds by default.
 
 1. **No True Directories**: S3 uses prefixes, not real directories
 2. **No Rename**: S3 doesn't support rename (XeFM performs copy + delete)
-3. **Edit Through a Copy**: `E` edits a local copy and uploads it on each save
+3. **Edit Through a Copy**: **File → Edit File** (`edit_file`) edits a local copy and uploads it on each save
    (see [Remote Editing](REMOTE_EDIT_FEATURE.md)); each save rewrites the whole object
 4. **API Rate Limits**: AWS may throttle requests for high-volume operations
 5. **Costs**: S3 operations incur AWS charges (requests and data transfer)
@@ -397,7 +400,7 @@ S3_MULTIPART_CHUNKSIZE = 5 * 1024 * 1024  # 5MB
 xefm
 
 # Open the local directory in one pane and s3://my-backup-bucket/ in the other
-# Select files in the local pane, then press C to copy them to the S3 pane
+# Select files in the local pane, then run copy_files to copy them to the S3 pane
 ```
 
 ### Example 2: Download S3 Files
@@ -407,7 +410,7 @@ xefm
 xefm s3://my-bucket/downloads/
 
 # Open the S3 directory in one pane and the local destination in the other
-# Select files, then press C to copy them to the local pane
+# Select files, then run copy_files to copy them to the local pane
 ```
 
 ### Example 3: Organize S3 Objects
@@ -415,7 +418,7 @@ xefm s3://my-bucket/downloads/
 ```bash
 # Navigate to s3://my-bucket/
 # Select files to move
-# Press move key
+# Run move_files
 # Navigate to s3://my-bucket/organized/
 # Confirm move
 ```

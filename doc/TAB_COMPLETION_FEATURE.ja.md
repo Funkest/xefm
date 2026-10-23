@@ -11,10 +11,10 @@ XeFM のテキスト入力欄では、入力中にファイルやディレクト
 | 入力欄 | 開き方 | 補完対象 |
 |--------|-----------|-----------|
 | **Jump to Path** | `jump_to_path` | ファイル + ディレクトリ |
-| **New Directory** | create-directory | ファイル + ディレクトリ |
-| **New File** | create-file | ファイル + ディレクトリ |
-| **Rename** | `R`（単一の項目） | ファイル + ディレクトリ |
-| **Create Archive** | create-archive | ファイル + ディレクトリ |
+| **New Directory** | `create_directory` | ファイル + ディレクトリ |
+| **New File** | `create_file` | ファイル + ディレクトリ |
+| **Rename** | `rename`（単一の項目） | ファイル + ディレクトリ |
+| **Create Archive** | `create_archive` | ファイル + ディレクトリ |
 
 「Jump to Path」はディレクトリだけでなくファイルも補完します。この入力欄ではファイルのパスも有効な移動先で、ペインはそのディレクトリへ移動し、カーソルはそのファイルの上に置かれます。名前を付ける入力欄も両方を補完するので、`sub/dir/name` のように入れ子になった名前を入力するときに便利です。
 

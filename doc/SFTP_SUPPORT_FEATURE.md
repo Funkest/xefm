@@ -43,7 +43,7 @@ ssh://server.example.com:2222/opt/data
 
 **Method 2: Favorites**
 1. Add SFTP paths to favorites in config: `~/.xefm/config.py`
-2. Press `J` to access favorites
+2. Open **Go → Go to Favorite…** (`favorites`)
 3. Select your SFTP bookmark
 
 **Method 3: Command Line**
@@ -84,7 +84,7 @@ Host prod-*
 
 **Generate SSH key** (if you don't have one):
 ```bash
-ssh-gen -t rsa -b 4096 -C "your_email@example.com"
+ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
 ```
 
 **Copy key to server:**
@@ -105,12 +105,15 @@ Once SSH key authentication works, XeFM will use it automatically.
 
 All standard file operations work on SFTP paths:
 
-- **Copy** (`C`): Copy files/directories between local and remote
-- **Move** (`M`): Move files/directories on remote server
-- **Delete** (`K`): Delete remote files/directories
-- **Rename** (`R`): Rename remote files/directories
-- **Create Directory** (`M` when nothing is selected): Create directories on remote server
-- **View Files** (`V`): View remote text files with syntax highlighting
+- **Copy** (`copy_files`): Copy files/directories between local and remote
+- **Move** (`move_files`): Move files/directories on remote server
+- **Delete** (`delete_files`): Delete remote files/directories
+- **Rename** (`rename`): Rename remote files/directories
+- **Create Directory** (`create_directory`): Create directories on remote server
+- **View Files** (`view_file`): View remote text files with syntax highlighting
+
+These are the **File** menu's items; their keys depend on your keymap preset —
+see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
 ### Cross-Storage Operations
 
@@ -142,7 +145,7 @@ Extract: ssh://server/archive.tar.gz → ~/extracted/
 - Real-time results as search progresses
 - Works recursively through directories
 
-**Content Search** (`G`):
+**Content Search** (`find_in_files`):
 - Search file contents using regex patterns
 - Automatically detects text files
 - Shows matching lines with context
@@ -182,10 +185,10 @@ XeFM includes several optimizations for SFTP operations:
 View remote text files with full syntax highlighting:
 
 1. Navigate to a text file on SFTP
-2. Press `Enter` or `V` to open viewer
+2. Press `Enter`, or use **File → View File** (`view_file`), to open the viewer
 3. Use arrow keys to scroll
-4. Press `/` to search within file
-5. Press `q` to close viewer
+4. Search within the file (`isearch`)
+5. Press `Esc` to close the viewer
 
 **Supported formats:** Python, JavaScript, JSON, YAML, Markdown, Shell scripts, and 20+ more with `pygments` installed.
 
@@ -217,7 +220,7 @@ FAVORITES = [
 ]
 ```
 
-Access with `j` key. The list is drawn from the config alone — no connection is
+Open them with **Go → Go to Favorite…** (`favorites`). The list is drawn from the config alone — no connection is
 opened to any of these until you select one.
 
 ## Advanced Usage
@@ -235,9 +238,9 @@ forwards configured there are left out of XeFM's connection.
 
 Select multiple files and perform batch operations:
 
-1. Use `Space` to select files
-2. Use `A` to select all files in directory
-3. Press the operation key (`C` for copy, `K` for delete, etc.)
+1. Select files (`toggle_select_down`)
+2. Or select every file in the directory (`toggle_select_files`)
+3. Run the operation (`copy_files` to copy, `delete_files` to delete, etc.)
 4. Confirm operation
 5. Watch progress bar for completion
 
@@ -249,9 +252,9 @@ completion in the background, and the partly-transferred file is removed.
 **Example: Backup multiple directories**
 ```
 1. Navigate to ssh://server/data
-2. Select directories with Space
-3. Press C (Copy)
-4. Navigate to ~/backup
+2. Open ~/backup in the other pane
+3. Select the directories
+4. Copy them across (`copy_files`)
 5. Press Enter to confirm
 ```
 
@@ -374,7 +377,7 @@ Solution:
 
 **For permission changes:**
 ```bash
-# Press X to enter sub-shell
+# Run subshell (Tools → Subshell Here) to enter the sub-shell
 chmod 755 $XEFM_THIS_DIR/script.sh
 exit
 ```
@@ -426,7 +429,7 @@ tar czf archive.tar.gz $XEFM_THIS_DIR/*
 ```
 1. Left pane: ~/local/config
 2. Right pane: ssh://server/etc/app
-3. Use external diff tool: x
+3. Run an external diff tool (`programs`)
 4. Select "Beyond Compare" or "diff"
 5. Review differences
 ```

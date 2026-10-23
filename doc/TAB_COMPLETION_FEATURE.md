@@ -15,10 +15,10 @@ typing) shows and narrows the choices.
 | Prompt | Opened by | Completes |
 |--------|-----------|-----------|
 | **Jump to Path** | `jump_to_path` | files + directories |
-| **New Directory** | create-directory | files + directories |
-| **New File** | create-file | files + directories |
-| **Rename** | `R` (single item) | files + directories |
-| **Create Archive** | create-archive | files + directories |
+| **New Directory** | `create_directory` | files + directories |
+| **New File** | `create_file` | files + directories |
+| **Rename** | `rename` (single item) | files + directories |
+| **Create Archive** | `create_archive` | files + directories |
 
 "Jump to Path" completes files as well as directories: a file path is a valid
 destination there — the pane goes to its directory and the cursor lands on the
