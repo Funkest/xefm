@@ -121,6 +121,33 @@ Add modifiers before the main key, separated by hyphens:
 - Modifier **order doesn't matter**: `'Command-Shift-X'` equals `'Shift-Command-X'`
 - You can combine **multiple modifiers**: `'Command-Shift-X'`, `'Control-Alt-Delete'`
 
+### Key sequences
+
+A binding can be several keys pressed one after another. Write the keys
+separated by spaces:
+
+```python
+'go_root': ['g r'],          # g, then r
+'cursor_top': ['g g'],       # g twice
+'toggle_hidden': ['z Shift-H'],
+```
+
+While a sequence is unfinished, the status bar shows the keys pressed so far
+(`g …`). `Esc` drops them. A key that does not continue any sequence ends it
+and does its usual job. Sequences work in the file list.
+
+When one binding is the start of another (`g` alone and `g g`), XeFM waits
+for the next key. `KEY_SEQUENCE_TIMEOUT` in `config.py` decides how long:
+
+```python
+KEY_SEQUENCE_TIMEOUT = 1.0    # seconds; then g runs on its own (the default)
+KEY_SEQUENCE_TIMEOUT = None   # no timeout: g runs when the next key is not g
+```
+
+A key that only starts sequences and is not bound alone (`g` here, if only
+`g g` and `g r` use it) never runs anything by itself, and with no timeout it
+simply waits.
+
 ### Keymap presets
 
 Every key comes from a **preset**, a complete keymap: AFX style (letters) or

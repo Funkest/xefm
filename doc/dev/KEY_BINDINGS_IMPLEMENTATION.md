@@ -190,11 +190,43 @@ and returns the first action whose selection requirement is satisfied.
 Returns the raw config tokens and selection requirement for an action (used by the
 help dialog).
 
+#### Key sequences (#587)
+
+A token holding whitespace (`'g g'`) parses to `(parts, frozenset(), "seq")`,
+where `parts` is the tuple of each key's own triple. `_matches` never matches
+`"seq"`, so the single-key paths (`find_action_for_event`,
+`is_action_for_event`, the flat lookup) ignore sequences. Code that compares
+parsed keys, such as `keymap_presets._release_claimed_keys` and the extension
+`key_suggestions` check, compares them like any other triple.
+
+`sequence_lookup(events, has_selection, context) -> (action, longer)` answers
+for the keys pressed so far: the action bound to exactly those keys, if any,
+and whether a longer sequence begins with them. It walks `_context_entries` in
+order, so one key alone resolves as `find_action_for_event` would.
+
+The state between keys is `xefm.key_sequence.KeySequencer`. It owns the
+pending keys, the fallback (the action the pending keys complete by
+themselves) and a generation counter that makes a stale timer harmless.
+`feed(event)` answers one of:
+
+- `WAIT`: the key was taken.
+- `ACT, action`: the sequence completed.
+- `PASS, fallback`: run the fallback if there is one, then handle the key as
+  usual.
+
+`KEY_SEQUENCE_TIMEOUT` (seconds, default 1.0, or None for no timeout) decides
+when a fallback runs without another key. The app keeps one sequencer for the
+file list. `on_event` feeds it before its own lookup, a modal layer or a keymap
+rebuild cancels it, and `StatusBar._text` shows `pending_text()` while it is
+pending. The text viewer gets one with the Vim-style preset, which needs it
+there.
+
 #### `format_key_for_display(key_expr) -> str`
 Formats a token for UI display: single literals pass through; named tokens map to
 conventional labels via `_KEY_DISPLAY` (`ENTER` → `Enter`, `UP` → `↑`,
 `PAGE_UP` → `PgUp`); modifiers abbreviate via `_MOD_DISPLAY` (`Command` → `Cmd`,
-`Option` → `Opt`). E.g. `"Command-Shift-X"` → `"Cmd-Shift-X"`.
+`Option` → `Opt`). E.g. `"Command-Shift-X"` → `"Cmd-Shift-X"`. A sequence
+shows each key that way, separated by spaces (`"z Shift-H"`).
 
 ## Public API functions
 

@@ -299,6 +299,7 @@ class Config:
     #   'ENTER'  'PAGE_UP'  'F10'   a named key
     #   'BACKQUOTE'  'SEMICOLON'    a punctuation key by name
     #   'Ctrl-O'  'Command-ENTER'   a chord
+    #   'g h'                       a sequence: g, then h (the file list only)
     #
     # A name XeFM does not know is not silently ignored: it logs
     # "Unknown key in expression: ..." and that binding never fires.
@@ -321,7 +322,18 @@ class Config:
         #
         # The search bar's own keys (it takes typed text, so modified keys):
         # 'search.toggle_case': ['Ctrl-T'],
+        #
+        # A key sequence, keys separated by spaces (see KEY_SEQUENCE_TIMEOUT):
+        # 'go_root': ['g r'],
     }
+
+    # Key sequences ('g r' above): how long XeFM waits for the next key when
+    # what you have pressed so far is a binding of its own and also the start
+    # of a longer one -- 'g' bound alone as well as in 'g r'. After this many
+    # seconds the shorter binding runs. None waits for as long as it takes:
+    # the shorter one then runs when the next key continues no sequence. Esc
+    # drops the keys pressed so far either way; the status bar shows them.
+    KEY_SEQUENCE_TIMEOUT = 1.0
 
 
 
