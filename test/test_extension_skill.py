@@ -343,6 +343,22 @@ class PreviewUses(_Tmp):
         judged = ext.stable_only(ext.preview_uses(manifest))
         self.assertEqual({p.severity for p in judged}, {"error"})
 
+    def test_a_deprecated_api_is_a_warning_in_the_check(self):
+        from xefm import preview
+        self.uses()          # writes the package
+        root = self.tmp / "p-ext"
+        (root / "p_ext" / "mod.py").write_text(
+            "def go(ctx):\n    ctx.message('hi')\n", encoding="utf-8")
+        with unittest.mock.patch.dict(preview.DEPRECATED_APIS, {
+                "xefm.user_api.ActionContext.message": "use ctx.show_markdown"}):
+            _manifest, problems = ext.check_package(root)
+        (problem,) = [p for p in problems if "deprecated" in p.message]
+        self.assertEqual(problem.severity, "warning")
+        self.assertEqual(str(problem), "warning: p_ext/mod.py:2: ctx.message — "
+                         "deprecated — use ctx.show_markdown; it will be removed "
+                         "in a later release")
+        self.assertEqual(ext.errors(problems), [])
+
     def test_cli(self):
         root = ext.scaffold("hello-xefm", self.tmp)
         layout = ext.Layout(self.tmp / "home")

@@ -473,3 +473,28 @@ under local pytest and at the release pre-tag check.
   - A `ctx` copy/move API that goes through file operations, if one is needed.
   - Stabilizing the Preview tiers of `PATH_SCHEMES` once a real extension uses
     them.
+
+## 9. Deprecation — how a stable API goes away
+
+Added after the first release of this plan (discussion #469 asked for "how
+deprecation works" as part of the compatibility promise).
+
+1. **Deprecate first.** `@deprecated("use … instead")` in `xefm/preview.py`
+   marks a stable function, method, property getter or class. A `config.py`
+   table or a manifest section goes into `DEPRECATED_APIS` by name. The API
+   keeps working. Its docstring opens with "Deprecated — …", it is listed
+   in `xefm.user_api.DEPRECATED_APIS` with what replaces it, its first use
+   from outside XeFM logs a warning naming the caller, and `xefm ext check`
+   reports each use as a warning (`deprecated_uses`, part of
+   `check_manifest`). The snapshot records it as `deprecated`, which is not a
+   breaking change.
+2. **Keep it for at least one minor release.** The release that deprecates
+   it says so in its notes, with the replacement.
+3. **Then remove it, and bump `API_VERSION`.** Removing a deprecated API is
+   a breaking change, so `make api-snapshot` refuses it without the bump.
+   Removing a stable API that was never deprecated is refused the same way,
+   and the message asks for deprecation first. A bump overrides it for the
+   rare case that cannot wait (a security problem), and the release notes
+   must say why.
+
+Preview APIs need none of this: they change or go in any release.

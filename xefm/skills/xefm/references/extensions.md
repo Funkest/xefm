@@ -162,7 +162,7 @@ The function's docstring is its help text (first line = one-line summary).
 modules, and from each only the names in its `__all__`:
 
 - `xefm.user_api.__all__` — `API_VERSION`, `PREVIEW_APIS`,
-  `ActionContext`, `PaneApi`, `EntryInfo`, `HookEvent`, `extension`,
+  `DEPRECATED_APIS`, `ActionContext`, `PaneApi`, `EntryInfo`, `HookEvent`, `extension`,
   `TaskJob`, `TaskOutcome`, `md_code_block`, `md_escape`, `xefm_tool`,
   `xefm_python`, `is_desktop_mode`
 - `xefm.path_base.__all__` — `ReadOnlyPathImpl`, `UriPathImpl`,
@@ -201,6 +201,9 @@ instead:
   by `from … import` or as an attribute (`user_api.run_guarded`).
 - **warning** — `print()`: it never reaches the user.
 - **warning** — touching `sys.path` (see *Dependencies*).
+- **warning** — using a deprecated API (`xefm.user_api.DEPRECATED_APIS`):
+  it still works, the message says what replaces it, and it is removed no
+  earlier than the next minor XeFM release. Switch to the replacement.
 - **preview** — each use of a Preview API: a manifest section, a name
   imported from the two modules, a Preview `ctx` / `ctx.pane` member, a
   Preview backend member. Not a fault — a package with only `preview` lines

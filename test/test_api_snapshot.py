@@ -97,11 +97,20 @@ def test_status_moves():
 
 def test_removal_and_addition_follow_the_status():
     assert api_snapshot.classify({"x": ("stable", "method", "[]")}, {}) \
-        == [("breaking", "x", "removed")]
+        == [("breaking", "x", "removed without being deprecated first")]
     assert api_snapshot.classify({"x": ("preview", "method", "[]")}, {}) \
         == [("preview", "x", "removed")]
     assert api_snapshot.classify({}, {"x": ("stable", "method", "[]")}) \
         == [("addition", "x", "added")]
+
+
+def test_deprecating_is_not_breaking_and_removing_a_deprecated_api_is():
+    assert _one(("stable", "method", "[]"), ("deprecated", "method", "[]")) \
+        == ("deprecation", "deprecated")
+    assert api_snapshot.classify({"x": ("deprecated", "method", "[]")}, {}) \
+        == [("breaking", "x", "removed")]
+    assert _one(("deprecated", "method", _sig(("a", "pk", None))),
+                ("deprecated", "method", _sig()))[0] == "breaking"
 
 
 def test_anything_goes_for_preview_but_it_still_shows():
@@ -138,6 +147,19 @@ def test_write_refuses_a_breaking_change_without_a_version_bump(tmp_path, capsys
         snapshot.write_text(api_snapshot.render(older), encoding="utf-8")
         assert api_snapshot.main(["--write"]) == 0
         assert "Gone" not in snapshot.read_text(encoding="utf-8")
+
+
+def test_write_accepts_a_deprecation(tmp_path):
+    snapshot = tmp_path / "api_snapshot.txt"
+    current = api_snapshot.build()
+    newer = dict(current)
+    status, kind, detail = newer["xefm.user_api.xefm_tool"]
+    newer["xefm.user_api.xefm_tool"] = ("deprecated", kind, detail)
+    snapshot.write_text(api_snapshot.render(current), encoding="utf-8")
+    with patch.object(api_snapshot, "SNAPSHOT", snapshot), \
+            patch.object(api_snapshot, "build", return_value=newer):
+        assert api_snapshot.main(["--write"]) == 0
+    assert "deprecated\tfunction\txefm.user_api.xefm_tool" in snapshot.read_text()
 
 
 def test_write_accepts_an_addition(tmp_path):

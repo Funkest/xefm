@@ -102,6 +102,7 @@ warning that skips that entry, never a load failure.
 import inspect
 import re
 import traceback
+from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping, NamedTuple
 
 from xefm import actions as _actions
@@ -116,6 +117,7 @@ from xefm.external_programs import xefm_python, xefm_tool
 from xefm.log_manager import getLogger
 from xefm.path import Path, PathImpl
 from xefm.path_base import UriPathImpl
+from xefm.preview import DEPRECATED_APIS as _DEPRECATED_APIS
 from xefm.preview import PREVIEW_APIS as _PREVIEW_APIS, preview
 
 
@@ -132,8 +134,8 @@ logger = getLogger("UserAPI")
 #: The public API: the only names an extension or a config may take from this
 #: module (see *The public names* above). ``xefm ext check`` reads this list.
 __all__ = [
-    # versioning: what is promised, and what is not yet
-    "API_VERSION", "PREVIEW_APIS",
+    # versioning: what is promised, what is not yet, and what is on its way out
+    "API_VERSION", "PREVIEW_APIS", "DEPRECATED_APIS",
     # what an action or a hook is handed
     "ActionContext", "PaneApi", "EntryInfo", "HookEvent",
     # an extension package's own settings, state and files
@@ -1562,3 +1564,8 @@ def preview_notice(*, hooks: int = 0, image_decoders: int = 0,
 #: last, so every ``@preview`` in this module is in it; ``xefm.path_base``,
 #: imported at the top, has registered its own by then.
 PREVIEW_APIS = frozenset(_PREVIEW_APIS)
+
+#: The deprecated APIs, mapped to what to use instead — still working, and
+#: removed no earlier than the next minor release, with an ``API_VERSION``
+#: bump. Read-only; set last for the same reason as :data:`PREVIEW_APIS`.
+DEPRECATED_APIS = MappingProxyType(dict(_DEPRECATED_APIS))

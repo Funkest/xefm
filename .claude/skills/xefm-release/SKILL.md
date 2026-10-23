@@ -56,8 +56,10 @@ any of that, do the checks preflight cannot:
 - `git diff v<current> -- test/data/api_snapshot.txt` — what the public API
   did since the last release. If the `API_VERSION` line moved, the release
   broke something stable on purpose: say so in a bullet of the note, with
-  what an extension author must change. Stable additions and Preview changes
-  an extension author would notice go in the note's "Also" paragraph.
+  what an extension author must change. A line that turned `deprecated`
+  gets the same treatment: name the replacement. Stable additions and
+  Preview changes an extension author would notice go in the note's "Also"
+  paragraph.
 - The pytest suite runs inside `make tag`, but nothing automated exercises
   the real UI, and Claude cannot run it (the TUI/GUI blocks — per CLAUDE.md,
   never launch it). Ask the user whether they have actually run the app on

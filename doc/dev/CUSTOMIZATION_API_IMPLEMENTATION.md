@@ -572,6 +572,11 @@ Customization API 1: 1 event hook(s), 2 menu item(s) loaded from Preview tables
 
 — and says nothing for a config that keeps to the stable ones.
 
+A stable API leaves through `@deprecated` (`STABLE_API_PLAN.md` §9): it keeps
+working, `DEPRECATED_APIS` names its replacement, its first use logs a
+warning, `xefm ext check` warns at each use, and the snapshot refuses its
+removal without an `API_VERSION` bump.
+
 ---
 
 ## 8b. `SORT_KEYS` — the first exposed registry
