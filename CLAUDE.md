@@ -68,6 +68,13 @@ Use `--no-pager` for any git command that may page output: `diff`, `log`, `show`
 - Internal-only changes → `doc/dev/` only.
 - Don't put implementation details in end-user docs; don't put basic usage in developer docs.
 - Only create docs when the user asks or the change clearly warrants it — don't generate docs for every edit.
+- **Keys belong to one page.** The keys depend on the keymap preset, so only
+  `doc/KEYMAP_PRESETS_FEATURE.md` lists them — every key of every preset, side by
+  side. Elsewhere, name the action (`copy_files`) or the menu item
+  (**File → Copy to Other Pane**) and link to that page where the key matters.
+  Keys that are the same in every preset (`Enter`, `Esc`, `F1`, the arrows) are
+  fine anywhere. When a preset's keys change, update that page's table in both
+  languages.
 
 ### Japanese translations
 

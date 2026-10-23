@@ -54,6 +54,7 @@ https://github.com/user-attachments/assets/f121401d-990b-445d-aa79-526d34e4a44e
 - **Compare & sync** - Side-by-side text diff down to the exact characters that changed; recursive directory compare, and a one-step sync (update or mirror) with the whole plan shown before anything is written ([diff](doc/DIFF_VIEWER_FEATURE.md), [sync](doc/DIRECTORY_SYNC_FEATURE.md))
 - **Find similar files** - Find duplicates, and images, videos and audio that are the same media resized, re-encoded or retagged ([details](doc/FIND_SIMILAR_FILES_FEATURE.md))
 - **Themes & visual effects** - A dozen built-in themes; desktop mode adds GPU background animations, CRT/phosphor screen effects, and text-reveal animations
+- **Four keymap presets** - AFX style (one letter, one command), Orthodox (function keys), OS native (Finder's or Explorer's keys) or Vim style, chosen at first launch ([details](doc/KEYMAP_PRESETS_FEATURE.md))
 - **Customizable** - Fully configurable key bindings, settings, and external program launchers; a command palette finds every action by name
 - **Extensions** - Install packages that add actions, themes, filters, syntax highlighting and more — [browse the list](https://github.com/crftwr/xefm/wiki/Extensions) — or let an AI agent write one with the XeFM skill
 
@@ -152,13 +153,20 @@ macOS / Windows app bundles.
 
 ### Essential Controls
 
-- **Navigate:** `↑↓` to move up/down, `←→` to switch panes/navigate directories
-- **Select:** `Space` to select/deselect files, `A` for all files, `Shift-A` for all items
-- **File operations:** `C` (copy), `M` (move), `K` (delete), `R` (rename)
-- **Search:** `F` for incremental search, `Shift-F` for filename search, `Shift-G` for content search
+The first launch asks which of four [keymap presets](doc/KEYMAP_PRESETS_FEATURE.md)
+you want: AFX style, Orthodox, OS native or Vim style.
+**Tools → Advanced → Keymap…** switches later. These work in all of them:
+
+- **Navigate:** the arrow keys move the cursor, `Enter` opens, `Backspace` goes
+  to the parent directory, and `Tab` switches panes
+- **Help:** `F1` opens the help dialog with every key of your preset, organized
+  by category — no need to memorize
+- **Everything else:** the menu bar (`F10`) and the command palette (**Tools →
+  Command Palette…**) list every command with its key
 - **Remote paths:** open `ssh://hostname/path` or `s3://bucket/path` like any directory
-- **Help:** `F1` opens the help dialog with every key binding organized by category — no need to memorize
-- **Quit:** `Q` to exit
+
+The [Keymap Presets](doc/KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side) page
+lists every key of all four side by side.
 
 ## Documentation
 
@@ -166,6 +174,7 @@ macOS / Windows app bundles.
 - **[Complete User Guide](doc/XEFM_USER_GUIDE.md)** - Comprehensive guide covering all features, configuration, and usage
 - **[Configuration](doc/CONFIGURATION_FEATURE.md)** - Complete configuration reference and customization guide
 - **[Desktop Mode](doc/DESKTOP_MODE_GUIDE.md)** - Native Windows / macOS desktop app setup and options
+- **[Keymap Presets](doc/KEYMAP_PRESETS_FEATURE.md)** - The four keymaps, and every key of each side by side
 - **[Color Schemes & Visual Effects](doc/COLOR_SCHEMES_FEATURE.md)** - Themes, themeable GPU background scenes, and screen effects
 - **[Image Viewer](doc/IMAGE_VIEWER_FEATURE.md)**, **[Markdown Viewer](doc/MARKDOWN_VIEWER_FEATURE.md)** & **[JSON / CSV Viewers](doc/JSON_CSV_VIEWERS_FEATURE.md)** - Built-in viewers
 - **[Diff Viewer](doc/DIFF_VIEWER_FEATURE.md)** & **[Batch Rename](doc/BATCH_RENAME_FEATURE.md)** - File / directory diffs and regex-based multi-file renaming
@@ -195,17 +204,18 @@ Recipes and community extensions are collected on the **[XeFM wiki](https://gith
 Press `Enter` on an archive file (`.zip`, `.tar`, `.tar.gz`, `.tgz`, `.tar.bz2`,
 `.tar.xz`) to browse it as if it were a regular directory — no extraction
 needed. Navigate nested directories, view files, search by name or content, and
-copy files out with the normal copy key; `Backspace` leaves the archive. `P`
-creates a new archive, `U` extracts one. See the
+copy files out as from any directory; `Backspace` leaves the archive.
+**File → Create Archive…** and **File → Extract Archive…** make and unpack
+one. See the
 [Archive Feature Guide](doc/ARCHIVE_FEATURE.md).
 
 ## Built-in File Viewers
 
-Press `V` (or `Enter`) to view the selected file. XeFM picks the right viewer
+Press `Enter` on a file to view it. XeFM picks the right viewer
 for the file type: syntax-highlighted text (20+ formats, line numbers, wrapping,
 in-file search), images with zoom / pan (inline in iTerm2 / kitty / sixel
 terminals and in desktop mode), and *rendered* views for Markdown, JSON, and
-CSV/TSV (`M` toggles rendered / raw). All viewers work on local files, inside
+CSV/TSV, each with a key to switch to the raw text. All viewers work on local files, inside
 archives, and on remote SFTP / S3 paths without extraction or download.
 
 ![Text viewer](doc/images/text-viewer.jpg)
@@ -219,7 +229,7 @@ archives, and on remote SFTP / S3 paths without extraction or download.
 
 ## Themes & Visual Effects
 
-XeFM ships a dozen built-in themes. Press `T` to cycle to the next theme, or pick one from the **View → Theme** menu — your choice is remembered across restarts. Define your own in `~/.xefm/config.py` and they appear in the picker alongside the built-ins.
+XeFM ships a dozen built-in themes. Pick one from the **View → Theme** menu — your choice is remembered across restarts. Define your own in `~/.xefm/config.py` and they appear in the picker alongside the built-ins.
 
 | | | |
 |:---:|:---:|:---:|
@@ -237,7 +247,7 @@ and terminal mode ignores them. See
 
 ## Sub-shell Mode
 
-Press `Shift-X` to temporarily suspend XeFM and enter a shell whose environment
+**Tools → Subshell Here** suspends XeFM and enters a shell whose environment
 describes the current panes and selection (`XEFM_LEFT_DIR`, `XEFM_THIS_DIR`,
 `XEFM_LEFT_SELECTED`, …); type `exit` to return to XeFM. The full variable list
 is in the [User Guide](doc/XEFM_USER_GUIDE.md#sub-shell-mode).

@@ -682,7 +682,7 @@ AWS の認証情報とバケットの権限を確認してください
 
 ### 移動と検索
 - [ナビゲーションダイアログ](NAVIGATION_DIALOGS_FEATURE.ja.md) - お気に入り、ジャンプ、履歴、ドライブの選択画面
-- [キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md) - 英字キー単独には何も割り当てない、ファンクションキー中心の配置
+- [キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md) - AFX style、Orthodox、OS native、Vim style と、それぞれのすべてのキーの一覧
 - [フォルダータブ](FOLDER_TABS_FEATURE.ja.md) - 各ペインで複数の場所を開いたままにする
 - [フラット表示](FLAT_VIEW_FEATURE.ja.md) - ディレクトリ以下のすべてのファイルを 1 つの平らな一覧で表示
 - [サーバーへ接続](CONNECT_TO_SERVER_FEATURE.ja.md) - XeFM の中から NAS やファイルサーバーをマウント
@@ -735,7 +735,7 @@ AWS の認証情報とバケットの権限を確認してください
 
 **リファレンスは XeFM の中にあります。** `F1` を押すとヘルプダイアログが開きます。ヘルプは設定から実際に作られたキーマップからアクションごとに生成されるので、キーの実際の動作とずれることはありません。メニューバーにも、各項目の横に同じキーが表示されます。
 
-そのため、このガイドではキーではなく**アクション**の名前（`copy_files`、`find_files`、`jump_to_path`）で説明しています。キーは選んだ[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md)によって変わるからです。すべてのキーにコメントが付いた AFX スタイルの表は [`xefm/keymap_afx.py`](../xefm/keymap_afx.py) です。キーを変えるには、`~/.xefm/config.py` の `KEY_BINDINGS` にアクションを追加します。
+そのため、このガイドではキーではなく**アクション**の名前（`copy_files`、`find_files`、`jump_to_path`）で説明しています。キーは選んだ[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md)によって変わるからです。すべてのプリセットのすべてのキーは、[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)に並べて載せています。キーを変えるには、`~/.xefm/config.py` の `KEY_BINDINGS` にアクションを追加します。
 
 - どのキーの組み合わせがどこで使えるか（ターミナルはウィンドウが送れるものをすべて送れるわけではありません）、どれがターミナルやエディターに先に取られるか：[キーバインド](KEY_BINDINGS_FEATURE.ja.md)
 - ビューアーやダイアログの中だけのアクションと、その割り当て直し方：[カスタマイズ](CUSTOMIZATION_FEATURE.ja.md)
