@@ -105,9 +105,20 @@ class TestUnboundRowsReadAsUnbound(HelpMarkdownCase):
 
     def test_bound_key_is_still_typeset_as_a_key(self):
         md = self.terminal_help()
-        self.assertIn("| `Q` | [Quit XeFM](xefm-action:quit) |", md)
-        self.assertIn("| `_` | [Reset the log pane height](xefm-action:reset_log_height) |", md)
+        self.assertIn("| `Q` | [Quit XeFM](xefm-action:quit) · `quit` |", md)
+        self.assertIn("| `_` | [Reset the log pane height](xefm-action:reset_log_height) "
+                      "· `reset_log_height` |", md)
         self.assertTrue(self._CODE_KEY.search(md))
+
+    def test_every_row_names_its_action(self):
+        # The name KEY_BINDINGS and ctx.invoke take, so a key can be rebound
+        # straight from the help.
+        md = self.terminal_help()
+        self.assertIn("| `Q` | [Quit XeFM](xefm-action:quit) · `quit` |", md)
+        self.assertIn(f"| {UNBOUND_KEYS} | [Copy the whole log", md)
+        for line in md.splitlines():
+            if line.startswith("| ") and "xefm-action:" in line:
+                self.assertRegex(line, r" · `[a-z_.]+` \|$", line)
 
     def test_every_unbound_row_names_the_menu_that_reaches_it(self):
         # A row with no key and no route names a feature and withholds the one
