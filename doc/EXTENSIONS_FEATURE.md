@@ -14,22 +14,17 @@ a package uses. In the manifest, `[contributes.actions]`, `sort_keys`,
 `event_hooks`, `image_decoders`, `lexers`, `themes`, `[settings]`, `[requires]`
 and `updates` are Preview.
 
-## Official extensions
+## Finding extensions
+
+The wiki's [Extensions](https://github.com/crftwr/xefm/wiki/Extensions) page
+lists what is available, both the official packages and the ones written by
+others.
 
 The XeFM project keeps its own extensions in
 [crftwr/xefm-extensions](https://github.com/crftwr/xefm-extensions). They are
 written against the same public API as anyone else's, so they also serve as
-examples to copy. Each has a README with its usage.
-
-| Extension | What it does | Install |
-|---|---|---|
-| [Compute Hash](https://github.com/crftwr/xefm-extensions/tree/main/compute-hash) | MD5, SHA-1, SHA-256, SHA-512 or BLAKE2b digests of the selected files, in the background, shown ready to copy in `sha256sum` form. Works on SSH, S3 and in archives. File menu and right-click menu. | `xefm ext install github:crftwr/xefm-extensions/compute-hash` |
-
-Each release is a tag such as `compute-hash-v0.1.0`; add `@<tag>` to the
-install source to pin one.
-
-Extensions written by others are listed on the wiki's
-[Extensions](https://github.com/crftwr/xefm/wiki/Extensions) page.
+examples to copy. Each has a README with its usage, and each release is a tag
+such as `compute-hash-v0.1.0`; add `@<tag>` to the install source to pin one.
 
 ## Installing and managing
 
