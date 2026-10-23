@@ -33,7 +33,8 @@ def _parser() -> argparse.ArgumentParser:
     home.add_argument("--config", metavar="FILE",
                       help="use this config.py (default: XeFM's template)")
     home.add_argument("--keymap", default="afx",
-                      help="the keymap preset (default: afx)")
+                      help="the keymap preset: afx, orthodox or native "
+                      "(default: afx)")
     home.add_argument("--left", metavar="DIR", help="the left pane's directory "
                       "(default: a few sample files in the home)")
     home.add_argument("--right", metavar="DIR",

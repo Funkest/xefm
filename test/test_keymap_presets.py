@@ -283,6 +283,112 @@ def _key(key, char=None, mods=()):
     return Event(type=EventType.KEY, key=key, char=char, modifiers=frozenset(mods))
 
 
+def _native_case(platform_name, backend):
+    """The OS native table as one of the three cases builds it."""
+    from contextlib import contextmanager
+    from xefm import backend_detector
+
+    @contextmanager
+    def scope():
+        saved_platform, saved_backend = sys.platform, os.environ.get("XEFM_BACKEND")
+        sys.platform = platform_name
+        os.environ["XEFM_BACKEND"] = backend
+        backend_detector._cached_backend = None
+        try:
+            yield keymap_presets.table(keymap_presets.NATIVE)
+        finally:
+            sys.platform = saved_platform
+            if saved_backend is None:
+                os.environ.pop("XEFM_BACKEND", None)
+            else:
+                os.environ["XEFM_BACKEND"] = saved_backend
+            backend_detector._cached_backend = None
+    return scope()
+
+
+CASES = (("darwin", "gui"), ("win32", "gui"), ("linux", "vt"), ("darwin", "vt"))
+
+
+class Native(unittest.TestCase):
+    """#587: Finder's keys on the macOS desktop, Explorer's on the Windows one,
+    and in a terminal the same layout with what a terminal can send."""
+
+    def _keys(self, table, action):
+        value = table.get(action)
+        return value["keys"] if isinstance(value, dict) else value
+
+    def test_it_is_a_preset_with_type_ahead(self):
+        config = _config_with()
+        keymap_presets.apply(config, keymap_presets.NATIVE)
+        self.assertTrue(keymap_presets.type_ahead(config))
+        self.assertIn(keymap_presets.NATIVE, keymap_presets.LABELS)
+
+    def test_each_case_follows_its_platform(self):
+        with _native_case("darwin", "gui") as t:
+            self.assertEqual(self._keys(t, "clipboard_copy")[0], "Command-C")
+            self.assertEqual(self._keys(t, "create_directory")[0], "Command-Shift-N")
+            self.assertEqual(self._keys(t, "quick_view")[0], "SPACE")
+            self.assertEqual(self._keys(t, "go_parent")[0], "Command-UP")
+        with _native_case("win32", "gui") as t:
+            self.assertEqual(self._keys(t, "create_directory")[0], "Ctrl-Shift-N")
+            self.assertEqual(self._keys(t, "file_details")[0], "Alt-ENTER")
+            self.assertEqual(self._keys(t, "quit")[0], "Alt-F4")
+        for platform_name in ("darwin", "win32", "linux"):
+            with _native_case(platform_name, "vt") as t:
+                self.assertEqual(self._keys(t, "create_directory"), ["F7"])
+                self.assertEqual(self._keys(t, "clipboard_copy"), ["Ctrl-C"])
+                self.assertEqual(self._keys(t, "rename"), ["F2"])
+
+    def test_the_two_pane_operations_are_on_function_keys(self):
+        for platform_name, backend in CASES:
+            with _native_case(platform_name, backend) as t:
+                self.assertEqual(self._keys(t, "copy_files"), ["F5"])
+                self.assertEqual(self._keys(t, "move_files"), ["F6"])
+                self.assertEqual(self._keys(t, "redraw"), [])
+
+    def test_no_key_runs_two_file_list_actions(self):
+        from collections import defaultdict
+        from xefm.actions import FILER, registry
+        own = {a.name for a in registry.actions(FILER)}
+        for platform_name, backend in CASES:
+            with self.subTest(case=(platform_name, backend)), \
+                    _native_case(platform_name, backend) as t:
+                kb = xefm_config.KeyBindings(t)
+                seen = defaultdict(list)
+                for action, value in t.items():
+                    if action in own:
+                        for expr in self._keys(t, action):
+                            seen[kb._parse_key_expression(expr)].append(action)
+                clashes = {k: v for k, v in seen.items() if len(v) > 1}
+                self.assertEqual(clashes, {})
+
+    def test_every_key_parses(self):
+        for platform_name, backend in CASES:
+            with _native_case(platform_name, backend) as t:
+                kb = xefm_config.KeyBindings(t)
+                with patch.object(kb, "logger") as logger:
+                    for action in t:
+                        for expr in self._keys(t, action) or []:
+                            kb._parse_key_expression(expr)
+                self.assertFalse(logger.warning.called, logger.warning.call_args_list)
+
+    def test_the_terminal_case_binds_nothing_a_terminal_cannot_send(self):
+        from xefm.actions import COMMON, FILER, registry
+        ours = {a.name for a in registry.actions(FILER)} | \
+            {a.name for a in registry.actions(COMMON)}
+        with _native_case("linux", "vt") as t:
+            kb = xefm_config.KeyBindings(t)
+            for action in ours & set(t):
+                for expr in self._keys(t, action):
+                    ident, mods, _mode = kb._parse_key_expression(expr)
+                    self.assertNotIn("cmd", mods, f"{action}: {expr}")
+                    letter = len(ident) == 1 and ident.isalpha()
+                    self.assertFalse(letter and {"ctrl", "shift"} <= mods,
+                                     f"{action}: {expr}")
+                    self.assertFalse(ident == "enter" and mods & {"ctrl", "alt"},
+                                     f"{action}: {expr}")
+
+
 class InTheApp(unittest.TestCase):
 
     #: What keymap_presets.apply writes onto the config it is given.
@@ -486,7 +592,8 @@ class InTheApp(unittest.TestCase):
                           lambda *a, **k: asked.append(k)):
             self.app._ask_keymap_preset()
         self.assertEqual(asked[0]["buttons"],
-                         ("AFX style (letters)", "Orthodox (function keys)"))
+                         ("AFX style (letters)", "Orthodox (function keys)",
+                          "OS native"))
         self.assertFalse(asked[0]["dismissable"], "there is no Cancel")
         asked[0]["on_result"]("Orthodox (function keys)")
         self.assertEqual(self.app._keymap_preset, "orthodox")
