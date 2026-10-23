@@ -2,7 +2,7 @@
 
 [English](README.md) \| 日本語
 
-XeFM（*Xenolith File Manager* の略）は、キーボード操作中心の 2 画面ファイルマネージャーです。**Windows と macOS** ではネイティブのデスクトップアプリとして、**Windows・macOS・Linux** ではターミナルで動作します。SSH サーバー、S3 バケット、アーカイブも普通のフォルダーと同じように開けて、ほぼすべての動作を Python で変更できます。[既製の拡張機能](https://github.com/crftwr/xefm/wiki/Extensions)をインストールすることも、自分で書くことも、[XeFM スキル](doc/AGENT_SKILL_FEATURE.ja.md)を使って AI コーディングエージェントに書かせることもできます。
+XeFM（*Xenolith File Manager* の略）は、キーボード操作中心の 2 画面ファイルマネージャーです。**Windows と macOS** ではネイティブのデスクトップアプリとして、**Windows、macOS、Linux** ではターミナルで動作します。SSH サーバー、S3 バケット、アーカイブも普通のフォルダーと同じように開けます。また、ほぼすべての動作を Python で自由に変えられます。[既製の拡張機能](https://github.com/crftwr/xefm/wiki/Extensions)をインストールすることも、自分で書くことも、[XeFM スキル](doc/AGENT_SKILL_FEATURE.ja.md)を使って AI コーディングエージェントに書かせることもできます。
 
 <p>
   <a href="https://apps.microsoft.com/detail/9PK2X44W810V">
@@ -37,7 +37,7 @@ https://github.com/user-attachments/assets/f121401d-990b-445d-aa79-526d34e4a44e
 
 ## 主な機能
 
-- **クロスプラットフォーム** - **Windows と macOS** ではネイティブのデスクトップアプリ、**Windows・macOS・Linux** ではターミナル（TUI）アプリとして動作
+- **クロスプラットフォーム** - **Windows と macOS** ではネイティブのデスクトップアプリ、**Windows、macOS、Linux** ではターミナル（TUI）アプリとして動作
 - **2 画面表示** - 左右のペインを別々に移動でき、ペインをまたいだ操作が可能
 - **アーカイブのブラウズ** - ZIP、TAR、圧縮アーカイブを仮想ディレクトリとして移動
 - **SFTP 対応** - SSH 経由でリモートサーバーを高速にブラウズ・管理
@@ -47,10 +47,10 @@ https://github.com/user-attachments/assets/f121401d-990b-445d-aa79-526d34e4a44e
 - **OS のインデックス検索** - 検索ダイアログから Spotlight（macOS）や Windows Search を検索し、見つかったファイルをファイル一覧として操作（[詳細](doc/OS_INDEX_SEARCH_FEATURE.ja.md)）
 - **お気に入りとタグ** - ディレクトリやファイルをお気に入りに登録。システムが持つタグをそのまま読み書きするので、Finder で付けたタグが XeFM に表示され、その逆も同様です（[詳細](doc/FILE_TAGS_FEATURE.ja.md)）
 - **充実した内蔵ビューアー** - シンタックスハイライト付きテキスト、画像、Markdown、JSON、CSV/TSV
-- **比較と同期** - テキストファイルを左右に並べて比較し、違う文字まで示す差分表示。ディレクトリの再帰的な比較と、書き込む前に計画全体を確認できるワンステップの同期（更新またはミラー）（[差分](doc/DIFF_VIEWER_FEATURE.ja.md)、[同期](doc/DIRECTORY_SYNC_FEATURE.ja.md)）
-- **類似ファイルの検索** - 重複ファイルに加え、サイズ変更・再エンコード・タグ変更されただけの同じ画像、動画、音声を検出（[詳細](doc/FIND_SIMILAR_FILES_FEATURE.ja.md)）
+- **比較と同期** - テキストファイルを左右に並べ、変更箇所を文字単位で示す差分表示。ディレクトリの再帰的な比較と、1 回の操作で済む同期（更新またはミラー）。同期では、書き込む前に実行内容をすべて確認できます（[差分](doc/DIFF_VIEWER_FEATURE.ja.md)、[同期](doc/DIRECTORY_SYNC_FEATURE.ja.md)）
+- **類似ファイルの検索** - 重複ファイルに加え、サイズ変更、再エンコード、メタデータの書き換えをしただけで中身は同じ画像、動画、音声を検出（[詳細](doc/FIND_SIMILAR_FILES_FEATURE.ja.md)）
 - **テーマと視覚効果** - 10 種類以上の内蔵テーマ。デスクトップモードでは GPU による背景アニメーション、CRT／蛍光体風の画面効果、テキストが浮かび上がるアニメーションも使えます
-- **カスタマイズ性** - キーバインド、設定項目、外部プログラムの起動をすべて設定可能。コマンドパレットからはすべてのアクションを名前で探せます
+- **カスタマイズ性** - キーバインド、設定項目、外部プログラムの起動をすべて自由に変更可能。コマンドパレットからは、すべてのアクションを名前で探せます
 - **拡張機能** - アクション、テーマ、フィルター、シンタックスハイライトなどを追加するパッケージをインストール（[一覧を見る](https://github.com/crftwr/xefm/wiki/Extensions)）。XeFM スキルを使えば AI エージェントに書かせることもできます
 
 ## クイックスタート
@@ -59,14 +59,14 @@ https://github.com/user-attachments/assets/f121401d-990b-445d-aa79-526d34e4a44e
 
 XeFM をどう使いたいかに合わせてインストール方法を選んでください。
 
-| | 入手先 | 得られるもの |
+| | 入手先 | 内容 |
 |---|---|---|
-| **デスクトップアプリ** — Windows | **[Microsoft Store](https://apps.microsoft.com/detail/9PK2X44W810V)** | Microsoft が署名した、正式にインストールされるアプリ。ワンクリックで導入でき、自動更新され、SmartScreen の警告も出ません。Python は不要です。 |
-| **デスクトップアプリ** — macOS | [最新リリース](https://github.com/crftwr/xefm/releases/latest)、または Homebrew：`brew install --cask crftwr/tap/xefm` | 正式にインストールされるアプリ。専用のアイコン、Dock 項目、ファイルアクセス権限を持ちます。Python は不要です。 |
+| **デスクトップアプリ** — Windows | **[Microsoft Store](https://apps.microsoft.com/detail/9PK2X44W810V)** | Microsoft の署名付きで、通常のアプリとしてインストールされます。ワンクリックで導入でき、自動更新され、SmartScreen の警告も出ません。Python は不要です。 |
+| **デスクトップアプリ** — macOS | [最新リリース](https://github.com/crftwr/xefm/releases/latest)、または Homebrew：`brew install --cask crftwr/tap/xefm` | 通常のアプリとしてインストールされ、専用のアイコンと Dock 項目を持ち、ファイルアクセス権限も XeFM 自身に与えられます。Python は不要です。 |
 | **ターミナルアプリ** — Windows、macOS、Linux | [PyPI](https://pypi.org/project/xefm/) | どのターミナルからでも（SSH 越しでも）使える `xefm` コマンド。Python 3.10 以上が必要です。 |
 | **ターミナルアプリ** — macOS、Linux | Homebrew：`brew install crftwr/tap/xefm` | Homebrew で管理される同じ `xefm` コマンド。自分で Python ライブラリを追加したい場合は PyPI 版を使ってください。 |
 
-デスクトップアプリとターミナルアプリは共存でき、設定は `~/.xefm/` で共有されます。両方をインストールするのはごく普通の使い方です。
+デスクトップアプリとターミナルアプリは共存でき、設定は `~/.xefm/` で共有されます。両方をインストールして使うのも、ごく普通の構成です。
 
 ### デスクトップアプリ（Windows、macOS）
 
@@ -82,7 +82,7 @@ brew install --cask crftwr/tap/xefm
 
 Gatekeeper に関する注意を含むインストールの詳細は **[デスクトップモードガイド](doc/DESKTOP_MODE_GUIDE.ja.md#デスクトップアプリのパッケージのインストール)** にあります。
 
-> **`xefm --backend gui` ではなくパッケージを使ってください** — この起動方法は XeFM の開発用で、普段使うためのものではありません。Dock／タスクバーのアイコンや、macOS ではファイルアクセス権限が、XeFM ではなく Python やターミナルのものとして扱われてしまいます。[Why not `xefm --backend gui`?](doc/DESKTOP_MODE_GUIDE.ja.md#xefm---backend-gui-ではいけないのはなぜですか) を参照してください。
+> **`xefm --backend gui` ではなくパッケージを使ってください** — この起動方法は XeFM の開発用で、普段使うためのものではありません。Dock／タスクバーのアイコンや、macOS ではファイルアクセス権限が、XeFM ではなく Python やターミナルのものとして扱われてしまいます。[`xefm --backend gui` ではいけないのはなぜですか？](doc/DESKTOP_MODE_GUIDE.ja.md#xefm---backend-gui-ではいけないのはなぜですか) を参照してください。
 
 ### ターミナルアプリ（Windows、macOS、Linux）
 
@@ -103,11 +103,11 @@ brew install crftwr/tap/xefm
 
 `config.py` で XeFM に同梱されていないライブラリを import している場合や、`pillow-heif` のような Pillow プラグインを使いたい場合は、`~/.xefm/requirements.txt` に書いて `xefm deps sync`（または Tools → Advanced → Sync Python Packages）を実行してください。デスクトップアプリを含むどのインストール方法でも同じように動き、アップグレード後も残ります。[追加の Python ライブラリ](doc/PYTHON_PACKAGES_FEATURE.ja.md)を参照してください。
 
-**アップグレードはインストールしたときと同じツールで行ってください**（`pipx upgrade xefm`、`uv tool upgrade xefm`、`pip install --upgrade xefm`、`brew upgrade xefm`）。これらは互いに置き換えられません。詳細とよくあるインストールエラーの対処法は[ユーザーガイド](doc/XEFM_USER_GUIDE.ja.md#アップグレードとアンインストール)にあります。
+**アップグレードはインストールしたときと同じツールで行ってください**（`pipx upgrade xefm`、`uv tool upgrade xefm`、`pip install --upgrade xefm`、`brew upgrade xefm`）。ツールを混ぜて使うことはできません。詳細とよくあるインストールエラーの対処法は[ユーザーガイド](doc/XEFM_USER_GUIDE.ja.md#アップグレードとアンインストール)にあります。
 
 ### ソースから
 
-XeFM そのものを開発する場合は、チェックアウトを使います。
+XeFM 自体を開発する場合は、リポジトリをクローンして使います。
 
 ```bash
 git clone https://github.com/crftwr/xefm.git
@@ -125,7 +125,7 @@ make run         # launch XeFM through it, no activation needed
 - **ファイル操作：** `C`（コピー）、`M`（移動）、`K`（削除）、`R`（名前の変更）
 - **検索：** `F` でインクリメンタルサーチ、`Shift-F` でファイル名検索、`Shift-G` で内容検索
 - **リモートパス：** `ssh://hostname/path` や `s3://bucket/path` を普通のディレクトリと同じように開けます
-- **ヘルプ：** `F1` でヘルプダイアログが開き、すべてのキーバインドがカテゴリー別に表示されます。覚えておく必要はありません
+- **ヘルプ：** `F1` でヘルプダイアログが開き、すべてのキーバインドがカテゴリー別に表示されます。キーを覚えておく必要はありません
 - **終了：** `Q`
 
 ## ドキュメント
@@ -139,17 +139,17 @@ make run         # launch XeFM through it, no activation needed
 - **[差分ビューアー](doc/DIFF_VIEWER_FEATURE.ja.md)**、**[一括リネーム](doc/BATCH_RENAME_FEATURE.ja.md)** - ファイル／ディレクトリの差分表示と、正規表現による複数ファイルの名前変更
 - **[SFTP 対応](doc/SFTP_SUPPORT_FEATURE.ja.md)** - SSH 経由のリモートサーバーアクセス、ファイル操作、検索
 - **[AWS S3 対応](doc/S3_SUPPORT_FEATURE.ja.md)** - クラウドストレージとの連携と S3 バケットの管理
-- **[サーバーへ接続](doc/CONNECT_TO_SERVER_FEATURE.ja.md)** - XeFM から離れずに SMB／WebDAV 共有をマウントし、ボリュームの切断や取り出しを行う
+- **[サーバーへ接続](doc/CONNECT_TO_SERVER_FEATURE.ja.md)** - XeFM から離れずに行う、SMB／WebDAV 共有のマウントとボリュームの切断・取り出し
 - **[アーカイブ](doc/ARCHIVE_FEATURE.ja.md)** - アーカイブの作成、展開、ディレクトリとしてのブラウズ
 - **[Migemo 検索](doc/MIGEMO_SEARCH_FEATURE.ja.md)** - インクリメンタルサーチで、ローマ字入力から日本語にマッチ
 - **[検索アニメーション](doc/SEARCH_ANIMATION_FEATURE.ja.md)** - 高度な検索機能と視覚的なフィードバック
-- **[フォルダータブ](doc/FOLDER_TABS_FEATURE.ja.md)**、**[クイックビュー](doc/QUICK_VIEW_FEATURE.ja.md)**、**[コマンドパレット](doc/COMMAND_PALETTE_FEATURE.ja.md)** - 1 つのペインで複数の場所を開く、反対側のペインでのライブプレビュー、すべてのアクションを名前で実行
+- **[フォルダータブ](doc/FOLDER_TABS_FEATURE.ja.md)**、**[クイックビュー](doc/QUICK_VIEW_FEATURE.ja.md)**、**[コマンドパレット](doc/COMMAND_PALETTE_FEATURE.ja.md)** - 1 つのペインで開く複数の場所、反対側のペインでのライブプレビュー、名前で実行できるすべてのアクション
 - **[OS のインデックス検索](doc/OS_INDEX_SEARCH_FEATURE.ja.md)**、**[ファイルリスト](doc/FILE_LIST_IMPORT_FEATURE.ja.md)** - Spotlight／Windows Search の結果や、任意のツールが出力したパスの一覧をペインとして表示
-- **[類似ファイルの検索](doc/FIND_SIMILAR_FILES_FEATURE.ja.md)** - 同一ファイルと、似た画像・動画・音声
+- **[類似ファイルの検索](doc/FIND_SIMILAR_FILES_FEATURE.ja.md)** - 同一ファイルと、似た画像、動画、音声
 - **[拡張パッケージ](doc/EXTENSIONS_FEATURE.ja.md)** - 拡張機能のインストール、アップグレード、作成
-- **[AI エージェント向け XeFM スキル](doc/AGENT_SKILL_FEATURE.ja.md)** - AI コーディングエージェントに設定の編集や拡張機能の作成を任せる
+- **[AI エージェント向け XeFM スキル](doc/AGENT_SKILL_FEATURE.ja.md)** - 設定の編集や拡張機能の作成を AI コーディングエージェントに任せる方法
 
-すべての機能ガイドは[ユーザーガイド](doc/XEFM_USER_GUIDE.ja.md#機能ドキュメント)の最後に一覧があります。
+機能ガイドの一覧は[ユーザーガイド](doc/XEFM_USER_GUIDE.ja.md#機能ドキュメント)の末尾にあります。
 レシピやコミュニティの拡張機能は **[XeFM wiki](https://github.com/crftwr/xefm/wiki)** にまとめられています。
 
 ### 開発者向けドキュメント（英語）
@@ -160,11 +160,11 @@ make run         # launch XeFM through it, no activation needed
 
 ## アーカイブを仮想ディレクトリとしてブラウズ
 
-アーカイブファイル（`.zip`、`.tar`、`.tar.gz`、`.tgz`、`.tar.bz2`、`.tar.xz`）の上で `Enter` を押すと、普通のディレクトリと同じようにブラウズできます。展開は不要です。入れ子のディレクトリの移動、ファイルの表示、名前や内容での検索、いつものコピーキーでのファイルの取り出しができ、`Backspace` でアーカイブから出ます。`P` で新しいアーカイブを作成し、`U` で展開します。[アーカイブ機能ガイド](doc/ARCHIVE_FEATURE.ja.md)を参照してください。
+アーカイブファイル（`.zip`、`.tar`、`.tar.gz`、`.tgz`、`.tar.bz2`、`.tar.xz`）の上で `Enter` を押すと、普通のディレクトリと同じようにブラウズできます。展開は不要です。アーカイブの中でも、入れ子のディレクトリの移動、ファイルの表示、名前や内容での検索ができ、いつものコピーキーでファイルを取り出せます。`Backspace` でアーカイブから出ます。`P` で新しいアーカイブを作成し、`U` で展開します。[アーカイブ機能ガイド](doc/ARCHIVE_FEATURE.ja.md)を参照してください。
 
 ## 内蔵ファイルビューアー
 
-`V`（または `Enter`）で選択中のファイルを表示します。XeFM はファイルの種類に合ったビューアーを選びます。シンタックスハイライト付きテキスト（20 以上の形式、行番号、折り返し、ファイル内検索）、拡大縮小とスクロールができる画像（iTerm2／kitty／sixel 対応ターミナルとデスクトップモードではインライン表示）、そして Markdown、JSON、CSV/TSV の*整形表示*（`M` で整形表示と生テキストを切り替え）です。どのビューアーも、ローカルファイル、アーカイブの中、リモートの SFTP／S3 パスで、展開やダウンロードなしに使えます。
+`V`（または `Enter`）で選択中のファイルを表示します。XeFM はファイルの種類に合ったビューアーを選びます。テキストはシンタックスハイライト付きで表示し（20 以上の形式、行番号、折り返し、ファイル内検索）、画像は拡大縮小とスクロールができます（iTerm2／kitty／sixel 対応ターミナルとデスクトップモードではインライン表示）。Markdown、JSON、CSV/TSV は*整形表示*になり、`M` で整形表示と生テキストを切り替えられます。どのビューアーも、ローカルファイル、アーカイブの中、リモートの SFTP／S3 パスで、展開やダウンロードなしに使えます。
 
 ![テキストビューアー](doc/images/text-viewer.jpg)
 
@@ -186,7 +186,7 @@ XeFM には 10 種類以上のテーマが内蔵されています。`T` を押�
 | <img src="doc/images/theme-light.jpg" width="260"><br>**Light+** | <img src="doc/images/theme-solarized-light.jpg" width="260"><br>**Solarized Light** | <img src="doc/images/theme-sci-fi.jpg" width="260"><br>**Sci-Fi** |
 | <img src="doc/images/theme-cyber.jpg" width="260"><br>**Cyber** | <img src="doc/images/theme-segment-lcd.jpg" width="260"><br>**Segment LCD** | <img src="doc/images/theme-shinagawa.jpg" width="260"><br>**Shinagawa** |
 
-デスクトップモードでは、テーマに GPU が描画する**視覚効果**を含めることもできます。インターフェースの背後や手前に描かれる背景アニメーション（`starfield`、`rain`、`hologram` など）、CRT／蛍光体風の画面ポストエフェクト、テキストが浮かび上がるアニメーション、半透明の面などです。視覚効果は純粋にテーマのデータなので、独自テーマで自由に組み合わせられます。ターミナルモードでは無視されます。[配色と視覚効果](doc/COLOR_SCHEMES_FEATURE.ja.md)を参照してください。
+デスクトップモードでは、インターフェースの背後や前面に GPU で描画する**視覚効果**をテーマに含めることもできます。背景アニメーション（`starfield`、`rain`、`hologram` など）、CRT／蛍光体風の画面ポストエフェクト、テキストが浮かび上がるアニメーション、半透明の面などです。視覚効果はテーマの定義の一部にすぎないので、独自テーマで自由に組み合わせられます。ターミナルモードでは無視されます。[配色と視覚効果](doc/COLOR_SCHEMES_FEATURE.ja.md)を参照してください。
 
 ## サブシェルモード
 
@@ -194,7 +194,7 @@ XeFM には 10 種類以上のテーマが内蔵されています。`T` を押�
 
 ## コマンドラインオプション
 
-ここで説明するオプションは、ターミナル版のインストールとソースのチェックアウト（どのコマンドも `python3 -m xefm …` として実行可能）で使えます。デスクトップ版のパッケージは引数を取りません。
+ここで説明するオプションは、ターミナル版とソースからの実行で使えます（ソースからの場合、どのコマンドも `python3 -m xefm …` として実行できます）。デスクトップ版のパッケージは引数を取りません。
 
 ```bash
 xefm                                    # terminal mode (the default)
@@ -210,20 +210,20 @@ XeFM は `~/.xefm/config.py` で細かく設定できます。テーマと視覚
 
 ## 拡張機能
 
-拡張パッケージは、`config.py` に手を入れずに、アクション、イベントフック、テーマ、ソート順、フィルター、画像形式、場所（パス）、シンタックスハイライトを追加します。インストール、アップグレード、アンインストールは 1 つの単位として行えます。
+拡張パッケージは、`config.py` に手を入れずに、アクション、イベントフック、テーマ、ソート順、フィルター、画像形式、場所（パス）、シンタックスハイライトを追加します。インストール、アップグレード、アンインストールはパッケージ単位でまとめて行えます。
 
 ```bash
 xefm ext install github:crftwr/xefm-extensions/compute-hash
 xefm ext list
 ```
 
-デスクトップアプリでは、代わりに **Tools → Advanced → Install Extension…** を使います。wiki の **[Extensions](https://github.com/crftwr/xefm/wiki/Extensions)** ページに、使える拡張機能の一覧があります。ハッシュや行数の計算から、署名付き S3 リンク、クラシックな青いテーマまでそろった [crftwr/xefm-extensions](https://github.com/crftwr/xefm-extensions) の公式パッケージと、コミュニティによるものです。自分で書くには[拡張パッケージ](doc/EXTENSIONS_FEATURE.ja.md)を参照してください。AI コーディングエージェントに [XeFM スキル](doc/AGENT_SKILL_FEATURE.ja.md)を渡して、欲しい機能を頼むこともできます。拡張機能の API はプレビュー段階なので、形式が変わる可能性があります。
+デスクトップアプリでは、代わりに **Tools → Advanced → Install Extension…** を使います。wiki の **[Extensions](https://github.com/crftwr/xefm/wiki/Extensions)** ページに、使える拡張機能の一覧があります。[crftwr/xefm-extensions](https://github.com/crftwr/xefm-extensions) の公式パッケージ（ハッシュや行数の計算から、S3 の署名付き URL、クラシックな青いテーマまで）と、コミュニティによるものです。自分で書くには[拡張パッケージ](doc/EXTENSIONS_FEATURE.ja.md)を参照してください。AI コーディングエージェントに [XeFM スキル](doc/AGENT_SKILL_FEATURE.ja.md)を渡して、欲しい機能を頼むこともできます。拡張機能の API はプレビュー段階なので、形式が変わる可能性があります。
 
 ## トラブルシューティング
 
 - ポータブル版の `XeFM.exe` を起動すると *「Windows によって PC が保護されました」* と表示される — zip にコード署名がないためです。**詳細情報** → **実行** をクリックするか、展開する前に [zip のブロックを解除](doc/DESKTOP_MODE_GUIDE.ja.md#windows--ポータブル-zip)してください。[Microsoft Store](https://apps.microsoft.com/detail/9PK2X44W810V) 版は署名されているので、この警告は出ません
 - macOS で *「開発元を検証できないため、XeFM を開けません」* と表示される — *アプリケーション* の `XeFM.app` を右クリックして **開く** を選び、一度だけ確認してください
-- インストールの問題（`command not found`、`externally-managed-environment`、アップグレードのエラー） — [Installation troubleshooting](doc/XEFM_USER_GUIDE.ja.md#インストールのトラブルシューティング) を参照してください
+- インストールの問題（`command not found`、`externally-managed-environment`、アップグレードのエラー） — [インストールのトラブルシューティング](doc/XEFM_USER_GUIDE.ja.md#インストールのトラブルシューティング) を参照してください
 
 そのほかは[ユーザーガイド](doc/XEFM_USER_GUIDE.ja.md#トラブルシューティング)と[デスクトップモードガイド](doc/DESKTOP_MODE_GUIDE.ja.md#トラブルシューティング)にあります。
 
