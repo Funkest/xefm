@@ -8,8 +8,8 @@ in [`doc/KEYMAP_PRESETS_FEATURE.md`](../KEYMAP_PRESETS_FEATURE.md).
 ## Shape
 
 `xefm/keymap_presets.py` holds `Preset` (name, label, description,
-`bindings`, `free_letters`, `type_ahead`) and the `PRESETS` table: `afx` and
-`orthodox`. Discussion #343 asked for one mechanism with several presets on
+`bindings`, `free_letters`, `type_ahead`) and the `PRESETS` table: `afx`,
+`orthodox` and `native`. Discussion #343 asked for one mechanism with several presets on
 it, not a special-cased beginner mode, and that is the reason for this shape.
 
 Since [#597](https://github.com/crftwr/xefm/issues/597) the presets are
@@ -148,6 +148,49 @@ view, back/forward, the file clipboard, `delete_permanently`. `apply` skips an
 action the registry does not resolve, so the preset is right on a build with or
 without them, and a missing action never holds a key for nothing.
 
+### The OS native table
+
+`native` (discussion #587) is the first preset whose table depends on where
+XeFM runs. That makes `Preset.bindings` either a dict or a function, and
+`table()` calls the function each time it builds. `_native_bindings()` uses
+the same three cases as the foot of `keymap_afx.py`:
+
+- **Any terminal** gets a table of chords a terminal can send: no `Command`,
+  no `Ctrl-Shift-<letter>`, and no `Ctrl`/`Alt-Enter`.
+  `test_the_terminal_case_binds_nothing_a_terminal_cannot_send` holds it to
+  the same rule `TestThreeCases` holds AFX to.
+- **The macOS app** and **the Windows app** update that table, with the
+  platform chord first because a menu shows `keys[0]`. The terminal keys
+  stay as fallbacks.
+
+The choice is stored once (`~/.xefm`) for both apps, which is why the
+terminal case is a full layout rather than an afterthought. A user who picks
+Finder's keys in the app and opens the TUI still has copy, paste, rename and
+a new folder.
+
+Decisions the table encodes:
+
+- **Enter opens, on macOS too.** Finder renames on Enter. Following it would
+  leave no key to open a folder that every other preset opens with Enter.
+  `F2` renames everywhere.
+- **F5 / F6 copy and move to the other pane, and F3 / F4 / F7 / F8 follow.**
+  Finder and Explorer have no two-pane operations; these are the keys every
+  two-pane manager uses. So `redraw` loses F5, as in Orthodox.
+- **Quick view.** On macOS it is Space, Quick Look's key, so marking moves to
+  Ctrl-Space, which every backend delivers. Elsewhere it is Alt-P, Explorer's
+  preview pane, and Space marks.
+- **Stand-ins for the terminal**, where nothing native exists or the native
+  chord cannot arrive:
+  - `F7` new folder;
+  - `Alt-I` file details;
+  - `Ctrl-K` command palette (Ctrl-T is a new tab, as in both apps);
+  - `Ctrl-Q` quit.
+- **Released AFX keys.** `index_search` gives up Ctrl-F to find files,
+  `reveal_in_os` gives up Ctrl-R to reread, and `unselect_all` gives up End
+  to the cursor.
+
+`test_no_key_runs_two_file_list_actions` checks every case for clashes.
+
 `resolve(config, chosen)` returns `KEY_PRESET` from the config when it names a
 preset, else the saved choice (state key `keymap.preset`), else **None**:
 nothing has been chosen. Old names are mapped through `canonical`. `get(None)`
@@ -214,8 +257,8 @@ The I-Search key (`enter_isearch()` with no argument) is unchanged.
 
 ## Not done
 
-The Explorer/Finder preset, and presets as data packages
-(#543).
+The Vim-style preset and the key sequences it needs (discussion #587),
+and presets as data packages (#543).
 
 ## Tests
 
