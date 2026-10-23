@@ -97,6 +97,7 @@ from xefm import document_text, keymap_presets, os_index, similar_scan, tree_wal
 from xefm.file_clipboard import FileClipboard, conflicts as clipboard_conflicts
 from xefm.quick_view import QuickView
 from xefm import event_log
+from xefm import key_sequence
 from xefm.log_manager import (LOG_ERROR_SOURCE, LOG_SOURCE, clear_log_sink,
                               getLogger, route_library_logger, set_log_sink)
 from xefm.pane_manager import PaneManager
@@ -1365,6 +1366,10 @@ class StatusBar(Widget):
             return self._isearch_hints()
         if self.app.panel.has_layers:
             return ""
+        sequence = getattr(self.app, "key_sequence", None)
+        if sequence is not None and sequence.pending:
+            # Vim's showcmd: the keys of a sequence not finished yet (#587).
+            return f"{sequence.pending_text()} …   Esc cancel"
         return self._hints()
 
     def draw(self, ctx) -> None:
@@ -1871,6 +1876,15 @@ class XeFMApp:
         self._drag_cancelled_in_place = False
 
         self.panel = Panel(backend)
+        # Bindings of more than one key ('g g', #587) in the file list: the keys
+        # pressed so far, shown in the status bar until the sequence ends.
+        self.key_sequence = key_sequence.KeySequencer(
+            lambda: self.keys, _ctx.FILER,
+            timeout=lambda: getattr(self.config, "KEY_SEQUENCE_TIMEOUT",
+                                    key_sequence.DEFAULT_TIMEOUT),
+            call_later=self.panel.call_later,
+            on_timeout=self._sequence_timed_out,
+            on_change=self.panel.render)
         # The file clipboard (#577): XeFM's own, with the OS one as a bridge
         # where the backend has it (macOS / Windows desktop).
         self.clipboard = FileClipboard(self.panel)
@@ -5399,6 +5413,7 @@ class XeFMApp:
         built. Both were left naming the pre-reload key — the help dialog said
         'D' while the bar and the menu still said 'K' (issue #382)."""
         self._apply_keymap_preset()
+        self.key_sequence.cancel()
         self.status.invalidate()
         self.menu_bar.set_menu(self._build_menu())
 
@@ -11538,11 +11553,22 @@ class XeFMApp:
         # A modal layer (message box, menu popup) owns events while open: route
         # everything to it and let XeFM's global keymap stand down.
         if self.panel.has_layers:
+            self.key_sequence.cancel()
             if self.panel.dispatch_event(event):
                 self.panel.render()
             return
         if event.type is EventType.KEY:
             has_sel = bool(self.active_pane()["selected_files"])
+            outcome, sequence_action = self.key_sequence.feed(event, has_sel)
+            if outcome == key_sequence.WAIT:
+                return
+            if outcome == key_sequence.ACT:
+                if self.dispatch(sequence_action):
+                    self.panel.render()
+                self._quick_view_follow()
+                return
+            if sequence_action is not None and self.dispatch(sequence_action):
+                self.panel.render()
             action = self.keys.find_action_for_event(event, has_sel, _ctx.FILER)
             if self.dispatch(action):
                 self.panel.render()
@@ -11561,6 +11587,13 @@ class XeFMApp:
             if self.panel.dispatch_event(event):
                 self.panel.render()
             self._quick_view_follow()
+
+    def _sequence_timed_out(self, action: str) -> None:
+        """A key that is also the start of a longer sequence ran on its own,
+        once KEY_SEQUENCE_TIMEOUT passed with nothing following."""
+        if self.dispatch(action):
+            self.panel.render()
+        self._quick_view_follow()
 
     def run(self) -> None:
         self.panel.render()

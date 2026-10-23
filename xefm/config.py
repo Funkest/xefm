@@ -139,7 +139,18 @@ class KeyBindings:
             "EQUAL"        -> ("=", frozenset(), "char")
             "Shift-EQUAL"  -> ("+", frozenset(), "char")        # shifted glyph
             "Command-ENTER"-> ("enter", {"cmd"}, "key")         # GUI-only chord
+            "g g"          -> ((("g", ∅, "key"), ("g", ∅, "key")), ∅, "seq")
+
+        A token holding whitespace is a **key sequence** (#587): each part is
+        parsed on its own and the result is a ``"seq"`` triple whose identity is
+        the tuple of parts. It never matches a single event
+        (:meth:`_matches`); :meth:`sequence_lookup` is what matches it, one key
+        at a time.
         """
+        parts = key_expr.split()
+        if len(parts) > 1:
+            return (tuple(self._parse_key_expression(part) for part in parts),
+                    frozenset(), "seq")
         # Single-character token: letter -> key mode (lowercased); anything else
         # (digit or punctuation) -> char mode on the produced glyph.
         if len(key_expr) == 1:
@@ -199,6 +210,8 @@ class KeyBindings:
     def _matches(parsed: tuple, key, char, mods) -> bool:
         """Match a parsed binding against an event's contract triple."""
         identity, required, mode = parsed
+        if mode == "seq":
+            return False
         if mode == "char":
             # Ignore shift/alt (the glyph already encodes them); honour ctrl/cmd
             # only if the binding named them.
@@ -415,6 +428,35 @@ class KeyBindings:
 
         return None
 
+    def sequence_lookup(self, events, has_selection: bool = False,
+                        context: str = "filer") -> tuple:
+        """What the keys pressed so far mean in ``context``: ``(action,
+        longer)``, where ``action`` is the action bound to exactly these keys
+        (None if none) and ``longer`` says whether some longer sequence begins
+        with them. One key alone is matched against single-key bindings too,
+        in the order :meth:`find_action_for_event` tries them."""
+        ids = [self._event_identity(event) for event in events]
+        count = len(ids)
+        exact = None
+        longer = False
+        for parsed, action, selection_req in self._context_entries(context):
+            if not self._check_selection_requirement(selection_req, has_selection):
+                continue
+            if parsed[2] == "seq":
+                parts = parsed[0]
+            elif count == 1:
+                parts = (parsed,)
+            else:
+                continue
+            if len(parts) < count or not all(
+                    self._matches(part, *ids[i]) for i, part in enumerate(parts[:count])):
+                continue
+            if len(parts) == count:
+                exact = exact or action
+            else:
+                longer = True
+        return exact, longer
+
     def is_action_for_event(self, event, action: str, has_selection: bool = False,
                             context: str | None = None) -> bool:
         """Whether ``event`` triggers a *specific* ``action``.
@@ -526,6 +568,9 @@ class KeyBindings:
         # Single literal character (letter, digit, punctuation) - return as-is.
         if len(key_expr) == 1:
             return key_expr
+        # A key sequence: each key as it would show alone (#587).
+        if len(key_expr.split()) > 1:
+            return " ".join(self.format_key_for_display(part) for part in key_expr.split())
 
         parts = key_expr.split('-')
         base = parts[-1]
