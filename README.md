@@ -1,6 +1,6 @@
 # XeFM — a dual-pane file manager for the desktop and the terminal
 
-XeFM — short for *Xenolith File Manager* — is a powerful file manager that runs as a native desktop application on **Windows and macOS**, and in the terminal on **all platforms — Windows, macOS, and Linux**. Navigate your filesystem with keyboard shortcuts in a clean, intuitive dual-pane interface with comprehensive file operations, rich built-in viewers, themeable visual effects, and professional-grade features.
+XeFM — short for *Xenolith File Manager* — is a keyboard-driven dual-pane file manager that runs as a native desktop application on **Windows and macOS**, and in the terminal on **Windows, macOS, and Linux**. SSH servers, S3 buckets and archives open like any folder, and almost everything is yours to change in Python: install [ready-made extensions](https://github.com/crftwr/xefm/wiki/Extensions), write your own, or ask an AI coding agent to write one with [the XeFM skill](doc/AGENT_SKILL_FEATURE.md).
 
 <!-- pypi-exclude-start -->
 <p>
@@ -47,7 +47,7 @@ https://github.com/user-attachments/assets/f121401d-990b-445d-aa79-526d34e4a44e
 - **Rich built-in viewers** - Syntax-highlighted text, images, Markdown, JSON, and CSV/TSV
 - **Themes & visual effects** - A dozen built-in themes; desktop mode adds GPU background animations, CRT/phosphor screen effects, and text-reveal animations
 - **Customizable** - Fully configurable key bindings, settings, and external program launchers; a command palette finds every action by name
-- **Extensions** - Install packages that add actions, themes, sort orders, syntax highlighting and more — or let an AI agent write one with the XeFM skill
+- **Extensions** - Install packages that add actions, themes, filters, syntax highlighting and more — [browse the list](https://github.com/crftwr/xefm/wiki/Extensions) — or let an AI agent write one with the XeFM skill
 
 ## Quick Start
 
@@ -269,9 +269,11 @@ xefm ext list
 ```
 
 In the desktop apps, use **Tools → Advanced → Install Extension…** instead.
-The official extensions live in
-[crftwr/xefm-extensions](https://github.com/crftwr/xefm-extensions), and the
-wiki's **[Extensions](https://github.com/crftwr/xefm/wiki/Extensions)** page lists the community's.
+The wiki's **[Extensions](https://github.com/crftwr/xefm/wiki/Extensions)**
+page lists what is available — the official packages in
+[crftwr/xefm-extensions](https://github.com/crftwr/xefm-extensions), from
+hashes and line counts to presigned S3 links and a classic blue theme, and the
+community's.
 To write your own, see [Extension Packages](doc/EXTENSIONS_FEATURE.md) — or
 give an AI coding agent [the XeFM skill](doc/AGENT_SKILL_FEATURE.md) and ask
 it for the feature. The extension API is a Preview, so the format may still
