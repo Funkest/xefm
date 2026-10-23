@@ -272,7 +272,7 @@ class Apply(unittest.TestCase):
         self.assertEqual(keymap_presets.resolve(config, "default"), "afx",
                          "a menu choice saved under the old name")
         self.assertEqual(keymap_presets.get("default").name, "afx")
-        self.assertEqual(keymap_presets.LABELS["afx"], "AFX style (letters)")
+        self.assertEqual(keymap_presets.LABELS["afx"], "AFX style")
 
     def test_the_shipped_key_bindings_holds_examples_only(self):
         from xefm import _config
@@ -629,6 +629,48 @@ class InTheApp(unittest.TestCase):
         asked[0]["on_result"]("Orthodox")
         self.assertEqual(self.app._keymap_preset, "orthodox")
         self.assertEqual(self._action(_key("f5")), "copy_files")
+
+    def _menu_dialog(self):
+        asked = []
+        with patch.object(xefm_app, "show_message_box",
+                          lambda *a, **k: asked.append(dict(k, text=a[1]))):
+            self.app.choose_keymap()
+        return asked[0]
+
+    def test_the_menu_opens_the_same_dialog_with_a_cancel(self):
+        self.app.set_keymap_preset("orthodox")
+        shown = self._menu_dialog()
+        self.assertEqual(shown["buttons"],
+                         ("AFX style", "Orthodox", "OS native", "Vim style", "Cancel"))
+        self.assertTrue(shown["dismissable"])
+        self.assertEqual(shown["cancel"], 4)
+        self.assertEqual(shown["default"], 1)              # the current one
+        self.assertIn("**Orthodox** (current)", shown["text"])
+        for preset in keymap_presets.PRESETS.values():
+            self.assertIn(preset.description, shown["text"])
+
+    def test_choosing_in_the_menu_dialog_switches_and_cancel_does_not(self):
+        self.app.set_keymap_preset("afx")
+        self._menu_dialog()["on_result"]("Cancel")
+        self.assertEqual(self.app._keymap_preset, "afx")
+        self._menu_dialog()["on_result"]("Vim style")
+        self.assertEqual(self.app._keymap_preset, "vim")
+
+    def test_the_menu_dialog_says_when_config_py_decides(self):
+        self.app.config.KEY_PRESET = "orthodox"
+        try:
+            self.assertIn("KEY_PRESET = 'orthodox'", self._menu_dialog()["text"])
+        finally:
+            self.app.config.KEY_PRESET = None
+
+    def test_the_tools_menu_has_one_keymap_item(self):
+        tools = next(i for i in self.app._build_menu().items if i.label == "Tools")
+        advanced = next(i for i in tools.submenu.items
+                        if getattr(i, "label", "") == "Advanced")
+        keymap = [i for i in advanced.submenu.items
+                  if getattr(i, "label", "").startswith("Keymap")]
+        self.assertEqual([i.label for i in keymap], ["Keymap…"])
+        self.assertIsNone(keymap[0].submenu)
 
     def test_quitting_unanswered_asks_again_at_the_next_launch(self):
         self._forget()

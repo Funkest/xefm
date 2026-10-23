@@ -3829,6 +3829,7 @@ class XeFMApp:
                 "menu": (self.menu_bar.open_menu, None),
                 "redraw": (lambda: None, True),
                 "reread": (self.reread, False),
+                "choose_keymap": (self.choose_keymap, False),
                 # --- cursor ---
                 "cursor_up": (self._act_cursor_up, True),
                 "cursor_down": (self._act_cursor_down, True),
@@ -4841,10 +4842,10 @@ class XeFMApp:
             MenuItem("Advanced", submenu=Menu(
                 # A preset is how the keys work, not how things look, so it
                 # sits with the configuration rather than the theme.
-                MenuItem("Keymap", submenu=Menu(*[
-                    MenuItem(label, on_select=lambda n=name: self.set_keymap_preset(n),
-                             checked=lambda n=name: self._keymap_preset == n)
-                    for name, label in keymap_presets.LABELS.items()])),
+                # The presets' names say little alone; the dialog shows what
+                # each one does.
+                MenuItem("Keymap…", on_select=self.choose_keymap,
+                         shortcut=sc("choose_keymap")),
                 SEPARATOR,
                 MenuItem("Extensions…", on_select=self.show_extensions,
                          shortcut=sc("extensions")),
@@ -5471,26 +5472,45 @@ class XeFMApp:
 
     def _ask_keymap_preset(self) -> None:
         """Which keymap, asked at the first launch with none chosen — a new
-        install and one from before presets alike (#597). Neither is the
+        install and one from before presets alike (#597). None is the
         default, so there is no Cancel and Esc does nothing; one must be
         chosen. Quit before choosing, and the next launch asks again."""
+        self._keymap_dialog(first_launch=True)
+
+    def choose_keymap(self) -> None:
+        """Tools > Advanced > Keymap…: the first launch's dialog, with each
+        preset described, the current one under the cursor, and a Cancel."""
+        self._keymap_dialog(first_launch=False)
+
+    def _keymap_dialog(self, first_launch: bool) -> None:
         names = list(keymap_presets.PRESETS)
-        presets = [keymap_presets.PRESETS[n] for n in names]
-        buttons = [p.button or p.label for p in presets]
-        lines = ["Choose how XeFM's keys work. **Tools > Advanced > Keymap** changes it "
-                 "at any time.", ""]
-        for preset in presets:
-            lines.append(f"**{preset.label}** — {preset.description}")
-            lines.append("")
+        labels = [keymap_presets.PRESETS[n].label for n in names]
+        lines = ["Choose how XeFM's keys work. **Tools > Advanced > Keymap…** "
+                 "changes it at any time.", ""]
+        for name, label in zip(names, labels):
+            current = " (current)" if not first_launch and name == self._keymap_preset else ""
+            lines.append(f"- **{label}**{current} — "
+                         f"{keymap_presets.PRESETS[name].description}")
+        lines.append("")
+        configured = keymap_presets.canonical(getattr(self.config, "KEY_PRESET", None))
+        if not first_launch and configured in keymap_presets.PRESETS:
+            lines.append(f"`KEY_PRESET = {configured!r}` in config.py decides the "
+                         "keymap; change it there.")
 
         def answered(label: str) -> None:
-            self.set_keymap_preset(names[buttons.index(label)])
+            if label in labels:
+                self.set_keymap_preset(names[labels.index(label)])
             self.panel.render()
 
+        buttons = labels if first_launch else labels + ["Cancel"]
+        current = names.index(self._keymap_preset) \
+            if self._keymap_preset in names else 0
         show_message_box(
             self.panel, "\n".join(lines).rstrip(), title="Keymap",
-            icon="question", buttons=tuple(buttons), default=0,
-            on_result=answered, markdown=True, dismissable=False)
+            icon="question", buttons=tuple(buttons),
+            default=0 if first_launch else current,
+            cancel=None if first_launch else len(labels),
+            on_result=answered, markdown=True, dismissable=not first_launch)
         self.panel.render()
 
     def set_keymap_preset(self, name: str) -> None:

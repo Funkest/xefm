@@ -8,9 +8,9 @@ in [`doc/KEYMAP_PRESETS_FEATURE.md`](../KEYMAP_PRESETS_FEATURE.md).
 ## Shape
 
 `xefm/keymap_presets.py` holds `Preset` (name, label, description,
-`bindings`, `free_letters`, `type_ahead`, `button`) and the `PRESETS` table:
-`afx`, `orthodox`, `native` and `vim`. `button` is the first-launch dialog's
-short name: four full labels side by side overflow an 80-column terminal. Discussion #343 asked for one mechanism with several presets on
+`bindings`, `free_letters`, `type_ahead`) and the `PRESETS` table: `afx`,
+`orthodox`, `native` and `vim`. Labels are bare names (`AFX style`, `Orthodox`);
+what each does is the description, which the keymap dialog shows beside it. Discussion #343 asked for one mechanism with several presets on
 it, not a special-cased beginner mode, and that is the reason for this shape.
 
 Since [#597](https://github.com/crftwr/xefm/issues/597) the presets are
@@ -275,8 +275,13 @@ surfaces that cache key names: the status bar's hint line, and the menu
 refuses, with a log line, when `KEY_PRESET` in the config names a different
 preset.
 
-The menu is **Tools → Advanced → Keymap ▸**, one checked item per preset. A preset is
-not an action, so the command palette does not offer the switch.
+The menu is **Tools → Advanced → Keymap…**. It opens the first launch's dialog
+(`_keymap_dialog`), with a Cancel, the current preset under the cursor and
+marked "(current)", and a note when `KEY_PRESET` in `config.py` decides. It
+used to be a submenu with one checked item per preset, but the names alone
+("AFX style", "Orthodox") say little, and labels carrying "(letters)" or
+"(function keys)" grew uneven as presets were added. The `choose_keymap`
+action opens the same dialog, so the command palette offers it.
 
 ## Type-ahead
 

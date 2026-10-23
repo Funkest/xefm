@@ -78,18 +78,13 @@ class Preset:
     bindings: Union[dict, Callable[[], dict]] = field(default_factory=dict)
     free_letters: bool = False
     type_ahead: bool = False
-    #: The first-launch dialog's button: four full labels side by side do not
-    #: fit an 80-column terminal, so the button is short and the label goes
-    #: in the text above it. Empty means the label.
-    button: str = ""
 
 
 #: The function-key layout shared by the "orthodox" two-pane file managers —
 #: F3 view, F5 copy, F8 delete — and nothing on a bare letter.
 _ORTHODOX = Preset(
     name=ORTHODOX,
-    label="Orthodox (function keys)",
-    button="Orthodox",
+    label="Orthodox",
     description=("F3 view, F4 edit, F5 copy, F6 move, F7 new folder, F8 "
                  "delete; typing a letter searches."),
     free_letters=True,
@@ -385,8 +380,7 @@ _VIM = Preset(
 
 _AFX = Preset(
     name=AFX,
-    label="AFX style (letters)",
-    button="AFX style",
+    label="AFX style",
     description=("C copy, M move, K delete, V view, E edit; one letter runs "
                  "one command."),
 )

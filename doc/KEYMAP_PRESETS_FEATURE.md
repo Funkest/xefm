@@ -10,7 +10,9 @@ the first time XeFM starts, it asks which one you want.
 | **OS native** | search for a file | Finder's or Explorer's keys (`Cmd`/`Ctrl`-`C`, `F2`, `Delete`, …) |
 | **Vim style** | run commands | Vim-style keys (`hjkl`, `gg`, `yy`, `dd`, `/`, …) |
 
-**Tools → Advanced → Keymap** switches at any time. The change applies at once: the help
+**Tools → Advanced → Keymap…** switches at any time. It opens the same dialog
+as the first launch, with the current preset marked and a Cancel. The change
+applies at once: the help
 dialog (`F1`), the menus and the status bar show the new keys, and XeFM
 remembers your choice for later sessions.
 
@@ -19,7 +21,7 @@ remembers your choice for later sessions.
 When no preset has been chosen yet, XeFM starts with a **Keymap** dialog
 with one button per preset. That includes the first start after updating from
 a version without presets. The dialog has no Cancel, and `Esc` does not close
-it: choose one to go on. You can switch later from Tools → Advanced → Keymap.
+it: choose one to go on. You can switch later from Tools → Advanced → Keymap….
 
 If you are updating and want the keys you have been using, choose **AFX
 style**. Your `config.py` may hold a full copy of the old keymap. See

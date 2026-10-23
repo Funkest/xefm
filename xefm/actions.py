@@ -1071,6 +1071,7 @@ _FILER_ACTIONS = [
     # Every action of the file list, searchable and runnable — the long tail
     # the menu bar deliberately leaves out (discussion #550).
     _a("command_palette", FILER, "Search every action by name and run it"),
+    _a("choose_keymap", FILER, "Choose the keymap preset"),
     # External programs and configuration
     _a("programs", FILER, "Run an external program"),
     _a("subshell", FILER, "Open a subshell in this directory"),
