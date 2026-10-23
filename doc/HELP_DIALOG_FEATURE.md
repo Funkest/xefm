@@ -30,7 +30,10 @@ F1 on a row.
 ## Content
 
 The help is generated from your current key bindings, so it always reflects your
-configuration, including any customizations. That is also why the list below
+configuration, including any customizations. Each row shows the key and what
+it does, followed by the action's name (`Move cursor up · cursor_up`). That
+name is what you write in `KEY_BINDINGS` to rebind the key, so you can find it
+here. That is also why the list below
 names what each section covers instead of quoting keys — the dialog itself is
 the place to read which key does what on *your* setup. The sections, in order:
 

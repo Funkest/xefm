@@ -11092,7 +11092,9 @@ class XeFMApp:
 
         Each section renders as a Markdown heading over a two-column table
         (Key(s) / Action), so bindings align in a real column and the section
-        titles stand out.
+        titles stand out. Each action ends with its own name (``cursor_up``) —
+        what ``KEY_BINDINGS`` and ``ctx.invoke`` take, so a key can be rebound
+        without looking the name up elsewhere.
 
         Split from :meth:`show_help` so the content can be built — and checked —
         without a panel to push it onto."""
@@ -11111,7 +11113,12 @@ class XeFMApp:
                 # are a glyph apart.
                 keys = UNBOUND_KEYS if label == UNBOUND_KEYS else \
                     "`" + label.replace("|", "\\|") + "`"
-                lines.append(f"| {keys} | {self._action_link(action, desc)} |")
+                # The name rides in the action's cell rather than a column of
+                # its own: at 80 columns a third column breaks
+                # toggle_select_in_place mid-word, while here the whole name
+                # moves down a line.
+                lines.append(f"| {keys} | {self._action_link(action, desc)} "
+                             f"· `{action}` |")
             lines.append("")
         lines.append(self._archive_help_section())
         return "\n".join(lines)
