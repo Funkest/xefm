@@ -20,7 +20,20 @@ XeFM — short for *Xenolith File Manager* — is a powerful file manager that r
 
 ![title](doc/images/xefm-page-title.jpg)
 
-![XeFM in the terminal: browsing, viewers, search, directory compare and themes](doc/images/xefm-tui-demo.gif)
+<table>
+  <tr>
+    <th width="50%">GUI (macOS)</th>
+    <th width="50%">TUI</th>
+  </tr>
+  <tr>
+    <td>
+
+https://github.com/user-attachments/assets/f121401d-990b-445d-aa79-526d34e4a44e
+
+</td>
+    <td><img src="doc/images/xefm-tui-demo.gif" alt="XeFM in the terminal: browsing, viewers, search, directory compare and themes"></td>
+  </tr>
+</table>
 
 ## Key Features
 
