@@ -1,5 +1,7 @@
 # File Extension Associations Feature
 
+English \| [日本語](FILE_ASSOCIATIONS_FEATURE.ja.md)
+
 ## Overview
 
 The File Extension Associations feature allows you to configure which programs XeFM uses to open, view, and edit different types of files based on their extensions. This provides a flexible way to customize how XeFM handles various file types.

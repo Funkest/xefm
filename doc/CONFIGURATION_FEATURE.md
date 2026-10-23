@@ -1,5 +1,7 @@
 # XeFM Configuration Feature
 
+English \| [日本語](CONFIGURATION_FEATURE.ja.md)
+
 ## Overview
 
 XeFM is customized through a Python configuration file. On first run XeFM creates it

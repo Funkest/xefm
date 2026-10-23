@@ -1,5 +1,7 @@
 # Text Editor Integration
 
+English \| [日本語](TEXT_EDITOR_FEATURE.ja.md)
+
 XeFM can hand files straight to your text editor. Put the cursor on a file —
 or select several with `Space` — and press `E`: XeFM steps aside while the
 editor runs and comes back automatically when you save and quit. Any editor

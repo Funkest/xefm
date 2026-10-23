@@ -1,5 +1,7 @@
 # Text Encodings
 
+English \| [日本語](TEXT_ENCODING_FEATURE.ja.md)
+
 The text viewer detects a file's character encoding automatically, so legacy
 Japanese text — Shift-JIS, EUC-JP, ISO-2022-JP — displays correctly alongside
 UTF-8, with or without a BOM. When detection gets a file wrong, you can pick

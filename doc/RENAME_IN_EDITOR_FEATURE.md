@@ -1,5 +1,7 @@
 # Rename in the Editor
 
+English \| [日本語](RENAME_IN_EDITOR_FEATURE.ja.md)
+
 Rename many files by editing their names in your text editor. You can use
 everything your editor offers: multi-cursor editing, search and replace,
 column selection, or typing a full-width space. You can also read long names

@@ -1,5 +1,7 @@
 # XeFM AWS S3 Support Feature
 
+English \| [日本語](S3_SUPPORT_FEATURE.ja.md)
+
 ## Overview
 
 XeFM provides native AWS S3 integration, allowing you to browse, navigate, and manage files in S3 buckets directly from the terminal interface. S3 paths are treated like local directories, providing a seamless experience for working with cloud storage.

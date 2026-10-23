@@ -1,5 +1,7 @@
 # Archives
 
+English \| [日本語](ARCHIVE_FEATURE.ja.md)
+
 XeFM works with archive files as a first-class feature: you can **create**
 archives from selected files, **extract** them, and **browse** their contents
 in place — navigating into an archive as if it were a regular directory, without

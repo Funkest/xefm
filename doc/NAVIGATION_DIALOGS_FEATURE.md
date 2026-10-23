@@ -1,5 +1,7 @@
 # Navigation Dialogs
 
+English \| [日本語](NAVIGATION_DIALOGS_FEATURE.ja.md)
+
 XeFM's directory navigation dialogs all share one searchable-list picker: a
 scrollable list you filter by typing, with the same keys for moving through it
 and choosing an entry. Four actions open four flavors of that picker (press `F1`
@@ -277,4 +279,4 @@ rather than forcing it.
 
 - [Connect to Server](CONNECT_TO_SERVER_FEATURE.md) — mounting a NAS or file
   server from inside XeFM
-- [S3 Integration](XEFM_USER_GUIDE.md#s3-integration) (in User Guide)
+- [S3 Integration](XEFM_USER_GUIDE.md#aws-s3-integration) (in User Guide)

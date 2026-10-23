@@ -1,5 +1,7 @@
 # Extension Packages
 
+English \| [日本語](EXTENSIONS_FEATURE.ja.md)
+
 An extension package is a folder that adds actions, event hooks, themes, sort
 orders, filters, picture formats, locations or syntax highlighting to XeFM.
 These are the same kinds of things `config.py` can add, with no lines in

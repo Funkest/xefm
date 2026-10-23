@@ -1,5 +1,7 @@
 # File Tags
 
+English \| [日本語](FILE_TAGS_FEATURE.ja.md)
+
 XeFM reads and writes the tags your system already keeps, so a tag added in
 XeFM shows up in Finder (or Dolphin, or the S3 console), and tags added there
 show up in XeFM. There is no separate XeFM tag list to keep in sync.

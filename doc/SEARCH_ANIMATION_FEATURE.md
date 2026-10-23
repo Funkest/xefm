@@ -1,5 +1,7 @@
 # Search Animation Feature
 
+English \| [日本語](SEARCH_ANIMATION_FEATURE.ja.md)
+
 ## Overview
 
 XeFM shows animated progress indicators during long-running operations like searching files. These animations let you know that XeFM is working and provide visual feedback during operations.

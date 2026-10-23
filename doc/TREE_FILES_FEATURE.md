@@ -1,5 +1,7 @@
 # Tree Files (.xft)
 
+English \| [日本語](TREE_FILES_FEATURE.ja.md)
+
 An `.xft` file holds **groups of references to files**: for example, the
 groups of similar videos a scan found. Each group lists files that may live
 in many different folders, on this computer or a server. Press `Enter` on a

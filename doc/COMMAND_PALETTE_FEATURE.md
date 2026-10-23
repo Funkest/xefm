@@ -1,5 +1,7 @@
 # Command Palette
 
+English \| [日本語](COMMAND_PALETTE_FEATURE.ja.md)
+
 Press **Ctrl-T** (or **Tools → Command Palette…**) to search every action the
 file list understands and run the one you pick.
 

@@ -1,5 +1,7 @@
 # Select by Pattern
 
+English \| [日本語](SELECT_BY_PATTERN_FEATURE.ja.md)
+
 Three ways to select many files at once without filtering the pane first.
 
 | Action | Key | Menu | What it does |

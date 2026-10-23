@@ -1,5 +1,7 @@
 # Extra Python Libraries: `~/.xefm/requirements.txt`
 
+English \| [日本語](PYTHON_PACKAGES_FEATURE.ja.md)
+
 Some things you can do in `config.py` need a Python library XeFM doesn't ship:
 a Pillow plugin such as `pillow-heif`, `rawpy` for camera RAW in an
 `IMAGE_DECODERS` entry, or anything your own actions import. List them in

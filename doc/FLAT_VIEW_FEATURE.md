@@ -1,5 +1,7 @@
 # Flat View
 
+English \| [日本語](FLAT_VIEW_FEATURE.ja.md)
+
 Flat view swaps the pane's listing for **every file below the current
 directory**, in one flat list. Press the key again to go back.
 

@@ -1,5 +1,7 @@
 # Filepath TAB Completion
 
+English \| [日本語](TAB_COMPLETION_FEATURE.ja.md)
+
 ## Overview
 
 XeFM's text prompts complete file and directory paths as you type. Press **TAB** in

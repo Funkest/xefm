@@ -1,5 +1,7 @@
 # Tip of the Day
 
+English \| [日本語](TIPS_FEATURE.ja.md)
+
 XeFM shows a short tip about one of its features when it starts — at most once
 per day. The rotation opens with a Welcome tip introducing the dual-pane model
 and pointing at the Help dialog, then steps through the rest of the features one

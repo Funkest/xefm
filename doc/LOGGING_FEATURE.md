@@ -1,5 +1,7 @@
 # Logging Feature
 
+English \| [日本語](LOGGING_FEATURE.ja.md)
+
 ## Overview
 
 XeFM provides comprehensive logging functionality that captures application output, error messages, and operational information in a dedicated log pane. The logging system helps you monitor XeFM's operations, troubleshoot issues, and understand what the application is doing.

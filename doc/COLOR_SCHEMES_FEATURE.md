@@ -1,5 +1,7 @@
 # Color Schemes Feature
 
+English \| [日本語](COLOR_SCHEMES_FEATURE.ja.md)
+
 ## Overview
 
 XeFM ships a range of **themes** — palettes that look good in different terminal

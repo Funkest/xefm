@@ -1,5 +1,7 @@
 # Remote Editing
 
+English \| [日本語](REMOTE_EDIT_FEATURE.ja.md)
+
 Press `E` on a file on an SSH or S3 pane and it opens in your editor like a
 local file. Each time you save, XeFM uploads your changes to where the file
 came from.

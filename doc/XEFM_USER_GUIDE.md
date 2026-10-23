@@ -1,10 +1,12 @@
 # XeFM User Guide
 
+English \| [日本語](XEFM_USER_GUIDE.ja.md)
+
 ## Table of Contents
 
 - [Getting Started](#getting-started)
 - [Installation](#installation)
-- [Desktop Mode (macOS)](#desktop-mode-macos)
+- [Desktop Mode (Windows, macOS)](#desktop-mode-windows-macos)
 - [Basic Usage](#basic-usage)
 - [Core Features](#core-features)
 - [File Operations](#file-operations)

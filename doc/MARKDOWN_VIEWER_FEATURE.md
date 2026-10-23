@@ -1,5 +1,7 @@
 # Markdown Viewer
 
+English \| [日本語](MARKDOWN_VIEWER_FEATURE.ja.md)
+
 XeFM's built-in file viewer can render Markdown files (`*.md`, `*.markdown`) as
 formatted rich text — headings, **bold** / *italic*, `code`, lists, tables,
 block quotes, links and images — in addition to the usual raw, line-numbered

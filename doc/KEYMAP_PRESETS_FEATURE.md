@@ -1,5 +1,7 @@
 # Keymap Presets
 
+English \| [日本語](KEYMAP_PRESETS_FEATURE.ja.md)
+
 XeFM has four complete keymaps, called **presets**. None is the default:
 the first time XeFM starts, it asks which one you want.
 

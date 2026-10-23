@@ -1,5 +1,7 @@
 # Image Viewer
 
+English \| [日本語](IMAGE_VIEWER_FEATURE.ja.md)
+
 XeFM has a built-in image viewer. Put the cursor on an image and run `view_file` (or
 **Enter**) to open it full-window, with zoom, pan, and navigation to the other
 images in the same directory — without leaving XeFM.

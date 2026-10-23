@@ -1,5 +1,7 @@
 # The .xft Format
 
+English \| [日本語](XFT_FORMAT.ja.md)
+
 An `.xft` file is **a tree of references to places**: groups that hold
 other groups or references, and references that point at a file or folder
 somewhere (a local path, or a URI such as `ssh://…` or `s3://…`). XeFM
