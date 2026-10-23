@@ -1890,6 +1890,8 @@ class XeFMApp:
         #: True while the quit confirm is up, so a second request (the close
         #: button pressed again) does not stack a second one.
         self._quit_confirming = False
+        #: True once _quit has started, so a second request does not repeat it.
+        self._quitting = False
         # The platform's own ways to quit -- the macOS application menu's Quit
         # and the Dock's, the window's close button -- go through the quit action
         # like the keymap's quit key: asked, background jobs stopped, state saved.
@@ -2671,7 +2673,11 @@ class XeFMApp:
             self.log_info(f"Could not save application state: {e}")
 
     def _quit(self) -> None:
-        """Stop monitoring, save state, then end the event loop."""
+        """Stop monitoring, save state, then end the event loop. Once only:
+        Alt-F4 can arrive both as a key and as the window's close request."""
+        if self._quitting:
+            return
+        self._quitting = True
         # Before anything is torn down, so a 'quit' hook still sees live panes
         # (saving a session is the motivating case).
         _hooks.fire("quit", self._user_ctx)
@@ -3814,6 +3820,7 @@ class XeFMApp:
             self._handlers = {
                 # --- application ---
                 "quit": (self.confirm_quit, False),
+                "quit_app": (lambda: self.confirm_quit(only_if_busy=True), False),
                 "help": (self.show_help, False),
                 "command_palette": (self.show_command_palette, False),
                 "quick_view": (self.quick_view, True),
@@ -6042,30 +6049,48 @@ class XeFMApp:
         self.panel.render()
 
     def _quit_shortcut(self) -> str | None:
-        """The keymap's first key for quitting, as the macOS application
-        menu's Quit item shows it — ``Cmd-Q`` under the OS native preset, ``Q``
-        under AFX — or None when nothing quits by key."""
-        keys, _ = self.keys.get_keys_for_action("quit", _ctx.FILER)
+        """The keymap's first key for the platform's way to quit
+        (``quit_app``), as the macOS application menu's Quit item shows
+        it — ``Cmd-Q`` under the OS native preset — or None when nothing binds
+        it."""
+        keys, _ = self.keys.get_keys_for_action("quit_app", _ctx.FILER)
         return self.keys.format_key_for_display(keys[0]) if keys else None
 
     def _on_quit_request(self) -> None:
-        """The platform asked to quit: the application menu's Quit, the Dock,
-        the window's close button. It is the quit action, whatever keys the
-        keymap gives it, so nothing quits without the confirm and the state
-        save. A second request while the confirm is up is the same question."""
+        """The platform asked to quit — the application menu's Quit, the Dock,
+        the window's close button — or a ``quit_app`` key was pressed (Cmd-Q,
+        Alt-F4), whatever was open. It asks only while a task runs, and always
+        saves the state on the way out. A second request while the confirm is
+        up is the same question."""
         if self._quit_confirming:
             return
-        self.dispatch("quit")
+        self.confirm_quit(only_if_busy=True)
         self.panel.render()
 
-    def confirm_quit(self) -> None:
+    def _busy_tasks(self) -> list:
+        """Every task quitting would stop: running in front or in the
+        background, or waiting for its turn."""
+        tasks = list(self.tasks.active_tasks())
+        tasks += [t for t in self.tasks.background_tasks() if t not in tasks]
+        return tasks
+
+    def confirm_quit(self, only_if_busy: bool = False) -> None:
         """A modal confirm before quitting — the canonical message-box pattern.
 
-        With background jobs running or queued it says so, and defaults to
-        Cancel: quitting stops a copy part-way, which is not what a reflexive
-        Enter should do."""
+        ``quit`` always asks. ``quit_app`` — the platform's Cmd-Q,
+        Alt-F4 and close button — asks only when quitting would stop a task,
+        and otherwise quits at once (the state is saved either way).
+
+        With tasks running or queued, in front or in the background, it says
+        so and defaults to Cancel: quitting stops a copy part-way, which is not
+        what a reflexive Enter should do."""
+        if self._quit_confirming:
+            return
+        jobs = self._busy_tasks()
+        if only_if_busy and not jobs:
+            self._quit()
+            return
         self._quit_confirming = True
-        jobs = self.tasks.background_tasks()
         if not jobs:
             def answered(label: str) -> None:
                 self._quit_confirming = False
@@ -6087,13 +6112,13 @@ class XeFMApp:
                 # Let each worker reach its next checkpoint and remove the
                 # file it was half-way through, rather than die mid-write.
                 if not self.tasks.cancel_all(timeout=3.0):
-                    getLogger("Main").warning("A background job did not stop in time; "
+                    getLogger("Main").warning("A job did not stop in time; "
                                               "a partly written file may be left behind")
                 self._quit()
 
         show_message_box(
             self.panel,
-            f"**{n}** background job{'' if n == 1 else 's'} "
+            f"**{n}** job{'' if n == 1 else 's'} "
             f"{'is' if n == 1 else 'are'} still running or queued. Quitting "
             f"stops {'it' if n == 1 else 'them'} part-way.",
             title="Quit XeFM?", icon="warning", buttons=("Quit", "Cancel"),
@@ -11629,6 +11654,14 @@ class XeFMApp:
             # out). GUI emits these; the TUI does not, so it's a GUI-only affordance.
             self.panel.dispatch_event(event)
             self.panel.render()
+            return
+        # quit_app (Cmd-Q, Alt-F4) is the window's close button as a key: it
+        # works over a dialog or a viewer too, so it is answered before any
+        # layer sees the key.
+        if (event.type is EventType.KEY
+                and self.keys.is_action_for_event(event, "quit_app", context=_ctx.FILER)):
+            self.key_sequence.cancel()
+            self._on_quit_request()
             return
         # A modal layer (message box, menu popup) owns events while open: route
         # everything to it and let XeFM's global keymap stand down.

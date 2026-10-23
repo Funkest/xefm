@@ -877,6 +877,10 @@ _DETAILS: dict[str, str] = {
 
 _COMMON_ACTIONS = [
     _a("quit", COMMON, "Quit XeFM — or close the open viewer"),
+    # The platform's way to quit (Cmd-Q, Alt-F4, the close button): from
+    # anywhere — a dialog or a viewer open too — and asking only while a task
+    # runs. ``quit`` always asks, and in a viewer closes the viewer.
+    _a("quit_app", COMMON, "Quit XeFM from anywhere, asking first only while a task is running"),
     _a("help", COMMON, "Show the key bindings for what is on screen"),
     _a("isearch", COMMON, "Incremental search",
        aliases=("search",)),

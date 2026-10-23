@@ -239,6 +239,8 @@ def _native_bindings() -> dict:
         "reveal_in_os": [],                     # Ctrl-R rereads here
         "redraw": [],                           # F5 copies here
         "command_palette": ["Ctrl-K"],
+        # Ctrl-Q always asks. Cmd-Q / Alt-F4 (quit_app) come with the AFX
+        # table's desktop keys, which every preset starts from.
         "quit": ["Ctrl-Q"],
     }
     from xefm.backend_detector import is_desktop_mode
@@ -270,7 +272,6 @@ def _native_bindings() -> dict:
             "find_files": ["Command-F", "Ctrl-F"],
             "toggle_hidden": ["Command-Shift-.", "."],
             "command_palette": ["Command-Shift-P", "Ctrl-K"],
-            "quit": ["Command-Q", "Ctrl-Q"],
         })
     elif sys.platform == "win32":
         keys.update({
@@ -278,7 +279,6 @@ def _native_bindings() -> dict:
             "copy_paths": ["Ctrl-Shift-C", "Ctrl-P"],
             "file_details": ["Alt-ENTER", "Alt-I"],
             "command_palette": ["Ctrl-Shift-P", "Ctrl-K"],
-            "quit": ["Alt-F4", "Ctrl-Q"],
         })
     return keys
 

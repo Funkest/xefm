@@ -177,6 +177,15 @@ Decisions the table encodes:
 - **F5 / F6 copy and move to the other pane, and F3 / F4 / F7 / F8 follow.**
   Finder and Explorer have no two-pane operations; these are the keys every
   two-pane manager uses. So `redraw` loses F5, as in Orthodox.
+- **Two quits.** `Ctrl-Q` is `quit`, which always asks. `Cmd-Q` (macOS app)
+  and `Alt-F4` (Windows app) are `quit_app`, which quits from anywhere and
+  asks only while a task runs. They are not in this table: they are the AFX
+  table's desktop keys, which every preset starts from, so every preset has
+  exactly the platform's key in the desktop app and none in a terminal
+  (closing the terminal window is the terminal's business). They are
+  defaults; `KEY_BINDINGS` still wins. Orthodox keeps Total Commander's
+  `Alt-F4` on `quit`; in the Windows app, where `Alt-F4` is also `quit_app`,
+  `quit_app` is matched first.
 - **Quick view.** On macOS it is Space, Quick Look's key, so marking moves to
   Ctrl-Space, which every backend delivers. Elsewhere it is Alt-P, Explorer's
   preview pane, and Space marks.

@@ -237,13 +237,21 @@ same gap.
 self._quit_shortcut())` once at startup and again on every keymap rebuild:
 
 - **Platform requests** (the Quit item, the Dock, logout, the close button,
-  Windows' `WM_CLOSE`) reach `_on_quit_request`, which dispatches the `quit`
-  action, the same path as the keymap's quit key. `_quit_confirming` keeps a
-  second request from stacking a second confirm.
-- **The Quit item's shortcut** is the keymap's first key for `quit`. It is
-  display-only, like every menu shortcut, so ⌘Q reaches the keymap: it quits
-  where the preset binds `Command-Q` (OS native) and does nothing where it
-  does not (AFX, whose quit key is `Q`).
+  Windows' `WM_CLOSE`) reach `_on_quit_request`, and so does a key bound to
+  `quit_app` (Cmd-Q / Alt-F4 in the desktop app, under every preset).
+  `on_event` checks for that key before any layer sees it, so it works over
+  a dialog or a viewer, as the close button does.
+- `_on_quit_request` asks only while `_busy_tasks()` is non-empty
+  (foreground or background, running or queued), and otherwise goes straight
+  to `_quit`. The `quit` action (`Q`, File ▸ Quit) always asks, and in a
+  viewer closes the viewer.
+- `_quit_confirming` keeps a second request from stacking a second confirm,
+  and `_quitting` keeps `_quit` from running twice. Alt-F4 can arrive both as
+  a key bound to `quit_app` and as `WM_CLOSE`.
+- **The Quit item's shortcut** is the keymap's first key for `quit_app`.
+  It is display-only, like every menu shortcut, so ⌘Q reaches the keymap.
+  Every preset binds `Command-Q` in the macOS app, through the AFX table's
+  desktop keys; `'quit_app': []` in `KEY_BINDINGS` turns it off.
 
 The PuiKit side is documented in PuiKit's `docs/window_management.md`, under
 "Quit requests".
