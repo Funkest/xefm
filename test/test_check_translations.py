@@ -56,6 +56,9 @@ class TestStuckEmphasis:
         assert not ct.stuck_emphasis("- item")
         assert not ct.stuck_emphasis("2 * 3 * 4")
 
+    def test_escaped_stars_are_text(self):
+        assert not ct.stuck_emphasis("| 表示\\* | x |")
+
 
 def test_links_skip_code():
     text = "[a](A.md) `[b](B.md)`\n```\n[c](C.md)\n```\n<a href=\"D.md#x\">d</a>\n"

@@ -147,7 +147,7 @@ def stuck_emphasis(line: str) -> bool:
     no spaces, so ``**[設定](x.md)**を`` stays literal where
     ``**[設定](x.md)** を`` is bold.
     """
-    line = INLINE_CODE.sub("`", line)
+    line = INLINE_CODE.sub("`", line).replace("\\*", "")
     seen: dict[int, int] = {}
     for m in STARS.finditer(line):
         before = line[m.start() - 1] if m.start() else " "
