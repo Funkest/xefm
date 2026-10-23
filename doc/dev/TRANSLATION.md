@@ -75,6 +75,14 @@ A page with no translation gets none of this and stays English.
 - **Links go to translations.** A link in a `.ja.md` points to the other page's
   `.ja.md` when that exists, and to the English page otherwise. Anchors change
   with the headings: `#installation` in English is `#インストール` in Japanese.
+- **`make fix-docs`** does that for you. Translate with every link copied
+  from the English page as it is; `tools/check_translations.py --fix` turns
+  `X.md` into `X.ja.md` wherever the translation exists, maps each `#anchor`
+  to the Japanese heading at the same position, and adds a missing switcher
+  line to either page. That mapping is why a translation keeps its source's
+  headings one for one — same count, same order, same levels. Run it again
+  whenever a page gains its translation, so the pages already translated link
+  to it.
 - **`make check-docs`** (`tools/check_translations.py`) reports pages with no
   translation (a warning until every page is in — `--strict` makes it an
   error), a pair missing its switcher line, links to an English page that has

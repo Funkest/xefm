@@ -1,6 +1,6 @@
 # XeFM Makefile
 
-.PHONY: api-snapshot api-compat check-docs skill-zip skill-references release-skill qa help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config keymap-reset venv clean-venv check-venv install-puikit
+.PHONY: api-snapshot api-compat check-docs fix-docs skill-zip skill-references release-skill qa help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config keymap-reset venv clean-venv check-venv install-puikit
 
 # Python interpreter selection
 # All Python is run through the project virtual environment (.venv). There is no
@@ -142,6 +142,7 @@ help:
 	@echo "                   change to the stable API unless API_VERSION was bumped)"
 	@echo "  api-compat     - Check every package in xefm-extensions against this tree"
 	@echo "  check-docs     - Check the Japanese doc translations (missing, stale, links)"
+	@echo "  fix-docs       - Point translations' links at other translations, then check"
 	@echo "  format         - Format code"
 	@echo ""
 	@echo "Release (one target per artifact; run in this order):"
@@ -341,6 +342,9 @@ api-compat: check-venv
 # doc/dev/TRANSLATION.md.
 check-docs: check-venv
 	$(PYTHON) tools/check_translations.py
+
+fix-docs: check-venv
+	$(PYTHON) tools/check_translations.py --fix
 
 # --- Linux, in Docker --------------------------------------------------------
 #

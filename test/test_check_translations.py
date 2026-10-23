@@ -60,3 +60,48 @@ class TestStuckEmphasis:
 def test_links_skip_code():
     text = "[a](A.md) `[b](B.md)`\n```\n[c](C.md)\n```\n<a href=\"D.md#x\">d</a>\n"
     assert ct.links(text) == ["A.md", "D.md#x"]
+
+
+class TestFix:
+    """``--fix``: links copied from the English page, pointed at translations."""
+
+    def make_repo(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ct, "REPO_ROOT", tmp_path)
+        doc = tmp_path / "doc"
+        doc.mkdir()
+        (tmp_path / "README.md").write_text("# XeFM\n\nSee [A](doc/A.md#setup).\n",
+                                            encoding="utf-8")
+        (tmp_path / "README.ja.md").write_text("# XeFM\n\n[A](doc/A.md#setup) を参照。\n",
+                                               encoding="utf-8")
+        (doc / "A.md").write_text("# A\n\n## Intro\n\n## Setup\n\n[B](B.md#x)\n",
+                                  encoding="utf-8")
+        (doc / "A.ja.md").write_text(
+            "# A\n\n## はじめに\n\n## 準備\n\n[B](B.md#x) と [準備](#setup)、"
+            "`[code](A.md)`、[README](../README.md)\n", encoding="utf-8")
+        (doc / "B.md").write_text("# B\n\n## X\n", encoding="utf-8")
+        return tmp_path
+
+    def test_links_and_anchors_move_to_the_translations(self, tmp_path, monkeypatch):
+        root = self.make_repo(tmp_path, monkeypatch)
+        assert ct.fix() == 0
+        readme = (root / "README.ja.md").read_text(encoding="utf-8")
+        assert readme == ("# XeFM\n\n[English](README.md) \\| 日本語\n\n"
+                          "[A](doc/A.ja.md#準備) を参照。\n")
+        page = (root / "doc" / "A.ja.md").read_text(encoding="utf-8")
+        assert "[English](A.md) \\| 日本語" in page
+        assert "[B](B.md#x)" in page                  # B has no translation
+        assert "[準備](#準備)" in page                 # its own anchor, mapped
+        assert "`[code](A.md)`" in page               # code is left alone
+        assert "[README](../README.ja.md)" in page
+
+    def test_the_english_page_gets_its_switcher_under_the_title(self, tmp_path, monkeypatch):
+        root = self.make_repo(tmp_path, monkeypatch)
+        ct.fix()
+        assert (root / "doc" / "A.md").read_text(encoding="utf-8").startswith(
+            "# A\n\nEnglish \\| [日本語](A.ja.md)\n\n## Intro\n")
+
+    def test_a_heading_mismatch_is_reported_not_guessed(self, tmp_path, monkeypatch):
+        root = self.make_repo(tmp_path, monkeypatch)
+        (root / "doc" / "A.ja.md").write_text("# A\n\n## 準備\n\n[x](#setup)\n",
+                                             encoding="utf-8")
+        assert ct.fix() == 1

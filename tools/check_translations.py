@@ -21,6 +21,11 @@ reports:
   by modification time for a file with uncommitted changes
 
 The exit status is 1 when anything other than a warning was found.
+
+``--fix`` (``make fix-docs``) first does the mechanical part: it points links
+in the translations at the other translations, maps their anchors to the
+Japanese headings, and adds missing switcher lines. A translation therefore
+copies its links from the English page as they are.
 doc/dev/TRANSLATION.md holds the conventions and the glossary.
 """
 
@@ -102,20 +107,28 @@ def slug(heading: str) -> str:
     return text.replace(" ", "-")
 
 
-def anchors(path: Path, cache: dict[Path, set[str]]) -> set[str]:
-    """The anchors a link into ``path`` may use, duplicates numbered as
+def heading_slugs(path: Path) -> list[str]:
+    """The anchors of ``path``'s headings in order, duplicates numbered as
     GitHub numbers them (``name``, ``name-1``, ...)."""
+    found, seen = [], {}
+    for line in prose_lines(path.read_text(encoding="utf-8")):
+        m = HEADING.match(line)
+        if not m:
+            continue
+        base = slug(m.group(2))
+        n = seen.get(base, 0)
+        seen[base] = n + 1
+        found.append(base if n == 0 else f"{base}-{n}")
+    return found
+
+
+def anchors(path: Path, cache: dict[Path, set[str]]) -> set[str]:
+    """The anchors a link into ``path`` may use: its headings' and any
+    explicit ``<a id>``."""
     if path not in cache:
-        found, seen = set(), {}
+        found = set(heading_slugs(path))
         for line in prose_lines(path.read_text(encoding="utf-8")):
             found.update(HTML_ID.findall(line))
-            m = HEADING.match(line)
-            if not m:
-                continue
-            base = slug(m.group(2))
-            n = seen.get(base, 0)
-            seen[base] = n + 1
-            found.add(base if n == 0 else f"{base}-{n}")
         cache[path] = found
     return cache[path]
 
@@ -193,8 +206,7 @@ def check(strict: bool) -> int:
         en_text = en.read_text(encoding="utf-8")
         ja_text = ja.read_text(encoding="utf-8")
 
-        en_line = f"English \\| [日本語]({ja.name})"
-        ja_line = f"[English]({en.name}) \\| 日本語"
+        en_line, ja_line = switcher_lines(en, ja)
         if en_line not in en_text:
             errors.append(f"{rel(en)}: missing the line '{en_line}'")
         if ja_line not in ja_text:
@@ -233,11 +245,107 @@ def check(strict: bool) -> int:
     return 1 if failed else 0
 
 
+def switcher_lines(en: Path, ja: Path) -> tuple[str, str]:
+    """The "English | 日本語" line of each page of a pair."""
+    return f"English \\| [日本語]({ja.name})", f"[English]({en.name}) \\| 日本語"
+
+
+def with_switcher(text: str, line: str) -> str:
+    """``text`` with ``line`` as its own paragraph under the ``#`` title."""
+    lines = text.split("\n")
+    head, rest = (lines[:1], lines[1:]) if lines[0].startswith("# ") else ([], lines)
+    while rest and not rest[0].strip():
+        rest = rest[1:]
+    return "\n".join(head + ([""] if head else []) + [line, ""] + rest)
+
+
+def fix() -> int:
+    """Point the translations' links at the other translations.
+
+    A translation is written with its links copied from the English page;
+    this rewrites ``X.md`` to ``X.ja.md`` wherever that exists, and turns
+    each English ``#anchor`` into the Japanese heading at the same position,
+    so translations must keep their source's headings one for one. It also
+    adds a missing "English | 日本語" line to either page of a pair.
+    """
+    problems = []
+    for ja in [REPO_ROOT / "README.ja.md"] + sorted((REPO_ROOT / "doc").glob("*.ja.md")):
+        en = source_of(ja)
+        if not ja.exists() or not en.exists():
+            continue
+        en_line, ja_line = switcher_lines(en, ja)
+        en_text = en.read_text(encoding="utf-8")
+        if en_line not in en_text:
+            en.write_text(with_switcher(en_text, en_line), encoding="utf-8")
+            print(f"{en.relative_to(REPO_ROOT)}: added the switcher line")
+
+        def map_anchor(source: Path, target: Path, anchor: str) -> str:
+            if not anchor or anchor in anchors(target, {}):
+                return anchor
+            en_slugs, ja_slugs = heading_slugs(source), heading_slugs(target)
+            if anchor in en_slugs and len(en_slugs) == len(ja_slugs):
+                return ja_slugs[en_slugs.index(anchor)]
+            problems.append(f"{ja.relative_to(REPO_ROOT)}: cannot map #{anchor} "
+                            f"into {target.relative_to(REPO_ROOT)}")
+            return anchor
+
+        def retarget(target: str) -> str:
+            if SCHEME.match(target):
+                return target
+            file_part, hashmark, anchor = target.partition("#")
+            if not file_part:
+                return "#" + map_anchor(en, ja, anchor) if anchor else target
+            dest = (ja.parent / file_part).resolve()
+            if not file_part.endswith(".md") or dest == en:
+                return target
+            if is_translation(dest):
+                source, translated, new_file = source_of(dest), dest, file_part
+            elif translation_of(dest).exists():
+                source, translated = dest, translation_of(dest)
+                new_file = file_part[:-3] + ".ja.md"
+            else:
+                return target
+            if not source.exists():
+                return target
+            return new_file + (hashmark + map_anchor(source, translated, anchor) if anchor else "")
+
+        def rewrite(segment: str) -> str:
+            segment = MD_LINK.sub(lambda m: m.group(0)[:m.start(1) - m.start()]
+                                  + retarget(m.group(1)) + ")", segment)
+            return HTML_HREF.sub(lambda m: m.group(0)[:m.start(1) - m.start()]
+                                 + retarget(m.group(1)) + '"', segment)
+
+        text = ja.read_text(encoding="utf-8")
+        out, fenced = [], False
+        for line in text.split("\n"):
+            if FENCE.match(line):
+                fenced = not fenced
+            if fenced or FENCE.match(line) or line == ja_line:
+                out.append(line)
+                continue
+            parts = re.split(r"(`+[^`]*`+)", line)
+            out.append("".join(p if i % 2 else rewrite(p) for i, p in enumerate(parts)))
+        new = "\n".join(out)
+        if ja_line not in new:
+            new = with_switcher(new, ja_line)
+        if new != text:
+            ja.write_text(new, encoding="utf-8")
+            print(f"{ja.relative_to(REPO_ROOT)}: links updated")
+    for line in problems:
+        print(f"error: {line}")
+    return 1 if problems else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--strict", action="store_true",
                         help="treat a page with no translation as an error")
-    return check(parser.parse_args().strict)
+    parser.add_argument("--fix", action="store_true",
+                        help="point links at translations and add switcher lines, then check")
+    args = parser.parse_args()
+    if args.fix and fix():
+        return 1
+    return check(args.strict)
 
 
 if __name__ == "__main__":
