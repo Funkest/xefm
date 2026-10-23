@@ -1,6 +1,6 @@
 # XeFM Makefile
 
-.PHONY: skill-zip skill-references release-skill qa help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config keymap-reset venv clean-venv check-venv install-puikit
+.PHONY: api-snapshot api-compat skill-zip skill-references release-skill qa help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config keymap-reset venv clean-venv check-venv install-puikit
 
 # Python interpreter selection
 # All Python is run through the project virtual environment (.venv). There is no
@@ -138,6 +138,9 @@ help:
 	@echo "  install-config - Copy default config to ~/.xefm/config.py (overwrites existing)"
 	@echo "  keymap-reset   - Forget the chosen keymap preset; the next launch asks again"
 	@echo "  lint           - Run code linting"
+	@echo "  api-snapshot   - Regenerate test/data/api_snapshot.txt (refuses a breaking"
+	@echo "                   change to the stable API unless API_VERSION was bumped)"
+	@echo "  api-compat     - Check every package in xefm-extensions against this tree"
 	@echo "  format         - Format code"
 	@echo ""
 	@echo "Release (one target per artifact; run in this order):"
@@ -320,6 +323,17 @@ test: check-venv
 	@echo "Running XeFM tests..."
 	@$(PYTHON) -m pytest test -v || echo "pytest not available, running individual tests..."
 	@cd test && for test in test_*.py; do echo "Running $$test..."; PYTHONPATH=.. $(PYTHON) "$$test" || exit 1; done
+
+# The public API, held still (#713). test/test_api_snapshot.py fails on any
+# difference from the snapshot; regenerating it is the deliberate step, and is
+# refused for a breaking change to the stable part unless API_VERSION moved.
+# api-compat runs the real extensions' check and tests against this tree,
+# using ../xefm-extensions or a clone in temp/.
+api-snapshot: check-venv
+	PYTHONPATH=. $(PYTHON) tools/api_snapshot.py --write
+
+api-compat: check-venv
+	PYTHONPATH=. $(PYTHON) tools/api_compat.py
 
 # --- Linux, in Docker --------------------------------------------------------
 #

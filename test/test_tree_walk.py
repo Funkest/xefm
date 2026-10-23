@@ -11,11 +11,11 @@ import uuid
 import pytest
 
 from xefm import tree_walk
-from xefm.path import Path
+from xefm.path import Path, listing_concurrency
 
 
 class FakeDir:
-    """A directory answering ``listdir_attrs`` from a nested dict, with a
+    """A directory answering ``_listdir_attrs`` from a nested dict, with a
     delay per listing so overlap is measurable."""
 
     def __init__(self, name, tree, concurrency=1, delay=0.0, log=None):
@@ -25,10 +25,10 @@ class FakeDir:
         self.delay = delay
         self.log = log if log is not None else []
 
-    def listing_concurrency(self):
+    def _listing_concurrency(self):
         return self.concurrency
 
-    def listdir_attrs(self):
+    def _listdir_attrs(self):
         self.log.append(self.name)
         time.sleep(self.delay)
         if self.tree is None:
@@ -101,7 +101,7 @@ def test_cancel_stops_the_parallel_walk():
 
 
 def test_backends_declare_their_concurrency(tmp_path):
-    assert Path(str(tmp_path)).listing_concurrency() == 1
+    assert listing_concurrency(Path(str(tmp_path))) == 1
     from xefm.ssh import SSHPathImpl
     assert SSHPathImpl.LISTING_CONCURRENCY > 1
 

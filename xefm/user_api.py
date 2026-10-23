@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-XeFM in-process customization API — **Preview**.
+XeFM in-process customization API.
 
 ``~/.xefm/config.py`` is an executed Python module, so it can already hold real
 logic. This module is the step that makes it a scripting surface: a config may
@@ -49,14 +49,23 @@ the registries, ``run_guarded``, the names imported from elsewhere such as
 On the objects, the same line runs through the leading underscore:
 ``ctx.pane`` is the API, ``ctx._app`` is not.
 
-Preview status
---------------
+Stable and Preview
+------------------
 
-``API_VERSION`` is ``0``: everything here may change — signatures, config
-variable formats, the set of events, the storage base class — until it reaches
-``1``. A config that uses any of these variables gets one line in the log pane
-saying so at load time; nothing else gates it, and nothing about the rest of the
-config changes.
+``API_VERSION`` is ``1``: what is not Preview is stable, and a breaking change
+to it bumps the number. Stable today are the ``ACTIONS``, ``SORT_KEYS`` and
+``FILTERS`` tables, :class:`EntryInfo`, :class:`PaneApi` and the core of
+:class:`ActionContext` — the panes, ``invoke``, ``run_program``, ``message``,
+``action_names``. Additions to them do not bump it.
+
+Everything else is Preview, marked one API at a time (:mod:`xefm.preview`):
+``open_list``, the prompts (``input`` / ``choose`` / ``confirm`` — whether
+the callback shape is livable is not settled), ``run_task`` and its job and
+outcome, ``show_markdown`` / ``copy_text`` and the Markdown helpers,
+``extension()``, ``EVENT_HOOKS`` and :class:`HookEvent`, and the
+``IMAGE_DECODERS``, ``PATH_SCHEMES``, ``LEXERS`` and ``MENU_ITEMS`` tables.
+A config that uses a Preview table gets one line in the log pane saying so at
+load time; nothing else gates it.
 
 The firewall
 ------------
@@ -102,8 +111,11 @@ from xefm import lexer_registry as _lexers
 from xefm import name_key
 from xefm import path_schemes as _path_schemes
 from xefm import sort_keys as _sort_keys
+from xefm.backend_detector import is_desktop_mode
+from xefm.external_programs import xefm_python, xefm_tool
 from xefm.log_manager import getLogger
 from xefm.path import Path, PathImpl
+from xefm.path_base import UriPathImpl
 from xefm.preview import PREVIEW_APIS as _PREVIEW_APIS, preview
 
 
@@ -130,16 +142,32 @@ __all__ = [
     "TaskJob", "TaskOutcome",
     # building Markdown for ctx.show_markdown
     "md_code_block", "md_escape",
+    # for PROGRAMS and the rest of config.py; also importable, for configs
+    # written before they lived here, from xefm.external_programs and
+    # xefm.backend_detector — those three names only
+    "xefm_tool", "xefm_python", "is_desktop_mode",
 ]
 
 
 #: Bumped only on a breaking change to an API that is not Preview. Each API is
-#: Preview on its own (:data:`PREVIEW_APIS`); while every one of them still is,
-#: as today, this stays ``0``.
-API_VERSION = 0
+#: Preview on its own (:data:`PREVIEW_APIS`); ``0`` was the version in which
+#: every one of them still was, and ``1`` the first with a stable part.
+API_VERSION = 1
 
 #: ``PREVIEW_APIS`` — which APIs are Preview — is set at the foot of this
 #: module, once every ``@preview`` below has run.
+
+#: The keys each table's dict form accepts — the schema the API snapshot fixes
+#: (test/test_api_snapshot.py). A builder reads the ones it uses and ignores a
+#: key not listed, except ``MENU_ITEMS``, which refuses one.
+TABLE_KEYS: dict[str, tuple[str, ...]] = {
+    "ACTIONS": ("func", "context", "description", "override"),
+    "SORT_KEYS": ("key", "label", "explain", "hotkey", "override"),
+    "FILTERS": ("match", "pattern", "label"),
+    "IMAGE_DECODERS": ("open", "label"),
+    "PATH_SCHEMES": ("class", "override"),
+    "MENU_ITEMS": ("menus", "label", "when"),
+}
 
 #: The menus ``MENU_ITEMS`` can put an action in: the menu bar's File menu, and
 #: the context menu of a file-list row.
@@ -167,7 +195,6 @@ EVENTS: dict[str, str] = {
 # Entries
 # --------------------------------------------------------------------------- #
 
-@preview
 class EntryInfo:
     """One item in a pane — a file, a directory or a symlink.
 
@@ -227,7 +254,7 @@ class EntryInfo:
         return name_key.nfc(self.path.stem)
 
     @classmethod
-    def from_attrs(cls, path, attrs: Mapping[str, Any]):
+    def _from_attrs(cls, path, attrs: Mapping[str, Any]):
         """An entry whose ``size`` and ``mtime`` come from a listing's attribute
         record instead of a fresh ``stat``.
 
@@ -278,7 +305,6 @@ class EntryInfo:
 # Panes
 # --------------------------------------------------------------------------- #
 
-@preview
 class PaneApi:
     """One file pane, at the model level.
 
@@ -340,6 +366,7 @@ class PaneApi:
         """Re-read the directory. Also asynchronous — see :meth:`cd`."""
         self._app._relist(self._pane)
 
+    @preview
     def open_list(self, paths, *, title: str) -> None:
         """Open ``paths`` in this pane as a flat list headed ``title``, in place
         of a directory — the door a search of your own comes through.
@@ -681,30 +708,25 @@ class ActionContext:
     # --- panes -------------------------------------------------------------- #
 
     @property
-    @preview
     def pane(self) -> PaneApi:
         """The active pane — the one the cursor is in."""
         return PaneApi(self._app, self._app.pm.active_pane)
 
     @property
-    @preview
     def other(self) -> PaneApi:
         """The inactive pane."""
         return PaneApi(self._app, "right" if self._app.pm.active_pane == "left" else "left")
 
     @property
-    @preview
     def left(self) -> PaneApi:
         return PaneApi(self._app, "left")
 
     @property
-    @preview
     def right(self) -> PaneApi:
         return PaneApi(self._app, "right")
 
     # --- running other actions ---------------------------------------------- #
 
-    @preview
     def invoke(self, action_name: str) -> None:
         """Run another action by name, in the file-list context.
 
@@ -717,7 +739,6 @@ class ActionContext:
 
     # --- running external programs ------------------------------------------ #
 
-    @preview
     def run_program(self, command, *, terminal: bool = False,
                     cwd: str | None = None,
                     env: Mapping[str, str] | None = None) -> int | None:
@@ -813,7 +834,6 @@ class ActionContext:
 
     # --- talking to the user ------------------------------------------------ #
 
-    @preview
     def message(self, text: str) -> None:
         """Write one line to the log pane."""
         self._app.log_info(str(text))
@@ -918,10 +938,9 @@ class ActionContext:
     def api_version(self) -> int:
         return API_VERSION
 
-    @preview
-    def action_names(self, context: str = _actions.FILER) -> list[str]:
-        """Every action name ``context`` understands — what ``invoke()`` accepts."""
-        return _actions.registry.names(context)
+    def action_names(self) -> list[str]:
+        """Every action name ``invoke()`` accepts — the file list's."""
+        return _actions.registry.names(_actions.FILER)
 
 
 def _guard(what: str, func: Callable | None, *, arity: int) -> Callable | None:
@@ -1031,7 +1050,25 @@ def menu_items(menu: str) -> list[MenuEntry]:
     return [entry for entry in menu_entries if menu in entry.menus]
 
 
-def load_user_entries(config, registry=None) -> tuple[list[str], int, int, int, int, int, int, int]:
+class LoadResult(NamedTuple):
+    """What :func:`load_user_entries` loaded: the warnings, then how many
+    entries of each table. ``scheme_overrides`` counts the ``PATH_SCHEMES``
+    entries that replace a built-in scheme — the Preview part of a table that
+    is otherwise stable."""
+
+    warnings: list
+    actions: int
+    hooks: int
+    sort_keys: int
+    filters: int
+    image_decoders: int
+    path_schemes: int
+    lexers: int
+    menu_items: int = 0
+    scheme_overrides: int = 0
+
+
+def load_user_entries(config, registry=None) -> LoadResult:
     """Install a config's ``ACTIONS``, ``EVENT_HOOKS``, ``SORT_KEYS``,
     ``FILTERS``, ``IMAGE_DECODERS``, ``PATH_SCHEMES`` and ``LEXERS``.
 
@@ -1039,10 +1076,9 @@ def load_user_entries(config, registry=None) -> tuple[list[str], int, int, int, 
     reload path: edit the config, reload, and the new definitions replace the old
     ones with no restart and no idempotence contract on the config's part.
 
-    Returns ``(warnings, action_count, hook_count, sort_key_count,
-    filter_count, image_decoder_count, path_scheme_count, lexer_count)``. Warnings are the same kind
-    of non-fatal, report-them-all diagnostics the rest of ``validate_config``
-    produces; a warned entry is skipped, never fatal.
+    Returns a :class:`LoadResult`. Its warnings are the same kind of non-fatal,
+    report-them-all diagnostics the rest of ``validate_config`` produces; a
+    warned entry is skipped, never fatal.
     """
     return _process_user_entries(config, registry, apply=True)
 
@@ -1053,7 +1089,7 @@ def validate_user_entries(config, registry=None) -> list[str]:
     return _process_user_entries(config, registry, apply=False)[0]
 
 
-def _process_user_entries(config, registry, apply: bool) -> tuple[list[str], int, int, int, int, int, int, int]:
+def _process_user_entries(config, registry, apply: bool) -> LoadResult:
     registry = registry if registry is not None else _actions.registry
     if apply:
         registry.unregister_source("user")
@@ -1153,12 +1189,22 @@ def _process_user_entries(config, registry, apply: bool) -> tuple[list[str], int
                                      label=entry["label"])
         decoder_count += 1
 
-    scheme_count = 0
+    scheme_count = scheme_overrides = 0
     for name, spec in _items(getattr(config, "PATH_SCHEMES", None), "PATH_SCHEMES", warnings):
         impl, problem = _build_path_scheme(name, spec)
         if problem:
             warnings.append(problem)
             continue
+        if not issubclass(impl, UriPathImpl):
+            # Loaded anyway: it worked yesterday, and refusing it would take the
+            # user's folder away over a promise, not a fault.
+            warnings.append(
+                f"PATH_SCHEMES['{name}'] is {impl.__name__}, which does not "
+                f"build on xefm.path_base.ReadOnlyPathImpl or UriPathImpl — "
+                f"subclassing PathImpl directly is not supported and breaks "
+                f"whenever XeFM's storage interface grows")
+        if name in _path_schemes.schemes("builtin"):
+            scheme_overrides += 1
         if apply:
             _path_schemes.register(name, impl, source="user")
         scheme_count += 1
@@ -1189,6 +1235,7 @@ def _process_user_entries(config, registry, apply: bool) -> tuple[list[str], int
     # table instead.
     table = getattr(config, "ACTIONS", None)
     own = set(table) if isinstance(table, dict) and not apply else set()
+    menu_count = 0
     for name, spec in _items(getattr(config, "MENU_ITEMS", None), "MENU_ITEMS", warnings):
         entry, problem = _build_menu_entry(name, spec, registry, own)
         if problem:
@@ -1196,9 +1243,11 @@ def _process_user_entries(config, registry, apply: bool) -> tuple[list[str], int
             continue
         if apply:
             menu_entries.append(entry)
+        menu_count += 1
 
-    return (warnings, count, hook_count, sort_count, filter_count,
-            decoder_count, scheme_count, lexer_count)
+    return LoadResult(warnings, count, hook_count, sort_count, filter_count,
+                      decoder_count, scheme_count, lexer_count, menu_count,
+                      scheme_overrides)
 
 
 def _items(value, label: str, warnings: list[str]):
@@ -1226,10 +1275,11 @@ def _build_menu_entry(name, spec, registry, own: set) -> tuple[MenuEntry | None,
     if name not in own and registry.resolve(_actions.FILER, name) is None:
         return None, (f"MENU_ITEMS['{name}'] names no action — define it in "
                       f"ACTIONS, or name a built-in one")
-    unknown = sorted(set(spec) - {"menus", "label", "when"})
+    unknown = sorted(set(spec) - set(TABLE_KEYS["MENU_ITEMS"]))
     if unknown:
         return None, (f"MENU_ITEMS['{name}'] has unknown keys "
-                      f"{', '.join(unknown)} — known: label, menus, when")
+                      f"{', '.join(unknown)} — known: "
+                      f"{', '.join(sorted(TABLE_KEYS['MENU_ITEMS']))}")
     menus = spec.get("menus")
     if isinstance(menus, str):
         menus = [menus]
@@ -1451,7 +1501,7 @@ def _build_path_scheme(name, spec) -> tuple[type | None, str | None]:
 
     override = _override_requested(spec)
     if isinstance(spec, dict):
-        spec = spec.get("class", spec.get("impl"))
+        spec = spec.get("class")
 
     if not isinstance(spec, type) or not issubclass(spec, PathImpl):
         return None, (f"PATH_SCHEMES['{name}'] must be a PathImpl subclass, or "
@@ -1485,36 +1535,30 @@ def _build_path_scheme(name, spec) -> tuple[type | None, str | None]:
     return spec, None
 
 
-def preview_notice(action_count: int, hook_count: int,
-                   sort_key_count: int = 0, filter_count: int = 0,
-                   image_decoder_count: int = 0,
-                   path_scheme_count: int = 0,
-                   lexer_count: int = 0) -> str | None:
-    """The one line a config using this API gets in the log pane, or ``None``
-    when it uses none of it."""
-    if not any((action_count, hook_count, sort_key_count, filter_count,
-                image_decoder_count, path_scheme_count, lexer_count)):
+def preview_notice(*, hooks: int = 0, image_decoders: int = 0,
+                   lexers: int = 0, menu_items: int = 0,
+                   scheme_overrides: int = 0) -> str | None:
+    """The one line a config gets in the log pane when it uses a Preview
+    table, or ``None`` when it uses none. ``ACTIONS``, ``SORT_KEYS``,
+    ``FILTERS`` and ``PATH_SCHEMES`` (short of replacing a built-in scheme)
+    are stable and take no part: a config that keeps to them has nothing to be
+    told."""
+    parts = [f"{count} {label}" for count, label in (
+        (hooks, "event hook(s)"),
+        (image_decoders, "image decoder(s)"),
+        (lexers, "lexer(s)"),
+        (menu_items, "menu item(s)"),
+        (scheme_overrides, "built-in scheme override(s)")) if count]
+    if not parts:
         return None
-    parts = [f"{action_count} action(s)", f"{hook_count} event hook(s)"]
-    if sort_key_count:
-        parts.append(f"{sort_key_count} sort key(s)")
-    if filter_count:
-        parts.append(f"{filter_count} filter(s)")
-    if image_decoder_count:
-        parts.append(f"{image_decoder_count} image decoder(s)")
-    if path_scheme_count:
-        parts.append(f"{path_scheme_count} path scheme(s)")
-    if lexer_count:
-        parts.append(f"{lexer_count} lexer(s)")
-    return (f"Customization API (Preview, API_VERSION {API_VERSION}): "
-            f"{', '.join(parts)} loaded — this API may change without notice.")
+    return (f"Customization API {API_VERSION}: {', '.join(parts)} loaded from "
+            f"Preview tables — these may change in any release.")
 
 
 #: The names of the APIs that are Preview — free to change in any release —
 #: such as ``xefm.user_api.ActionContext.run_task``, ``config.MENU_ITEMS`` or
 #: ``manifest.contributes.menus``. A class's entry covers its members. Each
 #: Preview function, method and class also opens its docstring saying so. Set
-#: last, so every ``@preview`` in this module is in it; ``xefm.path_base`` is
-#: imported first for its own.
-import xefm.path_base  # noqa: E402,F401 — registers its @preview classes
+#: last, so every ``@preview`` in this module is in it; ``xefm.path_base``,
+#: imported at the top, has registered its own by then.
 PREVIEW_APIS = frozenset(_PREVIEW_APIS)

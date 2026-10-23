@@ -194,7 +194,7 @@ written.
 ## From your own config
 
 A config action can open a list the same way, with
-[`pane.open_list()`](CUSTOMIZATION_FEATURE.md#opening-your-own-list-of-files) —
+[`pane.open_list()`](CUSTOMIZATION_FEATURE.md#opening-your-own-list-of-files-preview) —
 for a search written in Python. Unlike **Open List → From Command**, the
 action runs on the UI thread, so keep anything slow out of it.
 

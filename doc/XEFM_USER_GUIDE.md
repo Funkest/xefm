@@ -847,18 +847,18 @@ For detailed information about specific features, see these dedicated guides:
 ### Configuration and Customization
 - [Configuration Feature](CONFIGURATION_FEATURE.md) - Complete configuration reference and customization guide
 - [Key Bindings Feature](KEY_BINDINGS_FEATURE.md) - Customizable keyboard shortcuts
-- [Customization (Preview)](CUSTOMIZATION_FEATURE.md) - Rebind viewer keys, bind keys to your own Python functions, run functions on events
+- [Customization](CUSTOMIZATION_FEATURE.md) - Rebind viewer keys, bind keys to your own Python functions, run functions on events
 - [File Associations](FILE_ASSOCIATIONS_FEATURE.md) - Which program opens, views and edits each file type
 - [Extra Python Libraries](PYTHON_PACKAGES_FEATURE.md) - Libraries your `config.py` or extensions need, from `~/.xefm/requirements.txt`
 - [Logging](LOGGING_FEATURE.md) - The log pane and log files
 
 ### Integration and Extensions
-- [Extension Packages (Preview)](EXTENSIONS_FEATURE.md) - Install, upgrade and write packages that add actions, themes, sort orders, syntax highlighting and more; the official ones live in [crftwr/xefm-extensions](https://github.com/crftwr/xefm-extensions), others on the [wiki](https://github.com/crftwr/xefm/wiki/Extensions)
+- [Extension Packages](EXTENSIONS_FEATURE.md) - Install, upgrade and write packages that add actions, themes, sort orders, syntax highlighting and more; the official ones live in [crftwr/xefm-extensions](https://github.com/crftwr/xefm-extensions), others on the [wiki](https://github.com/crftwr/xefm/wiki/Extensions)
 - [The XeFM Skill for AI Agents](AGENT_SKILL_FEATURE.md) - Let an AI coding agent edit your configuration and write extensions
 - [Trying XeFM in a Throwaway Home](TRY_FEATURE.md) - `xefm try`: run XeFM in a temporary home, leaving your own `~/.xefm` untouched
 - [External Programs Feature](EXTERNAL_PROGRAMS_FEATURE.md) - Custom program integration (incl. the VSCode recipe)
 - [External Terminal](EXTERNAL_TERMINAL_FEATURE.md) - The terminal window the desktop app opens for the subshell and terminal programs
-- [Virtual Folders (Preview)](VIRTUAL_FOLDERS_FEATURE.md) - Browse something that is not a directory - a registry, a database, an API - as if it were one
+- [Virtual Folders](VIRTUAL_FOLDERS_FEATURE.md) - Browse something that is not a directory - a registry, a database, an API - as if it were one
 
 ---
 

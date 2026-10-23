@@ -208,10 +208,10 @@ class TestFileMonitorManagerLifecycle(unittest.TestCase):
         """A XeFM Path whose scheme is not 'file' disables monitoring (issue #181).
 
         This is the real-world case: an S3 pane holds a xefm.path.Path whose
-        str() is 's3://bucket/', and detection must key off get_scheme() rather
+        str() is 's3://bucket/', and detection must key off its scheme rather
         than fragile string prefixes."""
         remote_path = Mock()
-        remote_path.get_scheme.return_value = "s3"
+        remote_path.scheme = "s3"
         remote_path.__str__ = Mock(return_value="s3://bucket/")
         mode = self.manager._detect_monitoring_mode(remote_path)
         self.assertEqual(mode, "disabled")
@@ -223,7 +223,7 @@ class TestFileMonitorManagerLifecycle(unittest.TestCase):
         [Errno 2] on 's3://bucket/'. Detection now disables monitoring for the
         pane without creating an observer or accumulating error/retry counts."""
         remote_path = Mock()
-        remote_path.get_scheme.return_value = "s3"
+        remote_path.scheme = "s3"
         remote_path.__str__ = Mock(return_value="s3://bucket/")
 
         self.manager._start_pane_monitoring('left', remote_path)

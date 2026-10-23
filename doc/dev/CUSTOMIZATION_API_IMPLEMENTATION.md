@@ -1,7 +1,8 @@
 # Customization API — Implementation
 
 Implements steps 1–3 of [`CUSTOMIZATION_API_DESIGN.md`](CUSTOMIZATION_API_DESIGN.md),
-shipped as a **Preview**: the action registry with contexts, the `ACTIONS`
+shipped first as a Preview, its core declared stable by `API_VERSION` 1 (#713):
+the action registry with contexts, the `ACTIONS`
 config variable with its invocation-time façade, and `EVENT_HOOKS`. Step 4
 (exposed registries — `VIEWER_RENDERERS` and friends) is not implemented.
 
@@ -525,47 +526,51 @@ Four, all deliberate:
 
 ---
 
-## 8. Preview status
+## 8. Stable and Preview
 
 Preview is per API, not per module (#632). `xefm/preview.py` holds the
 `@preview` decorator and the registry: a marked function, method, property
 getter or class is recorded by its qualified name and its docstring opens with
-"Preview — may change in any release."; a `config.py` table (`config.ACTIONS`)
+"Preview — may change in any release."; a `config.py` table (`config.MENU_ITEMS`)
 or a manifest section (`manifest.contributes.menus`) is listed by name there,
 having no object to decorate. A class's entry covers its members, which is why
-`ActionContext` itself is not marked but each of its members is — so one can be
-declared stable (`api_version` already is) while `run_task` stays Preview. The
-set is published as `user_api.PREVIEW_APIS`, frozen at the foot of the module
-once every decorator has run (`xefm.path_base` is imported there for its own).
-`API_VERSION` promises only what is not in it, and stays `0` while everything
-is. The module-wide `PREVIEW = True` it replaced could not say "this part is
-stable, that part is not"; marking every API now means stabilizing one later is
-deleting its mark, with no change of meaning in between.
+`ActionContext` itself is not marked but its Preview members are. The set is
+published as `user_api.PREVIEW_APIS`, frozen at the foot of the module once
+every decorator has run (`xefm.path_base`, imported at the top, has added its
+own by then).
 
-`test_user_task_api.py` holds the other half: every public name is either
-Preview or in the test's `STABLE` set, so a new API has to be one or the other
-on purpose. `xefm ext check` does not warn on Preview use yet — with almost
-everything Preview, every package would carry the warning and it would say
-nothing; it becomes worth emitting once the stable part is real.
+`API_VERSION` 1 (#713) declared the first stable part: `ACTIONS`, `SORT_KEYS`,
+`FILTERS` and `PATH_SCHEMES`, `EntryInfo`, `PaneApi` but `open_list`, and the
+core of `ActionContext`. What stayed Preview, and why, is in
+[`STABLE_API_PLAN.md`](STABLE_API_PLAN.md) §1; the questions this section used to
+list as standing between Preview and 1 — viewer contexts, the callback-shaped
+prompts, `directory_changed` on virtual panes — are why the prompts and
+`EVENT_HOOKS` are still Preview. Viewer contexts would be an addition to
+`ACTIONS`, so they did not hold it back.
 
-The log notice is unchanged: a config using any of the tables gets one line in
-the log pane at load and at every reload —
+Three things keep the split honest:
+
+- **The API snapshot** (`test/data/api_snapshot.txt`, `tools/api_snapshot.py`,
+  `test/test_api_snapshot.py`) lists every public name with its status and
+  signature, and fails on any difference. Regenerating it refuses a breaking
+  change to the stable part unless `API_VERSION` moved. It replaced the
+  `STABLE` set `test_user_task_api.py` used to keep.
+- **The contract tests** (`test/test_stable_api_contract.py`) state what the
+  stable APIs mean; changing an expectation there is a breaking change.
+- **Preview use is told to the author.** `xefm ext check` lists it as
+  `preview` findings (`extensions.preview_uses`), never errors unless
+  `--stable-only`; at run time `@preview` wraps functions and methods and
+  `preview.record_use` logs the first call from outside XeFM, naming the
+  extension or `config.py`.
+
+The log notice now counts only the Preview tables —
 
 ```
-Customization API (Preview, API_VERSION 0): 2 action(s), 1 event hook(s) loaded
-— this API may change without notice.
+Customization API 1: 1 event hook(s), 2 menu item(s) loaded from Preview tables
+— these may change in any release.
 ```
 
-`preview_notice()` returns `None` when every count is zero, so a config that
-does not use the API says nothing; the registries that landed later add their own
-clause (`3 sort key(s)`, `2 filter(s)`) only when a config defines any.
-
-Reaching `1` means committing to `ActionContext`, `PaneApi`, `EntryInfo` and the
-config variable formats. Before that, the questions worth settling with real
-use: whether user functions should be allowed in viewer contexts and what a
-per-view API looks like; whether the callback-shaped prompts are livable or want
-a different idiom; whether `directory_changed` should also fire on entering and
-leaving a search-results (virtual) pane.
+— and says nothing for a config that keeps to the stable ones.
 
 ---
 
@@ -613,7 +618,7 @@ threading rule always said had to be made with the first registry rather than
 after: sorting *is* the slow per-entry work, so it is the one thing that cannot
 be pinned to the UI thread.
 
-**`EntryInfo.from_attrs` seeds size and mtime** from the listing's own attribute
+**`EntryInfo._from_attrs` seeds size and mtime** from the listing's own attribute
 record. Without it a key reading `entry.size` would `stat` once per entry — 10,000
 round trips on a network mount, for information the listing already collected,
 behind an ordering that needs none.

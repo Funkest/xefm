@@ -12,7 +12,7 @@ one label stand for whichever the backend happened to report. Where a backend
 cannot report an allocation — SSH, S3, an archive, any Windows path — the walk
 says so instead of summing zeros; see :func:`reports_allocation`.
 
-The walk is storage-agnostic: it descends via ``Path.listdir_attrs()``, one
+The walk is storage-agnostic: it descends via :func:`xefm.path.listdir_attrs`, one
 bulk call per directory (a bulk syscall locally, a single request over SSH),
 so no per-entry ``stat`` round trips happen on any backend.
 
@@ -28,6 +28,7 @@ from typing import Sequence
 
 from xefm.log_manager import getLogger
 from xefm import dir_scan
+from xefm.path import listdir_attrs
 
 logger = getLogger("DiskUsage")
 
@@ -166,7 +167,7 @@ class UsageScan:
                 return
             directory = stack.pop()
             try:
-                entries = directory.listdir_attrs()
+                entries = listdir_attrs(directory)
             except Exception:
                 totals.errors += 1
                 continue

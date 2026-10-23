@@ -40,14 +40,14 @@ class RegistryPathImpl(ReadOnlyPathImpl):
     READ_ONLY_MESSAGE = 'the registry is edited with regedit'
 
     def exists(self):
-        return self._key in TREE
+        return self.key in TREE
 
     def is_dir(self):
-        return self._key in TREE
+        return self.key in TREE
 
     def iterdir(self):
-        for name in TREE.get(self._key, []):
-            yield self._child(name)
+        for name in TREE.get(self.key, []):
+            yield self.child(name)
 
     def stat(self):
         return UriStatResult(is_dir=self.is_dir())
@@ -85,7 +85,7 @@ def clean_schemes():
 def load(**attrs):
     """``(warnings, path_scheme_count)`` for one config."""
     result = user_api.load_user_entries(config_with(**attrs))
-    return result[0], result[6]
+    return result.warnings, result.path_schemes
 
 
 # --------------------------------------------------------------------------- #
@@ -105,7 +105,7 @@ def test_a_registered_scheme_is_browsable(clean_schemes):
     assert sorted(str(c) for c in branch.iterdir()) == [
         'reg://HKEY_CURRENT_USER/Console', 'reg://HKEY_CURRENT_USER/Software']
     assert str(branch.parent) == 'reg://'
-    assert branch.get_scheme() == 'reg'
+    assert branch.scheme == 'reg'
     assert branch.is_remote()
 
 
@@ -155,9 +155,10 @@ def test_no_path_schemes_at_all_is_not_a_problem(clean_schemes):
     assert count == 0
 
 
-def test_the_preview_notice_counts_them(clean_schemes):
-    notice = user_api.preview_notice(0, 0, 0, 0, 0, 2)
-    assert '2 path scheme(s)' in notice
+def test_path_schemes_are_stable_but_replacing_a_builtin_is_preview(clean_schemes):
+    assert user_api.preview_notice() is None
+    notice = user_api.preview_notice(scheme_overrides=1)
+    assert '1 built-in scheme override(s)' in notice
     assert 'Preview' in notice
 
 
@@ -184,7 +185,7 @@ def test_a_bad_entry_is_one_warning(clean_schemes, scheme, spec, expected):
 
 
 def test_a_class_registered_under_the_wrong_scheme_is_refused(clean_schemes):
-    """Its ``_root_prefix`` would build ``reg://`` paths while the registry
+    """Its ``root_prefix`` would build ``reg://`` paths while the registry
     answers to ``hive://``, so its own ``parent`` would leave the folder."""
     RegistryPathImpl.SCHEME = 'reg'
     warnings, count = load(PATH_SCHEMES={'hive': RegistryPathImpl})
@@ -200,6 +201,35 @@ def test_a_builtin_can_be_replaced_on_purpose(clean_schemes):
     assert warnings == []
     assert count == 1
     assert isinstance(Path('s3://bucket/key')._impl, MyS3)
+
+
+def test_replacing_a_builtin_is_counted_as_the_preview_part(clean_schemes):
+    class MyS3(RegistryPathImpl):
+        SCHEME = 's3'
+
+    result = user_api.load_user_entries(config_with(
+        PATH_SCHEMES={'s3': {'class': MyS3, 'override': True},
+                      'reg': RegistryPathImpl}))
+    assert (result.path_schemes, result.scheme_overrides) == (2, 1)
+
+
+def test_the_class_goes_under_class_not_impl(clean_schemes):
+    warnings, count = load(PATH_SCHEMES={'reg': {'impl': RegistryPathImpl}})
+    assert count == 0
+    assert "must be a PathImpl subclass, or a dict with a 'class' key" in warnings[0]
+
+
+def test_subclassing_pathimpl_directly_loads_with_a_warning(clean_schemes):
+    from xefm.path import LocalPathImpl
+
+    class Direct(LocalPathImpl):
+        SCHEME = 'direct'
+
+    warnings, count = load(PATH_SCHEMES={'direct': Direct})
+    assert count == 1
+    assert len(warnings) == 1
+    assert "subclassing PathImpl directly is not supported" in warnings[0]
+    assert path_schemes.is_uri('direct://x')
 
 
 def test_one_bad_entry_does_not_take_the_good_one_with_it(clean_schemes):

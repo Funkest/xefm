@@ -70,7 +70,7 @@ from `ACTIONS` in `config.py`. While both define it, `config.py` wins.
 [extension]
 id = "hello-xefm"                   # required
 version = "0.1.0"                   # required
-api_version = 0                     # required: the XeFM API written against (0 = Preview)
+api_version = 1                     # required: the XeFM API written against
 name = "Hello"                      # optional, shown to the user
 description = "Says hello"          # optional
 min_xefm = "1.7.0"                  # optional: the oldest XeFM it runs on
@@ -163,11 +163,13 @@ modules, and from each only the names in its `__all__`:
 
 - `xefm.user_api.__all__` — `API_VERSION`, `PREVIEW_APIS`,
   `ActionContext`, `PaneApi`, `EntryInfo`, `HookEvent`, `extension`,
-  `TaskJob`, `TaskOutcome`, `md_code_block`, `md_escape`
-- `xefm.path_base.__all__` — `ReadOnlyPathImpl`, `UriStatResult`
+  `TaskJob`, `TaskOutcome`, `md_code_block`, `md_escape`, `xefm_tool`,
+  `xefm_python`, `is_desktop_mode`
+- `xefm.path_base.__all__` — `ReadOnlyPathImpl`, `UriPathImpl`,
+  `UriStatResult`
 
 Anything else those modules happen to contain (`run_guarded`,
-`load_user_entries`, `hooks`, `Path`, `UriPathImpl`, …) is XeFM's own, however
+`load_user_entries`, `hooks`, `Path`, `UnsupportedPathImpl`, …) is XeFM's own, however
 public its name looks. On the objects you are handed, the line is the leading
 underscore: `ctx.pane` is the API, `ctx._app` is not. To see the lists in the
 installed XeFM: `python -c "import xefm.user_api as u, xefm.path_base as p;
@@ -178,9 +180,15 @@ print(u.__all__, p.__all__)"`.
 any release.", and is named in `xefm.user_api.PREVIEW_APIS` — code as
 `xefm.user_api.ActionContext.run_task`, a `config.py` table as
 `config.MENU_ITEMS`, a manifest section as `manifest.contributes.menus`; a
-class's entry covers its members. `API_VERSION` promises only what is not in
-it. Today almost everything is Preview, so use it, but tell the user when the
-package rests on Preview APIs, and set `api_version` and `min_xefm` honestly.
+class's entry covers its members. `API_VERSION` (1) promises only what is not
+in it. The stable part: `ACTIONS`/`SORT_KEYS`/`FILTERS`/`PATH_SCHEMES`
+(their manifest sections, and `key_suggestions`), `EntryInfo`, `PaneApi`
+except `open_list`, and `ctx.pane`/`other`/`left`/`right`, `invoke`,
+`run_program`, `message`, `action_names`, `api_version`. The names below say
+"(Preview)" where they are not. Preview is fine to use, but `xefm ext check`
+lists every Preview use as a `preview:` line — **relay those lines to the
+user**, so they know which parts of the package may need updating after an
+XeFM release — and set `api_version` and `min_xefm` honestly.
 
 `xefm ext check` enforces this on your code, and each error names what to use
 instead:
@@ -193,6 +201,11 @@ instead:
   by `from … import` or as an attribute (`user_api.run_guarded`).
 - **warning** — `print()`: it never reaches the user.
 - **warning** — touching `sys.path` (see *Dependencies*).
+- **preview** — each use of a Preview API: a manifest section, a name
+  imported from the two modules, a Preview `ctx` / `ctx.pane` member, a
+  Preview backend member. Not a fault — a package with only `preview` lines
+  installs and loads — but `xefm ext check --stable-only` turns them into
+  errors, for a package that means to stay on the stable part.
 
 Vendored code under `_vendor/` is not checked.
 
@@ -203,32 +216,33 @@ The public names:
 - `ctx.run_program(command, *, terminal=False, cwd=None, env=None)` — run an
   external program; `terminal=True` hands it the terminal (TUI) or opens a
   terminal window (desktop)
-- `ctx.run_task(title, work, *, on_done=None, read_only=False)` — run
+- `ctx.run_task(title, work, *, on_done=None, read_only=False)` (Preview) — run
   `work(job)` on a worker thread behind XeFM's progress dialog (Cancel, Run in
   background); see *Long work* below
 - `ctx.message(text)` — one line in the log pane (XeFM's "log"); call it
   once per line rather than passing a string with newlines
-- `ctx.show_markdown(title, source)` — a scrollable dialog showing Markdown;
+- `ctx.show_markdown(title, source)` (Preview) — a scrollable dialog showing Markdown;
   each fenced code block gets a Copy button, and the text is selectable. The
   way to show a result
-- `ctx.copy_text(text)` — put text on the clipboard without showing anything
-- `md_code_block(text, lang="")` and `md_escape(text)` (import them from
+- `ctx.copy_text(text)` (Preview) — put text on the clipboard without showing anything
+- `md_code_block(text, lang="")` and `md_escape(text)` (Preview; import them from
   `xefm.user_api`) — build that Markdown safely: a code block whose fence no
   line of `text` can close, and a file name escaped for prose
 - `ctx.input(prompt, default="", *, title="", on_accept=None, on_cancel=None)`
-- `ctx.choose(title, items, *, type="choice", on_result=None)` — `type` is
+  (Preview)
+- `ctx.choose(title, items, *, type="choice", on_result=None)` (Preview) — `type` is
   `"choice"` or `"filter"`; `on_result` gets the index or `None`
-- `ctx.confirm(prompt, *, title="Confirm", on_result=None)` — `on_result` gets
+- `ctx.confirm(prompt, *, title="Confirm", on_result=None)` (Preview) — `on_result` gets
   `True`/`False`
 - `ctx.api_version`, `ctx.action_names()`
-- `extension(__name__)` — this package's handle (below); import it from
+- `extension(__name__)` (Preview) — this package's handle (below); import it from
   `xefm.user_api`
 
 `PaneApi` (`ctx.pane`):
 
 - `name` (`"left"`/`"right"`), `is_active`, `activate()`
 - `path`, `cd(path, focus_name=None)`, `refresh()`
-- `open_list(paths, *, title)` — show a list of paths as a virtual folder
+- `open_list(paths, *, title)` (Preview) — show a list of paths as a virtual folder
 - `entries` — every listed `EntryInfo`, in the pane's order (a property)
 - `focused` — the `EntryInfo` under the cursor (a property). `None` in an
   empty directory, and it can be the `..` entry: skip an entry named `..`

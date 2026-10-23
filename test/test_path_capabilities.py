@@ -96,10 +96,10 @@ class TestDeclaredCapabilities(unittest.TestCase):
         self.assertFalse(Path('s3://bucket/key').supports(''))
 
     def test_scheme_and_remoteness_come_back_through_the_methods(self):
-        self.assertEqual(Path('/tmp/test').get_scheme(), 'file')
+        self.assertEqual(Path('/tmp/test').scheme, 'file')
         self.assertFalse(Path('/tmp/test').is_remote())
         s3 = Path('s3://bucket/key')
-        self.assertEqual(s3.get_scheme(), 's3')
+        self.assertEqual(s3.scheme, 's3')
         self.assertTrue(s3.is_remote())
 
     def test_archive_still_decides_remoteness_per_path(self):
@@ -171,7 +171,7 @@ class TestTheSurfaceThatWasPublished(unittest.TestCase):
                 self.assertFalse(getattr(method, '__isabstractmethod__', False))
 
     def test_the_default_title_is_the_path_itself(self):
-        self.assertEqual(Path('s3://bucket/key').get_display_title(),
+        self.assertEqual(Path('s3://bucket/key')._impl.get_display_title(),
                          's3://bucket/key')
 
 

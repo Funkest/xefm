@@ -22,7 +22,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
 from xefm import dir_scan  # noqa: E402
-from xefm.path import Path, attrs_via_path  # noqa: E402
+from xefm.path import Path, attrs_via_path, listdir_attrs  # noqa: E402
 
 
 def _reference(directory, name):
@@ -142,7 +142,7 @@ class ScanReportsDirectoryErrors(_TreeBase):
 
 class PathListdirAttrs(_TreeBase):
     def test_local_paths_scan_in_bulk_and_agree_with_the_per_file_route(self):
-        for entry, attrs in Path(self.tmp).listdir_attrs():
+        for entry, attrs in listdir_attrs(Path(self.tmp)):
             self.assertIsInstance(entry, Path)
             per_file = attrs_via_path(entry)
             self.assertEqual(attrs['is_dir'], per_file['is_dir'], entry.name)
@@ -154,7 +154,7 @@ class PathListdirAttrs(_TreeBase):
 
     def test_it_covers_the_same_names_as_iterdir(self):
         self.assertEqual(
-            sorted(p.name for p, _ in Path(self.tmp).listdir_attrs()),
+            sorted(p.name for p, _ in listdir_attrs(Path(self.tmp))),
             sorted(p.name for p in Path(self.tmp).iterdir()))
 
 

@@ -43,7 +43,7 @@ does — otherwise a typo silently changes what Filename means.
   has to order entries within one group.
 * ``entry.size`` and ``entry.mtime`` are free here — the listing's own attribute
   record is seeded into the entry, so reading them costs no ``stat`` even over a
-  network mount (see :meth:`~xefm.user_api.EntryInfo.from_attrs`).
+  network mount (see :meth:`~xefm.user_api.EntryInfo._from_attrs`).
 * **It may run on a worker thread**, and does for the first listing of a
   directory. It must not touch the UI or anything else the UI thread owns. This
   is the opposite of the promise ``ACTIONS`` and ``EVENT_HOOKS`` make, and

@@ -236,14 +236,14 @@ class XftPathImpl(ReadOnlyPathImpl):
                          "with the pane-sync key (Shift-O) and act on it there")
     CAPABILITIES = frozenset({"extraction_for_reading"})
 
-    def _parse(self, uri: str) -> str:
+    def parse_uri(self, uri: str) -> str:
         prefix = f"{SCHEME}://"
         if not uri.startswith(prefix):
             raise ValueError(f"not a {prefix} URI: {uri!r}")
         self._file, _sep, key = uri[len(prefix):].partition("#")
         return key
 
-    def _root_prefix(self) -> str:
+    def root_prefix(self) -> str:
         return f"{SCHEME}://{self._file}#"
 
     # -- where the tree sits ---------------------------------------------- #
@@ -258,7 +258,7 @@ class XftPathImpl(ReadOnlyPathImpl):
         on the file, as leaving an archive does."""
         if not self._segments:
             return self.file.parent
-        return self._at("/".join(self._segments[:-1]))
+        return self.at("/".join(self._segments[:-1]))
 
     @property
     def name(self) -> str:
@@ -296,7 +296,7 @@ class XftPathImpl(ReadOnlyPathImpl):
         if not node.is_group:
             raise NotADirectoryError(errno.ENOTDIR, "not a group", str(self))
         for child in node.children:
-            yield self._child(child.name)
+            yield self.child(child.name)
 
     def stat(self):
         node = self._node()

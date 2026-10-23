@@ -545,21 +545,19 @@ class FileMonitorManager:
         # Preferred check: the XeFM Path abstraction knows its own storage
         # scheme. watchdog only understands local ('file') paths, so disable
         # monitoring for every other backend (s3, ssh, scp, ftp, archive, …).
-        get_scheme = getattr(path, "get_scheme", None)
-        if callable(get_scheme):
-            try:
-                scheme = get_scheme()
-            except Exception as e:
-                self.logger.debug(f"Could not determine scheme for {path}: {e}")
-                scheme = None
-            if scheme is not None and scheme != "file":
-                self.logger.debug(f"Remote/virtual backend detected ({scheme}): {path} - monitoring disabled")
-                return "disabled"
+        try:
+            scheme = getattr(path, "scheme", None)
+        except Exception as e:
+            self.logger.debug(f"Could not determine scheme for {path}: {e}")
+            scheme = None
+        if isinstance(scheme, str) and scheme != "file":
+            self.logger.debug(f"Remote/virtual backend detected ({scheme}): {path} - monitoring disabled")
+            return "disabled"
 
         path_str = str(path)
 
-        # Fallback heuristics for plain str/pathlib paths that don't expose
-        # get_scheme(). These remote/virtual URIs cannot be watched by watchdog
+        # Fallback heuristics for plain str/pathlib paths, which have no
+        # scheme. These remote/virtual URIs cannot be watched by watchdog
         # either. Note: pathlib normalizes "s3://" to "s3:", so match the bare
         # scheme prefix as well as the collapsed "/s3/" form.
         if path_str.startswith(('s3:', '/s3/', 'ssh:', 'sftp:', 'scp:', 'ftp:', 'archive:')):

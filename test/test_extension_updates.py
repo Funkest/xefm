@@ -81,7 +81,7 @@ class _Home(unittest.TestCase):
             [extension]
             id = "{ext_id}"
             version = "{version}"
-            api_version = 0
+            api_version = 1
             {updates_line}
             {extra}
 

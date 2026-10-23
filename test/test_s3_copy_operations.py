@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch, MagicMock
 
-from xefm.path import Path
+from xefm.path import Path, copy_to
 
 
 class TestS3CopyFix(unittest.TestCase):
@@ -48,7 +48,7 @@ class TestS3CopyFix(unittest.TestCase):
 
         # Perform copy operation
         try:
-            result = self.test_file.copy_to(s3_dest, overwrite=True)
+            result = copy_to(self.test_file, s3_dest, overwrite=True)
             self.assertTrue(result, "Copy operation should return True on success")
 
             # Verify the streaming upload was used (not a single put_object)
@@ -88,7 +88,7 @@ class TestS3CopyFix(unittest.TestCase):
 
         try:
             # Perform copy operation
-            result = s3_source.copy_to(local_dest, overwrite=True)
+            result = copy_to(s3_source, local_dest, overwrite=True)
             self.assertTrue(result, "Copy operation should return True on success")
 
             # Verify file was created locally
@@ -112,7 +112,7 @@ class TestS3CopyFix(unittest.TestCase):
         local_dest = Path(self.temp_dir) / "local_copy.txt"
         
         # Perform copy operation
-        result = self.test_file.copy_to(local_dest, overwrite=True)
+        result = copy_to(self.test_file, local_dest, overwrite=True)
         self.assertTrue(result, "Copy operation should return True on success")
         
         # Verify file was created
@@ -128,7 +128,7 @@ class TestS3CopyFix(unittest.TestCase):
         dest = Path(self.temp_dir) / "dest.txt"
         
         with self.assertRaises(FileNotFoundError):
-            nonexistent.copy_to(dest)
+            copy_to(nonexistent, dest)
     
     def test_copy_to_existing_file_no_overwrite(self):
         """Test copying to an existing file without overwrite flag"""
@@ -136,7 +136,7 @@ class TestS3CopyFix(unittest.TestCase):
         dest.write_text("existing content")
         
         with self.assertRaises(FileExistsError):
-            self.test_file.copy_to(dest, overwrite=False)
+            copy_to(self.test_file, dest, overwrite=False)
     
     def test_copy_to_existing_file_with_overwrite(self):
         """Test copying to an existing file with overwrite flag"""
@@ -144,7 +144,7 @@ class TestS3CopyFix(unittest.TestCase):
         dest.write_text("existing content")
         
         # Should succeed with overwrite=True
-        result = self.test_file.copy_to(dest, overwrite=True)
+        result = copy_to(self.test_file, dest, overwrite=True)
         self.assertTrue(result)
         
         # Verify content was overwritten
@@ -167,11 +167,9 @@ class TestS3CopyIntegration(unittest.TestCase):
             local_path = Path("/tmp/test.txt")
             s3_path = Path("s3://bucket/key.txt")
             
-            # Verify methods exist
-            self.assertTrue(hasattr(local_path, 'copy_to'))
-            self.assertTrue(callable(local_path.copy_to))
-            self.assertTrue(hasattr(s3_path, 'copy_to'))
-            self.assertTrue(callable(s3_path.copy_to))
+            # copy_to is xefm.path's, not a member of the public Path
+            self.assertFalse(hasattr(local_path, 'copy_to'))
+            self.assertFalse(hasattr(s3_path, 'copy_to'))
             
         except ImportError:
             self.skipTest("boto3 not available for S3 testing")

@@ -54,7 +54,7 @@ def clean_registry():
 def load(**table):
     cfg = types.SimpleNamespace(LEXERS=table)
     result = user_api.load_user_entries(cfg)
-    return result[0], result[-1]
+    return result.warnings, result.lexers
 
 
 # --------------------------------------------------------------------------- #
@@ -202,5 +202,5 @@ def test_without_pygments_the_table_is_reported_once(monkeypatch):
 
 
 def test_the_preview_notice_counts_them():
-    assert "lexer" not in (user_api.preview_notice(1, 0) or "")
-    assert "2 lexer(s)" in user_api.preview_notice(0, 0, 0, 0, 0, 0, 2)
+    assert "lexer" not in (user_api.preview_notice(hooks=1) or "")
+    assert "2 lexer(s)" in user_api.preview_notice(lexers=2)

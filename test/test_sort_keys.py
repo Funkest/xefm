@@ -52,9 +52,8 @@ def order(tree, mode, reverse=False):
 
 def load(**sort_keys_table):
     cfg = types.SimpleNamespace(SORT_KEYS=sort_keys_table)
-    (warnings, _actions, _hooks, count, _filters,
-     _decoders, _schemes, _lexers) = user_api.load_user_entries(cfg)
-    return warnings, count
+    result = user_api.load_user_entries(cfg)
+    return result.warnings, result.sort_keys
 
 
 # --- what a key may return ---------------------------------------------------
@@ -257,9 +256,8 @@ def test_the_status_bar_names_a_registered_key():
     assert flm.get_sort_description(pane) == "Grouped ↑"
 
 
-def test_the_preview_notice_counts_sort_keys():
-    assert "sort key" not in (user_api.preview_notice(1, 0) or "")
-    assert "2 sort key(s)" in user_api.preview_notice(0, 0, 2)
+def test_sort_keys_are_stable_and_get_no_preview_notice():
+    assert user_api.preview_notice() is None
 
 
 # --- lifecycle ---------------------------------------------------------------

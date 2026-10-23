@@ -25,7 +25,7 @@ from xefm import dir_scan  # noqa: E402
 from xefm.completion import FilepathCompleter  # noqa: E402
 from xefm.config import get_config  # noqa: E402
 from xefm.file_list_manager import FileListManager  # noqa: E402
-from xefm.path import Path, attrs_via_path  # noqa: E402
+from xefm.path import Path, attrs_via_path, listdir_attrs  # noqa: E402
 
 _WINDOWS = sys.platform == "win32"
 
@@ -100,7 +100,7 @@ class ScanReadsTheHiddenAttribute(unittest.TestCase):
         self.assertTrue(got["protected.sys"]["hidden"])
 
     def test_the_per_file_route_agrees_with_the_scan(self):
-        for entry, attrs in Path(self.tmp).listdir_attrs():
+        for entry, attrs in listdir_attrs(Path(self.tmp)):
             self.assertEqual(attrs["hidden"], attrs_via_path(entry)["hidden"],
                              entry.name)
             self.assertEqual(attrs["hidden"], dir_scan.hidden_of(entry),
@@ -210,7 +210,7 @@ class TheListingFilterUsesTheRecord(unittest.TestCase):
         ]
 
         class _Dir:
-            def listdir_attrs(self):
+            def _listdir_attrs(self):
                 return entries
 
             def __str__(self):

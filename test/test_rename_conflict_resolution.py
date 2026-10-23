@@ -9,7 +9,7 @@ import tempfile
 import shutil
 from pathlib import Path as StdPath
 
-from xefm.path import Path
+from xefm.path import Path, copy_to
 
 
 def test_copy_rename_conflict():
@@ -42,7 +42,7 @@ def test_copy_rename_conflict():
         # Copy with new name
         source_path = Path(str(test_file))
         dest_path = Path(str(new_dest))
-        source_path.copy_to(dest_path)
+        copy_to(source_path, dest_path)
         
         print(f"Copied to: {new_dest}")
         print(f"New file exists: {new_dest.exists()}")
@@ -86,7 +86,7 @@ def test_move_rename_conflict():
         # Move with new name (copy then delete)
         source_path = Path(str(test_file))
         dest_path = Path(str(new_dest))
-        source_path.copy_to(dest_path)
+        copy_to(source_path, dest_path)
         source_path.unlink()
         
         print(f"Moved to: {new_dest}")
@@ -175,7 +175,7 @@ def test_directory_rename_conflict():
         # Copy directory with new name
         source_path = Path(str(test_dir))
         dest_path = Path(str(new_dest))
-        source_path.copy_to(dest_path)
+        copy_to(source_path, dest_path)
         
         print(f"Copied to: {new_dest}")
         print(f"New directory exists: {new_dest.exists()}")

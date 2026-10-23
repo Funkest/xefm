@@ -54,7 +54,7 @@ from xefm.archive import (ArchiveInUseError, get_archive_cache,
 from xefm.dialog_geometry import (OPEN_MS_VIEWER, animate_open, draw_title_bar,
                                   title_content_top)
 from xefm.diff_viewer import show_diff_viewer
-from xefm.path import Path
+from xefm.path import Path, copy_to, move_to
 from xefm.progress_manager import OperationType, ProgressManager
 from xefm.str_format import format_size, format_timestamp
 from xefm.task import Cancelled, Task, TaskManager
@@ -749,7 +749,7 @@ class FileOperationService:
                 and not _merges_into(target, dest_base)):
             prog.update_progress(target.name)
             try:
-                target.move_to(dest_base, overwrite=overwrite)
+                move_to(target, dest_base, overwrite=overwrite)
             except Cancelled:
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -781,9 +781,9 @@ class FileOperationService:
         ends."""
         if kind not in ("copy", "duplicate", "move"):
             return 1
-        schemes = {t.get_scheme() for t, _dest, _ow in plan}
+        schemes = {t.scheme for t, _dest, _ow in plan}
         if dest_dir is not None:
-            schemes.add(dest_dir.get_scheme())
+            schemes.add(dest_dir.scheme)
         return transfer_workers(self.config, schemes)
 
     def _run_parallel(self, task: Task, kind: str, plan: list,
@@ -823,7 +823,7 @@ class FileOperationService:
                         and not _merges_into(target, dest_base)):
                     prog.update_progress(target.name)
                     try:
-                        target.move_to(dest_base, overwrite=overwrite)
+                        move_to(target, dest_base, overwrite=overwrite)
                     except Cancelled:
                         raise
                     except Exception as exc:  # noqa: BLE001
@@ -987,15 +987,15 @@ class FileOperationService:
                     overwrite.kept = True
                     return False  # the destination's copy is as new — keep it
         overwrite = bool(overwrite)  # the storage layer takes a plain flag
-        same = src.get_scheme() == dest.get_scheme()
-        local = same and src.get_scheme() == "file"
+        same = src.scheme == dest.scheme
+        local = same and src.scheme == "file"
         if local and not src.is_symlink() and _clone_file(src, dest, overwrite):
             prog.file_bytes(slot, size, size)  # one syscall, all bytes landed
             return True  # a clone carries every xattr, tags included
         if not src.is_symlink() and (not same or size >= _BYTE_BAR_MIN):
             self._copy_bytes(task, src, dest, size, overwrite, local, prog, slot)
         else:
-            src.copy_to(dest, overwrite=overwrite)
+            copy_to(src, dest, overwrite=overwrite)
         # Neither path keeps tags everywhere: copystat copies xattrs on Linux
         # only, and nothing carries them across storages (#585).
         if not src.is_symlink():
@@ -1011,7 +1011,7 @@ class FileOperationService:
         a single call into S3 or SFTP, so the progress callback is the only
         thread of control that comes back often enough to notice a cancel. The
         ``Cancelled`` raised here unwinds the transfer and is re-raised
-        unchanged by ``Path.copy_to``. ``slot`` is the file's progress slot, so
+        unchanged by :func:`xefm.path.copy_to`. ``slot`` is the file's progress slot, so
         parallel transfers each drive their own row."""
         def report(bytes_copied: int, bytes_total: int) -> None:
             # Never a pause here: a remote stream held for as long as another
@@ -1025,12 +1025,11 @@ class FileOperationService:
                     slot: int) -> None:
         """Copy a large / cross-storage file while driving its byte slot. Local
         files are streamed in chunks here (so ``shutil`` doesn't hide progress);
-        cross-storage copies delegate to ``Path.copy_to``'s own progress callback."""
+        cross-storage copies delegate to :func:`xefm.path.copy_to`'s own progress callback."""
         if not local:
             try:
-                src.copy_to(dest, overwrite=overwrite,
-                            progress_callback=self._remote_progress(task, prog,
-                                                                    slot))
+                copy_to(src, dest, overwrite=overwrite,
+                        progress_callback=self._remote_progress(task, prog, slot))
             except Cancelled:
                 try:
                     dest.unlink()  # a half-sent remote file is not a copy
@@ -1276,7 +1275,7 @@ def _entry_device(path: Path) -> Optional[int]:
     match on both sides. ``None`` when ``path`` isn't local or can't be stat'ed, so
     the caller falls back to the storage-scheme test alone."""
     try:
-        if path.get_scheme() != "file":
+        if path.scheme != "file":
             return None
         return path.stat().st_dev
     except Exception:  # noqa: BLE001 — unknown device just means "can't tell"
@@ -1297,7 +1296,7 @@ def _is_atomic_move(kind: str, target: Path, dest_dir: Optional[Path]) -> bool:
     source's parent, and the destination directory the new entry lands in."""
     if kind != "move" or dest_dir is None:
         return False
-    if target.get_scheme() != dest_dir.get_scheme():
+    if target.scheme != dest_dir.scheme:
         return False
     src_dev = _entry_device(target.parent)
     dest_dev = _entry_device(dest_dir)

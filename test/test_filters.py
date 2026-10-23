@@ -46,9 +46,8 @@ def tree(tmp_path):
 
 def load(**filters_table):
     cfg = types.SimpleNamespace(FILTERS=filters_table)
-    (warnings, _actions, _hooks, _sorts, count,
-     _decoders, _schemes, _lexers) = user_api.load_user_entries(cfg)
-    return warnings, count
+    result = user_api.load_user_entries(cfg)
+    return result.warnings, result.filters
 
 
 def shown(tree, pattern):
@@ -362,9 +361,11 @@ def test_a_defined_row_survives_the_remove_key(picker):
 
 # --- lifecycle ---------------------------------------------------------------
 
-def test_the_preview_notice_counts_filters():
-    assert "filter" not in (user_api.preview_notice(1, 0) or "")
-    assert "2 filter(s)" in user_api.preview_notice(0, 0, 0, 2)
+def test_filters_are_stable_and_get_no_preview_notice():
+    cfg = types.SimpleNamespace(FILTERS={"pics": "*.png"})
+    result = user_api.load_user_entries(cfg)
+    assert result.filters == 1
+    assert user_api.preview_notice(hooks=result.hooks) is None
 
 
 def test_a_reload_drops_a_filter_the_config_no_longer_defines():

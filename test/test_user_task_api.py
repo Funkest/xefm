@@ -457,46 +457,35 @@ from xefm import extensions as _ext  # noqa: E402
 from xefm import path_base  # noqa: E402
 from xefm.preview import NOTE, is_preview  # noqa: E402
 
-#: Public APIs declared stable — outside PREVIEW_APIS on purpose. Adding to
-#: this set is the act of stabilizing one, so it is a decision, not an edit.
-STABLE = {"xefm.user_api.API_VERSION", "xefm.user_api.PREVIEW_APIS",
-          # the type of ctx; its members are marked one by one
-          "xefm.user_api.ActionContext",
-          "xefm.user_api.ActionContext.api_version"}
-
-
-def _public_api_names():
-    for module in (user_api, path_base):
-        for name in module.__all__:
-            yield f"{module.__name__}.{name}"
-    for name in dir(ActionContext):
-        if not name.startswith("_"):
-            yield f"xefm.user_api.ActionContext.{name}"
-
-
-def test_every_public_api_is_preview_or_declared_stable():
-    for name in _public_api_names():
-        assert is_preview(name) != (name in STABLE), name
+# Which public names are stable and which Preview is held still by the API
+# snapshot (test/test_api_snapshot.py); these check the mark itself.
 
 
 def test_a_preview_api_says_so_in_its_docstring():
     assert ActionContext.run_task.__doc__.startswith(NOTE)
-    assert ActionContext.pane.__doc__.startswith(NOTE)
+    assert ActionContext.input.__doc__.startswith(NOTE)
     assert user_api.TaskJob.__doc__.startswith(NOTE)
-    assert path_base.ReadOnlyPathImpl.__doc__.startswith(NOTE)
-    assert not (ActionContext.api_version.__doc__ or "").startswith(NOTE)
+    assert path_base.UriPathImpl.__doc__.startswith(NOTE)
+    for stable in (ActionContext.pane, ActionContext.api_version,
+                   user_api.PaneApi, path_base.ReadOnlyPathImpl):
+        assert not (stable.__doc__ or "").startswith(NOTE), stable
 
 
 def test_a_class_entry_covers_its_members():
-    assert is_preview("xefm.user_api.PaneApi.cd")
+    assert is_preview("xefm.user_api.TaskJob.progress")
+    assert not is_preview("xefm.user_api.PaneApi.cd")
     assert not is_preview("xefm.user_api.ActionContext.api_version")
 
 
 def test_the_tables_and_manifest_sections_are_named():
-    kinds = set(_ext.CONTRIBUTION_TABLES) | {"key_suggestions"}
-    assert {f"manifest.contributes.{k}" for k in kinds} <= user_api.PREVIEW_APIS
+    stable = {"ACTIONS", "SORT_KEYS", "FILTERS", "PATH_SCHEMES"}
     tables = set(_ext.CONTRIBUTION_TABLES.values()) - {"THEMES"}
-    assert {f"config.{t}" for t in tables} <= user_api.PREVIEW_APIS
+    for table in tables:
+        assert (f"config.{table}" in user_api.PREVIEW_APIS) == (table not in stable), table
+    stable_kinds = {"actions", "sort_keys", "filters", "path_schemes", "key_suggestions"}
+    for kind in set(_ext.CONTRIBUTION_TABLES) | {"key_suggestions"}:
+        assert (f"manifest.contributes.{kind}" in user_api.PREVIEW_APIS) \
+            == (kind not in stable_kinds), kind
 
 
 # --------------------------------------------------------------------------- #

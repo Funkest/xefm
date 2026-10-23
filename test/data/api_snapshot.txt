@@ -1,0 +1,170 @@
+# XeFM public API snapshot — regenerate with `PYTHONPATH=. python tools/api_snapshot.py --write`.
+# status	kind	name	detail
+stable	capability	capability.directory_rename
+stable	capability	capability.file_editing
+stable	capability	capability.streaming_read
+stable	capability	capability.write_operations
+stable	table	config.ACTIONS	context,description,func,override
+preview	table	config.EVENT_HOOKS
+preview	names	config.EVENT_HOOKS.events	directory_changed,file_open,quit,startup
+stable	table	config.FILTERS	label,match,pattern
+preview	table	config.IMAGE_DECODERS	label,open
+preview	table	config.LEXERS
+preview	table	config.MENU_ITEMS	label,menus,when
+stable	table	config.PATH_SCHEMES	class,override
+preview	table-key	config.PATH_SCHEMES.override
+stable	table	config.SORT_KEYS	explain,hotkey,key,label,override
+stable	sections	manifest	contributes,extension,requires,settings
+stable	section	manifest.contributes.actions	entry,description
+preview	section	manifest.contributes.event_hooks
+stable	section	manifest.contributes.filters
+preview	section	manifest.contributes.image_decoders
+stable	section	manifest.contributes.key_suggestions
+preview	section	manifest.contributes.lexers
+preview	section	manifest.contributes.menus
+stable	section	manifest.contributes.path_schemes
+stable	section	manifest.contributes.sort_keys
+preview	section	manifest.contributes.themes
+stable	keys	manifest.extension	api_version,backends,description,homepage,id,min_xefm,name,platforms,updates,version
+preview	key	manifest.extension.updates
+preview	keys	manifest.requires	host_packages,programs,python_packages
+preview	keys	manifest.settings	config_class,defaults
+stable	compat	xefm.backend_detector.is_desktop_mode	is xefm.user_api.is_desktop_mode
+stable	compat	xefm.external_programs.xefm_python	is xefm.user_api.xefm_python
+stable	compat	xefm.external_programs.xefm_tool	is xefm.user_api.xefm_tool
+stable	method	xefm.path.Path.absolute	[["self", "pk", null]]
+stable	property	xefm.path.Path.anchor	ro
+stable	method	xefm.path.Path.as_posix	[["self", "pk", null]]
+stable	method	xefm.path.Path.as_uri	[["self", "pk", null]]
+stable	method	xefm.path.Path.chmod	[["self", "pk", null], ["mode", "pk", null]]
+stable	classmethod	xefm.path.Path.cwd	[]
+stable	method	xefm.path.Path.exists	[["self", "pk", null]]
+stable	method	xefm.path.Path.expanduser	[["self", "pk", null]]
+stable	method	xefm.path.Path.glob	[["self", "pk", null], ["pattern", "pk", null]]
+stable	method	xefm.path.Path.hardlink_to	[["self", "pk", null], ["target", "pk", null]]
+stable	classmethod	xefm.path.Path.home	[]
+stable	method	xefm.path.Path.is_absolute	[["self", "pk", null]]
+stable	method	xefm.path.Path.is_dir	[["self", "pk", null]]
+stable	method	xefm.path.Path.is_file	[["self", "pk", null]]
+stable	method	xefm.path.Path.is_remote	[["self", "pk", null]]
+stable	method	xefm.path.Path.is_symlink	[["self", "pk", null]]
+stable	method	xefm.path.Path.iterdir	[["self", "pk", null]]
+stable	method	xefm.path.Path.joinpath	[["self", "pk", null], ["args", "*", null]]
+stable	method	xefm.path.Path.lstat	[["self", "pk", null]]
+stable	method	xefm.path.Path.match	[["self", "pk", null], ["pattern", "pk", null]]
+stable	method	xefm.path.Path.mkdir	[["self", "pk", null], ["mode", "pk", "511"], ["parents", "pk", "False"], ["exist_ok", "pk", "False"]]
+stable	property	xefm.path.Path.name	ro
+stable	method	xefm.path.Path.open	[["self", "pk", null], ["mode", "pk", "'r'"], ["buffering", "pk", "-1"], ["encoding", "pk", "None"], ["errors", "pk", "None"], ["newline", "pk", "None"]]
+stable	property	xefm.path.Path.parent	ro
+stable	property	xefm.path.Path.parents	ro
+stable	property	xefm.path.Path.parts	ro
+stable	method	xefm.path.Path.read_bytes	[["self", "pk", null]]
+stable	method	xefm.path.Path.read_text	[["self", "pk", null], ["encoding", "pk", "None"], ["errors", "pk", "None"]]
+stable	method	xefm.path.Path.relative_to	[["self", "pk", null], ["other", "pk", null]]
+stable	method	xefm.path.Path.rename	[["self", "pk", null], ["target", "pk", null]]
+stable	method	xefm.path.Path.replace	[["self", "pk", null], ["target", "pk", null]]
+stable	method	xefm.path.Path.resolve	[["self", "pk", null], ["strict", "pk", "False"]]
+stable	method	xefm.path.Path.rglob	[["self", "pk", null], ["pattern", "pk", null]]
+stable	method	xefm.path.Path.rmdir	[["self", "pk", null]]
+stable	method	xefm.path.Path.samefile	[["self", "pk", null], ["other_path", "pk", null]]
+stable	property	xefm.path.Path.scheme	ro
+stable	method	xefm.path.Path.stat	[["self", "pk", null]]
+stable	property	xefm.path.Path.stem	ro
+stable	property	xefm.path.Path.suffix	ro
+stable	property	xefm.path.Path.suffixes	ro
+stable	method	xefm.path.Path.supports	[["self", "pk", null], ["capability", "pk", null]]
+stable	method	xefm.path.Path.symlink_to	[["self", "pk", null], ["target", "pk", null], ["target_is_directory", "pk", "False"]]
+stable	method	xefm.path.Path.target	[["self", "pk", null]]
+stable	method	xefm.path.Path.touch	[["self", "pk", null], ["mode", "pk", "438"], ["exist_ok", "pk", "True"]]
+stable	method	xefm.path.Path.unlink	[["self", "pk", null], ["missing_ok", "pk", "False"]]
+stable	method	xefm.path.Path.with_name	[["self", "pk", null], ["name", "pk", null]]
+stable	method	xefm.path.Path.with_stem	[["self", "pk", null], ["stem", "pk", null]]
+stable	method	xefm.path.Path.with_suffix	[["self", "pk", null], ["suffix", "pk", null]]
+stable	method	xefm.path.Path.write_bytes	[["self", "pk", null], ["data", "pk", null]]
+stable	method	xefm.path.Path.write_text	[["self", "pk", null], ["data", "pk", null], ["encoding", "pk", "None"], ["errors", "pk", "None"], ["newline", "pk", "None"]]
+stable	class	xefm.path_base.ReadOnlyPathImpl
+preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.CAPABILITIES	attribute
+preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.DISPLAY_PREFIX	attribute
+stable	tier:overridable	xefm.path_base.ReadOnlyPathImpl.IS_REMOTE	attribute
+preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.LISTING_CONCURRENCY	attribute
+stable	tier:overridable	xefm.path_base.ReadOnlyPathImpl.READ_ONLY_MESSAGE	attribute
+stable	tier:required	xefm.path_base.ReadOnlyPathImpl.SCHEME	attribute
+preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.SEARCH_STRATEGY	attribute
+stable	tier:helpers	xefm.path_base.ReadOnlyPathImpl.at	method [["self", "pk", null], ["key", "pk", null]]
+stable	tier:helpers	xefm.path_base.ReadOnlyPathImpl.child	method [["self", "pk", null], ["name", "pk", null]]
+stable	tier:required	xefm.path_base.ReadOnlyPathImpl.exists	method [["self", "pk", null]]
+preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.forget_cached_metadata	method [["self", "pk", null]]
+preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.get_display_title	method [["self", "pk", null]]
+preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.get_extended_metadata	method [["self", "pk", null]]
+stable	tier:required	xefm.path_base.ReadOnlyPathImpl.is_dir	method [["self", "pk", null]]
+stable	tier:required	xefm.path_base.ReadOnlyPathImpl.iterdir	method [["self", "pk", null]]
+stable	tier:helpers	xefm.path_base.ReadOnlyPathImpl.key	property ro
+preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.listdir_attrs	method [["self", "pk", null]]
+stable	tier:required	xefm.path_base.ReadOnlyPathImpl.open	method [["self", "pk", null], ["mode", "pk", "'r'"], ["buffering", "pk", "-1"], ["encoding", "pk", "None"], ["errors", "pk", "None"], ["newline", "pk", "None"]]
+preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.parse_uri	method [["self", "pk", null], ["uri", "pk", null]]
+preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.root_prefix	method [["self", "pk", null]]
+stable	tier:required	xefm.path_base.ReadOnlyPathImpl.stat	method [["self", "pk", null]]
+stable	tier:overridable	xefm.path_base.ReadOnlyPathImpl.target	method [["self", "pk", null]]
+preview	class	xefm.path_base.UriPathImpl
+stable	class	xefm.path_base.UriStatResult
+stable	constructor	xefm.path_base.UriStatResult.__init__	[["self", "pk", null], ["size", "pk", "0"], ["mtime", "pk", "0.0"], ["is_dir", "pk", "False"], ["mode", "pk", "None"]]
+stable	version	xefm.user_api.API_VERSION	1
+stable	class	xefm.user_api.ActionContext
+stable	method	xefm.user_api.ActionContext.action_names	[["self", "pk", null]]
+stable	property	xefm.user_api.ActionContext.api_version	ro
+preview	method	xefm.user_api.ActionContext.choose	[["self", "pk", null], ["title", "pk", null], ["items", "pk", null], ["type", "kw", "'choice'"], ["on_result", "kw", "None"]]
+preview	method	xefm.user_api.ActionContext.confirm	[["self", "pk", null], ["prompt", "pk", null], ["title", "kw", "'Confirm'"], ["on_result", "kw", "None"]]
+preview	method	xefm.user_api.ActionContext.copy_text	[["self", "pk", null], ["text", "pk", null]]
+preview	method	xefm.user_api.ActionContext.input	[["self", "pk", null], ["prompt", "pk", null], ["default", "pk", "''"], ["title", "kw", "''"], ["on_accept", "kw", "None"], ["on_cancel", "kw", "None"]]
+stable	method	xefm.user_api.ActionContext.invoke	[["self", "pk", null], ["action_name", "pk", null]]
+stable	property	xefm.user_api.ActionContext.left	ro
+stable	method	xefm.user_api.ActionContext.message	[["self", "pk", null], ["text", "pk", null]]
+stable	property	xefm.user_api.ActionContext.other	ro
+stable	property	xefm.user_api.ActionContext.pane	ro
+stable	property	xefm.user_api.ActionContext.right	ro
+stable	method	xefm.user_api.ActionContext.run_program	[["self", "pk", null], ["command", "pk", null], ["terminal", "kw", "False"], ["cwd", "kw", "None"], ["env", "kw", "None"]]
+preview	method	xefm.user_api.ActionContext.run_task	[["self", "pk", null], ["title", "pk", null], ["work", "pk", null], ["on_done", "kw", "None"], ["read_only", "kw", "False"]]
+preview	method	xefm.user_api.ActionContext.show_markdown	[["self", "pk", null], ["title", "pk", null], ["source", "pk", null]]
+stable	class	xefm.user_api.EntryInfo
+stable	constructor	xefm.user_api.EntryInfo.__init__	[["self", "pk", null], ["path", "pk", null], ["is_dir", "kw", "False"], ["is_link", "kw", "False"]]
+stable	attribute	xefm.user_api.EntryInfo.is_dir
+stable	property	xefm.user_api.EntryInfo.is_file	ro
+stable	attribute	xefm.user_api.EntryInfo.is_link
+stable	property	xefm.user_api.EntryInfo.mtime	ro
+stable	attribute	xefm.user_api.EntryInfo.name
+stable	attribute	xefm.user_api.EntryInfo.path
+stable	property	xefm.user_api.EntryInfo.size	ro
+stable	property	xefm.user_api.EntryInfo.stem	ro
+stable	property	xefm.user_api.EntryInfo.suffix	ro
+preview	class	xefm.user_api.HookEvent
+stable	data	xefm.user_api.PREVIEW_APIS	frozenset
+stable	class	xefm.user_api.PaneApi
+stable	method	xefm.user_api.PaneApi.activate	[["self", "pk", null]]
+stable	method	xefm.user_api.PaneApi.cd	[["self", "pk", null], ["path", "pk", null], ["focus_name", "pk", "None"]]
+stable	property	xefm.user_api.PaneApi.cursor	rw
+stable	property	xefm.user_api.PaneApi.entries	ro
+stable	property	xefm.user_api.PaneApi.focused	ro
+stable	property	xefm.user_api.PaneApi.is_active	ro
+stable	property	xefm.user_api.PaneApi.name	ro
+preview	method	xefm.user_api.PaneApi.open_list	[["self", "pk", null], ["paths", "pk", null], ["title", "kw", null]]
+stable	property	xefm.user_api.PaneApi.path	ro
+stable	method	xefm.user_api.PaneApi.refresh	[["self", "pk", null]]
+stable	method	xefm.user_api.PaneApi.select	[["self", "pk", null], ["predicate", "pk", "None"]]
+stable	method	xefm.user_api.PaneApi.selected	[["self", "pk", null]]
+stable	method	xefm.user_api.PaneApi.unselect	[["self", "pk", null], ["predicate", "pk", "None"]]
+preview	class	xefm.user_api.TaskJob
+preview	method	xefm.user_api.TaskJob.cancelled	[["self", "pk", null]]
+preview	method	xefm.user_api.TaskJob.checkpoint	[["self", "pk", null]]
+preview	method	xefm.user_api.TaskJob.item_progress	[["self", "pk", null], ["done", "pk", null], ["total", "pk", null]]
+preview	method	xefm.user_api.TaskJob.progress	[["self", "pk", null], ["done", "pk", null], ["total", "pk", null], ["detail", "kw", "''"]]
+preview	class	xefm.user_api.TaskOutcome
+preview	attribute	xefm.user_api.TaskOutcome.error
+preview	property	xefm.user_api.TaskOutcome.ok	ro
+preview	attribute	xefm.user_api.TaskOutcome.status
+preview	attribute	xefm.user_api.TaskOutcome.value
+preview	function	xefm.user_api.extension	[["module", "pk", null]]
+stable	function	xefm.user_api.is_desktop_mode	[]
+preview	function	xefm.user_api.md_code_block	[["text", "pk", null], ["lang", "pk", "''"]]
+preview	function	xefm.user_api.md_escape	[["text", "pk", null]]
+stable	data	xefm.user_api.xefm_python	str
+stable	function	xefm.user_api.xefm_tool	[["tool_name", "pk", null]]

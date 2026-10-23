@@ -2,7 +2,7 @@
 """
 SSH directory listings go through ``listdir_attrs``.
 
-A pane reads a directory with :meth:`Path.listdir_attrs`, which every backend
+A pane reads a directory with :func:`xefm.path.listdir_attrs`, which every backend
 must answer. ``SSHPathImpl`` used to stand outside the ``PathImpl`` hierarchy, so
 it simply had no such method and every SSH pane failed with "'SSHPathImpl' object
 has no attribute 'listdir_attrs'". These tests pin both halves of the fix: the
@@ -13,7 +13,7 @@ the connection already ran.
 import unittest
 from unittest.mock import patch
 
-from xefm.path import Path, PathImpl
+from xefm.path import Path, PathImpl, listdir_attrs
 from xefm.ssh import SSHPathImpl
 
 
@@ -63,8 +63,8 @@ class TestSSHListdirAttrs(unittest.TestCase):
         self.assertIsInstance(self.impl, PathImpl)
 
     def test_listing_reaches_the_impl_through_path(self):
-        """The pane calls Path.listdir_attrs — it must not raise here"""
-        names = [child.name for child, _ in self.path.listdir_attrs()]
+        """The pane calls xefm.path.listdir_attrs — it must not raise here"""
+        names = [child.name for child, _ in listdir_attrs(self.path)]
         self.assertEqual(names, ['docs', 'notes.txt', 'current'])
 
     def test_entries_are_ssh_paths_under_this_directory(self):

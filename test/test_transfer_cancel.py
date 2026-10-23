@@ -14,7 +14,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from xefm.path import Path
+from xefm.path import Path, copy_to
 from xefm.s3 import clear_s3_cache
 from xefm.task import Cancelled, Task
 
@@ -56,7 +56,7 @@ class TestS3TransferCancel(unittest.TestCase):
 
         dest = Path(self.temp_dir) / "downloaded.bin"
         with self.assertRaises(Cancelled):
-            Path("s3://bucket/payload.bin").copy_to(
+            copy_to(Path("s3://bucket/payload.bin"), 
                 dest, overwrite=True, progress_callback=cancel_after_one_chunk)
 
     @patch('xefm.s3.boto3')
@@ -77,7 +77,7 @@ class TestS3TransferCancel(unittest.TestCase):
 
         dest = Path(self.temp_dir) / "downloaded.bin"
         with self.assertRaises(Cancelled):
-            Path("s3://bucket/payload.bin").copy_to(
+            copy_to(Path("s3://bucket/payload.bin"), 
                 dest, overwrite=True, progress_callback=cancel_after_one_chunk)
 
         self.assertFalse(dest.exists(),
@@ -100,7 +100,7 @@ class TestS3TransferCancel(unittest.TestCase):
                 raise Cancelled()
 
         with self.assertRaises(Cancelled):
-            self.local_file.copy_to(Path("s3://bucket/payload.bin"), overwrite=True,
+            copy_to(self.local_file, Path("s3://bucket/payload.bin"), overwrite=True,
                                     progress_callback=cancel_after_one_chunk)
 
     @patch('xefm.s3.boto3')
@@ -110,7 +110,7 @@ class TestS3TransferCancel(unittest.TestCase):
         self.client.upload_fileobj.side_effect = ValueError("bad bucket")
 
         with self.assertRaises(OSError):
-            self.local_file.copy_to(Path("s3://bucket/payload.bin"), overwrite=True,
+            copy_to(self.local_file, Path("s3://bucket/payload.bin"), overwrite=True,
                                     progress_callback=lambda copied, total: None)
 
 

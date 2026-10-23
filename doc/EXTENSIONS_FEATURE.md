@@ -1,4 +1,4 @@
-# Extension Packages — Preview
+# Extension Packages
 
 An extension package is a folder that adds actions, event hooks, themes, sort
 orders, filters, picture formats, locations or syntax highlighting to XeFM.
@@ -6,9 +6,13 @@ These are the same kinds of things `config.py` can add, with no lines in
 `config.py`. A package can be installed, shared, disabled and removed as one
 unit.
 
-Extensions run against the same Preview API as `config.py` customization (API
-version 0, see [Customization](CUSTOMIZATION_FEATURE.md)), so the format may
-still change.
+Extensions run against the same API as `config.py` customization, version 1
+(see [Customization](CUSTOMIZATION_FEATURE.md)). Most of it is stable; the parts
+marked Preview may still change, and `xefm ext check` lists every Preview part
+a package uses. In the manifest, `[contributes.actions]`, `sort_keys`,
+`filters`, `path_schemes` and `key_suggestions` are stable; `menus`,
+`event_hooks`, `image_decoders`, `lexers`, `themes`, `[settings]`, `[requires]`
+and `updates` are Preview.
 
 ## Official extensions
 
@@ -214,7 +218,7 @@ hello-xefm/
 [extension]
 id = "hello-xefm"
 version = "0.1.0"
-api_version = 0                       # the XeFM API it was written for
+api_version = 1                       # the XeFM API it was written for
 # optional:
 name = "Hello"
 description = "Says hello"
@@ -330,6 +334,29 @@ them:
   changing `sys.path`.
 
 Files under a `_vendor/` folder are skipped.
+
+Last, it lists every part of the API the package uses that is still Preview —
+a manifest section, a name it imports, a `ctx` method:
+
+```
+preview: xefm-extension.toml: contributes.menus: Preview, may change in any release
+preview: hello_xefm/actions.py:42: ctx.run_task — Preview, may change in any release
+2 Preview API(s) in use; everything else this package uses is stable.
+```
+
+These are not problems — using Preview is fine, and a package with only these
+lines installs and loads. They tell you which parts of your package may need
+a change after an XeFM release. To keep a package on the stable part only,
+check it with `--stable-only`, which reports them as errors:
+
+```bash
+xefm ext check --stable-only ./hello-xefm
+```
+
+The same shows at run time: the first time a package calls a Preview
+function, XeFM writes one line to the log pane naming the package and the
+function, and the startup line that lists your extensions names the Preview
+manifest sections each one uses.
 
 The exit status is 0 when the package would install. An install runs the same
 check and installs nothing if it finds an error.

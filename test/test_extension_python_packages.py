@@ -28,7 +28,7 @@ MANIFEST = '''
     [extension]
     id = "{id}"
     version = "0.1.0"
-    api_version = 0
+    api_version = 1
 
     [requires]
     python_packages = %s

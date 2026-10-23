@@ -14,7 +14,7 @@ import pytest
 from xefm import _config
 from xefm import file_operations as F
 from xefm.file_operations import FileOperationService, _unique_dest
-from xefm.path import Path
+from xefm.path import Path, move_to
 from xefm.progress_manager import ProgressManager
 from xefm.task import Cancelled, Task, TaskManager
 
@@ -148,7 +148,7 @@ def test_move_overwrite_merges_into_an_existing_directory(tmp_path, svc, monkeyp
 def test_path_move_to_overwrites_an_existing_file(tmp_path):
     (tmp_path / "a.txt").write_text("new")
     (tmp_path / "b.txt").write_text("old")
-    assert _P(tmp_path / "a.txt").move_to(_P(tmp_path / "b.txt"), overwrite=True)
+    assert move_to(_P(tmp_path / "a.txt"), _P(tmp_path / "b.txt"), overwrite=True)
     assert (tmp_path / "b.txt").read_text() == "new"
     assert not (tmp_path / "a.txt").exists()
 
@@ -197,7 +197,7 @@ def test_is_atomic_move_across_filesystems(tmp_path, monkeypatch):
 
 def test_is_atomic_move_unknown_device_stays_atomic(tmp_path, monkeypatch):
     """When the device can't be read (a remote backend, an unstat-able path) the
-    scheme test decides alone — and ``Path.move_to`` still falls back to copy+delete
+    scheme test decides alone — and ``xefm.path.move_to`` still falls back to copy+delete
     on EXDEV, so guessing "atomic" is never wrong, only unprogressed."""
     src, dst = tmp_path / "s", tmp_path / "d"
     src.mkdir(); dst.mkdir()

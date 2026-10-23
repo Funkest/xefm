@@ -11,7 +11,7 @@ from xefm import path_list
 from xefm import search_match
 from xefm import sort_keys
 from xefm.dir_scan import is_hidden
-from xefm.path import Path, attrs_via_path
+from xefm.path import Path, attrs_via_path, listdir_attrs
 from datetime import datetime
 from xefm.str_format import format_size
 
@@ -119,7 +119,7 @@ class FileListManager:
             # Read the directory and every entry's attributes in one pass, so a
             # large directory on a network mount costs one bulk enumeration
             # rather than a round trip per file (see xefm.dir_scan).
-            all_entries = path.listdir_attrs()
+            all_entries = listdir_attrs(path)
 
             # Filter hidden files if needed — a leading dot, or the platform's
             # own mark, which on Windows is a file attribute the one-pass scan
@@ -527,14 +527,14 @@ class FileListManager:
         Directories still lead and ``reverse`` still applies: a registered key
         only decides the order within a group, so a config never has to
         re-implement either. Entries are handed
-        :meth:`~xefm.user_api.EntryInfo.from_attrs` objects built from the
+        :meth:`~xefm.user_api.EntryInfo._from_attrs` objects built from the
         listing's own records, so a key reading ``size`` or ``mtime`` costs no
         filesystem call.
         """
         from xefm.user_api import EntryInfo   # imported here: user_api imports us
         try:
             def key(entry):
-                return user_key(EntryInfo.from_attrs(entry, attrs[str(entry)]))
+                return user_key(EntryInfo._from_attrs(entry, attrs[str(entry)]))
 
             directories = [e for e in entries if attrs[str(e)]['is_dir']]
             files = [e for e in entries if not attrs[str(e)]['is_dir']]

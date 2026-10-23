@@ -347,8 +347,16 @@ Not done yet:
 - Rewriting vendored imports (C, option 1). Only the collision refusal is done.
 
 Set aside: the `xefm.testing` fixtures (F). The skill's own fake and
-`xefm try --keys` cover extension testing for now. A compatibility check
-against real extensions belongs with API_VERSION 1 (discussion #469).
+`xefm try --keys` cover extension testing for now. The compatibility check
+against real extensions arrived with API_VERSION 1 (#713): `make api-compat`
+(`tools/api_compat.py`) runs every package in xefm-extensions through the check
+and its own tests against the working tree, and the release skill runs it
+before tagging.
+
+Preview use is reported by `preview_uses()`, kept apart from `check_manifest`
+so that install and loading — which gate on `check_manifest`'s errors — never
+see a `preview` finding. Only the `xefm ext check` CLI asks for it, and
+`--stable-only` (`stable_only()`) raises the findings to errors there.
 
 ## Tests
 

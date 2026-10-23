@@ -1,6 +1,7 @@
 # In-Process Customization API — Draft Design
 
-**Status: steps 1–3 implemented as a Preview.** The action registry with
+**Status: steps 1–3 implemented; `API_VERSION` 1 declared their core stable
+(#713, [`STABLE_API_PLAN.md`](STABLE_API_PLAN.md)).** The action registry with
 contexts, `ACTIONS` with its invocation-time façade, and `EVENT_HOOKS` all
 ship; step 4 (exposed registries) does not. What was built, where it differs
 from this sketch, and why, is in

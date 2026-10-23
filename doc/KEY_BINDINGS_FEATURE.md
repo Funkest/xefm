@@ -285,7 +285,7 @@ action — `quit`, `help`, `isearch`, `edit_file` — to one viewer:
 `'file_diff.quit': ['X']` changes it there and nowhere else.
 
 The full list of viewer actions and their defaults is in
-[Customization (Preview)](CUSTOMIZATION_FEATURE.md), along with how to bind a key
+[Customization](CUSTOMIZATION_FEATURE.md), along with how to bind a key
 to a Python function of your own.
 
 ### Search bar keys
@@ -295,7 +295,7 @@ its name the same way — `isearch.next_match`, `isearch.prev_match`,
 `isearch.toggle_select_down`, `isearch.toggle_select_up`,
 `isearch.select_matches`, `isearch.accept`, `isearch.cancel`. They are rebound
 exactly like a viewer's; the defaults and what each one does are in
-[Customization (Preview)](CUSTOMIZATION_FEATURE.md#the-incremental-search-bar).
+[Customization](CUSTOMIZATION_FEATURE.md#the-incremental-search-bar).
 
 One rule is specific to this surface: **the key must not be one that types a
 character.** The pattern field is offered every printable key first — that is
@@ -471,5 +471,5 @@ KEY_BINDINGS = {
 ## See Also
 
 - [Configuration Feature](CONFIGURATION_FEATURE.md) - General configuration guide
-- [Customization (Preview)](CUSTOMIZATION_FEATURE.md) - Viewer keys, your own actions, event hooks
+- [Customization](CUSTOMIZATION_FEATURE.md) - Viewer keys, your own actions, event hooks
 - [Help Dialog Feature](HELP_DIALOG_FEATURE.md) - Viewing key bindings in XeFM

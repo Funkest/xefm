@@ -30,7 +30,7 @@ from botocore.config import Config
 from botocore.awsrequest import AWSResponse
 from botocore.exceptions import HTTPClientError
 
-from xefm.path import Path, _CallbackAbort, _guard_progress
+from xefm.path import Path, _CallbackAbort, _guard_progress, copy_to
 from xefm.s3 import S3PathImpl
 from xefm.task import Cancelled
 
@@ -213,7 +213,7 @@ class TestS3UploadCancel(unittest.TestCase):
 class TestCopyToCancel(unittest.TestCase):
 
     def test_cancel_unwinds_copy_to_as_the_callers_exception(self):
-        # End to end through Path.copy_to: the caller's exception must come
+        # End to end through xefm.path.copy_to: the caller's exception must come
         # back as itself (file_operations catches it as Cancelled), not folded
         # into the OSError every transfer failure becomes.
         import tempfile
@@ -224,7 +224,7 @@ class TestCopyToCancel(unittest.TestCase):
             src_file.flush()
 
             with self.assertRaises(Cancelled):
-                Path(src_file.name).copy_to(
+                copy_to(Path(src_file.name), 
                     dest, overwrite=True,
                     progress_callback=cancelling_callback())
 
