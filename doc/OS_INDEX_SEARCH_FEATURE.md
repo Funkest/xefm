@@ -1,5 +1,7 @@
 # Searching the OS Index
 
+English \| [日本語](OS_INDEX_SEARCH_FEATURE.ja.md)
+
 Your operating system already keeps an index of your files, their names, their
 contents, and much more about them: **Spotlight** on macOS, **Windows
 Search** on Windows. XeFM can search that index and show what it finds as a

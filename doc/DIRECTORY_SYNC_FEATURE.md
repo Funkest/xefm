@@ -1,5 +1,7 @@
 # Directory Sync
 
+English \| [日本語](DIRECTORY_SYNC_FEATURE.ja.md)
+
 The [directory diff](DIFF_VIEWER_FEATURE.md#directory-diff) (`Shift+=`) lets
 you copy, move or delete one item at a time. Sync does the rest in one step:
 it makes the other side match the active side. You see the whole plan before

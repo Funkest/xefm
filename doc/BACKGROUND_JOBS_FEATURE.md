@@ -1,5 +1,7 @@
 # Background Jobs
 
+English \| [日本語](BACKGROUND_JOBS_FEATURE.ja.md)
+
 A copy, move or delete can run in the **background** while you go on using
 XeFM: browse, view files, even start another operation.
 

@@ -1,5 +1,7 @@
 # Batch Rename Feature
 
+English \| [日本語](BATCH_RENAME_FEATURE.ja.md)
+
 ## Overview
 The batch rename feature allows you to rename multiple files at once using regex patterns and destination templates with special macros.
 

@@ -1,5 +1,7 @@
 # Search Options Feature
 
+English \| [日本語](SEARCH_OPTIONS_FEATURE.ja.md)
+
 ## Overview
 
 The search dialog (`find_files` for filenames, `find_in_files` for contents,

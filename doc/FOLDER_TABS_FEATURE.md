@@ -1,5 +1,7 @@
 # Folder Tabs
 
+English \| [日本語](FOLDER_TABS_FEATURE.ja.md)
+
 Each pane can hold several **tabs**, and each tab keeps its own place open.
 Use them for the handful of directories a task moves between, or to keep a
 search result or an imported list while you browse somewhere else.

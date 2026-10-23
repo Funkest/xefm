@@ -1,5 +1,7 @@
 # Customization
 
+English \| [日本語](CUSTOMIZATION_FEATURE.ja.md)
+
 > **Stable, with some parts in Preview.** The API on this page is at version
 > 1 (`xefm.user_api.API_VERSION`). The stable parts keep working across XeFM
 > releases. A stable API that is going away is first deprecated: it keeps

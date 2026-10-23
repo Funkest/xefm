@@ -1,5 +1,7 @@
 # Help Dialog (F1 Key)
 
+English \| [日本語](HELP_DIALOG_FEATURE.ja.md)
+
 XeFM includes a scrollable help dialog listing the key bindings for whatever is
 on screen. Press **F1** in the file list to open the one described here. The
 viewers (text, image, file diff, directory diff) answer **F1** as well, each with

@@ -1,5 +1,7 @@
 # Migemo Search Feature
 
+English \| [日本語](MIGEMO_SEARCH_FEATURE.ja.md)
+
 ## Overview
 
 Migemo lets incremental search find Japanese names by typing romaji — no IME

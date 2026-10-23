@@ -1,5 +1,7 @@
 # File Lists
 
+English \| [日本語](FILE_LIST_IMPORT_FEATURE.ja.md)
+
 A pane can show a **list of paths** instead of a directory: files that live
 all over the disk, or on several machines, side by side in one listing, where
 every file operation works on them as it does anywhere else.

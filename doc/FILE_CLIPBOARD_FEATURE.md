@@ -1,5 +1,7 @@
 # File Clipboard
 
+English \| [日本語](FILE_CLIPBOARD_FEATURE.ja.md)
+
 Copy or cut files now, then paste them **wherever you go next**: a third
 folder, the other pane after you have moved it somewhere, or (on macOS and
 Windows) Finder or Explorer.

@@ -1,5 +1,7 @@
 # Connect to Server
 
+English \| [日本語](CONNECT_TO_SERVER_FEATURE.ja.md)
+
 XeFM connects to a NAS or file server by itself. On macOS you no longer need to
 open Finder, walk into **Network** and open a share to get it into `/Volumes`;
 on Windows you no longer need Explorer's *Map network drive*. Open

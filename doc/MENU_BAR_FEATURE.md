@@ -1,5 +1,7 @@
 # Menu Bar Feature
 
+English \| [日本語](MENU_BAR_FEATURE.ja.md)
+
 ## Overview
 
 In desktop (GUI) mode, XeFM shows a native menu bar so you can drive the file

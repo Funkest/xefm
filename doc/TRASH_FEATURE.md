@@ -1,5 +1,7 @@
 # Deleting to the Trash
 
+English \| [日本語](TRASH_FEATURE.ja.md)
+
 `K` (or `Delete`) moves files to your system's **Trash**, called the Recycle
 Bin on Windows, so a mistaken delete can be undone. Restore them from Finder
 (*Put Back*), the Recycle Bin, or your desktop's Trash, the same way as files

@@ -1,5 +1,7 @@
 # XeFM Desktop Mode Guide
 
+English \| [日本語](DESKTOP_MODE_GUIDE.ja.md)
+
 ## Overview
 
 XeFM can run as a native desktop application on Windows and macOS with GPU acceleration, providing a modern windowed experience while maintaining the same powerful keyboard-driven interface you know from terminal mode.

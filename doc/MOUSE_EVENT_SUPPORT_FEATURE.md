@@ -1,5 +1,7 @@
 # Mouse
 
+English \| [日本語](MOUSE_EVENT_SUPPORT_FEATURE.ja.md)
+
 XeFM is built to be fast from the keyboard, and the mouse works alongside it.
 You can mark and open files, move them by dragging, scroll and jump around,
 all with the mouse. Every mouse action also has a key.

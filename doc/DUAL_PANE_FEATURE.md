@@ -1,5 +1,7 @@
 # Dual-Pane File Management
 
+English \| [日本語](DUAL_PANE_FEATURE.ja.md)
+
 XeFM shows two directories side by side, which makes copying, moving, and
 comparing between them far quicker than in a single-pane manager. One pane is
 **active** (highlighted, with the cursor); the other is inactive. Press **Tab**

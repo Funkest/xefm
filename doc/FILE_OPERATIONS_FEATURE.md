@@ -1,5 +1,7 @@
 # File Operations
 
+English \| [日本語](FILE_OPERATIONS_FEATURE.ja.md)
+
 XeFM's core file operations — copy, move, duplicate, and rename — all share the
 same conflict handling and progress display. This document covers how each one
 works and the options you can configure.

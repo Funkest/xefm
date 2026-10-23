@@ -1,5 +1,7 @@
 # Diff Viewer
 
+English \| [日本語](DIFF_VIEWER_FEATURE.ja.md)
+
 XeFM has two built-in diff viewers: a **file diff** that compares two text files
 side by side, and a **directory diff** that compares two directory trees
 recursively. Both open full-window, without leaving XeFM.

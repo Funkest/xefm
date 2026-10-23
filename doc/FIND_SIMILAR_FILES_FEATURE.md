@@ -1,5 +1,7 @@
 # Find Similar Files
 
+English \| [日本語](FIND_SIMILAR_FILES_FEATURE.ja.md)
+
 **Tools → Find Similar Files…** looks through a folder for files you probably
 don't need twice:
 

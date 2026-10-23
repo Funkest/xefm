@@ -1,5 +1,7 @@
 # Quick View
 
+English \| [日本語](QUICK_VIEW_FEATURE.ja.md)
+
 Press `Shift-V` (**View → Quick View**) and the **other pane becomes a
 preview** of the item under the cursor. Move the cursor and the preview
 follows. Press `Shift-V` again, or `Esc`, to close it.

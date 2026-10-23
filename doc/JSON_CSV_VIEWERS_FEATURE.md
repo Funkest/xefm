@@ -1,5 +1,7 @@
 # JSON and CSV Viewers
 
+English \| [日本語](JSON_CSV_VIEWERS_FEATURE.ja.md)
+
 XeFM's built-in file viewer can render **JSON / JSON Lines** files as a
 collapsible tree and **CSV / TSV** files as an aligned table, in addition to the
 usual raw, line-numbered text view. They work exactly like the [Markdown

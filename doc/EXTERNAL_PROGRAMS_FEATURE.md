@@ -1,5 +1,7 @@
 # External Programs Feature
 
+English \| [日本語](EXTERNAL_PROGRAMS_FEATURE.ja.md)
+
 ## Overview
 
 The External Programs feature allows you to execute custom external programs directly from XeFM with access to the current file manager state through environment variables. This extends XeFM's functionality by integrating with external tools and scripts.

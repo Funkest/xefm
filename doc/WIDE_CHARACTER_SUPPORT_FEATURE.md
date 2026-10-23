@@ -1,5 +1,7 @@
 # Wide Character Support Feature
 
+English \| [日本語](WIDE_CHARACTER_SUPPORT_FEATURE.ja.md)
+
 ## Overview
 
 XeFM now includes comprehensive support for wide characters, particularly Japanese Zenkaku characters and other Unicode characters that occupy multiple display columns in terminal output. This feature ensures that filenames containing international characters are displayed correctly without breaking the layout.

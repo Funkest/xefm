@@ -1,5 +1,7 @@
 # Key Bindings Feature
 
+English \| [日本語](KEY_BINDINGS_FEATURE.ja.md)
+
 ## Overview
 
 XeFM's key bindings system allows you to customize keyboard shortcuts for all actions in the application. The system supports:

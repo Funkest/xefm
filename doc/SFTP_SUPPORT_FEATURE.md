@@ -1,5 +1,7 @@
 # SFTP Support Feature Guide
 
+English \| [日本語](SFTP_SUPPORT_FEATURE.ja.md)
+
 ## Overview
 
 XeFM provides seamless SFTP (SSH File Transfer Protocol) support, allowing you to browse, search, and manage files on remote servers as if they were local directories. XeFM opens one SSH connection per server and runs every operation over it, and supports all standard file operations.

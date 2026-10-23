@@ -1,5 +1,7 @@
 # Text Viewer
 
+English \| [日本語](TEXT_VIEWER_FEATURE.ja.md)
+
 XeFM has a built-in text viewer for source code, config files, logs, and any
 other text. The encoding is detected automatically — UTF-8 with or without
 BOM, Shift-JIS, EUC-JP, ISO-2022-JP, Latin-1 / CP1252 and more, with a manual

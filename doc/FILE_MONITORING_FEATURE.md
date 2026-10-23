@@ -1,5 +1,7 @@
 # Automatic File List Reloading
 
+English \| [日本語](FILE_MONITORING_FEATURE.ja.md)
+
 ## Overview
 
 XeFM automatically detects and displays changes made to files by external applications. When another program creates, deletes, modifies, or renames files in the directory you're viewing, XeFM updates the file list automatically—no manual refresh needed.

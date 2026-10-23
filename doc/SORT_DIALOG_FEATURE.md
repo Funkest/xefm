@@ -1,5 +1,7 @@
 # Sort Dialog
 
+English \| [日本語](SORT_DIALOG_FEATURE.ja.md)
+
 Press **S** to open the sort dialog over the active pane. It replaces the old
 generic sort menu with a picker made for the job: choose a **sort key**, choose
 an **order**, and read what that order means before you commit.

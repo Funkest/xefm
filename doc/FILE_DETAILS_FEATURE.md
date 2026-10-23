@@ -1,5 +1,7 @@
 # File Details (I Key)
 
+English \| [日本語](FILE_DETAILS_FEATURE.ja.md)
+
 Press **I** to open a scrollable dialog with detailed information about files and
 directories.
 

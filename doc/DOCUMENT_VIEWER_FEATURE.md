@@ -1,5 +1,7 @@
 # Documents as Text
 
+English \| [日本語](DOCUMENT_VIEWER_FEATURE.ja.md)
+
 XeFM's viewer shows **what a document says**: the text of PDF, Word, Excel,
 PowerPoint, OpenDocument and EPUB files, with their headings, lists, tables,
 pages, slides and sheets. You can search it, select and copy it, and wrap it

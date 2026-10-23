@@ -1,5 +1,7 @@
 # External Terminal (desktop mode)
 
+English \| [日本語](EXTERNAL_TERMINAL_FEATURE.ja.md)
+
 In terminal mode, XeFM lends its own terminal to anything that needs one: the
 subshell (`subshell`, Shift-X) and `PROGRAMS` entries marked
 `'options': {'terminal': True}` — `vim`, `less`, a REPL. The desktop app has no

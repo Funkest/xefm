@@ -1,5 +1,7 @@
 # XeFM Text Viewer Status Bar
 
+English \| [日本語](STATUS_BAR_FEATURE.ja.md)
+
 ## Overview
 The XeFM text viewer includes a comprehensive status bar at the bottom of the screen that provides real-time information about the current file and viewer state.
 

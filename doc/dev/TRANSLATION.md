@@ -126,46 +126,64 @@ term across the docs. Add a row when a new recurring term comes up.
 |---|---|---|
 | action | アクション | the config/extension concept |
 | active pane / this pane | アクティブなペイン | |
+| AI coding agent | AI コーディングエージェント | |
 | archive | アーカイブ | |
 | background job | バックグラウンドジョブ | |
 | bucket (S3) | バケット | |
+| built-in (viewer, handler) | 内蔵 | |
 | clipboard | クリップボード | |
 | command palette | コマンドパレット | |
 | configuration, config | 設定 | `config.py` stays as is |
+| conflict (file operations) | 競合 | key or name clashes: 衝突 |
 | content search | 内容検索 | searching inside files |
 | context menu | コンテキストメニュー | |
+| credentials | 認証情報 | |
+| cursor / item under the cursor | カーソル / カーソル位置の項目 | |
+| default | 既定 / 既定値 | never デフォルト |
+| deprecated | 非推奨 | |
 | desktop app / desktop mode | デスクトップアプリ / デスクトップモード | |
 | dialog | ダイアログ | |
+| diff (file / directory) | 差分（ファイル差分 / ディレクトリ差分） | |
 | directory | ディレクトリ | keep directory vs folder as the English has it |
 | dual-pane | 2 画面 | "dual-pane interface" → 2 画面表示 |
+| encoding | エンコーディング | |
 | event hook | イベントフック | |
-| extension | 拡張機能 | |
 | extension package | 拡張パッケージ | |
+| extension | 拡張機能 | |
 | external program | 外部プログラム | |
 | favorite (directory) | お気に入り | |
 | feature guide | 機能ガイド | |
 | file association | ファイルの関連付け | |
+| file clipboard | ファイルクリップボード | |
 | file manager | ファイルマネージャー | |
+| file monitoring | ファイル監視 | |
 | filename search | ファイル名検索 | |
 | filter | フィルター | |
+| Find Similar Files | 類似ファイルの検索 | |
 | flat view | フラット表示 | |
-| folder | フォルダー | |
 | folder tab | フォルダータブ | |
+| folder | フォルダー | |
+| hidden files | 隠しファイル | |
 | incremental search | インクリメンタルサーチ | |
 | key binding | キーバインド | |
 | keymap preset | キーマッププリセット | |
+| log pane | ログペイン | |
 | menu bar | メニューバー | |
+| mount / unmount / eject | マウント / アンマウント / 取り出し | |
 | other pane / opposite pane | 反対側のペイン | |
 | pane | ペイン | |
 | path scheme | パススキーム | `ssh://`, `s3://` |
 | Preview (API status) | プレビュー | |
+| progress (dialog) | 進捗（進捗ダイアログ） | |
 | quick view | クイックビュー | |
 | remote | リモート | |
+| rename / batch rename | 名前の変更 / 一括リネーム | |
+| rendered view / raw text view | 整形表示 / 生テキスト表示 | "rich view" → リッチ表示 |
+| See also / Related | 関連項目 | as a heading |
 | select / selection | 選択 / 選択項目 | |
 | server | サーバー | |
 | setting | 設定項目 | one entry in `config.py` |
 | skill (AI agent) | スキル | |
-| AI coding agent | AI コーディングエージェント | |
 | sort order | ソート順 | |
 | stable (API) | 安定版 | |
 | status bar | ステータスバー | |
@@ -180,3 +198,4 @@ term across the docs. Add a row when a new recurring term comes up.
 | virtual folder | 仮想フォルダー | |
 | visual effects | 視覚効果 | |
 | wide characters | 全角文字 | |
+| X Support (page title) | X 対応 | SFTP 対応, S3 対応 |

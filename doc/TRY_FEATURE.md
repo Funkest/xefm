@@ -1,5 +1,7 @@
 # Trying XeFM in a Throwaway Home
 
+English \| [日本語](TRY_FEATURE.ja.md)
+
 `xefm try` starts XeFM in the terminal inside a temporary home folder. Your
 own `~/.xefm` — your config, your favorites, your extensions — is never read
 or changed, and the temporary home is deleted when XeFM exits. Use it to:

@@ -1,5 +1,7 @@
 # The Extension Authoring Skill (moved)
 
+English \| [日本語](EXTENSION_AUTHORING_SKILL_FEATURE.ja.md)
+
 The `xefm-extension-authoring` skill is now **`xefm`**, and it covers editing
 your configuration as well as writing extensions. Its page is
 [The XeFM Skill for AI Agents](AGENT_SKILL_FEATURE.md)

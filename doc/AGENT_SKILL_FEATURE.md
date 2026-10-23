@@ -1,5 +1,7 @@
 # The XeFM Skill for AI Agents
 
+English \| [日本語](AGENT_SKILL_FEATURE.ja.md)
+
 XeFM provides an [Agent Skills](https://agentskills.io) skill, **`xefm`**, that
 teaches an AI agent to work with XeFM for you. It covers two things:
 

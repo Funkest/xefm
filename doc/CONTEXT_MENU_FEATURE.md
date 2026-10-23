@@ -1,5 +1,7 @@
 # Context Menus
 
+English \| [日本語](CONTEXT_MENU_FEATURE.ja.md)
+
 The file list has two context menus: one for the **item under the cursor**,
 and one for the **directory** the pane is showing. Each opens with the mouse or
 from the keyboard.

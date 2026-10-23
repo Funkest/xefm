@@ -1,5 +1,7 @@
 # Virtual folders
 
+English \| [日本語](VIRTUAL_FOLDERS_FEATURE.ja.md)
+
 > **Stable, with some parts in Preview.** `PATH_SCHEMES` and the
 > `ReadOnlyPathImpl` way of writing a virtual folder are stable API (version
 > 1): the five methods, `self.key`, `self.child()`, `UriStatResult`, and the
