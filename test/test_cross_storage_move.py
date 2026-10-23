@@ -15,7 +15,7 @@ import tempfile
 import shutil
 from pathlib import Path as PathlibPath
 
-from xefm.path import Path
+from xefm.path import Path, move_to
 
 
 class TestCrossStorageMove:
@@ -81,7 +81,7 @@ class TestCrossStorageMove:
         
         # Perform move
         try:
-            success = source_file.move_to(dest_file)
+            success = move_to(source_file, dest_file)
             assert success, "Move operation should succeed"
             
             # Verify move completed
@@ -106,7 +106,7 @@ class TestCrossStorageMove:
         print(f"Moving directory {source_dir} to {dest_subdir}")
         
         try:
-            success = source_dir.move_to(dest_subdir)
+            success = move_to(source_dir, dest_subdir)
             assert success, "Directory move operation should succeed"
             
             # Verify directory structure
@@ -131,7 +131,7 @@ class TestCrossStorageMove:
             # Try to create an S3 path
             s3_path = Path("s3://test-bucket/test-key")
             print(f"S3 path created: {s3_path}")
-            print(f"S3 scheme: {s3_path.get_scheme()}")
+            print(f"S3 scheme: {s3_path.scheme}")
             print("✓ S3 support is available")
             return
             
@@ -152,22 +152,22 @@ class TestCrossStorageMove:
             local_file = self.test_files[1]  # Use remaining test file
             s3_dest = Path("s3://test-bucket/moved-file.md")
             
-            print(f"Simulating move from {local_file.get_scheme()} to {s3_dest.get_scheme()}")
+            print(f"Simulating move from {local_file.scheme} to {s3_dest.scheme}")
             
             # Check scheme detection
-            assert local_file.get_scheme() == 'file', "Local file should have 'file' scheme"
-            assert s3_dest.get_scheme() == 's3', "S3 path should have 's3' scheme"
+            assert local_file.scheme == 'file', "Local file should have 'file' scheme"
+            assert s3_dest.scheme == 's3', "S3 path should have 's3' scheme"
             
             # Verify cross-storage detection logic
-            is_cross_storage = local_file.get_scheme() != s3_dest.get_scheme()
+            is_cross_storage = local_file.scheme != s3_dest.scheme
             assert is_cross_storage, "Should detect cross-storage move"
             
             print("✓ Cross-storage move detection works correctly")
             
             # Test scheme name mapping
             scheme_names = {'file': 'Local', 's3': 'S3', 'scp': 'SCP', 'ftp': 'FTP'}
-            source_name = scheme_names.get(local_file.get_scheme(), local_file.get_scheme().upper())
-            dest_name = scheme_names.get(s3_dest.get_scheme(), s3_dest.get_scheme().upper())
+            source_name = scheme_names.get(local_file.scheme, local_file.scheme.upper())
+            dest_name = scheme_names.get(s3_dest.scheme, s3_dest.scheme.upper())
             
             print(f"Move type: {source_name} → {dest_name}")
             assert source_name == "Local", "Source should be Local"
@@ -191,7 +191,7 @@ class TestCrossStorageMove:
             dest = Path(self.temp_dir) / "destination.txt"
             
             try:
-                non_existent.move_to(dest)
+                move_to(non_existent, dest)
                 print("✗ Should have raised FileNotFoundError")
                 return
             except FileNotFoundError:
@@ -205,7 +205,7 @@ class TestCrossStorageMove:
             existing_dest.write_text("Existing content")
             
             try:
-                source.move_to(existing_dest, overwrite=False)
+                move_to(source, existing_dest, overwrite=False)
                 print("✗ Should have raised FileExistsError")
                 return
             except FileExistsError:
@@ -213,7 +213,7 @@ class TestCrossStorageMove:
             
             # Test moving to existing destination with overwrite
             try:
-                success = source.move_to(existing_dest, overwrite=True)
+                success = move_to(source, existing_dest, overwrite=True)
                 assert success, "Move with overwrite should succeed"
                 assert not source.exists(), "Source should be gone"
                 assert existing_dest.exists(), "Destination should exist"

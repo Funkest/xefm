@@ -47,22 +47,22 @@ BODIES = {
 class NotesPathImpl(ReadOnlyPathImpl):
 
     def exists(self):
-        return self._key in NOTES or self._key in BODIES
+        return self.key in NOTES or self.key in BODIES
 
     def is_dir(self):
-        return self._key in NOTES
+        return self.key in NOTES
 
     def iterdir(self):
-        for name in NOTES.get(self._key, []):
-            yield self._child(name)
+        for name in NOTES.get(self.key, []):
+            yield self.child(name)
 
     def stat(self):
-        return UriStatResult(size=len(BODIES.get(self._key, '')),
+        return UriStatResult(size=len(BODIES.get(self.key, '')),
                              mtime=0.0, is_dir=self.is_dir())
 
     def open(self, mode='r', buffering=-1, encoding=None,
              errors=None, newline=None):
-        return io.StringIO(BODIES.get(self._key, ''))
+        return io.StringIO(BODIES.get(self.key, ''))
 
 
 class Config:
@@ -88,21 +88,21 @@ the module — and skips the class body in between. Only the
 |---|---|
 | `exists()` | whether there is anything at this path |
 | `is_dir()` | whether it can be listed |
-| `iterdir()` | the entries, as `self._child(name)` |
+| `iterdir()` | the entries, as `self.child(name)` |
 | `stat()` | size, time and kind, via `UriStatResult` |
 | `open(mode=…)` | a file object for the content |
 
-### `self._key`
+### `self.key`
 
 The part of the URI after `notes://`, with no leading or trailing slash:
 
-| path | `self._key` |
+| path | `self.key` |
 |---|---|
 | `notes://` | `''` — the root |
 | `notes://work` | `'work'` |
 | `notes://work/standup.md` | `'work/standup.md'` |
 
-`self._child(name)` builds a child of the current path. You never build a URI
+`self.child(name)` builds a child of the current path. You never build a URI
 by hand, and you never work out a parent, a name or a suffix — XeFM does that
 from the key.
 
@@ -158,7 +158,7 @@ class RegistryPathImpl(ReadOnlyPathImpl):
 
     def _open_key(self):
         """The open registry key for this path, or None if it is not one."""
-        hive, _, subkey = self._key.partition('/')
+        hive, _, subkey = self.key.partition('/')
         if hive not in HIVES:
             return None
         try:
@@ -168,7 +168,7 @@ class RegistryPathImpl(ReadOnlyPathImpl):
 
     def _value(self):
         """This path read as a *value* under its parent key, or None."""
-        parent, _, name = self._key.rpartition('/')
+        parent, _, name = self.key.rpartition('/')
         hive, _, subkey = parent.partition('/')
         if hive not in HIVES:
             return None
@@ -184,7 +184,7 @@ class RegistryPathImpl(ReadOnlyPathImpl):
         return self.is_dir() or self._value() is not None
 
     def is_dir(self):
-        if not self._key:
+        if not self.key:
             return True                      # reg:// lists the hives
         key = self._open_key()
         if key is None:
@@ -193,9 +193,9 @@ class RegistryPathImpl(ReadOnlyPathImpl):
         return True
 
     def iterdir(self):
-        if not self._key:
+        if not self.key:
             for name in HIVES:
-                yield self._child(name)
+                yield self.child(name)
             return
         key = self._open_key()
         if key is None:
@@ -203,10 +203,10 @@ class RegistryPathImpl(ReadOnlyPathImpl):
         with key:
             n_subkeys, n_values, _ = winreg.QueryInfoKey(key)
             for i in range(n_subkeys):
-                yield self._child(winreg.EnumKey(key, i))
+                yield self.child(winreg.EnumKey(key, i))
             for i in range(n_values):
                 name = winreg.EnumValue(key, i)[0]
-                yield self._child(name or '(Default)')
+                yield self.child(name or '(Default)')
 
     def stat(self):
         if self.is_dir():

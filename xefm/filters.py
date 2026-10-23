@@ -164,7 +164,7 @@ def matcher(pattern: str) -> Callable[[Any, Mapping[str, Any]], bool]:
     from xefm.user_api import EntryInfo
 
     def run(path, attrs) -> bool:
-        return bool(match(EntryInfo.from_attrs(path, attrs)))
+        return bool(match(EntryInfo._from_attrs(path, attrs)))
 
     return run
 

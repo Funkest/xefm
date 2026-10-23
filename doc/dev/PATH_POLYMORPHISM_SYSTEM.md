@@ -223,14 +223,14 @@ URI-addressed backend splits the same way — a root naming the container, a
 `/`-separated key inside it — so the class keeps one invariant:
 
 ```python
-str(self) == self._root_prefix() + self._key
+str(self) == self.root_prefix() + self.key
 ```
 
 and derives `parent`, `parents`, `parts`, `name`, `stem`, `suffix`, `anchor`,
 `joinpath`, `with_name`, `with_stem`, `with_suffix`, `relative_to`, `glob`,
 `rglob`, `match`, `__eq__`, `__hash__`, `__lt__` and the rest from it. A
-subclass overrides at most two hooks — `_parse(uri)` (store what names the
-root, return the key) and `_root_prefix()` — and gets the arithmetic.
+subclass overrides at most two hooks — `parse_uri(uri)` (store what names the
+root, return the key) and `root_prefix()` — and gets the arithmetic.
 
 **`ReadOnlyPathImpl`** adds a *policy*, not more shared code: the eleven write
 operations raise `OSError(errno.EROFS, …)` and the capability declaration says
@@ -257,7 +257,7 @@ class RegistryPathImpl(ReadOnlyPathImpl):
 
     def exists(self): ...
     def is_dir(self): ...
-    def iterdir(self): ...           # yield self._child(name)
+    def iterdir(self): ...           # yield self.child(name)
     def stat(self): ...              # return UriStatResult(size=…, mtime=…, is_dir=…)
     def open(self, mode='r', buffering=-1, encoding=None,
              errors=None, newline=None): ...
@@ -295,7 +295,7 @@ import time. The ABC stays strict; leniency belongs in the published subclass.
 
 ### Arithmetic Stays Inside the Class
 
-`UriPathImpl._at(key)` builds a sibling through `Path._from_impl(type(self)(…))`
+`UriPathImpl.at(key)` builds a sibling through `Path._from_impl(type(self)(…))`
 rather than `Path(uri)`. `Path(uri)` asks the scheme factory which class to
 build, so a backend the factory has never heard of would find its own `parent`
 coming back as a *local* path. Going through the implementation it already has

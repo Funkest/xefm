@@ -613,7 +613,7 @@ threading rule always said had to be made with the first registry rather than
 after: sorting *is* the slow per-entry work, so it is the one thing that cannot
 be pinned to the UI thread.
 
-**`EntryInfo.from_attrs` seeds size and mtime** from the listing's own attribute
+**`EntryInfo._from_attrs` seeds size and mtime** from the listing's own attribute
 record. Without it a key reading `entry.size` would `stat` once per entry — 10,000
 round trips on a network mount, for information the listing already collected,
 behind an ordering that needs none.

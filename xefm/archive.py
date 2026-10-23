@@ -2470,7 +2470,7 @@ class ArchivePathImpl(PathImpl):
         arrive. Returns the number written.
 
         The archive side of the contract ``S3PathImpl.download_to_stream``
-        implements, and it exists for the same reason: ``Path.copy_to`` reports
+        implements, and it exists for the same reason: ``xefm.path.copy_to`` reports
         progress only through a callback, and for a cross-storage copy that
         callback is also the *only* place the file operation can notice a cancel
         (:meth:`xefm.file_operations.FileOperationService._remote_progress`).

@@ -147,16 +147,17 @@ class CodeLint(_Tmp):
 
     def test_only_the_public_names_of_a_public_module(self):
         problems = self.lint('''
-            from xefm.user_api import md_code_block, run_guarded
-            from xefm.path_base import ReadOnlyPathImpl, UriPathImpl
+            from xefm.user_api import is_desktop_mode, run_guarded
+            from xefm.path_base import ReadOnlyPathImpl, UnsupportedPathImpl
             from xefm.user_api import *
         ''')
         self.assertEqual([p.severity for p in problems], ["error", "error"])
         self.assertIn("'run_guarded' is not part of xefm.user_api's public API",
                       problems[0].message)
         # The message lists what is allowed, so the fix needs no search.
-        self.assertIn("md_code_block", problems[0].message)
-        self.assertIn("'UriPathImpl' is not part of xefm.path_base", problems[1].message)
+        self.assertIn("is_desktop_mode", problems[0].message)
+        self.assertIn("'UnsupportedPathImpl' is not part of xefm.path_base",
+                      problems[1].message)
 
     def test_names_read_through_the_module_are_checked_too(self):
         problems = self.lint('''

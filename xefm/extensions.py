@@ -1754,6 +1754,9 @@ class LoadReport:
     #: ``(id or directory, reason)`` for each package not loaded.
     skipped: list[tuple[str, str]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    #: ``(table, key) -> extension id`` for each entry an extension placed, so
+    #: a later package that names the same key is told which one it lost to.
+    owners: dict[tuple[str, str], str] = field(default_factory=dict)
 
 
 def _current_backend() -> str:
@@ -1899,11 +1902,19 @@ def _apply(config, manifest: Manifest, layout: Layout, report: LoadReport) -> No
         current = dict(getattr(config, attr, None) or {})
         for key, value in entries.items():
             if key in current:
+                owner = report.owners.get((attr, key))
+                if owner is None:
+                    winner = "config.py wins"
+                    where = "config.py"
+                else:
+                    winner = f"{owner} loaded first and wins"
+                    where = f"the extension {owner}"
                 report.warnings.append(
-                    f"{manifest.id}: {attr}['{key}'] is also in config.py — "
-                    "config.py wins, the extension's entry is skipped")
+                    f"{manifest.id}: {attr}['{key}'] is also in {where} — "
+                    f"{winner}, the extension's entry is skipped")
                 continue
             current[key] = value
+            report.owners[(attr, key)] = manifest.id
         setattr(config, attr, current)
 
     suggestions = manifest.contributes.get("key_suggestions", {}) or {}

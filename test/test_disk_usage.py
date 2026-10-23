@@ -44,7 +44,7 @@ class _FakePath:
             st_mtime = 0.0
         return _Stat()
 
-    def listdir_attrs(self):
+    def _listdir_attrs(self):
         return [(_FakePath(f"{self._name}/{n}", []),
                  {"is_dir": False, "is_link": False, "size": size,
                   "alloc": alloc, "mtime": 0.0, "hidden": False, "ok": True})

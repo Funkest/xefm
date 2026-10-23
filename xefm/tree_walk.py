@@ -16,6 +16,8 @@ from __future__ import annotations
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from typing import Callable, Iterator, Tuple
 
+from xefm.path import listdir_attrs, listing_concurrency
+
 #: How often a parallel walk waiting on listings looks at its cancel flag.
 _CANCEL_POLL = 0.1
 
@@ -23,7 +25,7 @@ _CANCEL_POLL = 0.1
 def walk(root, cancel, descend: Callable[[object, dict], bool]
          ) -> Iterator[Tuple[object, dict]]:
     """Yield ``(entry, attrs)`` for every entry under ``root``
-    (:meth:`Path.listdir_attrs` records), descending into each entry for which
+    (:func:`xefm.path.listdir_attrs` records), descending into each entry for which
     ``descend(entry, attrs)`` is true. A directory that cannot be listed is
     skipped. Stops as soon as ``cancel`` (a ``threading.Event``) is set, and
     when the consumer stops iterating.
@@ -32,7 +34,7 @@ def walk(root, cancel, descend: Callable[[object, dict], bool]
     With one listing at a time the walk is depth-first; with several, a
     directory's entries come when its listing does, so the order across
     directories follows the storage, not the tree."""
-    workers = root.listing_concurrency()
+    workers = listing_concurrency(root)
     if workers <= 1:
         yield from _walk_sequential(root, cancel, descend)
     else:
@@ -45,7 +47,7 @@ def _walk_sequential(root, cancel, descend):
         if cancel.is_set():
             return
         try:
-            entries = stack.pop().listdir_attrs()
+            entries = listdir_attrs(stack.pop())
         except Exception:
             continue
         for entry, attrs in entries:
@@ -61,7 +63,7 @@ def _walk_parallel(root, cancel, descend, workers: int):
     its parent's listing names it — before its siblings are handed to the
     consumer — so the listings keep running while the consumer works."""
     pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="xefm-walk")
-    pending = {pool.submit(root.listdir_attrs)}
+    pending = {pool.submit(listdir_attrs, root)}
     try:
         while pending:
             done, _ = wait(pending, timeout=_CANCEL_POLL, return_when=FIRST_COMPLETED)
@@ -74,7 +76,7 @@ def _walk_parallel(root, cancel, descend, workers: int):
                 except Exception:
                     continue
                 subdirs = [entry for entry, attrs in entries if descend(entry, attrs)]
-                pending.update(pool.submit(d.listdir_attrs) for d in subdirs)
+                pending.update(pool.submit(listdir_attrs, d) for d in subdirs)
                 for item in entries:
                     if cancel.is_set():
                         return

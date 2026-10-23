@@ -18,7 +18,7 @@ Three things the design turns on:
   the remote's mtime and size as of the download (and of each upload since);
   anything different means someone else wrote it, and the app asks before
   overwriting that. The backend's metadata cache is bypassed for that one stat
-  (:meth:`Path.forget_cached_metadata`), or a change made within the cache's
+  (:func:`xefm.path.forget_cached_metadata`), or a change made within the cache's
   lifetime would go unseen.
 - **The copy outlives every failure.** An upload that fails or is declined
   leaves the session *pending*, and a pending copy is never deleted — not on
@@ -39,6 +39,7 @@ from pathlib import Path as LocalPath
 from typing import Any, Optional
 
 from xefm.log_manager import getLogger
+from xefm.path import forget_cached_metadata
 
 logger = getLogger("RemoteEdit")
 
@@ -76,9 +77,7 @@ def local_copy_path(root: LocalPath, remote: Any) -> LocalPath:
 def _remote_state(remote: Any) -> Optional[tuple[float, int]]:
     """The remote file's (mtime, size) straight from the storage, or None when
     it is gone. Other failures propagate: an unreachable host is not "gone"."""
-    forget = getattr(remote, "forget_cached_metadata", None)
-    if forget is not None:
-        forget()
+    forget_cached_metadata(remote)
     try:
         st = remote.stat()
     except FileNotFoundError:

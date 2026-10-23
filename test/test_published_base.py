@@ -37,16 +37,16 @@ class Sample(ReadOnlyPathImpl):
     SCHEME = 'sample'
 
     def exists(self):
-        return self._key in ('', 'dir', 'dir/a.tar.gz')
+        return self.key in ('', 'dir', 'dir/a.tar.gz')
 
     def is_dir(self):
-        return self._key in ('', 'dir')
+        return self.key in ('', 'dir')
 
     def iterdir(self):
-        if self._key == '':
-            yield self._child('dir')
-        elif self._key == 'dir':
-            yield self._child('a.tar.gz')
+        if self.key == '':
+            yield self.child('dir')
+        elif self.key == 'dir':
+            yield self.child('a.tar.gz')
 
     def stat(self):
         return UriStatResult(size=3, mtime=1.0, is_dir=self.is_dir())
@@ -62,12 +62,12 @@ class Bucketed(UriPathImpl):
 
     SCHEME = 'buck'
 
-    def _parse(self, uri):
+    def parse_uri(self, uri):
         rest = uri[len('buck://'):]
         self._bucket, _, key = rest.partition('/')
         return key
 
-    def _root_prefix(self):
+    def root_prefix(self):
         return f'buck://{self._bucket}/'
 
     def exists(self): return True
@@ -117,7 +117,7 @@ class TestArithmetic(unittest.TestCase):
 
     def test_the_invariant(self):
         p = Sample('sample://dir/a.tar.gz')
-        self.assertEqual(str(p), p._root_prefix() + p._key)
+        self.assertEqual(str(p), p.root_prefix() + p.key)
 
     def test_name_components(self):
         p = Sample('sample://dir/a.tar.gz')
@@ -168,7 +168,7 @@ class TestArithmetic(unittest.TestCase):
                 self.assertEqual(str(Sample(written)), expected)
 
     def test_arithmetic_keeps_the_class_that_produced_it(self):
-        """The reason ``_at`` does not call ``Path(uri)``: a scheme the factory
+        """The reason ``at`` does not call ``Path(uri)``: a scheme the factory
         has never heard of would come back as a local path, so a virtual
         folder's own ``parent`` would leave the virtual folder."""
         parent = Sample('sample://dir/a.tar.gz').parent

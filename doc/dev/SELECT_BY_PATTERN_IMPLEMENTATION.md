@@ -34,7 +34,7 @@ hold without a second implementation:
 
 The attribute record comes from `pane['_listing_entries']` (the pre-filter
 snapshot, which has `size`/`mtime`/`ok`) so a predicate filter gets real values
-through `EntryInfo.from_attrs`. A pane with no snapshot falls back to
+through `EntryInfo._from_attrs`. A pane with no snapshot falls back to
 `file_info`, which carries `is_dir` and `cmp_name` — enough for any glob.
 
 A predicate that raises fails the whole action and changes nothing (logged as an

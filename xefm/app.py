@@ -2101,19 +2101,19 @@ class XeFMApp:
 
         Shared by startup and reload — the loader drops every previously loaded
         user entry first, so re-running it *is* the reload. Problems are reported
-        as ordinary log lines, one per bad entry, and a config that uses the API
-        at all gets the one-line preview notice: this is not a stable surface
-        yet, and the log pane is where a user finds that out."""
+        as ordinary log lines, one per bad entry, and a config that uses a
+        Preview table gets the one-line preview notice: that part may still
+        change, and the log pane is where a user finds that out."""
         self._report_extensions()
         self._report_python_packages()
-        (warnings, action_count, hook_count, sort_count,
-         filter_count, decoder_count, scheme_count,
-         lexer_count) = load_user_entries(config)
-        for warning in warnings:
+        loaded = load_user_entries(config)
+        for warning in loaded.warnings:
             self.log_info(f"Config warning: {warning}")
-        notice = preview_notice(action_count, hook_count, sort_count,
-                                filter_count, decoder_count, scheme_count,
-                                lexer_count)
+        notice = preview_notice(hooks=loaded.hooks,
+                                image_decoders=loaded.image_decoders,
+                                lexers=loaded.lexers,
+                                menu_items=loaded.menu_items,
+                                scheme_overrides=loaded.scheme_overrides)
         if notice:
             self.log_info(notice)
         # Action names that have been corrected since this config was written.
@@ -2387,7 +2387,7 @@ class XeFMApp:
             return
         if report.loaded:
             names = ", ".join(f"{m.id} {m.version}" for m in report.loaded)
-            self.log_info(f"Extensions: {names} (Preview API "
+            self.log_info(f"Extensions: {names} (API "
                           f"{_extensions._api_version()})")
         for label, reason in report.skipped:
             if reason != "disabled":
@@ -9673,7 +9673,7 @@ class XeFMApp:
         is not in it, because the reader is serialised by the handler's claim
         whatever this returns, so the only thing a worker count can overlap here
         is the writing."""
-        schemes = {dest_dir.get_scheme()} if dest_dir is not None else {"file"}
+        schemes = {dest_dir.scheme} if dest_dir is not None else {"file"}
         return transfer_workers(getattr(self, "config", None), schemes)
 
     def _close_gate(self) -> CloseGate:

@@ -29,7 +29,7 @@ from xefm.archive_libarchive import (  # noqa: E402
     LibarchiveHandler, can_decrypt_7z, clean_member_path, libarchive_formats,
     libarchive_info,
 )
-from xefm.path import Path  # noqa: E402
+from xefm.path import Path, copy_to  # noqa: E402
 from xefm.task import Cancelled  # noqa: E402
 
 _HAS_7Z = any(fmt.label == "7z" for fmt in libarchive_formats())
@@ -774,7 +774,7 @@ def test_the_disk_filling_up_at_close_is_still_recognised(tmp_path, monkeypatch)
 @requires_7z
 def test_copy_out_of_a_browsed_7z_streams(tmp_path):
     """The reported bug: a large member copied out of a browsed 7z showed no byte
-    progress and could not be cancelled, because ``Path.copy_to`` had no branch
+    progress and could not be cancelled, because ``xefm.path.copy_to`` had no branch
     for archive -> file and fell into the read-it-whole one."""
     payload = bytes(range(256)) * 8192
     archive = _write_7z(tmp_path / "big.7z", [("big.bin", payload)])
@@ -782,7 +782,7 @@ def test_copy_out_of_a_browsed_7z_streams(tmp_path):
 
     reports = []
     dest = Path(str(tmp_path / "out.bin"))
-    member.copy_to(dest, overwrite=True,
+    copy_to(member, dest, overwrite=True,
                    progress_callback=lambda done, total: reports.append((done, total)))
 
     assert len(reports) > 1
@@ -806,7 +806,7 @@ def test_copy_out_of_a_7z_is_cancellable(tmp_path):
     with pytest.raises(_Cancelled):
         def stop(done, total):
             raise _Cancelled()
-        member.copy_to(dest, overwrite=True, progress_callback=stop)
+        copy_to(member, dest, overwrite=True, progress_callback=stop)
     assert not (tmp_path / "out.bin").exists()
 
 

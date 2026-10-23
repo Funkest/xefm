@@ -14,7 +14,7 @@ def test_s3_path_creation():
     # Test S3 path creation
     s3_path = Path('s3://my-bucket/path/to/file.txt')
     print(f"S3 Path: {s3_path}")
-    print(f"Scheme: {s3_path.get_scheme()}")
+    print(f"Scheme: {s3_path.scheme}")
     print(f"Is remote: {s3_path.is_remote()}")
     print(f"Name: {s3_path.name}")
     print(f"Stem: {s3_path.stem}")
@@ -43,7 +43,7 @@ def test_local_path_compatibility():
     
     local_path = Path('/tmp/test.txt')
     print(f"Local Path: {local_path}")
-    print(f"Scheme: {local_path.get_scheme()}")
+    print(f"Scheme: {local_path.scheme}")
     print(f"Is remote: {local_path.is_remote()}")
     
     print("✓ Local path compatibility tests passed!")

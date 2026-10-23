@@ -42,9 +42,8 @@ def clean_registry():
 
 def load(**table):
     cfg = types.SimpleNamespace(IMAGE_DECODERS=table)
-    (warnings, _actions, _hooks, _sorts, _filters,
-     count, _schemes, _lexers) = user_api.load_user_entries(cfg)
-    return warnings, count
+    result = user_api.load_user_entries(cfg)
+    return result.warnings, result.image_decoders
 
 
 def _raster(w=2, h=2):
@@ -247,7 +246,7 @@ def test_reloading_replaces_the_previous_definitions():
 
 
 def test_the_preview_notice_counts_them():
-    notice = user_api.preview_notice(0, 0, 0, 0, 3, 0)
+    notice = user_api.preview_notice(image_decoders=3)
     assert "3 image decoder(s)" in notice
     assert "Preview" in notice
 

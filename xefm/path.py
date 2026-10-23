@@ -1071,17 +1071,13 @@ class Path:
         """Iterate over the files in this directory"""
         return self._impl.iterdir()
 
-    def listdir_attrs(self) -> List[tuple]:
-        """Return ``[(Path, attrs), …]`` for this directory — ``iterdir`` plus
-        each entry's ``is_dir``/``is_link``/``size``/``alloc``/``mtime`` in one
-        call. See :meth:`PathImpl.listdir_attrs`."""
+    def _listdir_attrs(self) -> List[tuple]:
+        """See :func:`listdir_attrs`."""
         return self._impl.listdir_attrs()
 
-    def listing_concurrency(self) -> int:
-        """How many directories a tree walk under this path may list at once
-        (``PathImpl.LISTING_CONCURRENCY``)."""
+    def _listing_concurrency(self) -> int:
+        """See :func:`listing_concurrency`."""
         return max(1, int(getattr(self._impl, 'LISTING_CONCURRENCY', 1) or 1))
-
 
     def glob(self, pattern: str) -> Iterator['Path']:
         """Iterate over this subtree and yield all existing files matching pattern"""
@@ -1189,8 +1185,11 @@ class Path:
         """Return True if this path represents a remote resource"""
         return self._impl.is_remote()
     
-    def get_scheme(self) -> str:
-        """Return the scheme of the path (e.g., 'file', 's3', 'scp')"""
+    @property
+    def scheme(self) -> str:
+        """The storage this path lives on: ``'file'`` for the local disk,
+        otherwise the URI scheme — ``'s3'``, ``'ssh'``, ``'archive'``, or one a
+        ``PATH_SCHEMES`` backend registered."""
         return self._impl.get_scheme()
     
     def as_uri(self) -> str:
@@ -1214,27 +1213,16 @@ class Path:
         version has never heard of, is ``False``."""
         return self._impl.supports(capability)
 
-    def forget_cached_metadata(self) -> None:
-        """Make the next :meth:`stat` ask the storage, not a cache — see
-        :meth:`PathImpl.forget_cached_metadata`."""
+    def _forget_cached_metadata(self) -> None:
+        """See :func:`forget_cached_metadata`."""
         self._impl.forget_cached_metadata()
-
-    # Display methods delegation
-    def get_display_title(self) -> str:
-        """Return a formatted title for display in viewers and dialogs"""
-        return self._impl.get_display_title()
-
-    # Metadata method delegation
-    def get_extended_metadata(self) -> dict:
-        """Return storage-specific metadata for display in info dialogs"""
-        return self._impl.get_extended_metadata()
 
     def target(self) -> Optional['Path']:
         """The real place a reference stands for, or ``None`` — see
         :meth:`PathImpl.target`."""
         return self._impl.target()
     
-    def move_to(self, destination: 'Path', overwrite: bool = False) -> bool:
+    def _move_to(self, destination: 'Path', overwrite: bool = False) -> bool:
         """
         Move this file or directory to the destination path.
         
@@ -1262,8 +1250,8 @@ class Path:
             raise FileExistsError(f"Destination already exists: {destination}")
         
         # Handle same-storage moving first
-        source_scheme = self.get_scheme()
-        dest_scheme = destination.get_scheme()
+        source_scheme = self.scheme
+        dest_scheme = destination.scheme
         
         # Two directories merge rather than replace: no rename can do that, so
         # it takes the copy + delete path below.
@@ -1286,7 +1274,7 @@ class Path:
         # Cross-storage moving: copy then delete
         try:
             # First copy to destination
-            success = self.copy_to(destination, overwrite=overwrite)
+            success = self._copy_to(destination, overwrite=overwrite)
             if not success:
                 return False
             
@@ -1327,7 +1315,7 @@ class Path:
         else:
             self.unlink()
     
-    def copy_to(self, destination: 'Path', overwrite: bool = False, 
+    def _copy_to(self, destination: 'Path', overwrite: bool = False, 
                 progress_callback: Optional[callable] = None) -> bool:
         """
         Copy this file or directory to the destination path.
@@ -1355,8 +1343,8 @@ class Path:
             raise FileExistsError(f"Destination already exists: {destination}")
         
         # Handle same-storage copying first
-        source_scheme = self.get_scheme()
-        dest_scheme = destination.get_scheme()
+        source_scheme = self.scheme
+        dest_scheme = destination.scheme
         
         if source_scheme == dest_scheme:
             # Same storage type - use native copy if available
@@ -1407,12 +1395,12 @@ class Path:
         """
         try:
             # Create destination directory if needed (only for local destinations)
-            if destination.get_scheme() == 'file':
+            if destination.scheme == 'file':
                 destination.parent.mkdir(parents=True, exist_ok=True)
             
             # Get source and destination schemes
-            source_scheme = self.get_scheme()
-            dest_scheme = destination.get_scheme()
+            source_scheme = self.scheme
+            dest_scheme = destination.scheme
             
             # Handle all cross-storage combinations with progress tracking.
             # An S3 leg streams through boto3's managed transfer, which reports
@@ -1543,7 +1531,7 @@ class Path:
             # Create destination directory
             # For local destinations, use parents=True to create intermediate directories
             # For remote destinations, mkdir should handle directory creation
-            if destination.get_scheme() == 'file':
+            if destination.scheme == 'file':
                 destination.mkdir(parents=True, exist_ok=overwrite)
             else:
                 # For remote destinations (SSH, S3), create directory if it doesn't exist
@@ -1565,6 +1553,57 @@ class Path:
             raise
         except Exception as e:
             raise OSError(f"Failed to copy directory from {self} to {destination}: {e}")
+
+
+# --------------------------------------------------------------------------- #
+# What XeFM does with a Path that is not part of Path
+# --------------------------------------------------------------------------- #
+#
+# ``Path`` is what the stable extension API hands out (``EntryInfo.path``,
+# ``PaneApi.path``), so every public member it has is a promise. These are
+# XeFM's own: they live here, in a module an extension cannot import, rather
+# than as methods anyone holding a Path could call. See
+# doc/dev/STABLE_API_PLAN.md §2.2.
+
+def copy_to(src: Path, destination: Path, overwrite: bool = False,
+            progress_callback: Optional[callable] = None) -> bool:
+    """Copy ``src`` (a file or a directory) to ``destination``, across storage
+    if need be (local, S3, SSH, archive members, and anything else through
+    ``read_bytes``/``write_bytes``). ``progress_callback(done, total)`` gets
+    bytes; raising from it cancels, and the caller gets its own exception back.
+
+    This is the transfer underneath file operations, not a file operation: no
+    conflict dialog, no queue, no progress pane. Call it from there."""
+    return src._copy_to(destination, overwrite, progress_callback)
+
+
+def move_to(src: Path, destination: Path, overwrite: bool = False) -> bool:
+    """Move ``src`` to ``destination``: a rename within one storage, a
+    :func:`copy_to` and delete across two. Two directories merge when
+    ``overwrite`` is set. The same caveat as :func:`copy_to` applies."""
+    return src._move_to(destination, overwrite)
+
+
+def listdir_attrs(path) -> List[tuple]:
+    """``[(Path, attrs), …]`` for the directory ``path`` — ``iterdir`` plus each
+    entry's ``is_dir``/``is_link``/``size``/``alloc``/``mtime`` in one call.
+    See :meth:`PathImpl.listdir_attrs`."""
+    return path._listdir_attrs()
+
+
+def listing_concurrency(path) -> int:
+    """How many directories a tree walk under ``path`` may list at once
+    (``PathImpl.LISTING_CONCURRENCY``)."""
+    return path._listing_concurrency()
+
+
+def forget_cached_metadata(path) -> None:
+    """Make the next ``stat`` of ``path`` ask the storage, not a cache — see
+    :meth:`PathImpl.forget_cached_metadata`. Something with no cache to
+    forget is left alone."""
+    forget = getattr(path, "_forget_cached_metadata", None)
+    if forget is not None:
+        forget()
 
 
 # Convenience functions that mirror pathlib module-level functions

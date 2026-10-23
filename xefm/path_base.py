@@ -69,11 +69,17 @@ is *not* de-abstracted in place: a backend inside this repository that forgets
 a method should still fail at import. Strictness for the internal interface,
 defaults for the published one.
 
-Preview status
---------------
+Stable and Preview
+------------------
 
-This surface is covered by ``xefm.user_api.API_VERSION`` — ``0``, meaning it
-may change until it reaches ``1``.
+A ``ReadOnlyPathImpl`` subclass is promised what :data:`TIERS` lists, under
+``xefm.user_api.API_VERSION``: the members it must write, the ones it may
+override, and the helpers it may call. Each name in a tier is Stable unless it
+is in :data:`~xefm.user_api.PREVIEW_APIS`; everything not in a tier — the path
+arithmetic, ``__eq__``, the refusals, ``supports`` — is XeFM's to change and
+not to be overridden. :class:`UriPathImpl`, the route to a writable backend,
+is Preview as a whole. Subclassing :class:`~xefm.path.PathImpl` directly is
+not supported: ``PATH_SCHEMES`` loads such a class with a warning.
 """
 
 import errno
@@ -84,16 +90,40 @@ from pathlib import PurePosixPath
 from typing import Iterator, List, Optional
 
 from xefm.path import Path, PathImpl
-from xefm.preview import preview
+from xefm.preview import PREVIEW_APIS, preview
 
 #: The public API of this module: what a ``PATH_SCHEMES`` backend may import
-#: from it. ``xefm ext check`` refuses any other name — ``UriPathImpl`` and
-#: ``UnsupportedPathImpl`` included, which are XeFM's own building blocks
-#: rather than something a backend is promised.
-__all__ = ["ReadOnlyPathImpl", "UriStatResult"]
+#: from it. ``xefm ext check`` refuses any other name — ``UnsupportedPathImpl``
+#: included, which is XeFM's own.
+__all__ = ["ReadOnlyPathImpl", "UriPathImpl", "UriStatResult"]
+
+#: What a :class:`ReadOnlyPathImpl` subclass deals in, by tier
+#: (doc/dev/STABLE_API_PLAN.md §3.1). ``required``: it must write these.
+#: ``overridable``: each has a default, and XeFM calls the override.
+#: ``helpers``: what it calls to build its answers. A name here is Stable
+#: unless :data:`~xefm.preview.PREVIEW_APIS` lists it, which the loop at the
+#: foot of this module arranges for the Preview ones. XeFM reads this table —
+#: the API snapshot, ``xefm ext check`` — and it is not itself API.
+TIERS = {
+    "required": ("SCHEME", "exists", "is_dir", "iterdir", "stat", "open"),
+    "overridable": ("READ_ONLY_MESSAGE", "IS_REMOTE", "DISPLAY_PREFIX",
+                    "get_display_title", "target",
+                    # Preview, below
+                    "parse_uri", "root_prefix", "CAPABILITIES",
+                    "SEARCH_STRATEGY", "listdir_attrs", "get_extended_metadata",
+                    "forget_cached_metadata", "LISTING_CONCURRENCY"),
+    "helpers": ("child", "at", "key"),
+}
+
+#: The tier members that are Preview: the URI hooks, which few backends need,
+#: and the ones whose shape is still XeFM's internal one (a capability
+#: vocabulary mixed with search tuning, the listing record, the info-dialog
+#: dict, the cache and concurrency knobs).
+_PREVIEW_MEMBERS = ("parse_uri", "root_prefix", "CAPABILITIES",
+                    "SEARCH_STRATEGY", "listdir_attrs", "get_extended_metadata",
+                    "forget_cached_metadata", "LISTING_CONCURRENCY")
 
 
-@preview
 class UriStatResult:
     """An ``os.stat_result`` stand-in built from the three facts a listing
     actually needs.
@@ -140,28 +170,29 @@ def _normalize_key(key: str) -> str:
     return '/'.join(seg for seg in key.split('/') if seg and seg != '.')
 
 
+@preview
 class UriPathImpl(PathImpl):
     """A ``PathImpl`` for any backend addressed by ``scheme://…``, with the
     string arithmetic already written.
 
     The model is one invariant::
 
-        str(self) == self._root_prefix() + self._key
+        str(self) == self.root_prefix() + self.key
 
-    where ``_key`` is ``/``-separated with no leading or trailing slash, and
+    where :attr:`key` is ``/``-separated with no leading or trailing slash, and
     the root of the backend is the path whose key is empty. Everything else
     here follows from that: ``parent`` drops the last segment, ``joinpath``
     appends, ``parts`` splits, ``name`` is the last one.
 
     A subclass overrides at most two hooks:
 
-    ``_parse(uri)``
+    ``parse_uri(uri)``
         Pull apart a URI of this scheme, store whatever names the root — a
         bucket, a host, an archive file — on ``self``, and return the key. The
         default accepts ``{SCHEME}://<key>``, which is all a virtual folder
         with no container needs.
 
-    ``_root_prefix()``
+    ``root_prefix()``
         The string a key is appended to, ``'s3://bucket/'`` or
         ``'archive://file.zip#'``. The default is ``'{SCHEME}://'``.
 
@@ -181,15 +212,15 @@ class UriPathImpl(PathImpl):
     IS_REMOTE = True
 
     def __init__(self, uri: str):
-        self._key = _normalize_key(self._parse(str(uri)))
+        self._key = _normalize_key(self.parse_uri(str(uri)))
 
     # -- the two hooks ----------------------------------------------------- #
 
-    def _parse(self, uri: str) -> str:
+    def parse_uri(self, uri: str) -> str:
         """Split ``uri`` and return the key part.
 
         Called from ``__init__`` before anything else, so this is also where a
-        subclass stores whatever its :meth:`_root_prefix` needs. The default
+        subclass stores whatever its :meth:`root_prefix` needs. The default
         handles ``{SCHEME}://<key>``.
         """
         prefix = f'{self.SCHEME}://'
@@ -197,14 +228,14 @@ class UriPathImpl(PathImpl):
             raise ValueError(f'not a {prefix} URI: {uri!r}')
         return uri[len(prefix):]
 
-    def _root_prefix(self) -> str:
+    def root_prefix(self) -> str:
         """The string a key is appended to — see the class docstring's
         invariant. The default is ``'{SCHEME}://'``."""
         return f'{self.SCHEME}://'
 
     # -- building siblings ------------------------------------------------- #
 
-    def _at(self, key: str) -> Path:
+    def at(self, key: str) -> Path:
         """The ``Path`` for ``key`` under this same root, as this same class.
 
         Not ``Path(uri)``: that would ask the scheme factory which class to
@@ -213,12 +244,18 @@ class UriPathImpl(PathImpl):
         registry contract — URI string in, ``PathImpl`` out — applied to
         itself.
         """
-        return Path._from_impl(type(self)(self._root_prefix() + _normalize_key(key)))
+        return Path._from_impl(type(self)(self.root_prefix() + _normalize_key(key)))
 
-    def _child(self, name: str) -> Path:
+    def child(self, name: str) -> Path:
         """The ``Path`` for one entry of this directory — what an
         :meth:`iterdir` implementation yields."""
-        return self._at(f'{self._key}/{name}' if self._key else name)
+        return self.at(f'{self._key}/{name}' if self._key else name)
+
+    @property
+    def key(self) -> str:
+        """Where this path is under its root: ``/``-separated, with no leading
+        or trailing slash — ``''`` at the root, ``'todo/monday'`` further in."""
+        return self._key
 
     @property
     def _segments(self) -> List[str]:
@@ -227,7 +264,7 @@ class UriPathImpl(PathImpl):
     # -- identity ---------------------------------------------------------- #
 
     def __str__(self) -> str:
-        return self._root_prefix() + self._key
+        return self.root_prefix() + self._key
 
     def __repr__(self) -> str:
         return f'{type(self).__name__}({str(self)!r})'
@@ -262,11 +299,11 @@ class UriPathImpl(PathImpl):
 
     @property
     def parts(self) -> tuple:
-        return (self._root_prefix(),) + tuple(self._segments)
+        return (self.root_prefix(),) + tuple(self._segments)
 
     @property
     def anchor(self) -> str:
-        return self._root_prefix()
+        return self.root_prefix()
 
     # -- walking ----------------------------------------------------------- #
 
@@ -280,8 +317,8 @@ class UriPathImpl(PathImpl):
         """
         segments = self._segments
         if not segments:
-            return self._at('')
-        return self._at('/'.join(segments[:-1]))
+            return self.at('')
+        return self.at('/'.join(segments[:-1]))
 
     @property
     def parents(self) -> List[Path]:
@@ -305,12 +342,12 @@ class UriPathImpl(PathImpl):
         key = self._key
         for arg in args:
             key = f"{key}/{str(arg)}" if key else str(arg)
-        return self._at(key)
+        return self.at(key)
 
     def with_name(self, name: str) -> Path:
         if not self._segments:
             raise ValueError(f'{self} has an empty name')
-        return self._at('/'.join(self._segments[:-1] + [name]))
+        return self.at('/'.join(self._segments[:-1] + [name]))
 
     def with_stem(self, stem: str) -> Path:
         return self.with_name(stem + self.suffix)
@@ -332,16 +369,16 @@ class UriPathImpl(PathImpl):
         return True
 
     def absolute(self) -> Path:
-        return self._at(self._key)
+        return self.at(self._key)
 
     def resolve(self, strict: bool = False) -> Path:
         """No symlink resolution: a backend that has symlinks and can follow
         them overrides this."""
-        return self._at(self._key)
+        return self.at(self._key)
 
     def expanduser(self) -> Path:
         """``~`` has no meaning in a URI, so this is a no-op."""
-        return self._at(self._key)
+        return self.at(self._key)
 
     # -- what the backend still has to answer ------------------------------ #
 
@@ -355,7 +392,7 @@ class UriPathImpl(PathImpl):
 
     @abstractmethod
     def iterdir(self) -> Iterator[Path]:
-        """Yield this directory's entries — ``self._child(name)`` for each."""
+        """Yield this directory's entries — ``self.child(name)`` for each."""
 
     @abstractmethod
     def stat(self):
@@ -435,7 +472,6 @@ class UriPathImpl(PathImpl):
         return str(self) == str(other_path)
 
 
-@preview
 class ReadOnlyPathImpl(UriPathImpl):
     """A :class:`UriPathImpl` that refuses every write.
 
@@ -518,14 +554,14 @@ class UnsupportedPathImpl(ReadOnlyPathImpl):
     #: URI rather than off the class.
     SCHEME = ''
 
-    def _parse(self, uri: str) -> str:
+    def parse_uri(self, uri: str) -> str:
         scheme, separator, key = uri.partition('://')
         if not separator:
             raise ValueError(f'not a URI: {uri!r}')
         self._scheme = scheme
         return key
 
-    def _root_prefix(self) -> str:
+    def root_prefix(self) -> str:
         return f'{self._scheme}://'
 
     def get_scheme(self) -> str:
@@ -553,3 +589,7 @@ class UnsupportedPathImpl(ReadOnlyPathImpl):
     def open(self, mode='r', buffering=-1, encoding=None, errors=None,
              newline=None):
         self._unsupported()
+
+
+for _name in _PREVIEW_MEMBERS:
+    PREVIEW_APIS.add(f"{__name__}.ReadOnlyPathImpl.{_name}")

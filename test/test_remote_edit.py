@@ -41,7 +41,7 @@ class FakeRemote:
     def supports(self, capability):
         return self.writable and capability == "write_operations"
 
-    def forget_cached_metadata(self):
+    def _forget_cached_metadata(self):
         self.forgotten += 1
 
     def stat(self):

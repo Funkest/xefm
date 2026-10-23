@@ -618,11 +618,11 @@ class Config:
     #     NOTES = {'': ['todo', 'ideas'], 'todo': [], 'ideas': []}
     #
     #     class NotesPathImpl(ReadOnlyPathImpl):
-    #         def exists(self):   return self._key in NOTES
-    #         def is_dir(self):   return self._key in NOTES
+    #         def exists(self):   return self.key in NOTES
+    #         def is_dir(self):   return self.key in NOTES
     #         def iterdir(self):
-    #             for name in NOTES.get(self._key, []):
-    #                 yield self._child(name)
+    #             for name in NOTES.get(self.key, []):
+    #                 yield self.child(name)
     #         def stat(self):     return UriStatResult(is_dir=self.is_dir())
     #         def open(self, mode='r', buffering=-1, encoding=None,
     #                  errors=None, newline=None):
@@ -636,8 +636,8 @@ class Config:
     #
     #     PATH_SCHEMES = {'notes': NotesPathImpl}
     #
-    # self._key is the part after 'notes://', with no leading or trailing
-    # slash -- '' at the root, 'todo/monday' further in. self._child(name)
+    # self.key is the part after 'notes://', with no leading or trailing
+    # slash -- '' at the root, 'todo/monday' further in. self.child(name)
     # builds a child; XeFM works out parents, names and suffixes itself.
     #
     # Writing is refused for you, with a clear message. Say why in your own

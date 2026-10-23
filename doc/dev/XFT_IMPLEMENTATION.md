@@ -24,8 +24,8 @@ characters fits the file list's extension column. `xft.SUFFIXES`,
 
 ## The scheme
 
-`xft://<file>#<group>/<entry>`, the archive's shape. `_parse` keeps the file
-part, and `_root_prefix` is `xft://<file>#`. At the top, `name` is the
+`xft://<file>#<group>/<entry>`, the archive's shape. `parse_uri` keeps the file
+part, and `root_prefix` is `xft://<file>#`. At the top, `name` is the
 file's name and `parent` is the file's directory. That is exactly what
 `_go_parent` needs to land on the file when leaving, with no special case,
 the same way leaving an archive lands on the archive.
@@ -42,7 +42,7 @@ the same way leaving an archive lands on the archive.
   reference with nothing recorded falls back to the target's `stat`.
 - `open`: read modes delegate to the target, and any write mode is refused.
   View, diff, copy-out and quick view read real bytes this way.
-- `iterdir`: the children, as `_child(name)`.
+- `iterdir`: the children, as `child(name)`.
 
 Every write is refused with `EROFS` by `ReadOnlyPathImpl`, with a
 `READ_ONLY_MESSAGE` that names the way to the real file.

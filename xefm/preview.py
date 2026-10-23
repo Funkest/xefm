@@ -14,8 +14,8 @@ The mark lives on the definition, where whoever reads the code meets it:
 - A ``config.py`` table or a manifest section is not a Python object, so its
   name is listed here, below.
 
-Stabilizing an API is deleting its mark. Today everything is still marked: the
-API has not declared anything stable yet.
+Stabilizing an API is deleting its mark. ``API_VERSION`` 1 was the first
+release with a stable part (doc/dev/STABLE_API_PLAN.md §1 has the split).
 
 This module is XeFM's own. Extensions read the result as
 ``xefm.user_api.PREVIEW_APIS``.
@@ -35,14 +35,15 @@ NOTE = "Preview — may change in any release."
 #: ``manifest.contributes.menus`` for a manifest section. An entry for a class
 #: covers its members.
 PREVIEW_APIS: set[str] = {
-    # config.py tables
+    # config.py tables. ACTIONS, SORT_KEYS, FILTERS and PATH_SCHEMES are
+    # stable; replacing a built-in scheme is not.
     *(f"config.{table}" for table in (
-        "ACTIONS", "EVENT_HOOKS", "SORT_KEYS", "FILTERS", "IMAGE_DECODERS",
-        "PATH_SCHEMES", "LEXERS", "MENU_ITEMS")),
-    # xefm-extension.toml
+        "EVENT_HOOKS", "IMAGE_DECODERS", "LEXERS", "MENU_ITEMS")),
+    "config.PATH_SCHEMES.override",
+    # xefm-extension.toml. actions, sort_keys, filters, path_schemes and
+    # key_suggestions are stable.
     *(f"manifest.contributes.{kind}" for kind in (
-        "actions", "event_hooks", "sort_keys", "filters", "image_decoders",
-        "path_schemes", "lexers", "themes", "menus", "key_suggestions")),
+        "event_hooks", "image_decoders", "lexers", "themes", "menus")),
     "manifest.extension.updates",
     "manifest.settings",
     "manifest.requires",

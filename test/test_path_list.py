@@ -46,12 +46,12 @@ class RemotePathImpl(ReadOnlyPathImpl):
 
     SCHEME = "fake"
 
-    def _parse(self, uri):
+    def parse_uri(self, uri):
         rest = uri[len("fake://"):]
         self._host, _, key = rest.partition("/")
         return key
 
-    def _root_prefix(self):
+    def root_prefix(self):
         return f"fake://{self._host}/"
 
     def _check(self):

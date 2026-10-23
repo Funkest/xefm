@@ -435,10 +435,12 @@ def test_validation_reports_without_loading(clean_registry):
     assert config_manager.validate_config(cfg)       # and it reaches validate_config
 
 
-def test_the_preview_notice_only_appears_when_the_api_is_used():
-    assert user_api.preview_notice(0, 0) is None
-    notice = user_api.preview_notice(2, 1)
-    assert "Preview" in notice and "2 action(s)" in notice and "1 event hook(s)" in notice
+def test_the_preview_notice_only_appears_when_a_preview_table_is_used():
+    assert user_api.preview_notice() is None
+    notice = user_api.preview_notice(hooks=1, menu_items=2)
+    assert "Preview" in notice and "1 event hook(s)" in notice \
+        and "2 menu item(s)" in notice
+    assert "action" not in notice
 
 
 def test_a_hook_that_raises_is_logged_not_propagated(clean_registry):
@@ -815,10 +817,18 @@ def test_reload_config_installs_the_edited_actions_and_hooks(app_with, tmp_path)
 
 def test_the_preview_notice_reaches_the_log_pane(app_with):
     lines = []
-    app, _ = app_with(ACTIONS={"mine": lambda ctx: None})
+    app, _ = app_with(EVENT_HOOKS={"startup": lambda ctx, event: None})
     app.log_info = lines.append          # replaced after startup logged its own
     app._load_user_entries(app.config)
-    assert any("Preview" in line and "API_VERSION" in line for line in lines)
+    assert any("Preview" in line and "event hook" in line for line in lines)
+
+
+def test_a_config_on_the_stable_tables_gets_no_preview_notice(app_with):
+    lines = []
+    app, _ = app_with(ACTIONS={"mine": lambda ctx: None})
+    app.log_info = lines.append
+    app._load_user_entries(app.config)
+    assert not any("Preview" in line for line in lines)
 
 
 def test_a_config_that_uses_none_of_it_says_nothing(app_with):

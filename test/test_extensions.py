@@ -65,7 +65,7 @@ class _Home(unittest.TestCase):
                 [extension]
                 id = "{id}"
                 version = "0.1.0"
-                api_version = 0
+                api_version = 1
 
                 [contributes.actions]
                 "{id}.greet" = {{ entry = "{mod}.actions:greet", description = "Say hello" }}
@@ -143,7 +143,7 @@ class Check(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
             colour = "blue"
 
             [extras]
@@ -169,12 +169,26 @@ class Check(_Home):
         (problem,) = ext.errors(self.problems(root))
         self.assertIn("asks for API version 99", problem.message)
 
-    def test_min_xefm(self):
+    def test_a_package_written_for_api_0_still_loads_with_a_warning(self):
+        """0 was the all-Preview API. A package that says so is not refused —
+        what it used may still be there — but it is told the API moved on."""
         root, _ = self.package(manifest='''
             [extension]
             id = "{id}"
             version = "0.1.0"
             api_version = 0
+        ''', code={})
+        problems = self.problems(root)
+        self.assertEqual(ext.errors(problems), [])
+        self.assertTrue(any("written for API version 0" in p.message
+                            for p in problems))
+
+    def test_min_xefm(self):
+        root, _ = self.package(manifest='''
+            [extension]
+            id = "{id}"
+            version = "0.1.0"
+            api_version = 1
             min_xefm = "99.0"
         ''', code={})
         (problem,) = ext.errors(self.problems(root))
@@ -185,7 +199,7 @@ class Check(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.actions]
             rename = "{mod}.actions:greet"
@@ -198,7 +212,7 @@ class Check(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.actions]
             greet = "{mod}.actions:greet"
@@ -212,7 +226,7 @@ class Check(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.actions]
             "{id}.greet" = "{mod}.actions:greet"
@@ -230,7 +244,7 @@ class Check(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.actions]
             "{id}.greet" = "{mod}.actions:greet"
@@ -248,7 +262,7 @@ class Check(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.actions]
             "{id}.greet" = "{mod}.actions:greet"
@@ -266,7 +280,7 @@ class Check(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.actions]
             "{id}.greet" = "{mod}.actions:greet"
@@ -285,7 +299,7 @@ class Check(_Home):
             [extension]
             id = "{{id}}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
             updates = {value}
 
             [contributes.actions]
@@ -306,7 +320,7 @@ class Check(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.event_hooks]
             lunch = "{mod}.hooks:on_lunch"
@@ -319,7 +333,7 @@ class Check(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.actions]
             "{id}.greet" = "{mod}.code:greet"
@@ -351,7 +365,7 @@ class Check(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.themes."Solar Night"]
             base = "dark"
@@ -381,7 +395,7 @@ class Check(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [requires]
             programs = ["no-such-program-xefm"]
@@ -433,7 +447,7 @@ class Load(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.actions]
             "{id}.greet" = "{mod}.actions:greet"
@@ -454,6 +468,27 @@ class Load(_Home):
         self.assertIs(config.ACTIONS[f"{root.name}.greet"], mine)
         self.assertTrue(any("config.py wins" in w for w in report.warnings))
 
+    def test_between_two_extensions_the_first_loaded_wins_and_is_named(self):
+        manifest = '''
+            [extension]
+            id = "{id}"
+            version = "0.1.0"
+            api_version = 1
+
+            [contributes.actions]
+            "shared.greet" = "{mod}.actions:greet"
+        '''
+        first, _ = self.installed_package(manifest=manifest, ext_id="aa-first")
+        self.installed_package(manifest=manifest, ext_id="zz-second")
+        config = _config()
+        report = ext.load(config, self.layout)
+        self.assertEqual(len(report.loaded), 2)
+        clash = [w for w in report.warnings if "shared.greet" in w]
+        self.assertEqual(len(clash), 1, report.warnings)
+        self.assertIn("zz-second:", clash[0])
+        self.assertIn("aa-first loaded first and wins", clash[0])
+        self.assertNotIn("config.py", clash[0])
+
     def test_a_failing_package_is_skipped_with_its_reason(self):
         root, _ = self.installed_package(code={"actions.py": "def hello(c): pass"})
         config = _config()
@@ -469,7 +504,7 @@ class Load(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.actions]
             "{id}.a" = "{mod}.actions:greet"
@@ -493,7 +528,7 @@ class Load(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
             backends = ["desktop"]
         ''', code={})
         with patch.object(ext, "_current_backend", return_value="tui"):
@@ -505,7 +540,7 @@ class Load(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [requires]
             host_packages = ["no_such_host_package_xefm"]
@@ -518,7 +553,7 @@ class Load(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.actions]
             "{id}.greet" = "{mod}.actions:greet"
@@ -536,7 +571,7 @@ class Load(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.themes."Solar Night"]
             base = "dark"
@@ -556,7 +591,7 @@ class KeySuggestions(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.actions]
             "{id}.greet" = "{mod}.actions:greet"
@@ -593,7 +628,7 @@ class Settings(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [settings]
             defaults = "{mod}.settings:Settings"
@@ -857,7 +892,7 @@ class Cli(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [settings]
             defaults = "{mod}.settings:Settings"
@@ -878,7 +913,7 @@ class ConfigManagerIntegration(_Home):
             [extension]
             id = "{id}"
             version = "0.1.0"
-            api_version = 0
+            api_version = 1
 
             [contributes.actions]
             "{id}.greet" = "{mod}.actions:greet"

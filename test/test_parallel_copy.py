@@ -308,13 +308,10 @@ def test_parallel_progress_increments_are_not_lost(tmp_path, svc, monkeypatch):
 # --- worker-count selection ------------------------------------------------------
 
 class _Scheme:
-    """A stand-in path that only answers get_scheme()."""
+    """A stand-in path that only answers ``scheme``."""
 
     def __init__(self, scheme):
-        self._scheme = scheme
-
-    def get_scheme(self):
-        return self._scheme
+        self.scheme = scheme
 
 
 def _plan(*schemes):

@@ -13,7 +13,7 @@ import threading
 import unittest
 from unittest.mock import Mock, patch
 
-from xefm.path import Path
+from xefm.path import Path, copy_to
 from xefm.s3 import clear_s3_cache
 
 
@@ -60,7 +60,7 @@ class TestS3CopyProgress(unittest.TestCase):
         self.client.upload_fileobj.side_effect = fake_upload
         updates, callback = self._record_progress()
 
-        self.local_file.copy_to(Path("s3://bucket/payload.bin"), overwrite=True,
+        copy_to(self.local_file, Path("s3://bucket/payload.bin"), overwrite=True,
                                 progress_callback=callback)
 
         # boto3 hands over per-chunk deltas; the bar wants running totals
@@ -81,7 +81,7 @@ class TestS3CopyProgress(unittest.TestCase):
         updates, callback = self._record_progress()
 
         dest = Path(self.temp_dir) / "downloaded.bin"
-        Path("s3://bucket/payload.bin").copy_to(dest, overwrite=True,
+        copy_to(Path("s3://bucket/payload.bin"), dest, overwrite=True,
                                                 progress_callback=callback)
 
         self.assertEqual(updates, [(0, 4096), (1024, 4096), (2048, 4096),
@@ -99,7 +99,7 @@ class TestS3CopyProgress(unittest.TestCase):
         self.client.download_fileobj.side_effect = fake_download
 
         dest = Path(self.temp_dir) / "downloaded.bin"
-        Path("s3://bucket/payload.bin").copy_to(dest, overwrite=True)
+        copy_to(Path("s3://bucket/payload.bin"), dest, overwrite=True)
 
         self.client.get_object.assert_not_called()
         self.assertEqual(dest.read_bytes(), self.content)
@@ -117,7 +117,7 @@ class TestS3CopyProgress(unittest.TestCase):
 
         dest = Path(self.temp_dir) / "downloaded.bin"
         with self.assertRaises(OSError):
-            Path("s3://bucket/payload.bin").copy_to(dest, overwrite=True)
+            copy_to(Path("s3://bucket/payload.bin"), dest, overwrite=True)
 
         self.assertFalse(dest.exists(),
                          "partial download should not be left on disk")
@@ -134,7 +134,7 @@ class TestS3CopyProgress(unittest.TestCase):
         updates, callback = self._record_progress()
 
         source = Path("s3://bucket/payload.bin")
-        source.copy_to(Path("s3://other-bucket/payload.bin"), overwrite=True,
+        copy_to(source, Path("s3://other-bucket/payload.bin"), overwrite=True,
                        progress_callback=callback)
 
         self.client.copy.assert_called_once()
@@ -166,7 +166,7 @@ class TestS3CopyProgress(unittest.TestCase):
         self.client.upload_fileobj.side_effect = fake_upload
         updates, callback = self._record_progress()
 
-        self.local_file.copy_to(Path("s3://bucket/payload.bin"), overwrite=True,
+        copy_to(self.local_file, Path("s3://bucket/payload.bin"), overwrite=True,
                                 progress_callback=callback)
 
         self.assertEqual(updates[-1], (1024, 4096))

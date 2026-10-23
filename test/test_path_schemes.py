@@ -34,7 +34,7 @@ class DemoPathImpl(ReadOnlyPathImpl):
 
     def exists(self): return True
     def is_dir(self): return not self.name.endswith('.txt')
-    def iterdir(self): yield self._child('leaf.txt')
+    def iterdir(self): yield self.child('leaf.txt')
     def stat(self): return UriStatResult(size=1, mtime=1.0, is_dir=self.is_dir())
     def open(self, mode='r', **kwargs): return io.StringIO('demo')
 
@@ -191,7 +191,7 @@ class TestSchemesWithNoBackend(unittest.TestCase):
         the user never typed."""
         p = Path('ftp://host/some/path')
         self.assertEqual(str(p), 'ftp://host/some/path')
-        self.assertEqual(p.get_scheme(), 'ftp')
+        self.assertEqual(p.scheme, 'ftp')
         self.assertTrue(p.is_remote())
 
     def test_reading_one_says_what_is_actually_wrong(self):

@@ -9,7 +9,7 @@ import zipfile
 import tarfile
 from pathlib import Path as PathlibPath
 
-from xefm.path import Path
+from xefm.path import Path, copy_to
 from xefm.archive import ArchivePathImpl
 
 
@@ -252,7 +252,7 @@ class TestArchivePathImpl:
         archive_uri = f"archive://{self.zip_path}#file1.txt"
         path = Path(archive_uri)
         
-        assert path.get_scheme() == 'archive'
+        assert path.scheme == 'archive'
     
     def test_archive_readonly_operations(self):
         """Test that write operations raise errors"""
@@ -291,7 +291,7 @@ class TestArchivePathImpl:
 class TestStreamingOutOfAnArchive:
     """Copying a member out of a browsed archive (xefm#396 follow-up).
 
-    ``Path.copy_to`` had no branch for ``archive`` → ``file``, so the copy fell
+    ``xefm.path.copy_to`` had no branch for ``archive`` → ``file``, so the copy fell
     into the generic one — ``read_bytes()`` then ``write_bytes()``. That is one
     opaque call: the whole member in memory, no byte progress, and no
     cancellation, because for a cross-storage copy the progress callback is the
@@ -354,7 +354,7 @@ class TestStreamingOutOfAnArchive:
         for archive in (self.zip_path, self.tar_path):
             reports = []
             dest = Path(str(self.temp_path / f'out_{archive.suffix}.bin'))
-            self._member(archive).copy_to(
+            copy_to(self._member(archive),
                 dest, overwrite=True,
                 progress_callback=lambda done, total: reports.append((done, total)))
             assert len(reports) > 1, f"{archive.name} copied in one opaque call"
@@ -375,7 +375,7 @@ class TestStreamingOutOfAnArchive:
 
         dest = Path(str(self.temp_path / 'cancelled.bin'))
         with pytest.raises(_Cancelled):
-            self._member(self.zip_path).copy_to(
+            copy_to(self._member(self.zip_path),
                 dest, overwrite=True, progress_callback=cancel_after_first)
         assert seen                                   # it did get called
         assert not PathlibPath(str(dest)).exists()    # and left no stub
