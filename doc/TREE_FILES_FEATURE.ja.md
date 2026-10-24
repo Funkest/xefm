@@ -14,7 +14,7 @@ scan.xft/
     …
 ```
 
-このファイルを自分で書くことはありません。書くのはプログラムです。XeFM の[類似ファイルの検索](FIND_SIMILAR_FILES_FEATURE.ja.md)機能が、similar-files を通じて書き出します。以前のバージョンではこのファイルを `.xefml` と呼んでいましたが、XeFM は今もそれを開けます。形式は、そうしたプログラムを書く人向けに [XFT_FORMAT.md](XFT_FORMAT.ja.md) で説明しています。
+このファイルを自分で書くことはありません。書くのはプログラムです。XeFM の[類似ファイルの検索](FIND_SIMILAR_FILES_FEATURE.ja.md)機能が、similar-files を通じて書き出します。形式は、そうしたプログラムを書く人向けに [XFT_FORMAT.md](XFT_FORMAT.ja.md) で説明しています。
 
 ## ブラウズ
 

@@ -11,11 +11,7 @@ that looks like.
 The format is meant to be written by programs, such as a duplicate finder, a
 search tool or a catalogue script, and read by XeFM. Its first producer is
 [similar-files](https://github.com/crftwr/similar-files) (`--format tree`).
-This page is the specification.
-
-The format was called `.xefml` until #613 shortened the name to fit the
-four-character extension column XeFM's file list shows. XeFM still reads a
-`.xefml` file and a `"format": "xefml"` document; write `.xft` and `"xft"`. Producers write it from this description and
+This page is the specification. Producers write it from this description and
 need nothing from XeFM's code.
 
 ## The file

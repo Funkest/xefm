@@ -5,11 +5,8 @@
 landed" comment. The format is [`doc/XFT_FORMAT.md`](../XFT_FORMAT.md),
 and user-facing behavior is [`doc/TREE_FILES_FEATURE.md`](../TREE_FILES_FEATURE.md).
 
-Renamed from `.xefml` / `xefml://` / `xefm/xefml.py` by
-[#613](https://github.com/crftwr/xefm/issues/613): an extension of at most four
-characters fits the file list's extension column. `xft.SUFFIXES`,
-`xft.OLD_FORMATS` and `is_tree_file` keep reading the old name, and
-`ScanJob.result_path` falls back to a folder's `result.xefml`.
+The extension is kept to four characters so it fits the file list's extension
+column ([#613](https://github.com/crftwr/xefm/issues/613)).
 
 ## Pieces
 

@@ -39,16 +39,11 @@ FORMAT = "xft"
 VERSION = 1
 SUFFIX = ".xft"
 SCHEME = "xft"
-#: The names the format had before #613 renamed it — ``.xefml`` and
-#: ``"xefml"`` — still read, so a scan written by an earlier similar-files
-#: opens as before.
-OLD_FORMATS = ("xefml",)
-SUFFIXES = (SUFFIX, ".xefml")
 
 
 def is_tree_file(path) -> bool:
-    """Whether ``path`` names a tree file by its extension, old or new."""
-    return str(path).lower().endswith(SUFFIXES)
+    """Whether ``path`` names a tree file by its extension."""
+    return str(path).lower().endswith(SUFFIX)
 
 #: How long a document is trusted before its file is looked at again.
 _RECHECK_S = 1.0
@@ -144,7 +139,7 @@ def _adopt(parent: Node, kids: list) -> None:
 def parse(data: dict) -> Document:
     """A document from the JSON object of an ``.xft`` file. Raises
     ``ValueError`` for anything that is not one this version reads."""
-    if not isinstance(data, dict) or data.get("format") not in (FORMAT, *OLD_FORMATS):
+    if not isinstance(data, dict) or data.get("format") != FORMAT:
         raise ValueError("not an .xft file")
     if data.get("version") != VERSION:
         raise ValueError(f".xft version {data.get('version')!r}; this XeFM reads {VERSION}")
