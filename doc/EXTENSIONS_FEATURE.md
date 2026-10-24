@@ -79,8 +79,8 @@ that needs a newer XeFM is refused and says so, and the version you have stays
 installed. A package you disabled stays disabled.
 
 A package that does not say where it is published cannot be checked; the
-command says so. GitHub allows 60 checks an hour without an account. If you
-hit that, wait, or set `GITHUB_TOKEN` (or `GH_TOKEN`) to a token.
+command says so. Checking needs no GitHub account or token, and packages
+published in the same repository are checked together.
 
 At startup XeFM warns, without going online, about a package nothing could
 reinstall: one installed from a file that is now gone, with no `updates`.

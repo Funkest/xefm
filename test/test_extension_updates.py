@@ -3,13 +3,12 @@
 ``[extension] updates`` names where a package's versions are tagged; ``xefm
 ext outdated`` / ``upgrade`` and Tools ▸ Advanced ▸ Check for Extension
 Updates look there, and only when asked. A fake GitHub stands in for both the
-tags API and codeload here, so nothing reaches the network.
+tag list (git's ref advertisement), codeload and release assets here, so nothing reaches the network.
 
 Run with: python -m pytest test/test_extension_updates.py -v
 """
 
 import io
-import json
 import os
 import shutil
 import sys
@@ -29,6 +28,23 @@ from xefm import extension_cli  # noqa: E402
 from xefm import extensions as ext  # noqa: E402
 
 REPO = "github:someone/exts/packages/upd"
+REFS = "https://github.com/someone/exts.git/info/refs?service=git-upload-pack"
+
+
+def _pkt(text: str) -> bytes:
+    data = text.encode()
+    return f"{len(data) + 4:04x}".encode() + data
+
+
+def advertisement(tags) -> bytes:
+    """What ``git ls-remote`` reads: a service line, a flush, then the refs —
+    the first with capabilities after a NUL, annotated tags also peeled."""
+    sha = "0" * 40
+    lines = [f"{sha} HEAD\0multi_ack side-band-64k\n", f"{sha} refs/heads/main\n"]
+    for tag in tags:
+        lines += [f"{sha} refs/tags/{tag}\n", f"{sha} refs/tags/{tag}^{{}}\n"]
+    return (_pkt("# service=git-upload-pack\n") + b"0000"
+            + b"".join(map(_pkt, lines)) + b"0000")
 
 
 class FakeGitHub:
@@ -60,11 +76,8 @@ class FakeGitHub:
         self.urls.append(url)
         if self.fail is not None:
             raise self.fail
-        api = "https://api.github.com/repos/someone/exts/git/matching-refs/tags/"
-        if url.startswith(api):
-            prefix = url[len(api):]
-            return json.dumps([{"ref": f"refs/tags/{tag}"} for tag in self.tags
-                               if tag.startswith(prefix)]).encode()
+        if url == REFS:
+            return advertisement(self.tags)
         release = "https://github.com/someone/exts/releases/download/"
         if url.startswith(release):
             tag, name = url[len(release):].split("/")
@@ -123,19 +136,32 @@ class Versions(_Home):
         self.github.tags["other-v9.0.0"] = b""
         found = ext.published_versions(REPO, "upd", opener=self.github)
         self.assertEqual(found, ["0.1.0", "0.2.0", "0.10.0"])   # numeric, no beta
-        self.assertEqual(self.github.urls, [
-            "https://api.github.com/repos/someone/exts/git/matching-refs/tags/upd-v"])
+        self.assertEqual(self.github.urls, [REFS])
 
     def test_a_package_at_the_root_is_tagged_v(self):
         self.assertEqual(ext.tag_prefix("github:o/r", "x"), "v")
         self.assertEqual(ext.tag_prefix("github:o/r/x", "x"), "x-v")
         self.assertEqual(ext.release_source("github:o/r", "x", "1.0"), "github:o/r@v1.0")
 
-    def test_the_rate_limit_is_named(self):
-        self.github.fail = urllib.error.HTTPError("u", 403, "rate limited", {}, None)
+    def test_a_missing_repository_is_named(self):
+        """GitHub answers 401, asking for credentials, for a repository that
+        does not exist or is private."""
+        self.github.fail = urllib.error.HTTPError("u", 401, "Unauthorized", {}, None)
         with self.assertRaises(ext.InstallError) as caught:
             ext.published_versions(REPO, "upd", opener=self.github)
-        self.assertIn("GITHUB_TOKEN", str(caught.exception))
+        self.assertIn("github.com/someone/exts", str(caught.exception))
+
+    def test_packages_sharing_a_repository_cost_one_request(self):
+        self.release("0.1.0")
+        self.release("0.1.0", ext_id="two", updates="github:someone/exts/packages/two")
+        ext.install(f"{REPO}@upd-v0.1.0", self.layout, opener=self.github)
+        ext.install("github:someone/exts/packages/two@two-v0.1.0", self.layout,
+                    opener=self.github)
+        self.release("0.2.0")
+        self.github.urls.clear()
+        checks = ext.check_updates(self.layout, opener=self.github)
+        self.assertEqual([(c.id, c.latest) for c in checks], [("two", ""), ("upd", "0.2.0")])
+        self.assertEqual(self.github.urls, [REFS])
 
 
 class Check(_Home):
@@ -223,7 +249,6 @@ class ReleaseAssets(_Home):
     installs the newest release."""
 
     ASSET = "https://github.com/someone/exts/releases/download/upd-v0.2.0/upd-v0.2.0.zip"
-    API = "https://api.github.com/repos/someone/exts/git/matching-refs/tags/upd-v"
 
     def test_a_tag_s_asset_is_preferred_to_the_repository_zip(self):
         self.release("0.2.0", asset=True)
@@ -242,7 +267,7 @@ class ReleaseAssets(_Home):
         self.release("0.2.0", asset=True)
         manifest = ext.install(REPO, self.layout, opener=self.github)
         self.assertEqual(manifest.version, "0.2.0")
-        self.assertEqual(self.github.urls, [self.API, self.ASSET])
+        self.assertEqual(self.github.urls, [REFS, self.ASSET])
         self.assertEqual(self.installed().source, REPO)
 
     def test_no_ref_and_no_release_installs_the_default_branch(self):
@@ -259,8 +284,8 @@ class ReleaseAssets(_Home):
                                            "exts-main/packages/upd/")
 
         def opener(url):
-            if url.startswith("https://api.github.com/"):
-                raise urllib.error.HTTPError(url, 403, "rate limited", {}, None)
+            if url == REFS:
+                raise urllib.error.HTTPError(url, 503, "Unavailable", {}, None)
             return self.github(url)
 
         manifest = ext.install(REPO, self.layout, opener=opener)
