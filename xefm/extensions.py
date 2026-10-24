@@ -1329,19 +1329,64 @@ def parse_github_source(source: str) -> Optional[tuple[str, str, str, Optional[s
     return m.group(1), m.group(2), m.group(3).strip("/"), m.group(4)
 
 
-def _github_zip_url(source: str) -> Optional[tuple[str, str]]:
-    """``github:owner/repo[/path][@ref]`` or a github.com repository URL → the
-    URL of its zip and the package's subdirectory inside it."""
+def _github_parts(source: str) -> Optional[tuple[str, str, str, Optional[str]]]:
+    """``github:owner/repo[/path][@ref]`` or a github.com repository URL →
+    ``(owner, repo, subdirectory, ref)``, or None for anything else."""
     parsed = parse_github_source(source)
     if parsed is not None:
-        owner, repo, subdir, ref = parsed
-    else:
-        m = re.fullmatch(r"https://github\.com/([\w.-]+)/([\w.-]+?)(?:\.git)?/?"
-                         r"(?:tree/([\w./-]+))?", source)
-        if not m:
-            return None
-        owner, repo, subdir, ref = m.group(1), m.group(2), "", m.group(3)
-    return f"https://codeload.github.com/{owner}/{repo}/zip/{ref or 'HEAD'}", subdir
+        return parsed
+    m = re.fullmatch(r"https://github\.com/([\w.-]+)/([\w.-]+?)(?:\.git)?/?"
+                     r"(?:tree/([\w./-]+))?", source)
+    return (m.group(1), m.group(2), "", m.group(3)) if m else None
+
+
+def _latest_release_tag(owner: str, repo: str, subdir: str,
+                        opener: Callable[[str], bytes] | None) -> Optional[str]:
+    """The newest release tag of the package in ``subdir`` — named by the
+    folder, as the tag prefix names a package by its id — or None when it has
+    none or GitHub cannot be asked, and the default branch is installed."""
+    ext_id = subdir.rsplit("/", 1)[-1]
+    updates = f"github:{owner}/{repo}" + (f"/{subdir}" if subdir else "")
+    try:
+        versions = published_versions(updates, ext_id, opener=opener)
+    except InstallError as exc:
+        logger.warning(f"Could not look up the releases of {updates}: {exc}")
+        return None
+    return f"{tag_prefix(updates, ext_id)}{versions[-1]}" if versions else None
+
+
+def _download_zip(url: str, workdir: Path, opener: Callable[[str], bytes] | None) -> None:
+    workdir.mkdir(parents=True, exist_ok=True)
+    try:
+        payload = (opener or _open_url)(url)
+    except OSError as exc:
+        raise InstallError(f"could not download {url}: {exc}") from None
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            _safe_extract(archive, workdir)
+    except zipfile.BadZipFile:
+        raise InstallError(f"{url} did not return a zip file") from None
+
+
+def _fetch_github(owner: str, repo: str, subdir: str, ref: Optional[str],
+                  workdir: Path, opener: Callable[[str], bytes] | None) -> Path:
+    """A GitHub source at ``ref`` — the newest release when it names none.
+    A tag's release asset ``<tag>.zip`` holds just the package, so it is
+    preferred; without one, the zip of the whole repository at ``ref``."""
+    if ref is None:
+        ref = _latest_release_tag(owner, repo, subdir, opener)
+    if ref is not None:
+        asset = f"https://github.com/{owner}/{repo}/releases/download/{ref}/{ref}.zip"
+        try:
+            _download_zip(asset, workdir / "release", opener)
+            return _find_package_root(workdir / "release")
+        except InstallError:
+            # No such release or asset (a 404 most of the time): the
+            # repository's zip below says what is wrong, if anything is.
+            pass
+    _download_zip(f"https://codeload.github.com/{owner}/{repo}/zip/{ref or 'HEAD'}",
+                  workdir / "repo", opener)
+    return _find_package_root(workdir / "repo", subdir)
 
 
 def _safe_extract(archive: zipfile.ZipFile, dest: Path) -> None:
@@ -1402,21 +1447,14 @@ def fetch(source: str, workdir: Path,
         except zipfile.BadZipFile:
             raise InstallError(f"{source} is not a zip file") from None
         return _find_package_root(workdir)
-    github = _github_zip_url(source)
-    url, subdir = github or (source if source.startswith("https://") else None, "")
-    if url is None:
+    github = _github_parts(source)
+    if github is not None:
+        return _fetch_github(*github, workdir, opener)
+    if not source.startswith("https://"):
         raise InstallError(f"{source} is not a directory, a zip, an https:// URL "
                            "or github:owner/repo[/path]")
-    try:
-        payload = (opener or _open_url)(url)
-    except OSError as exc:
-        raise InstallError(f"could not download {url}: {exc}") from None
-    try:
-        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-            _safe_extract(archive, workdir)
-    except zipfile.BadZipFile:
-        raise InstallError(f"{url} did not return a zip file") from None
-    return _find_package_root(workdir, subdir)
+    _download_zip(source, workdir, opener)
+    return _find_package_root(workdir)
 
 
 def summarize(manifest: Manifest) -> list[str]:

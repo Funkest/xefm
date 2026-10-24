@@ -252,10 +252,20 @@ the file atomically.
    - A directory is used in place.
    - A zip is extracted with `_safe_extract`, which refuses members that
      resolve outside the target.
-   - A `github:owner/repo[/path][@ref]` source or a github.com URL becomes a
-     codeload zip URL (`parse_github_source`). The optional path names a
-     package in a subdirectory, so one repository can hold several
+   - A `github:owner/repo[/path][@ref]` source or a github.com URL
+     (`_github_parts`, `_fetch_github`). The optional path names a package in
+     a subdirectory, so one repository can hold several
      (crftwr/xefm-extensions); a `.` or `..` component is refused.
+     - With no `@ref`, the newest release tag is looked up the way
+       `published_versions` does, taking the folder's name as the id for the
+       tag prefix. No tags, or no answer from the API (the rate limit), leaves
+       the default branch (`HEAD`), with a warning in the log.
+     - At a ref, the release asset
+       `releases/download/<ref>/<ref>.zip` is tried first. It holds the package
+       alone; `releases/download` is not the API, so it does not count toward
+       the rate limit. Any failure there (a 404 for a branch, or a tag with no
+       release) falls back to the codeload zip of the whole repository at
+       `ref`, and that one's error is the one reported.
    - Any other `https://` URL is fetched as is.
    - The manifest root is the extracted top, or its single child directory
      (GitHub zips wrap everything in `repo-ref/`) — followed by the path, when

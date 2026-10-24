@@ -32,20 +32,29 @@ REPO = "github:someone/exts/packages/upd"
 
 
 class FakeGitHub:
-    """Tags and zips of one repository holding ``packages/<id>/`` at each tag."""
+    """Tags and zips of one repository holding ``packages/<id>/`` at each tag,
+    and the release assets ``<tag>.zip`` of the tags that have one."""
 
     def __init__(self):
         self.tags: dict[str, bytes] = {}     # tag -> zip of the repository
+        self.assets: dict[str, bytes] = {}   # tag -> zip of the package alone
+        self.head: bytes = b""               # zip of the default branch
         self.urls: list[str] = []
         self.fail: Exception | None = None
 
-    def publish(self, tag: str, package: Path, ext_id: str) -> None:
+    @staticmethod
+    def _zip(package: Path, prefix: str) -> bytes:
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as z:
             for path in package.rglob("*"):
                 if path.is_file():
-                    z.write(path, f"exts-{tag}/packages/{ext_id}/{path.relative_to(package)}")
-        self.tags[tag] = buf.getvalue()
+                    z.write(path, f"{prefix}{path.relative_to(package)}")
+        return buf.getvalue()
+
+    def publish(self, tag: str, package: Path, ext_id: str, *, asset=False) -> None:
+        self.tags[tag] = self._zip(package, f"exts-{tag}/packages/{ext_id}/")
+        if asset:
+            self.assets[tag] = self._zip(package, f"{ext_id}/")
 
     def __call__(self, url: str) -> bytes:
         self.urls.append(url)
@@ -56,9 +65,16 @@ class FakeGitHub:
             prefix = url[len(api):]
             return json.dumps([{"ref": f"refs/tags/{tag}"} for tag in self.tags
                                if tag.startswith(prefix)]).encode()
+        release = "https://github.com/someone/exts/releases/download/"
+        if url.startswith(release):
+            tag, name = url[len(release):].split("/")
+            if tag in self.assets and name == f"{tag}.zip":
+                return self.assets[tag]
+            raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
         zip_prefix = "https://codeload.github.com/someone/exts/zip/"
         if url.startswith(zip_prefix):
-            return self.tags[url[len(zip_prefix):]]
+            ref = url[len(zip_prefix):]
+            return self.head if ref == "HEAD" else self.tags[ref]
         raise AssertionError(f"unexpected URL {url}")
 
 
@@ -90,10 +106,10 @@ class _Home(unittest.TestCase):
         '''), encoding="utf-8")
         return root
 
-    def release(self, version: str, **kw) -> Path:
+    def release(self, version: str, *, asset=False, **kw) -> Path:
         root = self.package(version, **kw)
         self.github.publish(f"{kw.get('ext_id', 'upd')}-v{version}", root,
-                            kw.get("ext_id", "upd"))
+                            kw.get("ext_id", "upd"), asset=asset)
         return root
 
     def installed(self, ext_id="upd") -> ext.InstalledEntry:
@@ -199,6 +215,65 @@ class Upgrade(_Home):
         self.assertIn("99.0.0", str(caught.exception))
         self.assertEqual(self.installed().version, "0.1.0")
         self.assertEqual(ext.read_manifest(self.layout.packages / "upd").version, "0.1.0")
+
+
+class ReleaseAssets(_Home):
+    """A tag's release asset ``<tag>.zip`` holds the package alone, so it is
+    downloaded instead of the whole repository; a source with no ``@ref``
+    installs the newest release."""
+
+    ASSET = "https://github.com/someone/exts/releases/download/upd-v0.2.0/upd-v0.2.0.zip"
+    API = "https://api.github.com/repos/someone/exts/git/matching-refs/tags/upd-v"
+
+    def test_a_tag_s_asset_is_preferred_to_the_repository_zip(self):
+        self.release("0.2.0", asset=True)
+        manifest = ext.install(f"{REPO}@upd-v0.2.0", self.layout, opener=self.github)
+        self.assertEqual(manifest.version, "0.2.0")
+        self.assertEqual(self.github.urls, [self.ASSET])
+
+    def test_a_tag_without_an_asset_falls_back_to_the_repository_zip(self):
+        self.release("0.2.0")
+        ext.install(f"{REPO}@upd-v0.2.0", self.layout, opener=self.github)
+        self.assertEqual(self.github.urls, [
+            self.ASSET, "https://codeload.github.com/someone/exts/zip/upd-v0.2.0"])
+
+    def test_no_ref_installs_the_newest_release(self):
+        self.release("0.1.0")
+        self.release("0.2.0", asset=True)
+        manifest = ext.install(REPO, self.layout, opener=self.github)
+        self.assertEqual(manifest.version, "0.2.0")
+        self.assertEqual(self.github.urls, [self.API, self.ASSET])
+        self.assertEqual(self.installed().source, REPO)
+
+    def test_no_ref_and_no_release_installs_the_default_branch(self):
+        self.github.head = FakeGitHub._zip(self.package("0.3.0"),
+                                           "exts-main/packages/upd/")
+        manifest = ext.install(REPO, self.layout, opener=self.github)
+        self.assertEqual(manifest.version, "0.3.0")
+        self.assertEqual(self.github.urls[-1],
+                         "https://codeload.github.com/someone/exts/zip/HEAD")
+
+    def test_no_ref_installs_the_default_branch_when_github_cannot_be_asked(self):
+        self.release("0.2.0", asset=True)
+        self.github.head = FakeGitHub._zip(self.package("0.3.0"),
+                                           "exts-main/packages/upd/")
+
+        def opener(url):
+            if url.startswith("https://api.github.com/"):
+                raise urllib.error.HTTPError(url, 403, "rate limited", {}, None)
+            return self.github(url)
+
+        manifest = ext.install(REPO, self.layout, opener=opener)
+        self.assertEqual(manifest.version, "0.3.0")
+
+    def test_an_upgrade_downloads_the_asset(self):
+        self.release("0.1.0")
+        ext.install(f"{REPO}@upd-v0.1.0", self.layout, opener=self.github)
+        self.release("0.2.0", asset=True)
+        (check,) = ext.check_updates(self.layout, opener=self.github)
+        ext.upgrade(check, self.layout, opener=self.github)
+        self.assertEqual(self.installed().version, "0.2.0")
+        self.assertEqual(self.github.urls[-1], self.ASSET)
 
 
 class SyncAndStartup(_Home):

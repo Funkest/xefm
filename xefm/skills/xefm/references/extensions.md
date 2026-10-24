@@ -479,7 +479,12 @@ the folder. Nothing needs uploading to GitHub Releases: a version is a tag,
 first release, so an installed copy knows where its next version is:
 `xefm ext outdated` and `upgrade` (and Check for Extension Updates in the
 Tools ▸ Advanced menu) read those tags. A tag that is not plain numbers
-(`v0.3.0-beta`) is never offered as an upgrade.
+(`v0.3.0-beta`) is never offered as an upgrade. An install source without
+`@ref` installs the newest of those tags.
+
+Optionally, attach the package folder zipped as a release asset named after
+the tag (`hello-xefm-v0.1.0.zip`). XeFM downloads it instead of the whole
+repository when it is there.
 
 ## When `xefm ext check` complains
 
