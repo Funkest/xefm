@@ -9,15 +9,13 @@
 
 ## Overview
 
-This document provides comprehensive implementation details for XeFM's drag-and-drop feature, which enables users to drag files from the file manager to external applications on desktop platforms. The implementation is designed with a platform-agnostic architecture at the XeFM level, with platform-specific implementations in the PuiKit backend layer.
+This document provides comprehensive implementation details for XeFM's drag-and-drop feature, which enables users to drag files from the file manager to external applications on desktop platforms, and to drop files onto a pane from other applications or the other pane. The implementation is designed with a platform-agnostic architecture at the XeFM level, with platform-specific implementations in the PuiKit backend layer.
 
 **Target Audience**: Developers working on XeFM, contributors adding platform support, maintainers debugging drag-and-drop issues.
 
 **Current Platform Support**:
-- ✅ macOS (via CoreGraphics backend)
-- ⏳ Windows (future implementation)
-- ⏳ Linux (future implementation)
-- ❌ Terminal mode (gracefully degrades)
+- ✅ macOS and Windows desktop app (drag out and drop in)
+- ❌ Terminal mode — a drag-out copies the paths to the clipboard instead; no drop-in
 
 ## Architecture Overview
 
@@ -289,90 +287,53 @@ row it is over, moving the cursor there as it raises the window. Windows already
 delivered that click (`DefWindowProc` answers `WM_MOUSEACTIVATE` with
 `MA_ACTIVATE`), so the field changes nothing there.
 
-## FileManager Integration
+## XeFM Integration
 
-**Module**: `xefm/app.py`
+**Modules**: `xefm/file_pane.py` (gesture), `xefm/app.py` (what to drag, where a drop goes)
 
-**Integration Points**:
+None of the `DragGestureDetector` / `DragPayloadBuilder` / `DragSessionManager`
+objects sketched in sections 1–3 exist in XeFM. The XeFM side is a pair of
+`FilePane` callbacks and the `XeFMApp` methods they call:
 
-1. **Component Initialization**:
-   ```python
-   def __init__(self, backend):
-       # ... existing initialization ...
-       self.gesture_detector = DragGestureDetector()
-       self.payload_builder = DragPayloadBuilder()
-       self.drag_manager = DragSessionManager(backend)
-   ```
+1. **Gesture** — `FilePane.handle_event` arms a possible drag on a left
+   `MOUSE_DOWN` over a row (`_press_index`, `_press_xy`) without consuming it,
+   so the Panel still synthesizes the click on release. On `MOUSE_DRAG`, once
+   the Manhattan distance from the press reaches `DRAG_THRESHOLD` (1.5 base
+   units, in `xefm/file_pane.py`), it calls `on_drag(index, event)` exactly once;
+   the native session then owns the mouse. A press on the scrollbar or on empty
+   space below the rows never drags.
 
-2. **Mouse Event Handling**:
-   ```python
-   def handle_mouse_event(self, event: MouseEvent) -> bool:
-       # Block events during drag
-       if self.drag_manager.is_dragging():
-           return True
-       
-       # Detect drag gestures
-       if event.event_type == MouseEventType.BUTTON_DOWN:
-           self.gesture_detector.handle_button_down(event.column, event.row)
-       elif event.event_type == MouseEventType.MOVE:
-           if self.gesture_detector.handle_move(event.column, event.row):
-               return self._initiate_drag()
-       elif event.event_type == MouseEventType.BUTTON_UP:
-           self.gesture_detector.handle_button_up()
-   ```
+2. **Wiring** — `XeFMApp` builds each pane with
+   `on_drag=lambda i, ev: self._start_drag(side, i, ev)`,
+   `on_drop=... self._on_drop(side, i, paths, op)` and
+   `on_drop_query=... self._drop_effect(side, i, paths, op)`.
 
-3. **Drag Initiation**:
-   ```python
-   def _initiate_drag(self) -> bool:
-       # Get files to drag
-       selected_files = self._get_selected_files()
-       focused_item = self._get_focused_item()
-       
-       # Build payload
-       urls = self.payload_builder.build_payload(
-           selected_files, focused_item, self._get_current_directory()
-       )
-       if not urls:
-           return False
-       
-       # Create drag image text
-       drag_text = (focused_item.name if len(urls) == 1 
-                    else f"{len(urls)} files")
-       
-       # Start drag session
-       return self.drag_manager.start_drag(
-           urls, drag_text, self._on_drag_completed
-       )
-   ```
+3. **Drag-out** — `_start_drag(pane_name, index, event)` takes the dragged row,
+   or the whole marked set (in list order) when the row is marked, keeps only
+   local paths (`_is_local`, i.e. not a `path_schemes` URI — so no `s3://`,
+   `ssh://` or `archive://` entries), and calls
+   `panel.begin_file_drag(paths, event=event, operations=("copy", "move"), on_complete=...)`.
+   It records `_drag_source_pane` *before* starting, because the TUI clipboard
+   fallback fires `on_complete` synchronously.
+   `_on_drag_complete(paths, operation)` logs the outcome, relists both panes
+   when the receiver reports `move`, and stays silent for a drag released in
+   place (#230).
 
-4. **Completion Handling**:
-   ```python
-   def _on_drag_completed(self, completed: bool) -> None:
-       if completed:
-           self.logger.info("Drag completed successfully")
-       else:
-           self.logger.info("Drag was cancelled")
-       
-       self.gesture_detector.reset()
-       self._request_redraw()
-   ```
+4. **Drop-in** — `FilePane` maps `FILE_DROP` (and `FILE_DRAG_OVER`) to the row
+   under the pointer (`-1` below the last row). `_drop_plan()` decides the
+   outcome once, for both the hover badge (`_drop_effect` → `"copy"` /
+   `"move"` / `"none"`) and the drop itself (`_on_drop`):
+   - refuse a search-results (virtual) pane or a browsed archive;
+   - target the folder row under the drop, otherwise the pane's directory;
+   - skip sources already in the destination — all skipped on the drag's own
+     source pane is `in_place` (cancelled silently), elsewhere a refusal;
+   - refuse `link`;
+   - with no modifier, move when `_same_volume()` says every source shares the
+     destination's volume, copy otherwise (#589).
 
-**Event Flow**:
-
-```
-User Action          → XeFM Handler              → Component
-─────────────────────────────────────────────────────────────
-Mouse button down    → handle_mouse_event()     → gesture_detector.handle_button_down()
-Mouse move           → handle_mouse_event()     → gesture_detector.handle_move()
-  (threshold met)    → _initiate_drag()         → payload_builder.build_payload()
-                     → _initiate_drag()         → drag_manager.start_drag()
-                     → drag_manager             → backend.start_drag_session()
-                     → backend                  → OS drag system
-User drops file      → OS drag system           → backend callback
-                     → backend                  → drag_manager.handle_drag_completed()
-                     → drag_manager             → _on_drag_completed()
-                     → _on_drag_completed()     → gesture_detector.reset()
-```
+   `_on_drop` then runs the shared copy/move engine (`self._fileops.copy` /
+   `.move`) with its confirmation and conflict handling, and relists both panes
+   on completion.
 
 ## Error Handling
 
@@ -423,94 +384,23 @@ All error paths ensure:
 
 ## Testing Strategy
 
-### Unit Tests
+### Automated Tests
 
-**Location**: `test/test_drag_*.py`
+**Location**: `test/test_drag_and_drop.py`, driven headlessly (no window):
 
-**Coverage**:
-- Specific drag gesture sequences with known coordinates
-- Edge cases (parent directory, remote files, archive contents)
-- Error conditions (missing files, too many files)
-- State machine transitions
-- Callback invocation
+- `FilePaneGesture` — a press that travels past `DRAG_THRESHOLD` fires
+  `on_drag` once; a press on empty space never drags; `FILE_DROP` reports the
+  paths and the row (or `-1` below the rows).
+- `AppDragDrop` — `_start_drag` hands the row, or the whole selection, to
+  `panel.begin_file_drag`; `_on_drop` copies into the pane directory or a
+  folder row, skips sources already there, cancels a drop back onto its source
+  pane silently, still copies into a subfolder of the source pane, and refuses
+  a virtual pane; `_on_drag_complete` clears the source pane.
+- `InactiveWindowStartsADrag` — the GUI window is created with
+  `WindowStyle(takes_first_click=True)` and nothing else changed; the terminal
+  backend gets no style (#431).
 
-**Example**:
-```python
-def test_drag_parent_directory_marker():
-    """Cannot drag parent directory marker."""
-    builder = DragPayloadBuilder()
-    parent = Path("..")
-    
-    urls = builder.build_payload(
-        selected_files=[],
-        focused_item=parent,
-        current_directory=Path("/tmp")
-    )
-    
-    assert urls is None
-```
-
-### Property-Based Tests
-
-**Location**: `test/test_drag_*.py` (marked with PBT comment)
-
-**Library**: `hypothesis`
-
-**Configuration**: Minimum 100 iterations per test
-
-**Coverage**:
-- Drag threshold behavior for arbitrary mouse movements
-- Payload building for arbitrary file selections
-- State machine correctness for arbitrary operation sequences
-- URL formatting for arbitrary file paths
-
-**Example**:
-```python
-from hypothesis import given, strategies as st
-
-# Feature: drag-and-drop, Property 2: Payload contains selected files
-@given(
-    selected_files=st.lists(
-        st.builds(Path, st.text(min_size=1, max_size=50)),
-        min_size=1,
-        max_size=100
-    )
-)
-def test_payload_contains_selected_files_in_order(selected_files, tmp_path):
-    """Drag payload must contain all selected files in order."""
-    # Create actual files
-    actual_files = []
-    for i, file_path in enumerate(selected_files):
-        actual_file = tmp_path / f"file_{i}.txt"
-        actual_file.write_text("test")
-        actual_files.append(actual_file)
-    
-    # Build payload
-    builder = DragPayloadBuilder()
-    urls = builder.build_payload(
-        selected_files=actual_files,
-        focused_item=None,
-        current_directory=tmp_path
-    )
-    
-    # Verify all files present in order
-    assert urls is not None
-    assert len(urls) == len(actual_files)
-    
-    for i, (url, file_path) in enumerate(zip(urls, actual_files)):
-        expected_url = f"file://{file_path.resolve().as_posix()}"
-        assert url == expected_url
-```
-
-### Integration Tests
-
-**Location**: `test/test_drag_integration.py`, `test/test_filemanager_drag_integration.py`
-
-**Coverage**:
-- Complete flow from mouse gesture to backend call
-- State transitions through full lifecycle
-- Error recovery paths
-- Multiple drag operations in sequence
+The drag source and its per-backend behaviour are tested in PuiKit.
 
 ### Manual Testing
 
@@ -658,9 +548,8 @@ Before releasing platform support:
 
 ### Related XeFM Documentation
 
-- `doc/MOUSE_EVENT_SUPPORT_FEATURE.md` - End-user documentation (Drag-and-Drop section)
-- `doc/MOUSE_EVENT_SUPPORT_FEATURE.md` - Mouse event infrastructure
-- `doc/dev/MOUSE_EVENT_SYSTEM.md` - Mouse event system implementation
+- `doc/MOUSE_EVENT_SUPPORT_FEATURE.md` - End-user documentation (Dragging files section)
+- `doc/dev/MOUSE_OPERATION_IMPLEMENTATION.md` - Mouse handling in the file panes
 
 ## Changelog
 
@@ -676,10 +565,7 @@ Before releasing platform support:
 
 ### Future Enhancements
 
-- Windows backend implementation
 - Linux X11 backend implementation
 - Linux Wayland backend implementation
 - Drag preview customization
-- Drag operation type hints (copy vs move)
 - Progress feedback for large file operations
-- Drag-and-drop from external apps to XeFM (drop target support)

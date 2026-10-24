@@ -123,8 +123,16 @@ current environment and adds:
   selected filenames in the left / right panes.
 - `XEFM_THIS_SELECTED` / `XEFM_OTHER_SELECTED` — same for the active / inactive
   panes.
+- `XEFM_LEFT_FOCUSED` / `XEFM_RIGHT_FOCUSED` / `XEFM_THIS_FOCUSED` /
+  `XEFM_OTHER_FOCUSED` — the file under the cursor in that pane, in the same
+  double-quoted form; empty only when the pane has no rows.
 
-If no files are selected in a pane, the file under the cursor is used instead.
+A `*_SELECTED` variable is exactly what Space selected and is **empty when
+nothing is selected** — it no longer substitutes the file under the cursor (it
+did through XeFM 1.1.0); that file is in `*_FOCUSED` instead, so a program can
+require a real selection (`build_xefm_env`, #348). The argv the picker appends
+still follows the old rule — the selection, else the focused entry
+(`get_selected_or_cursor_files`) — because one argument list cannot carry both.
 
 The working directory is set to the active pane's directory, except when that
 pane is browsing a remote path (e.g. S3), in which case it falls back to XeFM's
@@ -209,7 +217,10 @@ argv only the active selection.)
 Directory variables: `XEFM_THIS_DIR`, `XEFM_OTHER_DIR`, `XEFM_LEFT_DIR`,
 `XEFM_RIGHT_DIR`. Selection variables (space-separated, double-quoted filenames):
 `XEFM_THIS_SELECTED`, `XEFM_OTHER_SELECTED`, `XEFM_LEFT_SELECTED`,
-`XEFM_RIGHT_SELECTED`. Status: `XEFM_ACTIVE` (set to `"1"` under XeFM).
+`XEFM_RIGHT_SELECTED` (empty when nothing is selected). Cursor variables (the
+focused file, same form): `XEFM_THIS_FOCUSED`, `XEFM_OTHER_FOCUSED`,
+`XEFM_LEFT_FOCUSED`, `XEFM_RIGHT_FOCUSED`. Status: `XEFM_ACTIVE` (set to `"1"`
+under XeFM).
 
 ### Script placement
 

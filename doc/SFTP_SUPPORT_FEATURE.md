@@ -245,7 +245,7 @@ Select multiple files and perform batch operations:
 5. Watch progress bar for completion
 
 The progress bar fills as the bytes actually move, in both directions, so a slow
-transfer over a high-latency link no longer looks stalled at 0%. Press **ESC**
+transfer over a high-latency link does not look stalled at 0%. Press **ESC**
 to cancel: the transfer stops within about half a second rather than running to
 completion in the background, and the partly-transferred file is removed.
 

@@ -51,8 +51,7 @@ from the curses era and is inert.
 Binds every color-pair constant on the renderer:
 
 1. Optionally switch the current scheme (`color_scheme`).
-2. `renderer.set_fullcolor_mode(not force_fallback_colors)` — turn full RGB on
-   unless fallback mode is forced (see below).
+2. `renderer.set_fullcolor_mode(True)` — full RGB always (see below).
 3. `renderer.clear_color_cache()` — required so re-initialization takes effect
    when the palette changes.
 4. `renderer.update_background(default_bg)` — set the terminal/canvas background
@@ -89,20 +88,20 @@ These log/status helpers are the primary live consumers of `xefm.colors`
   `init_colors()` separately to apply it
 - `toggle_color_scheme()` — swap `dark` ↔ `light`, returning the new name
 
-Note the live "Next Theme" / `T` action does **not** call
+Note the live "Next Theme" (`toggle_color_scheme`) action does **not** call
 `toggle_color_scheme()`; it cycles the PuiKit `Theme` system (below). These
 dark/light helpers are the legacy pair-layer switch.
 
 ### Reduced-color terminals
 
-There is no `FALLBACK_COLOR_SCHEMES` dict — RGB is always the source of truth.
+There is no separate reduced-color palette — RGB is always the source of truth.
 `init_colors()` calls `renderer.set_fullcolor_mode(True)` and the backend
 approximates the RGB values on a terminal with a reduced palette.
 
 ## The modern multi-theme system (high level)
 
 The palettes the user actually cycles at runtime — the "Next Theme" menu item
-and the `toggle_color_scheme` (`T`) key — are PuiKit `Theme` objects, **not** the
+and the `toggle_color_scheme` action — are PuiKit `Theme` objects, **not** the
 `dark`/`light` pairs above. In `xefm/app.py`:
 
 - `_THEME_SPECS` is the list of built-in palettes (Dark+, Monokai, Dracula,

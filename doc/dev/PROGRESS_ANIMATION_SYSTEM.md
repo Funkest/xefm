@@ -3,8 +3,9 @@
 Module: `xefm/progress_animator.py`
 
 A small, generalized engine for animated progress indicators (spinners and
-progress-bar-style effects) used wherever XeFM needs "something is happening"
-feedback — search, and, through `ProgressManager`, file operations. It is a pure
+progress-bar-style effects). Its one caller in XeFM today is `ProgressManager`,
+which uses it for file-operation status; the search dialog
+(`xefm/progressive_search_dialog.py`) draws its own spinner. It is a pure
 frame generator: it computes which glyph to show based on elapsed time. Rendering
 and threading live in the callers.
 
@@ -96,9 +97,9 @@ PROGRESS_ANIMATION_SPEED   = 0.2   # seconds per frame; ~0.1–0.5 is reasonable
 
 ## Tests
 
-- `test/test_search_animation.py` — pattern behavior, frame cycling, timing,
-  config integration.
-- `test/test_search_animation_integration.py` — integration and thread-safety.
+- `test/test_progress_animator_generalized.py` — every pattern, runtime
+  pattern/speed changes, status text, indicator styles, the factory methods,
+  config fallbacks and frame timing.
 
 ## Related
 

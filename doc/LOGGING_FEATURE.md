@@ -131,19 +131,14 @@ XeFM retains a configurable number of log messages:
 
 ### Log Levels
 
-Control the verbosity of logging:
+Every message has one of these levels:
 
-- **INFO** (default): General operational messages
-- **WARNING**: Warnings and errors only
+- **INFO**: General operational messages
+- **WARNING**: Something that did not work as expected, but XeFM carried on
+- **ERROR**: A failure
 - **DEBUG**: Detailed diagnostic information
-- **ERROR**: Errors only
 
-Set log level in configuration:
-
-```python
-# In config file
-LOG_LEVEL = "INFO"  # or "WARNING", "DEBUG", "ERROR"
-```
+The log shows INFO and above. There is no setting to change that.
 
 ## Copy Log to Clipboard
 
@@ -333,13 +328,6 @@ Messages are color-coded for easy identification:
 - Keep log pane visible during operations
 - Check for errors after operations
 - Review warnings for potential issues
-
-### Log Level Selection
-
-- Use INFO for normal operations
-- Use WARNING to reduce verbosity
-- Use DEBUG for troubleshooting
-- Use ERROR for critical issues only
 
 ### Message Review
 

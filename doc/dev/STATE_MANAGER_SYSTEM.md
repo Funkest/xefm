@@ -18,7 +18,7 @@ The XeFM State Manager provides persistent application state management using SQ
 - **Pane State**: Directory paths, selection, scroll position, sort settings, filters
 - **Window Layout**: Pane width ratios, log pane height
 - **Recent Directories**: History of visited directories for quick navigation
-- **Search History**: Previously used search terms for auto-completion
+- **Query Histories**: Search, filter and list-command queries, each under its own key
 - **Path Cursor History**: Separate cursor positions for left and right panes
 - **Session Information**: Active XeFM instances with heartbeat tracking
 
@@ -93,17 +93,10 @@ pane_info = state_manager.get_state("left_pane")
 ### XeFM-Specific Operations
 
 ```python
-# Save pane state
-pane_data = {
-    'path': current_pane['path'],
-    'selected_index': current_pane['selected_index'],
-    'scroll_offset': current_pane['scroll_offset'],
-    'sort_mode': current_pane['sort_mode'],
-    'sort_reverse': current_pane['sort_reverse'],
-    'filter_pattern': current_pane['filter_pattern'],
-    'selected_files': list(current_pane['selected_files'])
-}
-state_manager.save_pane_state('left', pane_data)
+# Save pane state: pass the pane dict itself; save_pane_state extracts
+# path, focused_index (stored as 'selected_index'), scroll_offset, sort_mode,
+# sort_reverse, filter_pattern and selected_files
+state_manager.save_pane_state('left', current_pane)
 
 # Load pane state
 loaded_state = state_manager.load_pane_state('left')
@@ -120,7 +113,8 @@ layout = state_manager.load_window_layout()
 state_manager.add_recent_directory('/home/user/projects')
 recent_dirs = state_manager.load_recent_directories()
 
-# Search history
+# Search history (helpers kept on XeFMStateManager; the app itself keeps
+# per-mode query histories under its own keys, see Search History Integration)
 state_manager.add_search_term('*.py')
 search_history = state_manager.load_search_history()
 
@@ -128,8 +122,8 @@ search_history = state_manager.load_search_history()
 state_manager.save_pane_cursor_position('left', '/home/user/projects', 'main.py')
 cursor_filename = state_manager.load_pane_cursor_position('left', '/home/user/projects')
 left_positions = state_manager.get_pane_cursor_positions('left')
-left_history = state_manager.get_ordered_pane_cursor_history('left')  # Chronological order
-state_manager.clear_pane_cursor_history('left')  # Clear left pane cursor history
+left_history = state_manager.get_ordered_pane_history('left')  # Chronological order
+state_manager.clear_pane_history('left')  # Clear left pane cursor history
 ```
 
 ### Session Management
@@ -143,10 +137,10 @@ for session in sessions:
     print(f"PID: {session['pid']}")
     print(f"Host: {session['hostname']}")
 
-# Update heartbeat (done automatically in main loop)
+# Update heartbeat (done at startup)
 state_manager.update_session_heartbeat()
 
-# Cleanup (done automatically on exit)
+# Cleanup (done on quit, in XeFMApp._save_application_state)
 state_manager.cleanup_session()
 ```
 
@@ -154,154 +148,157 @@ state_manager.cleanup_session()
 
 ### Initialization
 
-The state manager is initialized in `FileManager.__init__()`:
+The state manager is set up in `XeFMApp.__init__()` (`xefm/app.py`). It is
+injectable so tests can pass a temp-db `XeFMStateManager`; otherwise the global
+one is used. The `PaneManager` gets the same instance:
 
 ```python
-self.state_manager = get_state_manager()
-self.load_application_state()
+self.state_manager = state_manager if state_manager is not None else get_state_manager()
+...
+self.pm = PaneManager(self.config, self._resolve_dir(left_dir),
+                      self._resolve_dir(right_dir),
+                      state_manager=self.state_manager,
+                      file_list_manager=self.flm)
+self._restore_layout_and_paths()
 ```
 
 ### State Loading
 
-Application state is loaded during startup:
+`_restore_layout_and_paths()` runs before the splitters and file lists are
+built. It is best-effort: any exception is swallowed, since the log view does
+not exist yet.
 
 ```python
-def load_application_state(self):
-    # Load window layout
-    layout = self.state_manager.load_window_layout()
-    if layout:
-        self.pane_manager.left_pane_ratio = layout['left_pane_ratio']
-        self.log_height_ratio = layout['log_height_ratio']
-    
-    # Load pane states
-    left_state = self.state_manager.load_pane_state('left')
-    if left_state and Path(left_state['path']).exists():
-        self.pane_manager.left_pane['path'] = Path(left_state['path'])
-        # ... restore other pane settings
-    
-    # Refresh file lists and restore cursor positions
-    self.refresh_files()
-    self.restore_startup_cursor_positions()
+def _restore_layout_and_paths(self):
+    self._panes_fraction = max(0.1, min(0.95, 1.0 - self._default_log_height()))
+    try:
+        self.state_manager.update_session_heartbeat()
+        self.state_manager.cleanup_non_existing_directories()
+
+        layout = self.state_manager.load_window_layout()
+        if layout:
+            ratio = layout.get('left_pane_ratio', self.pm.left_pane_ratio)
+            self.pm.left_pane_ratio = max(0.1, min(0.9, ratio))
+            # The saved log height only wins if it differs from the
+            # log_height_default saved with it, i.e. the user dragged it (#316)
+            ...
+
+        self._restore_one_pane('left', self.pm.left_pane, self._left_provided)
+        self._restore_one_pane('right', self.pm.right_pane, self._right_provided)
+        self._restore_tabs('left', self._left_provided)
+        self._restore_tabs('right', self._right_provided)
+    except Exception:
+        pass
 ```
+
+`_restore_one_pane()` re-applies the saved directory only when no startup
+directory was given on the command line and the directory still exists; sort
+mode (if still a known sort key), sort direction and filter are always restored.
 
 ### State Saving
 
-Application state is saved during shutdown:
+`_save_application_state()` is called from `_quit()`:
 
 ```python
-def save_application_state(self):
-    # Save window layout
-    self.state_manager.save_window_layout(
-        self.pane_manager.left_pane_ratio,
-        self.log_height_ratio
-    )
-    
-    # Save pane states
-    self.state_manager.save_pane_state('left', self.pane_manager.left_pane)
-    self.state_manager.save_pane_state('right', self.pane_manager.right_pane)
-    
-    # Save current cursor positions before quitting
-    self.save_quit_cursor_positions()
-    
-    # Add current directories to recent directories
-    self.state_manager.add_recent_directory(str(self.pane_manager.left_pane['path']))
-    self.state_manager.add_recent_directory(str(self.pane_manager.right_pane['path']))
+def _save_application_state(self):
+    try:
+        self.state_manager.save_window_layout(
+            self.pane_splitter.fraction,
+            1.0 - self.content_splitter.fraction,
+            log_height_default=self._default_log_height(),
+        )
+        self.state_manager.save_pane_state('left', self.pm.left_pane)
+        self.state_manager.save_pane_state('right', self.pm.right_pane)
+        self.pm.save_cursor_position(self.pm.left_pane)
+        self.pm.save_cursor_position(self.pm.right_pane)
+        self._save_tabs()
+
+        # The full visited-directory trail, most recent first (#220)
+        self.state_manager.save_recent_directories(
+            self._recent_dirs_most_recent_first(), _HISTORY_MAX)
+
+        self.state_manager.cleanup_session()
+    except Exception as e:
+        self.log_info(f"Could not save application state: {e}")
 ```
 
 ### Search History Integration
 
-Search terms are automatically saved to history:
+Each search mode keeps its own query history under a key of its own
+(`XeFMApp._SEARCH_HISTORY`: `search.history.filename`,
+`search.history.content`, `index_search.history`), stored with the generic
+`get_state` / `set_state`. Accepting the search dialog records the query:
 
 ```python
-def handle_search_dialog_input(self, key):
-    # ... handle search input
-    if action == 'navigate':
-        # Save search term to history
-        search_term = self.search_dialog.text_editor.text.strip()
-        if search_term:
-            self.add_search_to_history(search_term)
+def on_accept(mode, value):
+    query = dialog.query_edit.text.strip()
+    if query:
+        self._record_history(self._SEARCH_HISTORY[mode], query)
+    ...
 ```
+
+`_query_history(key)`, `_record_history(key, entry)` and
+`_forget_history(key, entry)` read, prepend (de-duplicated, capped at
+`_LIST_COMMAND_HISTORY_MAX`) and remove entries; the filter and list-command
+histories use the same pattern under their own keys.
 
 ### Cursor History Integration
 
-The PaneManager now uses persistent cursor history with proper ordering instead of in-memory storage:
+The PaneManager uses persistent cursor history (`xefm/pane_manager.py`):
 
 ```python
-# PaneManager initialization with state manager
-self.pane_manager = PaneManager(self.config, left_startup_path, right_startup_path, self.state_manager)
-
-# Cursor positions are automatically saved when navigating (pane-specific)
+# Cursor positions are saved per pane, keyed by directory
 def save_cursor_position(self, pane_data):
-    current_file = pane_data['files'][pane_data['selected_index']]
+    if not pane_data['files'] or pane_data['focused_index'] >= len(pane_data['files']):
+        return
+    current_file = pane_data['files'][pane_data['focused_index']]
     current_dir = str(pane_data['path'])
+    if not self.state_manager:
+        return
     pane_name = 'left' if pane_data is self.left_pane else 'right'
-    
-    if self.state_manager:
-        self.state_manager.save_pane_cursor_position(pane_name, current_dir, current_file.name)
+    max_entries = self.config.MAX_HISTORY_ENTRIES
+    self.state_manager.save_pane_cursor_position(pane_name, current_dir, current_file.name, max_entries)
 
-# Cursor positions are automatically restored when entering directories (pane-specific)
+# ... and restored when a directory's listing is in
 def restore_cursor_position(self, pane_data, display_height):
     current_dir = str(pane_data['path'])
+    if not self.state_manager:
+        return False
     pane_name = 'left' if pane_data is self.left_pane else 'right'
-    
-    if self.state_manager:
-        target_filename = self.state_manager.load_pane_cursor_position(pane_name, current_dir)
-        if target_filename:
-            # ... find and restore cursor to target_filename
+    target_filename = self.state_manager.load_pane_cursor_position(pane_name, current_dir)
+    if target_filename:
+        # ... find target_filename, set focused_index, adjust scroll_offset
 ```
+
+`XeFMApp` drives these through two wrappers: `_remember_cursor(pane)` is called
+*before* a navigation changes `pane['path']` (a no-op for a virtual
+search-results pane), and `_restore_remembered_cursor(pane)` is passed as the
+listing's `on_ready`, because the saved cursor is matched by filename and can
+only be placed once the files are in.
 
 #### Startup Cursor Restoration
 
-Cursor positions are automatically restored when XeFM starts up:
+Startup lists both panes on worker threads (`_start_initial_listings`) and
+restores the cursor as each listing completes:
 
 ```python
-def restore_startup_cursor_positions(self):
-    """Restore cursor positions for both panes during startup."""
-    # Calculate display height for proper scroll adjustment
-    height, width = self.stdscr.getmaxyx()
-    display_height = height - log_height - 3
-    
-    # Restore left pane cursor position
-    left_restored = self.pane_manager.restore_cursor_position(
-        self.pane_manager.left_pane, display_height
-    )
-    
-    # Restore right pane cursor position  
-    right_restored = self.pane_manager.restore_cursor_position(
-        self.pane_manager.right_pane, display_height
-    )
-    
-    # Trigger redraw if any cursors were restored
-    if left_restored or right_restored:
-        self.needs_full_redraw = True
+def _start_initial_listings(self):
+    for name in ("left", "right"):
+        self._list_pane(name, on_ready=self._restore_remembered_cursor)
 ```
 
 #### Quit Cursor Saving
 
-Cursor positions are automatically saved when XeFM quits:
-
-```python
-def save_quit_cursor_positions(self):
-    """Save current cursor positions when quitting XeFM."""
-    # Save left pane cursor position
-    if (self.pane_manager.left_pane['files'] and 
-        self.pane_manager.left_pane['selected_index'] < len(self.pane_manager.left_pane['files'])):
-        
-        self.pane_manager.save_cursor_position(self.pane_manager.left_pane)
-    
-    # Save right pane cursor position  
-    if (self.pane_manager.right_pane['files'] and 
-        self.pane_manager.right_pane['selected_index'] < len(self.pane_manager.right_pane['files'])):
-        
-        self.pane_manager.save_cursor_position(self.pane_manager.right_pane)
-```
+`_save_application_state()` (above) calls `self.pm.save_cursor_position()` for
+both panes; `save_cursor_position` itself skips an empty pane or an
+out-of-range `focused_index`.
 
 #### Separate Pane Cursor History Features
 
 - **Independent Histories**: Left and right panes maintain completely separate cursor histories
 - **Chronological Ordering**: Each pane's history maintains the order of directory visits
 - **Duplicate Handling**: Revisiting a directory updates the existing entry and moves it to the end
-- **Configurable Limits**: Maximum entries controlled by `MAX_CURSOR_HISTORY_ENTRIES` in config
+- **Configurable Limits**: Maximum entries controlled by `MAX_HISTORY_ENTRIES` in config
 - **LRU Behavior**: Oldest entries are automatically removed when limit is exceeded per pane
 - **No Cross-Contamination**: Navigation in one pane never affects the other pane's history
 - **Startup Restoration**: Cursor positions are automatically restored when XeFM starts up
@@ -351,7 +348,7 @@ def _get_connection(self):
 ## Performance Considerations
 
 ### Optimization Features
-- **Connection Pooling**: Reuses database connections efficiently
+- **Short-Lived Connections**: `_get_connection()` opens one connection per operation and closes it
 - **Batch Operations**: `get_all_states()` for bulk retrieval
 - **Indexed Queries**: Database indexes on frequently queried columns
 - **Memory Storage**: Temporary data stored in memory
@@ -369,25 +366,23 @@ def _get_connection(self):
 - **Database Unavailable**: Operations return default values
 - **Serialization Errors**: Invalid data is rejected, operation continues
 - **Permission Errors**: Warnings logged, application continues
-- **Corruption Recovery**: Database recreated if corrupted
 
 ### Error Examples
 
 ```python
-# Serialization error handling
+# Serialization error handling (_serialize_value)
 try:
-    serialized = json.dumps(value)
+    return json.dumps(value, default=str, ensure_ascii=False)
 except (TypeError, ValueError) as e:
-    print(f"Warning: Could not serialize value: {e}")
-    return False
+    raise ValueError(f"Cannot serialize value: {e}")  # set_state logs it and returns False
 
-# Database error handling
+# Database error handling (get_state)
 try:
     with self._get_connection() as conn:
         # ... database operations
 except Exception as e:
-    print(f"Warning: Database operation failed: {e}")
-    return default_value
+    self.logger.warning(f"Could not get state '{key}': {e}")
+    return default
 ```
 
 ## Configuration
@@ -398,9 +393,9 @@ except Exception as e:
 - **Auto-Creation**: Directory created automatically if needed
 
 ### Limits and Defaults
-- **Recent Directories**: 50 entries (configurable)
-- **Search History**: 100 entries (configurable)
-- **Cursor History**: 100 entries (configurable via `MAX_CURSOR_HISTORY_ENTRIES`)
+- **Recent Directories**: `save_recent_directories` defaults to 50; the app saves up to `_HISTORY_MAX` (100)
+- **Query Histories**: 100 entries per key (`_LIST_COMMAND_HISTORY_MAX` in `xefm/app.py`)
+- **Cursor History**: 100 entries per pane (configurable via `MAX_HISTORY_ENTRIES`)
 - **Session Timeout**: 5 minutes (300 seconds)
 - **Connection Timeout**: 30 seconds
 - **Retry Attempts**: 3 with exponential backoff
@@ -418,10 +413,13 @@ except Exception as e:
 
 ```bash
 # Run basic state manager tests
-python test/test_state_manager.py
+python -m pytest test/test_state_manager.py -v
 
 # Run integration tests
-python test/test_state_integration.py
+python -m pytest test/test_state_integration.py -v
+
+# App-level save/restore (XeFMApp on the headless backend)
+python -m pytest test/test_xefm_app_state_persistence.py -v
 ```
 
 ## Future Enhancements
