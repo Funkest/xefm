@@ -150,6 +150,21 @@ def test_viewer_reads_dimensions_and_size(images):
     assert viewer._error is None
 
 
+@pytest.mark.parametrize("ext", ["jpg", "tiff"])
+def test_dimensions_are_the_upright_ones_for_a_rotated_photo(tmp_path, ext):
+    # A phone photo held upright is stored landscape with EXIF Orientation 6.
+    # Every backend draws it upright (puikit#174), so the card says so too.
+    Image = pytest.importorskip("PIL.Image")
+    path = tmp_path / f"photo.{ext}"
+    if ext == "jpg":
+        exif = Image.Exif()
+        exif[0x0112] = 6
+        Image.new("RGB", (40, 20)).save(path, exif=exif)
+    else:
+        Image.new("RGB", (40, 20)).save(path, tiffinfo={0x0112: 6})
+    assert ImageViewer(Path(str(path)))._size == (20, 40)
+
+
 def test_viewer_starts_fitted_and_centered(images):
     viewer = ImageViewer(images[0])
     assert viewer.zoom == MIN_ZOOM
