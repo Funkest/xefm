@@ -24,7 +24,14 @@
 # PuiKit is XeFM's UI/rendering framework (the TUI/GUI backend layer), published
 # on PyPI as of 1.0. For co-development against a local checkout, ``make venv``
 # additionally installs it editable from ../puikit, which overrides this pin.
-# 1.14.0 is the floor, and a hard one: XeFM hands the platform's quit
+# 1.15.0 is the floor, and a soft one: a phone photo stored landscape with an
+# EXIF orientation tag was stretched in the macOS GUI viewer and drawn sideways
+# elsewhere; PuiKit now draws and sizes every path upright, and turns a Pillow
+# decode upright in RasterImage.from_pillow (puikit#174). The metadata card's
+# size probe imports ``puikit.image.exif_upright_size``, new in 1.15.0; on an
+# older PuiKit that import fails inside the probe's except and the card shows
+# no dimensions.
+# 1.14.0 was the previous floor, and a hard one: XeFM hands the platform's quit
 # requests -- the macOS application menu's Quit and the Dock's, the window's
 # close button -- to its own quit action with ``panel.set_quit_handler``, an
 # AttributeError on any older PuiKit, so XeFM would not start. Before it, those
@@ -185,7 +192,7 @@
 # itself from under a covering confirm box -- issue #333), and
 # ``MenuBar.open_menu`` / ``open_menu_mnemonic`` (keyboard menu activation --
 # issue #304).
-puikit>=1.14.0
+puikit>=1.15.0
 pygments
 boto3
 watchdog

@@ -358,16 +358,18 @@ class ImageViewer(Widget):
 
         Pillow's ``open`` parses the header and stops, so this costs a few
         hundred bytes rather than a decode — which is the whole point of asking
-        separately instead of reusing the decode path."""
+        separately instead of reusing the decode path. The size is the upright
+        one, as every backend draws it (puikit#174)."""
         size = self._backend_size(local) if local is not None else None
         if size is not None:
             return size
         try:
             from PIL import Image
+            from puikit.image import exif_upright_size
 
             source = local if local is not None else io.BytesIO(self._read(path, None))
             with Image.open(source) as image:
-                return image.size
+                return exif_upright_size(image)
         except Exception:
             return None
 

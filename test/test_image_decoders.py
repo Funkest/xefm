@@ -162,6 +162,20 @@ def test_a_pil_image_comes_back_as_pixels_the_backend_can_draw():
     assert raster.data[:4] == bytes((1, 2, 3, 255))
 
 
+def test_a_rotated_photo_decodes_upright():
+    # A picture decoded here is drawn as given, so it has to arrive already
+    # turned by its EXIF orientation — the way every backend draws the same
+    # file from a path (puikit#174).
+    import io
+
+    Image = pytest.importorskip("PIL.Image")
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    buf = io.BytesIO()
+    Image.new("RGB", (40, 20)).save(buf, "JPEG", exif=exif)
+    assert image_decoders.decode(".jpg", buf.getvalue()).size == (20, 40)
+
+
 def test_a_decoder_may_hand_over_a_raster_itself():
     # For a decoder that already has pixels, so it need not build a PIL.Image
     # only for XeFM to take it apart again.
