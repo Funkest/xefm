@@ -47,7 +47,6 @@ import ast
 import importlib
 import importlib.util
 import io
-import json
 import os
 import re
 import shutil
@@ -1329,19 +1328,64 @@ def parse_github_source(source: str) -> Optional[tuple[str, str, str, Optional[s
     return m.group(1), m.group(2), m.group(3).strip("/"), m.group(4)
 
 
-def _github_zip_url(source: str) -> Optional[tuple[str, str]]:
-    """``github:owner/repo[/path][@ref]`` or a github.com repository URL → the
-    URL of its zip and the package's subdirectory inside it."""
+def _github_parts(source: str) -> Optional[tuple[str, str, str, Optional[str]]]:
+    """``github:owner/repo[/path][@ref]`` or a github.com repository URL →
+    ``(owner, repo, subdirectory, ref)``, or None for anything else."""
     parsed = parse_github_source(source)
     if parsed is not None:
-        owner, repo, subdir, ref = parsed
-    else:
-        m = re.fullmatch(r"https://github\.com/([\w.-]+)/([\w.-]+?)(?:\.git)?/?"
-                         r"(?:tree/([\w./-]+))?", source)
-        if not m:
-            return None
-        owner, repo, subdir, ref = m.group(1), m.group(2), "", m.group(3)
-    return f"https://codeload.github.com/{owner}/{repo}/zip/{ref or 'HEAD'}", subdir
+        return parsed
+    m = re.fullmatch(r"https://github\.com/([\w.-]+)/([\w.-]+?)(?:\.git)?/?"
+                     r"(?:tree/([\w./-]+))?", source)
+    return (m.group(1), m.group(2), "", m.group(3)) if m else None
+
+
+def _latest_release_tag(owner: str, repo: str, subdir: str,
+                        opener: Callable[[str], bytes] | None) -> Optional[str]:
+    """The newest release tag of the package in ``subdir`` — named by the
+    folder, as the tag prefix names a package by its id — or None when it has
+    none or GitHub cannot be asked, and the default branch is installed."""
+    ext_id = subdir.rsplit("/", 1)[-1]
+    updates = f"github:{owner}/{repo}" + (f"/{subdir}" if subdir else "")
+    try:
+        versions = published_versions(updates, ext_id, opener=opener)
+    except InstallError as exc:
+        logger.warning(f"Could not look up the releases of {updates}: {exc}")
+        return None
+    return f"{tag_prefix(updates, ext_id)}{versions[-1]}" if versions else None
+
+
+def _download_zip(url: str, workdir: Path, opener: Callable[[str], bytes] | None) -> None:
+    workdir.mkdir(parents=True, exist_ok=True)
+    try:
+        payload = (opener or _open_url)(url)
+    except OSError as exc:
+        raise InstallError(f"could not download {url}: {exc}") from None
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            _safe_extract(archive, workdir)
+    except zipfile.BadZipFile:
+        raise InstallError(f"{url} did not return a zip file") from None
+
+
+def _fetch_github(owner: str, repo: str, subdir: str, ref: Optional[str],
+                  workdir: Path, opener: Callable[[str], bytes] | None) -> Path:
+    """A GitHub source at ``ref`` — the newest release when it names none.
+    A tag's release asset ``<tag>.zip`` holds just the package, so it is
+    preferred; without one, the zip of the whole repository at ``ref``."""
+    if ref is None:
+        ref = _latest_release_tag(owner, repo, subdir, opener)
+    if ref is not None:
+        asset = f"https://github.com/{owner}/{repo}/releases/download/{ref}/{ref}.zip"
+        try:
+            _download_zip(asset, workdir / "release", opener)
+            return _find_package_root(workdir / "release")
+        except InstallError:
+            # No such release or asset (a 404 most of the time): the
+            # repository's zip below says what is wrong, if anything is.
+            pass
+    _download_zip(f"https://codeload.github.com/{owner}/{repo}/zip/{ref or 'HEAD'}",
+                  workdir / "repo", opener)
+    return _find_package_root(workdir / "repo", subdir)
 
 
 def _safe_extract(archive: zipfile.ZipFile, dest: Path) -> None:
@@ -1376,13 +1420,6 @@ def _open_url(url: str) -> bytes:
     """Every download an install or an update check makes: one place, so a
     test can stand in for the network."""
     request = urllib.request.Request(url, headers={"User-Agent": f"xefm/{_XEFM_VERSION}"})
-    if url.startswith("https://api.github.com/"):
-        request.add_header("Accept", "application/vnd.github+json")
-        # A token lifts GitHub's limit of 60 requests an hour; it is sent to
-        # api.github.com only, and only when the user has one set.
-        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-        if token:
-            request.add_header("Authorization", f"Bearer {token}")
     with urllib.request.urlopen(request, timeout=60) as response:
         return response.read()
 
@@ -1402,21 +1439,14 @@ def fetch(source: str, workdir: Path,
         except zipfile.BadZipFile:
             raise InstallError(f"{source} is not a zip file") from None
         return _find_package_root(workdir)
-    github = _github_zip_url(source)
-    url, subdir = github or (source if source.startswith("https://") else None, "")
-    if url is None:
+    github = _github_parts(source)
+    if github is not None:
+        return _fetch_github(*github, workdir, opener)
+    if not source.startswith("https://"):
         raise InstallError(f"{source} is not a directory, a zip, an https:// URL "
                            "or github:owner/repo[/path]")
-    try:
-        payload = (opener or _open_url)(url)
-    except OSError as exc:
-        raise InstallError(f"could not download {url}: {exc}") from None
-    try:
-        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-            _safe_extract(archive, workdir)
-    except zipfile.BadZipFile:
-        raise InstallError(f"{url} did not return a zip file") from None
-    return _find_package_root(workdir, subdir)
+    _download_zip(source, workdir, opener)
+    return _find_package_root(workdir)
 
 
 def summarize(manifest: Manifest) -> list[str]:
@@ -1593,39 +1623,60 @@ def release_source(updates: str, ext_id: str, version: str) -> str:
     return f"{updates}@{tag_prefix(updates, ext_id)}{version}"
 
 
-def _github_json(url: str, opener: Callable[[str], bytes] | None) -> Any:
+def _parse_ref_advertisement(data: bytes) -> list[str]:
+    """The tag names in git's ref advertisement: pkt-lines, each a 4-digit hex
+    length (counting itself) and ``<sha> <ref>``; ``0000`` is a flush, the
+    first ref carries capabilities after a NUL, and ``^{}`` lines peel an
+    annotated tag."""
+    tags, i = [], 0
+    while i + 4 <= len(data):
+        size = int(data[i:i + 4], 16)
+        line, i = data[i + 4:i + size], i + max(size, 4)
+        _, _, ref = line.split(b"\0", 1)[0].rstrip(b"\n").partition(b" ")
+        if ref.startswith(b"refs/tags/") and not ref.endswith(b"^{}"):
+            tags.append(ref[len(b"refs/tags/"):].decode("utf-8", "replace"))
+    return tags
+
+
+def _remote_tags(owner: str, repo: str,
+                 opener: Callable[[str], bytes] | None) -> list[str]:
+    """Every tag of a GitHub repository, from the ref advertisement ``git
+    ls-remote`` reads — git's own endpoint, not the API, so no hourly limit
+    and no token."""
+    url = f"https://github.com/{owner}/{repo}.git/info/refs?service=git-upload-pack"
     try:
-        return json.loads((opener or _open_url)(url))
+        return _parse_ref_advertisement((opener or _open_url)(url))
     except urllib.error.HTTPError as exc:
-        if exc.code in (403, 429):
-            raise InstallError("GitHub's limit of 60 requests an hour without a "
-                               "token is used up; try again later, or set "
-                               "GITHUB_TOKEN") from None
-        if exc.code == 404:
-            raise InstallError(f"no such repository: {url}") from None
+        if exc.code in (401, 404):
+            # GitHub asks for credentials rather than say a repository is
+            # missing or private.
+            raise InstallError(f"no such public repository: github.com/{owner}/{repo}") from None
         raise InstallError(f"could not read {url}: {exc}") from None
     except (OSError, ValueError) as exc:
         raise InstallError(f"could not read {url}: {exc}") from None
 
 
 def published_versions(updates: str, ext_id: str, *,
-                       opener: Callable[[str], bytes] | None = None) -> list[str]:
-    """Every release version tagged at ``updates``, oldest first. One request:
-    the tags whose names start with this package's prefix."""
+                       opener: Callable[[str], bytes] | None = None,
+                       tags: dict[tuple[str, str], list[str]] | None = None) -> list[str]:
+    """Every release version tagged at ``updates``, oldest first: the tags
+    whose names start with this package's prefix. ``tags`` keeps each
+    repository's tags across calls, so packages that share a repository cost
+    one request between them."""
     parsed = parse_github_source(updates)
     if parsed is None or parsed[3] is not None:
         raise InstallError(f"updates = {updates!r} is not github:owner/repo[/path]")
     owner, repo, _subdir, _ref = parsed
+    key = (owner.lower(), repo.lower())
+    if tags is None or key not in tags:
+        names = _remote_tags(owner, repo, opener)
+        if tags is not None:
+            tags[key] = names
+    else:
+        names = tags[key]
     prefix = tag_prefix(updates, ext_id)
-    refs = _github_json(f"https://api.github.com/repos/{owner}/{repo}/git/"
-                        f"matching-refs/tags/{prefix}", opener)
-    versions = []
-    for ref in refs if isinstance(refs, list) else []:
-        name = str(ref.get("ref", "")).removeprefix("refs/tags/")
-        version = name[len(prefix):] if name.startswith(prefix) else ""
-        if _RELEASE_RE.fullmatch(version):
-            versions.append(version)
-    return sorted(set(versions), key=_version_tuple)
+    versions = [name[len(prefix):] for name in names if name.startswith(prefix)]
+    return sorted({v for v in versions if _RELEASE_RE.fullmatch(v)}, key=_version_tuple)
 
 
 @dataclass
@@ -1667,6 +1718,7 @@ def check_updates(layout: Layout | None = None, *, ids: Iterable[str] = (),
     if unknown:
         raise InstallError(f"not installed: {', '.join(unknown)}")
     results = []
+    tags: dict[tuple[str, str], list[str]] = {}
     for ext_id in wanted or sorted(installed):
         entry = installed[ext_id]
         if entry.source == "(local)":
@@ -1676,7 +1728,8 @@ def check_updates(layout: Layout | None = None, *, ids: Iterable[str] = (),
             check.problem = "it does not say where newer versions are published"
         else:
             try:
-                versions = published_versions(check.updates, ext_id, opener=opener)
+                versions = published_versions(check.updates, ext_id, opener=opener,
+                                              tags=tags)
             except InstallError as exc:
                 check.problem = str(exc)
                 versions = []

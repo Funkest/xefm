@@ -19,6 +19,7 @@ import textwrap
 import time
 import types
 import unittest
+import urllib.error
 import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -37,6 +38,14 @@ def _config(**tables):
     for name, value in tables.items():
         setattr(config, name, value)
     return config
+
+
+def _no_release_asset(url, payload):
+    """A fake GitHub whose tags have no release asset: the asset URL is a 404,
+    and anything else returns ``payload``."""
+    if "/releases/download/" in url:
+        raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+    return payload
 
 
 class _Home(unittest.TestCase):
@@ -741,10 +750,10 @@ class Install(_Home):
 
         def opener(url):
             urls.append(url)
-            return payload
+            return _no_release_asset(url, payload)
 
         manifest = ext.install("github:someone/repo@main", self.layout, opener=opener)
-        self.assertEqual(urls, ["https://codeload.github.com/someone/repo/zip/main"])
+        self.assertEqual(urls[-1], "https://codeload.github.com/someone/repo/zip/main")
         self.assertEqual(ext.read_installed(self.layout)[manifest.id].source,
                          "github:someone/repo@main")
 
@@ -763,11 +772,13 @@ class Install(_Home):
 
         def opener(url):
             urls.append(url)
-            return buf.getvalue()
+            return _no_release_asset(url, buf.getvalue())
 
         source = "github:crftwr/exts/packages/two@v1"
         manifest = ext.install(source, self.layout, opener=opener)
-        self.assertEqual(urls, ["https://codeload.github.com/crftwr/exts/zip/v1"])
+        self.assertEqual(urls, [
+            "https://github.com/crftwr/exts/releases/download/v1/v1.zip",
+            "https://codeload.github.com/crftwr/exts/zip/v1"])
         self.assertEqual(manifest.id, second.name)
         self.assertEqual(ext.read_installed(self.layout)[manifest.id].source, source)
         with self.assertRaises(ext.InstallError) as caught:
@@ -1038,7 +1049,7 @@ class AppInstall(_Home):
 
         def opener(url):
             urls.append(url)
-            return buf.getvalue()
+            return _no_release_asset(url, buf.getvalue())
 
         source = "github:someone/exts/pkgs/app-ext@v1"
         with patch.object(config_manager, "config_dir", self.home), \
@@ -1048,7 +1059,8 @@ class AppInstall(_Home):
             box = self._layer()
             self.assertIn(f"From {source}", box.message)
             box._close(box.buttons.index("Install"))
-        self.assertEqual(urls, ["https://codeload.github.com/someone/exts/zip/v1"])
+        self.assertEqual(urls[-1], "https://codeload.github.com/someone/exts/zip/v1")
+        self.assertEqual(len(urls), 2)   # the release asset, then the repository
         self.assertEqual(ext.read_installed(self.layout)["app-ext"].source, source)
 
     def test_a_relative_path_is_the_active_pane_s(self):

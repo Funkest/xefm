@@ -10,7 +10,7 @@
 
 Wiki の [Extensions](https://github.com/crftwr/xefm/wiki/Extensions) ページに、公式パッケージとほかの人が書いたパッケージの両方を含め、利用できるものが一覧されています。
 
-XeFM プロジェクト自身の拡張機能は [crftwr/xefm-extensions](https://github.com/crftwr/xefm-extensions) にあります。ほかの人の拡張機能と同じ公開 API で書かれているので、真似できる例としても役立ちます。それぞれに使い方を書いた README があり、各リリースは `compute-hash-v0.1.0` のようなタグです。特定のリリースに固定するには、インストール元に `@<tag>` を付けます。
+XeFM プロジェクト自身の拡張機能は [crftwr/xefm-extensions](https://github.com/crftwr/xefm-extensions) にあります。ほかの人の拡張機能と同じ公開 API で書かれているので、真似できる例としても役立ちます。それぞれに使い方を書いた README があり、各リリースは `compute-hash-v0.1.0` のようなタグです。インストール元に `@<tag>` を付けなければ最新のリリースがインストールされ、付ければそのリリースに固定できます。
 
 ## インストールと管理
 
@@ -19,7 +19,7 @@ XeFM プロジェクト自身の拡張機能は [crftwr/xefm-extensions](https:/
 ```bash
 xefm ext install ~/Downloads/hello-xefm.zip   # a .zip
 xefm ext install ./hello-xefm                 # a folder
-xefm ext install github:someone/hello-xefm    # a GitHub repository (@ref optional)
+xefm ext install github:someone/hello-xefm    # a GitHub repository: its newest release, or @ref
 xefm ext install github:crftwr/xefm-extensions/compute-hash   # one package of several in a repository
 xefm ext install https://example.com/hello-xefm.zip
 
@@ -47,7 +47,7 @@ XeFM の中では次のように操作します。
 
 XeFM が自分から確認しに行くことはありません。確認には GitHub への接続が必要なので、`xefm ext outdated`、`xefm ext upgrade`、または **Check for Extension Updates…** を実行したときにだけ行われます。アップグレードはインストールと同じ検査を通ります。より新しい XeFM を必要とするバージョンはその旨を表示して拒否され、手元のバージョンがインストールされたまま残ります。無効にしたパッケージは無効のままです。
 
-公開場所を示していないパッケージは確認できず、コマンドがその旨を表示します。GitHub ではアカウントなしで 1 時間に 60 回まで確認できます。上限に達したら、しばらく待つか、`GITHUB_TOKEN`（または `GH_TOKEN`）にトークンを設定してください。
+公開場所を示していないパッケージは確認できず、コマンドがその旨を表示します。確認に GitHub のアカウントやトークンは要りません。同じリポジトリで公開されているパッケージはまとめて確認されます。
 
 起動時に XeFM は、オンラインに接続することなく、何からも再インストールできないパッケージについて警告します。今はもうないファイルからインストールされ、`updates` もないパッケージです。そのパッケージは引き続き動作します。ただ、別のマシンで、あるいは `extensions/` が失われた後に `xefm ext sync` を実行しても、それを元に戻せません。
 
@@ -113,12 +113,14 @@ XeFM は AI エージェント向けのスキル `xefm` を提供しています
 
 ### 公開と、新しいバージョンの取得元
 
-パッケージを GitHub にプッシュします。何かをアップロードする必要はありません。`github:owner/repo@ref` で任意のタグ、ブランチ、コミットをインストールでき、バージョンは **タグ** です。
+パッケージを GitHub にプッシュします。何かをアップロードする必要はありません。`github:owner/repo@ref` で任意のタグ、ブランチ、コミットをインストールでき、`github:owner/repo` だけなら最新のリリース（リリースがなければデフォルトブランチ）がインストールされます。バージョンは **タグ** です。
 
 - リポジトリのルートにあるパッケージ：`v0.2.0`
 - サブディレクトリにあるパッケージ（`github:crftwr/xefm-extensions/compute-hash` のように、1 つのリポジトリに複数あるうちの 1 つ）：ID を先頭に付けて `compute-hash-v0.2.0`
 
 `[extension]` の `updates` は、新しいバージョンがどこで公開されるかを `github:owner/repo` または `github:owner/repo/path/to/package` の形で、`@ref` なしで示します。これはインストール方法ではなくパッケージに属するものなので、ダウンロードした zip からインストールしたコピーでも、次のバージョンがどこにあるかを知っています。最初のリリースから設定してください。これを持たないバージョンは、利用者を次のバージョンへ案内できません。
+
+リリースには、タグと同じ名前のアセット（`compute-hash-v0.2.0.zip`。中身はパッケージのフォルダー）としてパッケージを添付することもできます。添付されていれば XeFM はリポジトリ全体ではなくそれをダウンロードし、パッケージをファイルとして欲しい人もそこから入手できます。添付がなければ、XeFM はそのタグのリポジトリ全体をダウンロードし、パッケージの部分だけを使います。
 
 Wiki の [Extensions](https://github.com/crftwr/xefm/wiki/Extensions) ページに載せてもらうには、[Show and tell](https://github.com/crftwr/xefm/discussions/categories/show-and-tell) ディスカッションカテゴリーに、リポジトリへのリンク、1 行の説明、インストール元を添えて投稿してください。
 

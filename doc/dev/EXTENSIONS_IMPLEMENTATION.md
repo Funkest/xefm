@@ -252,10 +252,19 @@ the file atomically.
    - A directory is used in place.
    - A zip is extracted with `_safe_extract`, which refuses members that
      resolve outside the target.
-   - A `github:owner/repo[/path][@ref]` source or a github.com URL becomes a
-     codeload zip URL (`parse_github_source`). The optional path names a
-     package in a subdirectory, so one repository can hold several
+   - A `github:owner/repo[/path][@ref]` source or a github.com URL
+     (`_github_parts`, `_fetch_github`). The optional path names a package in
+     a subdirectory, so one repository can hold several
      (crftwr/xefm-extensions); a `.` or `..` component is refused.
+     - With no `@ref`, the newest release tag is looked up the way
+       `published_versions` does, taking the folder's name as the id for the
+       tag prefix. No tags, or no answer from GitHub, leaves the default
+       branch (`HEAD`), with a warning in the log.
+     - At a ref, the release asset
+       `releases/download/<ref>/<ref>.zip` is tried first. It holds the package
+       alone. Any failure there (a 404 for a branch, or a tag with no
+       release) falls back to the codeload zip of the whole repository at
+       `ref`, and that one's error is the one reported.
    - Any other `https://` URL is fetched as is.
    - The manifest root is the extracted top, or its single child directory
      (GitHub zips wrap everything in `repo-ref/`) — followed by the path, when
@@ -280,15 +289,21 @@ All downloads go through `_open_url`, one function a test can replace.
 A package's versions are tags at its `updates` source: `v<version>` at a
 repository's root, `<id>-v<version>` in a subdirectory (`tag_prefix`).
 
-- `published_versions` makes one GitHub API request:
-  `git/matching-refs/tags/<prefix>`. It returns only this package's tags,
-  which the plain tags list would page through for a repository of many
-  packages. Only dotted-number versions count. A tag such as `v0.3.0-beta` is a
+- `published_versions` reads the repository's tags from git's ref
+  advertisement, `github.com/<owner>/<repo>.git/info/refs?service=git-upload-pack`
+  — what `git ls-remote` reads (`_remote_tags`, `_parse_ref_advertisement`).
+  It is not the REST API, so it has no hourly limit and takes no token; the
+  REST API's 60 requests an hour without one was the reason to move off
+  `git/matching-refs`. The answer holds every ref of the repository, a few KB
+  for a repository of packages, so `check_updates` keeps it per repository
+  (`tags=`) and packages that share one cost one request. A missing or private
+  repository answers 401, asking for credentials, as well as 404; both read
+  "no such public repository". Only dotted-number versions count. A tag such as `v0.3.0-beta` is a
   pre-release and is never offered.
 - `check_updates` returns an `UpdateCheck` per installed package. It has
   `latest` when something newer exists and `problem` otherwise.
-  - `failed` tells a source that gave no answer (offline, the rate limit,
-    no such repository) from a package with no `updates`. The second is a
+  - `failed` tells a source that gave no answer (offline, no such
+    repository) from a package with no `updates`. The second is a
     fact about the package, so the CLI reports it but it does not make the
     exit status non-zero.
   - Local packages (made in `extensions/`, listed as `(local)`) are left out.
@@ -318,9 +333,9 @@ Nothing here runs unasked, because it reaches GitHub. The entry points are:
     `python_packages`.
   - The menu item is greyed out while either step runs.
 
-Requests send `User-Agent: xefm/<version>`. A `GH_TOKEN` / `GITHUB_TOKEN` in
-the environment is sent to `api.github.com` only, to lift the limit of 60
-requests an hour. The rate-limit refusal (403/429) names that variable.
+Requests send `User-Agent: xefm/<version>`. None of them goes to the REST
+API — the tag list, codeload zips and release assets are all outside it — so
+none needs a token.
 
 The issue's "what is newer, then what can run" order is not split further:
 when the newest release needs a newer XeFM, `upgrade` refuses it. It does not

@@ -26,7 +26,8 @@ The XeFM project keeps its own extensions in
 [crftwr/xefm-extensions](https://github.com/crftwr/xefm-extensions). They are
 written against the same public API as anyone else's, so they also serve as
 examples to copy. Each has a README with its usage, and each release is a tag
-such as `compute-hash-v0.1.0`; add `@<tag>` to the install source to pin one.
+such as `compute-hash-v0.1.0`. An install source without `@<tag>` installs the
+newest release; add `@<tag>` to pin one.
 
 ## Installing and managing
 
@@ -36,7 +37,7 @@ macOS app and the Windows app:
 ```bash
 xefm ext install ~/Downloads/hello-xefm.zip   # a .zip
 xefm ext install ./hello-xefm                 # a folder
-xefm ext install github:someone/hello-xefm    # a GitHub repository (@ref optional)
+xefm ext install github:someone/hello-xefm    # a GitHub repository: its newest release, or @ref
 xefm ext install github:crftwr/xefm-extensions/compute-hash   # one package of several in a repository
 xefm ext install https://example.com/hello-xefm.zip
 
@@ -78,8 +79,8 @@ that needs a newer XeFM is refused and says so, and the version you have stays
 installed. A package you disabled stays disabled.
 
 A package that does not say where it is published cannot be checked; the
-command says so. GitHub allows 60 checks an hour without an account. If you
-hit that, wait, or set `GITHUB_TOKEN` (or `GH_TOKEN`) to a token.
+command says so. Checking needs no GitHub account or token, and packages
+published in the same repository are checked together.
 
 At startup XeFM warns, without going online, about a package nothing could
 reinstall: one installed from a file that is now gone, with no `updates`.
@@ -178,7 +179,8 @@ every one of them, so a clean check confirms it.
 ### Publishing, and where newer versions come from
 
 Push the package to GitHub; nothing has to be uploaded. `github:owner/repo@ref`
-installs any tag, branch or commit, and a version is a **tag**:
+installs any tag, branch or commit, `github:owner/repo` alone installs the newest
+release (or the default branch when there is none), and a version is a **tag**:
 
 - a package at the repository's root: `v0.2.0`
 - a package in a subdirectory — one of several in a repository, as in
@@ -190,6 +192,12 @@ installs any tag, branch or commit, and a version is a **tag**:
 belongs to the package, not to how it was installed, so a copy installed from a
 downloaded zip still knows where its next version is. Set it from the first
 release: a version that lacks it cannot point its users to the next one.
+
+A release can also carry the package as an asset named after its tag
+(`compute-hash-v0.2.0.zip`, holding the package folder). XeFM downloads that
+instead of the whole repository when it is there, and it gives anyone who
+wants the package as a file something to download. Without it, XeFM downloads
+the repository at that tag and keeps only the package.
 
 To have it listed on the wiki's [Extensions](https://github.com/crftwr/xefm/wiki/Extensions)
 page, post it in the
