@@ -82,6 +82,25 @@ def _pair(first: str, second: str, context: str = _CONTEXT) -> str:
     return " / ".join(labels)
 
 
+def _search_help_rows(context: str) -> list:
+    """The help rows for a viewer's search in ``context``: the key that opens
+    it, the bar's own match keys, and find next / previous — each row only
+    where a key is bound, so a preset that leaves one out (Orthodox and OS
+    native type ahead in the file list and give ``isearch`` no key) is not
+    shown a fallback that does nothing (#737)."""
+    rows = []
+    start = _label("isearch", context=context)
+    if start:
+        rows.append((start, "incremental search"))
+    in_bar = _pair("isearch.prev_match", "isearch.next_match", context=ISEARCH)
+    if in_bar:
+        rows.append((in_bar + " (in search)", "prev / next match"))
+    again = _pair(f"{context}.search_prev", f"{context}.search_next", context=context)
+    if again:
+        rows.append((again, "prev / next match of the last search"))
+    return rows
+
+
 def footer_key(action: str, context: str, fallback: str = "", keys=None) -> str:
     """The *first* key bound to ``action`` in ``context``, display-formatted.
 
@@ -682,6 +701,7 @@ class TextViewer(Widget):
             status=self._search_status,
             accept=self._search_accept,
             cancel=self._search_cancel,
+            context=_CONTEXT,
         )
         # Layout captured each draw, read by the clipped scroll body.
         self._body = _ScrollBody(self._draw_rows)
@@ -764,11 +784,13 @@ class TextViewer(Widget):
         wrapped, proportional layout); this viewer only delegates."""
         return self.mode == "rich" and self._rich_widget is not None
 
-    def _enter_search(self) -> None:
+    def _enter_search(self, again: int = 0) -> None:
         """Open the incremental-search overlay pinned to the footer (the ``search``
         binding), in either view mode. Reuses the main file manager's ``ISearchBar``
         via :class:`ViewerISearch`; in rich mode the callbacks below drive the
-        embedded renderer's own search instead of the raw-text match set."""
+        embedded renderer's own search instead of the raw-text match set.
+        ``again`` (1 / -1) is find next / previous: the bar reopens on the last
+        pattern and steps to the match after / before the one in view."""
         if self._isearch.active or self._footer_rect is None:
             return
         if self._search_target_is_rich():
@@ -776,7 +798,10 @@ class TextViewer(Widget):
         else:
             self._search_origin_top = self.top
             self._clear_search()
-        self._isearch.open(self._panel, self._footer_rect, self._child_z)
+        if again:
+            self._isearch.reopen(self._panel, self._footer_rect, self._child_z, again)
+        else:
+            self._isearch.open(self._panel, self._footer_rect, self._child_z)
 
     def _clear_search(self) -> None:
         """Drop the highlight chrome (pattern + match set)."""
@@ -981,7 +1006,9 @@ class TextViewer(Widget):
         # bar covers this hint while a search is open, showing pattern + counter).
         self._footer_rect = (0.0, fy, wu, hu - fy)
         wrap_k = _label("toggle_wrap", "w")
-        search_k = _label("isearch", "F")
+        # Unbound under a preset that types ahead: say nothing then (#737).
+        search_k = _label("isearch")
+        search_seg = f"{search_k} search · " if search_k else ""
         enc_k = _label("change_encoding", "Shift-E")
         quit_k = _label("quit", "q")
         edit_seg = self._edit_hint_segment()
@@ -995,11 +1022,11 @@ class TextViewer(Widget):
         enc_seg = "" if self._document is not None else f"{enc_k} encoding · "
         if self._rich is not None:
             view_k = _label("toggle_view_mode", "M")
-            hint = (f" {scroll_seg}{wrap_k} wrap · {search_k} search · "
+            hint = (f" {scroll_seg}{wrap_k} wrap · {search_seg}"
                     f"{view_k} {self._rich.name.lower()} · {enc_seg}"
                     f"{edit_seg}{quit_k}/Esc close ")
         else:
-            hint = (f" {scroll_seg}{pan_seg}{wrap_k} wrap · {search_k} search · "
+            hint = (f" {scroll_seg}{pan_seg}{wrap_k} wrap · {search_seg}"
                     f"{enc_seg}{edit_seg}{quit_k}/Esc close ")
         draw_status_bar(ctx, fy, hint, pad_x=pad_x, bottom_pad=pad_y)
 
@@ -1015,7 +1042,9 @@ class TextViewer(Widget):
         ctx.draw_child(self._rich_widget, pad_x, head_h, iw, body_h)
         self._footer_rect = (0.0, fy, wu, hu - fy)
         view_k = _label("toggle_view_mode", "M")
-        search_k = _label("isearch", "F")
+        # Unbound under a preset that types ahead: say nothing then (#737).
+        search_k = _label("isearch")
+        search_seg = f"{search_k} search · " if search_k else ""
         enc_k = _label("change_encoding", "Shift-E")
         quit_k = _label("quit", "q")
         # A renderer with its own line wrap (JsonView) gets the wrap key in its
@@ -1028,7 +1057,7 @@ class TextViewer(Widget):
         # ``text_viewer.scroll_down`` does nothing in this mode, so naming it
         # would advertise a key that does not scroll.
         enc_seg = "" if self._document is not None else f"{enc_k} encoding · "
-        hint = (f" ↑↓ scroll · {wrap_seg}{search_k} search · {view_k} raw text · "
+        hint = (f" ↑↓ scroll · {wrap_seg}{search_seg}{view_k} raw text · "
                 f"{enc_seg}{self._edit_hint_segment()}{quit_k}/Esc close ")
         draw_status_bar(ctx, fy, hint, pad_x=pad_x, bottom_pad=pad_y)
 
@@ -1345,6 +1374,9 @@ class TextViewer(Widget):
         if action == "isearch":
             self._enter_search()
             return True
+        if action in ("text_viewer.search_next", "text_viewer.search_prev"):
+            self._enter_search(1 if action.endswith("next") else -1)
+            return True
         # The encoding picker applies in both modes too — re-decoding rebuilds
         # the raw lines and the rich renderer's source alike.
         if action == "change_encoding":
@@ -1641,9 +1673,7 @@ class TextViewer(Widget):
             (_pair("text_viewer.scroll_left", "text_viewer.scroll_right"),
              "scroll horizontally (no-wrap)"),
             (_label("toggle_wrap", "w"), "toggle line wrap"),
-            (_label("isearch", "F"), "incremental search"),
-            (_pair("isearch.prev_match", "isearch.next_match", context=ISEARCH)
-             + " (in search)", "prev / next match"),
+            *_search_help_rows(_CONTEXT),
             (_label("change_encoding", "Shift-E"), "change text encoding"),
         ]
         if self._on_edit is not None:

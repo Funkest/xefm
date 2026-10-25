@@ -456,3 +456,122 @@ def test_diff_search_highlight_x_after_cjk(tmp_path):
     assert v.search_matches == [0]
     assert _last_x(backend, "needle") - _last_x(backend, "日本語 needle x") \
         == display_width("日本語 ")
+
+
+# --- Preset search keys in the viewers (#737) --------------------------------
+#
+# Orthodox and OS native give 'isearch' no key (typing searches in the file
+# list), so each gives the viewers its own scoped keys instead, plus find
+# next / previous after the bar has closed.
+
+from xefm import keymap_presets
+from xefm.config import config_manager
+
+
+@pytest.fixture(params=[keymap_presets.ORTHODOX, keymap_presets.NATIVE])
+def preset(request, monkeypatch):
+    # The terminal's table: OS native's desktop keys are its Command chords.
+    monkeypatch.setattr("xefm.backend_detector.is_desktop_mode", lambda: False)
+    saved = (config_manager.config, config_manager._key_bindings)
+    config = _config.Config()
+    keymap_presets.apply(config, request.param)
+    config_manager.config, config_manager._key_bindings = config, None
+    yield request.param
+    config_manager.config, config_manager._key_bindings = saved
+
+
+def _screen(backend):
+    return "\n".join("".join(row) for row in backend.snapshot())
+
+
+def _chord(name, *mods):
+    return Event(type=EventType.KEY, key=name, modifiers=frozenset(mods))
+
+
+def _start(preset):
+    return _chord("f7") if preset == keymap_presets.ORTHODOX else _chord("f", "ctrl")
+
+
+def test_preset_viewer_search_start_and_find_again(preset, backend, text_file):
+    panel = Panel(backend)
+    v = show_text_viewer(panel, text_file)
+    panel.render()
+    panel.dispatch_event(_start(preset))
+    assert _top(panel) == "ISearchBar"
+    _type(panel, "alpha")                          # lines 0, 2, 4
+    panel.dispatch_event(_chord("f3"))             # next, with the bar open
+    assert v.match_pos == 1
+    panel.dispatch_event(_chord("f3", "shift"))
+    assert v.match_pos == 0
+    panel.dispatch_event(_chord("f3"))
+    panel.dispatch_event(_key("enter"))
+    assert _top(panel) == "TextViewer"
+
+    # The bar closed on line 2; F3 reopens it on "alpha" at the next match.
+    panel.dispatch_event(_chord("f3"))
+    assert _top(panel) == "ISearchBar"
+    assert v._isearch.pattern == "alpha"
+    assert v.matches[v.match_pos] == 4
+    panel.dispatch_event(_key("enter"))
+    panel.dispatch_event(_chord("f3", "shift"))
+    assert v.matches[v.match_pos] == 2
+
+
+def test_preset_diff_viewer_search_start_and_find_again(preset, backend, diff_files):
+    panel = Panel(backend)
+    v = show_diff_viewer(panel, *diff_files)
+    panel.render()
+    panel.dispatch_event(_start(preset))
+    assert _top(panel) == "ISearchBar"
+    _type(panel, "needle")
+    first = v.search_pos
+    panel.dispatch_event(_key("enter"))
+    panel.dispatch_event(_chord("f3"))
+    assert _top(panel) == "ISearchBar"
+    assert v._isearch.pattern == "needle"
+    assert v.search_pos == (first + 1) % len(v.search_matches)
+
+
+def test_find_again_before_any_search_just_opens_the_bar(preset, backend, text_file):
+    panel = Panel(backend)
+    v = show_text_viewer(panel, text_file)
+    panel.render()
+    panel.dispatch_event(_chord("f3"))
+    assert _top(panel) == "ISearchBar"
+    assert v._isearch.pattern == ""
+
+
+def test_the_footer_names_the_preset_s_key_not_a_dead_fallback(preset, backend, text_file):
+    panel = Panel(backend)
+    show_text_viewer(panel, text_file)
+    panel.render()
+    screen = _screen(backend)
+    expected = "F7 search" if preset == keymap_presets.ORTHODOX else "Ctrl-F search"
+    assert expected in screen
+    assert "F search" not in screen.replace(expected, "")
+
+
+def test_a_viewer_with_no_search_key_shows_no_search_hint(backend, text_file, monkeypatch):
+    saved = (config_manager.config, config_manager._key_bindings)
+    config = _config.Config()
+    keymap_presets.apply(config, keymap_presets.ORTHODOX)
+    for name in ("text_viewer.isearch", "isearch"):
+        config.KEY_BINDINGS[name] = []
+    config_manager.config, config_manager._key_bindings = config, None
+    try:
+        panel = Panel(backend)
+        show_text_viewer(panel, text_file)
+        panel.render()
+        screen = _screen(backend)
+        assert " search ·" not in screen
+    finally:
+        config_manager.config, config_manager._key_bindings = saved
+
+
+def test_the_file_list_s_bar_keeps_f3_for_viewing(preset):
+    # F3 steps matches only in a viewer's bar: the file list's quick search
+    # shares the isearch context, and an Orthodox F3 there must still view.
+    from xefm.actions import ISEARCH
+    keys = config_manager.get_key_bindings()
+    assert keys.find_action_for_event(_chord("f3"), context=ISEARCH) not in (
+        "isearch.next_match", "isearch.prev_match")

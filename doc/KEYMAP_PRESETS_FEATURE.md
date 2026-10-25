@@ -272,6 +272,13 @@ every viewer `Esc` closes it, and `quit`, `help`, `isearch` and `edit_file`
 work there on their keys from the file list table. Vim style also closes the
 text viewer with `q`.
 
+Orthodox and OS native give `isearch` no key in the file list, since typing
+a letter searches there. In the text viewer and the file diff viewer they use
+the search keys of the viewers they model instead: Total Commander's Lister
+for Orthodox, and the platform's own find keys for OS native. Find next and
+find previous also work while the search bar is open; after it has closed,
+they open it again on the last search and move to the next or previous match.
+
 **Text viewer**
 
 | Action name | What it does | Keys |
@@ -287,6 +294,9 @@ text viewer with `q`.
 | `toggle_wrap` | Toggle line wrapping | `W` |
 | `toggle_view_mode` | Toggle the rendered / raw view | `M` |
 | `change_encoding` | Choose the text encoding | `Shift-E` |
+| `isearch` | Incremental search | AFX style: `F`<br>Orthodox: `F7`<br>OS native: `Ctrl-F` (macOS app: `Cmd-F`, `Ctrl-F`)<br>Vim style: `/` |
+| `text_viewer.search_next` | Find the next match of the last search | AFX style, Vim style: —<br>Orthodox: `F3`<br>OS native: `F3` (macOS app: `Cmd-G`, `F3`) |
+| `text_viewer.search_prev` | Find the previous match of the last search | AFX style, Vim style: —<br>Orthodox: `Shift-F3`<br>OS native: `Shift-F3` (macOS app: `Cmd-Shift-G`, `Shift-F3`) |
 
 **Image viewer**
 
@@ -318,6 +328,9 @@ text viewer with `q`.
 | `file_diff.scroll_bottom` | Go to the bottom | `End` |
 | `file_diff.scroll_left` | Scroll left | `←` |
 | `file_diff.scroll_right` | Scroll right | `→` |
+| `isearch` | Incremental search | AFX style: `F`<br>Orthodox: `F7`<br>OS native: `Ctrl-F` (macOS app: `Cmd-F`, `Ctrl-F`)<br>Vim style: `/` |
+| `file_diff.search_next` | Find the next match of the last search | AFX style, Vim style: —<br>Orthodox: `F3`<br>OS native: `F3` (macOS app: `Cmd-G`, `F3`) |
+| `file_diff.search_prev` | Find the previous match of the last search | AFX style, Vim style: —<br>Orthodox: `Shift-F3`<br>OS native: `Shift-F3` (macOS app: `Cmd-Shift-G`, `Shift-F3`) |
 
 **Directory diff viewer**
 

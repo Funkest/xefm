@@ -43,9 +43,9 @@ from xefm.dialog_geometry import OPEN_MS_VIEWER, animate_open
 from xefm.isearch_bar import ViewerISearch, match_scroll_top
 from xefm.text_dialog import keys_markdown, show_markdown
 from xefm.text_viewer import (MONO, _ScrollBody, _content_bg, _header_bg, _highlight,
-                             _is_light, _match_bg, _read_lines, _syntax_palette,
-                             draw_hscrollbar, draw_status_bar, footer_pair, span_x,
-                             viewer_layer_hints, viewer_pad)
+                             _is_light, _match_bg, _read_lines, _search_help_rows,
+                             _syntax_palette, draw_hscrollbar, draw_status_bar,
+                             footer_pair, span_x, viewer_layer_hints, viewer_pad)
 from puikit.text import display_width
 
 def _label(action: str, fallback: str = "", context: str = _CONTEXT) -> str:
@@ -375,6 +375,7 @@ class DiffViewer(Widget):
             status=self._search_status,
             accept=self._search_accept,
             cancel=self._search_cancel,
+            context=_CONTEXT,
         )
 
     def _gutter_w(self) -> int:
@@ -471,15 +472,20 @@ class DiffViewer(Widget):
 
     # --- search --------------------------------------------------------------
 
-    def _enter_search(self) -> None:
+    def _enter_search(self, again: int = 0) -> None:
         """Open the incremental-search overlay pinned to the footer (the ``search``
         binding), reusing the main file manager's ``ISearchBar`` via
-        :class:`ViewerISearch`. Independent of ``n``/``N`` diff-block navigation."""
+        :class:`ViewerISearch`. Independent of ``n``/``N`` diff-block navigation.
+        ``again`` (1 / -1) is find next / previous: the bar reopens on the last
+        pattern and steps to the match after / before the one in view."""
         if self._isearch.active or self._footer_rect is None:
             return
         self._search_origin_top = self.top
         self._clear_search()
-        self._isearch.open(self._panel, self._footer_rect, self._child_z)
+        if again:
+            self._isearch.reopen(self._panel, self._footer_rect, self._child_z, again)
+        else:
+            self._isearch.open(self._panel, self._footer_rect, self._child_z)
 
     def _clear_search(self) -> None:
         """Drop the highlight chrome (pattern + match set)."""
@@ -611,7 +617,9 @@ class DiffViewer(Widget):
         # text inset, matching the main window (and the other two viewers). Its rect
         # is captured so the ISearchBar can pin over it during a search.
         self._footer_rect = (0.0, fy, wu, hu - fy)
-        search_k = _label("isearch", "F")
+        # Unbound under a preset that types ahead: say nothing then (#737).
+        search_k = _label("isearch")
+        search_seg = f"{search_k} search · " if search_k else ""
         edit_k = _label("edit_file", "E")
         quit_k = _label("quit", "q")
         # Block jumps and the horizontal pan are named from the live keymap like
@@ -624,7 +632,7 @@ class DiffViewer(Widget):
         jump_seg = f"{jump_k} jump · " if jump_k else ""
         pan_seg = f"{pan_k} pan · " if pan_k else ""
         hint = (f" {len(self.rows)} rows · {len(self.blocks)} changes · "
-                f"{jump_seg}{search_k} search · {edit_k} edit · {pan_seg}"
+                f"{jump_seg}{search_seg}{edit_k} edit · {pan_seg}"
                 f"{quit_k}/Esc close ")
         draw_status_bar(ctx, fy, hint, pad_x=pad_x, bottom_pad=pad_y)
 
@@ -676,6 +684,8 @@ class DiffViewer(Widget):
             self._handlers = {
                 "help": self._show_help,
                 "isearch": self._enter_search,
+                "file_diff.search_next": lambda: self._enter_search(1),
+                "file_diff.search_prev": lambda: self._enter_search(-1),
                 "edit_file": self._edit_in_tool,
                 "file_diff.next_block": lambda: self._step_block(1),
                 "file_diff.prev_block": lambda: self._step_block(-1),
@@ -710,9 +720,7 @@ class DiffViewer(Widget):
              "scroll horizontally"),
             (_pair("file_diff.next_block", "file_diff.prev_block"),
              "next / prev diff block"),
-            (_label("isearch", "F"), "incremental search"),
-            (_pair("isearch.prev_match", "isearch.next_match", context=ISEARCH)
-             + " (in search)", "prev / next match"),
+            *_search_help_rows(_CONTEXT),
             (_label("edit_file", "E"), "edit both sides in $TEXT_DIFF"),
             ("Drag gutter", "move centre split"),
             (_label("help", "F1"), "this help"),

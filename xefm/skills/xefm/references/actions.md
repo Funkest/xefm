@@ -187,6 +187,8 @@ viewer only.
 | `text_viewer.scroll_bottom` | Go to the bottom | `END` |
 | `text_viewer.scroll_left` | Scroll left (unwrapped only) | `LEFT` |
 | `text_viewer.scroll_right` | Scroll right (unwrapped only) | `RIGHT` |
+| `text_viewer.search_next` | Find the next match of the last search | — |
+| `text_viewer.search_prev` | Find the previous match of the last search | — |
 | `quit` | Quit XeFM — or close the open viewer | `Q` |
 | `quit_app` | Quit XeFM from anywhere, asking first only while a task is running | — |
 | `help` | Show the key bindings for what is on screen | `F1` |
@@ -228,6 +230,8 @@ viewer only.
 | `file_diff.scroll_bottom` | Go to the bottom | `END` |
 | `file_diff.scroll_left` | Scroll left | `LEFT` |
 | `file_diff.scroll_right` | Scroll right | `RIGHT` |
+| `file_diff.search_next` | Find the next match of the last search | — |
+| `file_diff.search_prev` | Find the previous match of the last search | — |
 | `quit` | Quit XeFM — or close the open viewer | `Q` |
 | `quit_app` | Quit XeFM from anywhere, asking first only while a task is running | — |
 | `help` | Show the key bindings for what is on screen | `F1` |

@@ -108,6 +108,7 @@ class ISearchBar(FocusContainer, Widget):
         on_cancel: Callable[[], None] | None = None,
         get_status: Callable[[], tuple[int, int]] | None = None,
         on_passthrough: Callable[[Event], None] | None = None,
+        navigate_actions: tuple[str, str, str] | None = None,
     ):
         self.prompt = prompt
         self.surface = surface
@@ -136,6 +137,13 @@ class ISearchBar(FocusContainer, Widget):
         #: actions — is handed here instead of to the field, so the owner can
         #: close the search and let the key act on the file list.
         self.on_passthrough = on_passthrough
+        #: ``(context, next_action, prev_action)``: another surface's find
+        #: next / previous actions whose keys walk the matches too while the
+        #: bar is open — a viewer's ``search_next`` / ``search_prev``, so
+        #: ``F3`` keeps stepping whether the bar is up or not (#737). Not the
+        #: ``isearch`` context's own keys: the file list's bar shares those,
+        #: and an Orthodox ``F3`` there has to stay "view" for the type-ahead.
+        self.navigate_actions = navigate_actions
 
         self._panel = None
         self.edit = TextEdit(text=text, on_change=self._edit_changed,
@@ -279,6 +287,12 @@ class ISearchBar(FocusContainer, Widget):
                 if is_action_for_event(event, name, context=ISEARCH):
                     handler()
                     return True
+            if self.navigate_actions is not None and self.on_navigate is not None:
+                context, next_action, prev_action = self.navigate_actions
+                for name, delta in ((next_action, 1), (prev_action, -1)):
+                    if is_action_for_event(event, name, context=context):
+                        self.on_navigate(delta)
+                        return True
             if self.on_passthrough is not None and event.key not in _EDIT_KEYS:
                 self.on_passthrough(event)
                 return True
@@ -328,30 +342,47 @@ class ViewerISearch:
         cancel():           Esc / outside click — restore the pre-search view.
     """
 
-    def __init__(self, *, recompute, navigate, status, accept, cancel):
+    def __init__(self, *, recompute, navigate, status, accept, cancel,
+                 context: str | None = None):
         self._recompute = recompute
         self._navigate = navigate
         self._status = status
         self._accept = accept
         self._cancel = cancel
+        #: The viewer's action context: its ``<context>.search_next`` /
+        #: ``search_prev`` keys step the matches while the bar is open too.
+        self._context = context
         self.active = False
         self._bar: ISearchBar | None = None
         self._panel = None
+        #: The pattern the bar last closed on, which :meth:`reopen` runs again,
+        #: and the 1-based match it closed on (0: none) — the "cursor" find
+        #: next steps from, since a viewer's scroll alone does not say which
+        #: of the matches in view was the current one.
+        self.last_pattern = ""
+        self.last_position = 0
 
-    def open(self, panel, footer_rect, z: int) -> None:
+    def open(self, panel, footer_rect, z: int, text: str = "") -> None:
         """Open the search bar over ``footer_rect`` (``(x, y, w, h)`` in the
-        panel's size units, e.g. the viewer's footer row). No-op when already open
-        or the footer hasn't been captured yet (nothing to anchor to)."""
+        panel's size units, e.g. the viewer's footer row), holding ``text``.
+        No-op when already open or the footer hasn't been captured yet (nothing
+        to anchor to)."""
         if self.active or panel is None or footer_rect is None:
             return
         self.active = True
         self._panel = panel
+        navigate_actions = None
+        if self._context is not None:
+            navigate_actions = (self._context, f"{self._context}.search_next",
+                                f"{self._context}.search_prev")
         self._bar = ISearchBar(
+            text=text,
             on_change=self._recompute,
             on_navigate=self._navigate,
             on_submit=self._accept_and_close,
             on_cancel=self._cancel_and_close,
             get_status=self._status,
+            navigate_actions=navigate_actions,
         )
         x, y, w, h = footer_rect
         # Pinned over the footer with the "status" surface so it reads as the
@@ -361,11 +392,39 @@ class ViewerISearch:
                          hints={"surface": "status", "x": x, "y": y, "w": w, "h": h})
         panel.render()
 
+    def reopen(self, panel, footer_rect, z: int, delta: int) -> None:
+        """Find next (``delta`` 1) / previous (-1) after the bar has closed:
+        open it again on :attr:`last_pattern`, run that, and step from the
+        match it lands on. With no pattern yet, just open it."""
+        pattern = self.last_pattern
+        self.open(panel, footer_rect, z, text=pattern)
+        if not pattern or self._bar is None:
+            return
+        self._recompute(pattern)
+        pos, total = self._status()
+        if total:
+            # Walk to the match after / before the one the bar closed on; the
+            # same pattern over the same text numbers its matches the same.
+            # One step at a time, as the bar's own keys do.
+            start = self.last_position - 1 if self.last_position else pos - 1
+            if start < 0:      # on no match: next is the first, previous the last
+                target = 0 if delta > 0 else total - 1
+            else:
+                target = (start + delta) % total
+            for _ in range(total):
+                if self._status()[0] - 1 == target:
+                    break
+                self._navigate(1)
+        panel.render()
+
     @property
     def pattern(self) -> str:
         return self._bar.pattern if self._bar is not None else ""
 
     def _teardown(self) -> None:
+        if self._bar is not None and self._bar.pattern:
+            self.last_pattern = self._bar.pattern
+            self.last_position = self._status()[0]
         self.active = False
         panel = self._panel
         if (panel is not None and panel.has_layers
