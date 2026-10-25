@@ -390,6 +390,31 @@ handed in through the constructor, and `draw()` re-resolves if the live panel is
 not the one the resolution was made against (`_resolved_panel`), which keeps a
 viewer built before its panel was known working.
 
+### What runs on the UI thread (#732)
+
+Only the metadata reads: route 1, and the backend's own size reading for the
+card. Everything that reads the file's bytes — routes 2–4 and the card's Pillow
+probe — is the module-level `_resolve_slow`, run on an `xefm-image-load` worker
+wherever the panel ticks. It touches neither the viewer nor the backend; it
+returns a `_Resolution` record, the tick adopts it (`_install`) and the card says
+"Loading…" until then. A Pillow decode of a 6000×4000 photo is 200–500 ms, so
+before this the viewer opened (and paged) that much late for any file off the
+fast lane — anything in an archive, on S3/SFTP, or in a format only Pillow reads.
+
+Each resolution bumps `_load_gen`; a result from an older generation (the user
+paged on, or closed) is dropped, and its staged temp file deleted. The tick runs
+until every started worker has been heard from (`_inflight`), not just the
+current one, so that cleanup also happens after close. Route 3 still measures
+its staged file on the UI thread: that is the backend's call. A still backend
+(nothing ticks) resolves in place, as before.
+
+**Not covered here:** on the fast lane XeFM hands the backend a path, and the
+macOS backend decodes it lazily, inside the first `drawInRect` on the main
+thread — measured offscreen at ~160 ms (24 MP JPEG), ~390 ms (HEIC), ~520 ms
+(PNG), and a JPEG re-decodes ~45 ms on every later draw. That is PuiKit's to move
+off the main thread (decode in `_load_image` on a worker, draw a placeholder,
+invalidate the view when the bitmap is ready).
+
 ### Non-local images
 
 This is where step 2 pays off. `read_bytes()` on an S3 / SSH / in-archive
