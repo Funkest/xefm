@@ -182,3 +182,30 @@ def test_the_palette_page_sits_inside_the_palette(app):
     outer, inner = _slot(app, palette).rect, _slot(app, page).rect
     assert inner.x > outer.x and inner.x + inner.w < outer.x + outer.w
     assert not _slot(app, page).hints.get("dim_below")
+
+
+def test_the_page_names_where_a_user_action_is_defined(app, monkeypatch):
+    """An extension's action and a config.py action both register as
+    ``source == "user"``; the page tells them apart (#709)."""
+    from types import SimpleNamespace
+    from xefm import extensions as _ext
+    from xefm.user_api import load_user_entries
+
+    def mine(ctx):
+        """Mine."""
+
+    def presign(ctx):
+        """Presign."""
+    cfg = DefaultConfig()
+    cfg.ACTIONS = {"mine": mine, "s3-share.presign": presign}
+    load_user_entries(cfg)
+    manifest = SimpleNamespace(id="s3-share", name="S3 Share", version="0.1.0")
+    report = _ext.LoadReport(loaded=[manifest],
+                             owners={("ACTIONS", "s3-share.presign"): "s3-share"})
+    monkeypatch.setattr(config_manager, "extension_report", report, raising=False)
+
+    page = app._action_page(xa.registry.resolve(xa.FILER, "s3-share.presign"))
+    assert "**Defined in:** the *S3 Share* extension (`s3-share` 0.1.0)" in page
+    assert "config.py (`ACTIONS`)" not in page
+    page = app._action_page(xa.registry.resolve(xa.FILER, "mine"))
+    assert "**Defined in:** your config.py (`ACTIONS`)" in page

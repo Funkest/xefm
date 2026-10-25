@@ -11180,12 +11180,27 @@ class XeFMApp:
             facts.append("**Only without a selection:** its key is ignored "
                          "while items are marked")
         if action.is_user:
-            facts.append("**Defined in:** your config.py (`ACTIONS`)")
+            facts.append(f"**Defined in:** {self._action_origin(action)}")
         if action.aliases:
             old = ", ".join(f"`{a}`" for a in action.aliases)
             facts.append(f"**Formerly:** {old}")
         paragraphs.append("\\\n".join(facts))
         return "\n\n".join(paragraphs)
+
+    def _action_origin(self, action) -> str:
+        """Where a user action came from, for its help page: the extension
+        package that placed it in ``ACTIONS``, or config.py. Both register
+        with ``source == "user"``; the extension loader's report is what tells
+        them apart (#709) — and it is the user's first clue which package to
+        update or disable when the action misbehaves."""
+        report = getattr(config_manager, "extension_report", None)
+        owner = report.owners.get(("ACTIONS", action.name)) if report else None
+        if owner is None:
+            return "your config.py (`ACTIONS`)"
+        manifest = next((m for m in report.loaded if m.id == owner), None)
+        if manifest is None:
+            return f"the extension `{owner}`"
+        return f"the *{manifest.name}* extension (`{owner}` {manifest.version})"
 
     def _help_markdown(self) -> str:
         """The help dialog's whole body.
