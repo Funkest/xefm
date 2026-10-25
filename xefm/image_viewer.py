@@ -42,6 +42,7 @@ from __future__ import annotations
 import io
 import os
 import tempfile
+import threading
 from typing import Any, Sequence
 
 from puikit.backend import Style, TextAttribute
@@ -158,6 +159,122 @@ def _format_size(count: int) -> str:
     return f"{size:.1f} GB"
 
 
+class _Resolution:
+    """What :func:`_resolve_slow` worked out for one image, handed back to the
+    viewer on the UI thread. A plain record rather than writes to the viewer,
+    because it is built on a worker thread and may arrive after the viewer has
+    moved on to another image."""
+
+    __slots__ = ("suffix", "source", "size", "nbytes", "error", "temp")
+
+    def __init__(self, suffix: str):
+        self.suffix = suffix
+        self.source: Any = None
+        self.size: tuple[int, int] | None = None
+        self.nbytes: int | None = None
+        self.error: str | None = None
+        # Route 3's staged copy. Its size is the backend's to read, which the
+        # viewer does once it adopts this (see ImageViewer._install).
+        self.temp: str | None = None
+
+    def read(self, path) -> bytes:
+        """The image's bytes, from wherever it lives, recording the count."""
+        data = path.read_bytes()
+        self.nbytes = len(data)
+        return data
+
+    def fail(self, message: str, path) -> None:
+        """Record a failure for the card and the log. Everything that can go
+        wrong here is somebody else's file being unreadable, so it is reported
+        rather than raised."""
+        self.error = message
+        logger.error(f"{message.rstrip('.')}: {path}")
+
+
+def _resolve_slow(path, local: str | None, suffix: str, draws: bool,
+                  native: bool) -> _Resolution:
+    """Routes 2–4 of :meth:`ImageViewer._resolve`, plus the card's Pillow size
+    probe — everything that reads the file's bytes. Runs on a worker thread, so
+    it touches neither the viewer nor the backend: ``draws`` and ``native`` are
+    the backend's answers, asked on the UI thread beforehand."""
+    res = _Resolution(suffix)
+
+    # No picture is going to be drawn: the dimensions are all the card wants.
+    if not draws:
+        res.size = _probe_size(res, path, local)
+        return res
+
+    # 2. Decode it here.
+    if image_decoders.decoder_for(suffix) is not None:
+        try:
+            raster = image_decoders.decode(suffix, res.read(path))
+        except Exception as e:
+            res.fail(f"Cannot decode: {e}", path)
+            return res
+        if raster is not None:
+            res.source, res.size = raster, raster.size
+            return res
+
+    # 3. The backend's format, somewhere the backend cannot reach.
+    if local is None and native:
+        res.temp = _stage_temp(res, path, suffix)
+        if res.temp is not None:
+            return res
+
+    # 4. Nothing read it.
+    if res.error is None:
+        res.error = _no_decoder_message(suffix)
+    return res
+
+
+def _probe_size(res: _Resolution, path, local: str | None) -> tuple[int, int] | None:
+    """Dimensions for the metadata card when no picture will be drawn and the
+    backend could not say.
+
+    Pillow's ``open`` parses the header and stops, so this costs a few hundred
+    bytes rather than a decode — which is the whole point of asking separately
+    instead of reusing the decode path. The size is the upright one, as every
+    backend draws it (puikit#174)."""
+    try:
+        from PIL import Image
+        from puikit.image import exif_upright_size
+
+        source = local if local is not None else io.BytesIO(res.read(path))
+        with Image.open(source) as image:
+            return exif_upright_size(image)
+    except Exception:
+        return None
+
+
+def _stage_temp(res: _Resolution, path, suffix: str) -> str | None:
+    """Write a non-local image to a temp file the backend can open, kept until
+    the viewer moves on or closes. The last resort, for a format only the
+    backend reads."""
+    try:
+        data = res.read(path)
+        handle, temp = tempfile.mkstemp(prefix="xefm_img_", suffix=suffix or ".img")
+        with os.fdopen(handle, "wb") as out:
+            out.write(data)
+    except Exception as e:
+        res.fail(f"Cannot read: {e}", path)
+        return None
+    return temp
+
+
+def _unlink_temp(temp: str) -> None:
+    try:
+        os.unlink(temp)
+    except OSError as e:
+        logger.error(f"Could not remove temp image {temp}: {e}")
+
+
+def _discard(res: _Resolution) -> None:
+    """Drop a load nobody is waiting for any more — its staged copy included,
+    which would otherwise outlive the viewer that asked for it."""
+    if res.temp is not None:
+        _unlink_temp(res.temp)
+
+
 class ImageViewer(Widget):
     """Full-window modal image viewer. Construct via :func:`show_image_viewer`."""
 
@@ -199,6 +316,23 @@ class ImageViewer(Widget):
         self._size: tuple[int, int] | None = None
         self._bytes: int | None = None
         self._error: str | None = None
+        # The slow routes — reading the bytes, decoding them, staging a temp
+        # file — run on a worker thread (issue #732), and the card says
+        # "Loading…" meanwhile. _load_gen numbers each resolution so a result
+        # that lands after the user moved on (or closed) is recognized as stale;
+        # the worker appends its answer to _load_results, which the animation
+        # tick drains on the UI thread, the same hand-off quick view uses. A
+        # list, not one slot: a stale answer and the current one can both land
+        # between two ticks, and the stale one may hold a temp file to delete.
+        self._loading = False
+        self._load_gen = 0
+        self._load_results: list[tuple[int, _Resolution]] = []
+        # Workers started and not yet drained, stale ones included: the tick
+        # keeps running until each has been heard from, so a load that outlives
+        # its image (or the viewer) still gets its temp file deleted.
+        self._inflight = 0
+        self._loader: threading.Thread | None = None
+        self._ticking = False
         # Body rect (layer-local) captured each draw, so a mouse drag can turn a
         # pixel delta into a pan.
         self._body_rect: tuple[float, float, float, float] | None = None
@@ -247,8 +381,17 @@ class ImageViewer(Widget):
         Between 1 and 2 sits the one thing worth spelling out: when the backend
         cannot draw pictures at all, no decode is attempted. The dimensions still
         come out, by the cheapest route available, because the card shows them.
+
+        Only route 1, and the backend's own size reading for the card, run here:
+        both are metadata reads. Everything that reads the file's bytes — a
+        decode, a remote read, a staged copy — is :func:`_resolve_slow`, which
+        runs on a worker thread wherever the backend ticks (issue #732); a
+        Pillow decode of a 24-megapixel photo alone is several hundred
+        milliseconds the UI thread should not spend.
         """
         self._release_temp()
+        self._load_gen += 1
+        self._loading = False
         self._resolved_panel = self._panel
         self._source = self._size = self._bytes = self._error = None
         path = self.path
@@ -269,34 +412,81 @@ class ImageViewer(Widget):
             # file. Fall through: a decoder here may still manage it.
 
         # No picture is going to be drawn, so decoding one would be waste — but
-        # the card still names the dimensions, so they are worth a cheap probe.
-        if not self._draws_pictures():
-            self._size = self._probe_size(path, local)
+        # the card still names the dimensions. The backend's own reading is a
+        # header parse; only when it has none does Pillow get asked, off-thread.
+        draws = self._draws_pictures()
+        if not draws and local is not None:
+            self._size = self._backend_size(local)
+            if self._size is not None:
+                return
+
+        # Everything left reads the file. Asked here, not on the worker: the
+        # first ask may be what calls into the backend for its format list.
+        native = suffix in image_decoders.native_suffixes()
+        job = (path, local, suffix, draws, native)
+        gen = self._load_gen
+        # Set before the tick can run, so the first tick sees a load in flight.
+        self._loading = True
+        if not self._start_ticking():
+            # A still backend (or no panel yet): no tick would ever pick the
+            # answer up, so it is worked out here, the way it always was.
+            self._install(_resolve_slow(*job))
             return
 
-        # 2. Decode it here.
-        if image_decoders.decoder_for(suffix) is not None:
+        def worker() -> None:
+            # Always answer: the tick runs until every worker has reported.
             try:
-                raster = image_decoders.decode(suffix, self._read(path, local))
+                res = _resolve_slow(*job)
             except Exception as e:
-                self._fail(f"Cannot decode: {e}", path)
-                return
-            if raster is not None:
-                self._source, self._size = raster, raster.size
-                return
+                logger.error(f"Image load failed for {path}: {e}")
+                res = _Resolution(suffix)
+            self._load_results.append((gen, res))
 
-        # 3. The backend's format, somewhere the backend cannot reach.
-        if local is None and suffix in image_decoders.native_suffixes():
-            staged = self._stage_temp(path, suffix)
-            if staged is not None:
-                size = self._backend_size(staged)
-                if size is not None:
-                    self._source, self._size = staged, size
-                    return
+        self._inflight += 1
+        self._loader = threading.Thread(target=worker, name="xefm-image-load",
+                                        daemon=True)
+        self._loader.start()
 
-        # 4. Nothing read it.
-        if self._error is None:
-            self._error = _no_decoder_message(suffix)
+    def _install(self, res: "_Resolution") -> None:
+        """Adopt a finished :func:`_resolve_slow` answer for the current image.
+        Route 3's size is measured here, on the UI thread, because it is the
+        backend's own reading of the staged file."""
+        self._loading = False
+        self._source, self._size, self._error = res.source, res.size, res.error
+        if res.nbytes is not None:
+            self._bytes = res.nbytes
+        self._temp = res.temp
+        if res.temp is not None and res.source is None:
+            size = self._backend_size(res.temp)
+            if size is not None:
+                self._source, self._size = res.temp, size
+            else:
+                self._error = _no_decoder_message(res.suffix)
+
+    def _start_ticking(self) -> bool:
+        """Make sure the animation tick that collects a worker's answer is
+        running; ``False`` where the backend has none (or there is no panel)."""
+        if self._ticking:
+            return True
+        if self._panel is not None and self._panel.request_animation_ticks(self._tick):
+            self._ticking = True
+        return self._ticking
+
+    def _tick(self) -> bool:
+        """Animation tick while a load is out: adopt the worker's answer once it
+        lands, or drop it if the viewer has moved on since it was asked."""
+        while self._load_results:
+            gen, res = self._load_results.pop(0)
+            self._inflight -= 1
+            if gen == self._load_gen and self._loading:
+                self._install(res)
+                if self._panel is not None:
+                    self._panel.render()
+            else:
+                _discard(res)
+        busy = self._inflight > 0
+        self._ticking = busy
+        return busy
 
     # --- the pieces _resolve is built from ------------------------------------
 
@@ -312,29 +502,6 @@ class ImageViewer(Widget):
             return None
         self._bytes = os.path.getsize(local)
         return local
-
-    def _read(self, path, local: str | None) -> bytes:
-        """The image's bytes, from wherever it lives, recording the byte count if
-        nothing has yet."""
-        data = path.read_bytes()
-        if self._bytes is None:
-            self._bytes = len(data)
-        return data
-
-    def _stage_temp(self, path, suffix: str) -> str | None:
-        """Write a non-local image to a temp file the backend can open, kept
-        until the viewer moves on or closes. The last resort, for a format only
-        the backend reads."""
-        try:
-            data = self._read(path, None)
-            handle, temp = tempfile.mkstemp(prefix="xefm_img_", suffix=suffix or ".img")
-            with os.fdopen(handle, "wb") as out:
-                out.write(data)
-        except Exception as e:
-            self._fail(f"Cannot read: {e}", path)
-            return None
-        self._temp = temp
-        return temp
 
     def _draws_pictures(self) -> bool:
         """Whether the backend draws real pixels at all. Asked here rather than
@@ -353,26 +520,6 @@ class ImageViewer(Widget):
             logger.error(f"Could not measure {local}: {e}")
             return None
 
-    def _probe_size(self, path, local: str | None) -> tuple[int, int] | None:
-        """Dimensions for the metadata card when no picture will be drawn.
-
-        Pillow's ``open`` parses the header and stops, so this costs a few
-        hundred bytes rather than a decode — which is the whole point of asking
-        separately instead of reusing the decode path. The size is the upright
-        one, as every backend draws it (puikit#174)."""
-        size = self._backend_size(local) if local is not None else None
-        if size is not None:
-            return size
-        try:
-            from PIL import Image
-            from puikit.image import exif_upright_size
-
-            source = local if local is not None else io.BytesIO(self._read(path, None))
-            with Image.open(source) as image:
-                return exif_upright_size(image)
-        except Exception:
-            return None
-
     def _fail(self, message: str, path) -> None:
         """Record a failure for the card and the log. Everything that can go
         wrong here is somebody else's file being unreadable, so it is reported
@@ -384,10 +531,7 @@ class ImageViewer(Widget):
         """Delete the staged copy of a non-local image, if one was needed."""
         if self._temp is None:
             return
-        try:
-            os.unlink(self._temp)
-        except OSError as e:
-            logger.error(f"Could not remove temp image {self._temp}: {e}")
+        _unlink_temp(self._temp)
         self._temp = None
 
     # --- navigation / zoom / pan ---------------------------------------------
@@ -588,11 +732,14 @@ class ImageViewer(Widget):
 
     def _card_reason(self, ctx) -> list[str]:
         """Why the picture is not on screen, in the order the reasons actually
-        apply. A file that failed says so; a format nothing here reads says what
-        would read it; otherwise it is the terminal that cannot show pictures at
-        all, whatever the file is."""
+        apply. A file that failed says so; one still being read on the worker
+        says that; a format nothing here reads says what would read it;
+        otherwise it is the terminal that cannot show pictures at all, whatever
+        the file is."""
         if self._error is not None:
             return [self._error]
+        if self._loading:
+            return ["Loading…"]
         if not _have_pillow():
             return ["Install pillow to view images"]
         if not ctx.images:
@@ -727,6 +874,10 @@ class ImageViewer(Widget):
     def _close(self) -> None:
         panel = self._panel
         self._release_temp()
+        # A load still out lands on a viewer that is gone: the tick drops it
+        # (and its staged copy) instead of adopting it.
+        self._load_gen += 1
+        self._loading = False
         if panel is not None and panel.has_layers and panel._layers[-1].widget is self:
             panel.pop_layer()
             # Only after we actually popped: the callback restores the theme's

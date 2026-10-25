@@ -15,6 +15,7 @@ Run with: python -m pytest test/test_image_viewer.py -v
 import os
 import struct
 import sys
+import time
 import zlib
 
 import pytest
@@ -106,12 +107,34 @@ def backend(request):
     return MemoryBackend(width=60, height=20, capabilities=request.param)
 
 
+def _settle(viewer):
+    """Let a load the viewer sent to its worker thread finish, and run the
+    animation tick that adopts it — what the backend's own loop does between
+    frames. A no-op when nothing is out."""
+    # Every worker, not just the last: one overtaken by navigation is still
+    # out until it reports, and the tick waits for it.
+    deadline = time.monotonic() + 5
+    while True:
+        if viewer._loader is not None:
+            viewer._loader.join(max(0.0, deadline - time.monotonic()))
+        if viewer._panel is not None:
+            viewer._panel.backend.run_animation_ticks()
+        if viewer._inflight <= 0 or time.monotonic() > deadline:
+            return
+        time.sleep(0.01)
+
+
 def _render(backend, viewer):
-    """Push the viewer onto a panel and draw one frame."""
+    """Push the viewer onto a panel and draw one frame — settling a load the
+    first frame started, so the frame asserted on shows the picture."""
     panel = Panel(backend)
     viewer._panel = panel
     panel.push_layer(viewer, z=80, hints={"x": 0, "y": 0, "w": 60, "h": 20})
     panel.render()
+    if viewer._loading:
+        _settle(viewer)
+        backend.clear()
+        panel.render()
     return panel
 
 
@@ -800,6 +823,7 @@ def test_a_non_local_image_is_decoded_from_its_bytes(images):
 
     viewer = ImageViewer(_remote(data), panel=Panel(MemoryBackend(
         width=60, height=20, capabilities=PROFILE_GUI_DESKTOP)))
+    _settle(viewer)
 
     assert viewer._temp is None
     assert viewer._size == (200, 100)
@@ -823,6 +847,7 @@ def test_a_non_local_image_only_the_backend_reads_is_staged(images):
         viewer = ImageViewer(_remote(data, name="r.heic", suffix=".heic",
                                      uri="archive://photos.zip/r.heic"),
                              panel=Panel(backend))
+        _settle(viewer)
 
         assert viewer._temp is not None and os.path.exists(viewer._temp)
         assert viewer._source == viewer._temp
@@ -894,6 +919,7 @@ def test_a_decoder_that_fails_shows_the_reason_not_a_traceback(images):
     try:
         viewer = ImageViewer(images[0], panel=Panel(MemoryBackend(
             width=60, height=20, capabilities=PROFILE_GUI_DESKTOP)))
+        _settle(viewer)
         assert viewer._source is None
         assert "bad frame" in viewer._error
     finally:
@@ -918,3 +944,128 @@ def test_no_decode_is_spent_where_no_picture_can_be_drawn(images, monkeypatch):
     assert calls == []
     assert viewer._source is None
     assert viewer._size == (200, 100)   # still on the card
+
+
+# --- loading off the UI thread (issue #732) ----------------------------------
+
+
+def test_a_slow_decode_runs_off_the_ui_thread(images):
+    # Opening must not wait for the decode: the viewer comes up at once with a
+    # "Loading…" card, and the picture is swapped in by the tick once the worker
+    # has it.
+    import threading
+
+    from puikit.image import RasterImage
+
+    gate = threading.Event()
+
+    def open_slow(data):
+        assert gate.wait(5), "the test never released the decoder"
+        return RasterImage(3, 2, b"\xff" * 24)
+
+    image_decoders.register(".png", open_slow)
+    try:
+        backend = MemoryBackend(width=60, height=20, capabilities=PROFILE_GUI_DESKTOP)
+        panel = Panel(backend)
+        viewer = ImageViewer(images[0], panel=panel)  # returns with the decode blocked
+        assert viewer._loading and viewer._source is None
+        panel.push_layer(viewer, z=80, hints={"x": 0, "y": 0, "w": 60, "h": 20})
+        panel.render()
+        assert "Loading" in "\n".join(backend.snapshot())
+        assert backend.image_calls == []
+
+        gate.set()
+        _settle(viewer)
+        assert not viewer._loading
+        assert viewer._size == (3, 2)
+        backend.clear()
+        panel.render()
+        assert backend.image_calls, "the decoded picture is drawn once it lands"
+    finally:
+        image_decoders.clear()
+
+
+def test_a_load_overtaken_by_navigation_is_dropped(images):
+    # Paging on while a decode is out: the late answer belongs to an image no
+    # longer shown, so it must not overwrite the one that is.
+    import threading
+
+    from puikit.image import RasterImage
+
+    first_gate, second_gate = threading.Event(), threading.Event()
+    gates = iter([first_gate, second_gate])
+
+    def open_slow(data):
+        gate = next(gates)
+        assert gate.wait(5)
+        if gate is first_gate:
+            return RasterImage(1, 1, b"\xff" * 4)
+        return RasterImage(5, 4, b"\xff" * 80)
+
+    image_decoders.register(".png", open_slow)
+    try:
+        backend = MemoryBackend(width=60, height=20, capabilities=PROFILE_GUI_DESKTOP)
+        viewer = ImageViewer(images[0], siblings=images, panel=Panel(backend))
+        first = viewer._loader
+        viewer._step_image(1)
+        second = viewer._loader
+        second_gate.set()
+        second.join(5)
+        backend.run_animation_ticks()
+        assert viewer._size == (5, 4)
+
+        first_gate.set()        # the overtaken load finishes last
+        first.join(5)
+        backend.run_animation_ticks()
+        assert viewer._size == (5, 4) and viewer.path == images[1]
+        assert backend.tick_callbacks == []  # nothing left to wait for
+    finally:
+        image_decoders.clear()
+
+
+def test_a_staged_copy_finished_after_close_is_removed(images, monkeypatch):
+    # Route 3 writes a temp file on the worker. If the viewer closed before the
+    # worker finished, nobody will ever release that file — the tick must.
+    import threading
+
+    from xefm import image_viewer as image_viewer_module
+
+    gate = threading.Event()
+    staged = []
+    real_stage = image_viewer_module._stage_temp
+
+    def slow_stage(res, path, suffix):
+        assert gate.wait(5)
+        temp = real_stage(res, path, suffix)
+        staged.append(temp)
+        return temp
+
+    monkeypatch.setattr(image_viewer_module, "_stage_temp", slow_stage)
+    data = open(str(images[0]), "rb").read()
+    backend = MemoryBackend(width=60, height=20, capabilities=PROFILE_GUI_DESKTOP)
+    backend.supported_image_formats = frozenset({".heic"})
+    image_decoders.set_native_suffixes(backend.image_formats)
+    try:
+        panel = Panel(backend)
+        viewer = ImageViewer(_remote(data, name="r.heic", suffix=".heic",
+                                     uri="archive://photos.zip/r.heic"), panel=panel)
+        panel.push_layer(viewer, z=80, hints={"x": 0, "y": 0, "w": 60, "h": 20})
+        viewer._close()
+        backend.run_animation_ticks()   # frames go on while the worker is out
+        assert backend.tick_callbacks, "the tick must outlive the closed viewer"
+        gate.set()
+        _settle(viewer)
+        assert staged and staged[0] is not None
+        assert not os.path.exists(staged[0])
+        assert viewer._temp is None
+        assert backend.tick_callbacks == []
+    finally:
+        image_decoders.set_native_suffixes(None)
+
+
+def test_a_still_backend_resolves_in_place(images):
+    # Where nothing ticks there is nobody to collect a worker's answer, so the
+    # decode happens right there in the constructor, as it always did.
+    viewer = ImageViewer(images[0])   # no panel at all
+    assert not viewer._loading and viewer._loader is None
+    assert viewer._size == (200, 100)
