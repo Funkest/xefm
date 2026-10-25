@@ -235,7 +235,10 @@ the new sdist is a day old it runs Homebrew's `bump-packages` action, which
 opens the formula's PR. It opens the PR and nothing else. It uses the
 `HOMEBREW_TAP_BUMP_TOKEN` secret, because a PR opened with the default
 `GITHUB_TOKEN` would not start the tests that build the bottles. Both bumps
-push a branch named `bump-xefm-X.Y.Z`, so merge the cask PR within the day.
+push a branch named `bump-xefm-X.Y.Z`. So while a PR from that branch is still
+open, whether it is the cask's or an earlier formula bump nobody has published
+yet, autobump waits and logs the PR instead of bumping again. A second bump
+would only fail pushing over the open PR's branch.
 
 Running `bump-formula-pr` by hand on release day fails the same way. A failed
 bump has already rewritten the formula's `url` and `sha256` in the local tap
@@ -253,10 +256,39 @@ Server and the OS image decoder. Bump those two by hand when PuiKit raises
 its PyObjC floor.
 
 Each bump opens a PR on the tap. Its CI (`brew test-bot`, macOS and Ubuntu)
-builds the formula's bottles. Once it is green, run the tap's **brew pr-pull**
-workflow with the PR number: it publishes the bottles and merges. A cask-only
-PR has no bottles, so it can be merged directly. Casks are moved only by the
-release, and the formula only by the autobump workflow above.
+builds the formula's bottles. The formula PR is opened with the owner's own
+token, and GitHub notifies nobody about their own actions, so once test-bot
+passes on a `bump-*` PR, a `notify` job in `tests.yml` comments as
+github-actions[bot] and mentions the owner. That comment is the signal to act:
+
+- **Formula PR:** the comment gives the exact command, and it publishes the
+  bottles and merges the PR in one step. Do **not** press Merge.
+  ```
+  gh workflow run publish.yml -R crftwr/homebrew-tap -f pull_request=<n> -f head_sha=<sha>
+  ```
+  That workflow runs `brew pr-pull`, which is what merges the PR and writes the
+  bottle block. Merging with the button publishes no bottles. 1.9.0 and 1.10.0
+  went out that way, and the formula kept naming the 1.8.0 bottles, so
+  installing the new version 404'd.
+- **Cask-only PR:** it has no bottles, so the comment says to merge it with
+  the button. The Keyhac cask in the same tap gets the same comment.
+
+A formula PR that was merged with the button anyway can still get its bottles:
+
+```
+gh workflow run publish.yml -R crftwr/homebrew-tap -f pull_request=<n> -f already_merged=true
+```
+
+`pr-pull` cannot do this. Cherry-picking fails because main already has the
+commits. `--no-cherry-pick` diffs main against itself, finds no formula to
+bottle, and amends main's tip commit. So `already_merged` skips `pr-pull`. It
+downloads the `bottles_*` artifacts from the test-bot run for the PR's head and
+runs `brew pr-upload` on them, which commits the bottle block and uploads to
+the release. 1.10.0's bottles were recovered this way. The artifacts last 90
+days.
+
+Casks are moved only by the release, and the formula only by the autobump
+workflow above.
 
 ## Preflight checks
 
