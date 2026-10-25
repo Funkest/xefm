@@ -30,7 +30,7 @@ The loop is always the same:
 Never launch XeFM yourself with `xefm` (or `python -m xefm`): it opens an
 interactive file manager that blocks until a person quits it. The `xefm ext …`
 subcommands are safe; they never open a window. The one way for you to see an
-extension run is `xefm try --ext <dir> --keys <script>`, which runs XeFM in a
+extension run is `xefm try --ext <dir> --keys steps.json`, which runs XeFM in a
 pseudo-terminal, follows the script and exits (*See it run*).
 
 ## 1. Start a package
