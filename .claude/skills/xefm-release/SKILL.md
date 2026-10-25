@@ -138,8 +138,8 @@ gh release edit vX.Y.Z --notes-file <scratch>/release-note-x.y.z.md
 ## 5. After the release
 
 - Bump the Homebrew **cask** once the DMG is attached (doing it earlier
-  points the tap at a file that does not exist yet), and merge its PR when CI
-  passes:
+  points the tap at a file that does not exist yet). When CI passes, a bot
+  comment says to merge it, so merge it with the button (a cask has no bottles):
   ```
   brew bump-cask-pr --no-fork --version X.Y.Z crftwr/tap/xefm   # only if this release has a DMG
   ```
@@ -147,15 +147,21 @@ gh release edit vX.Y.Z --notes-file <scratch>/release-note-x.y.z.md
   from packages uploaded at least 24 hours ago (`--uploaded-prior-to=P1D`),
   so a release-day bump fails. The tap's autobump workflow opens the formula
   PR on its own once the sdist is a day old. Report "formula PR: opened by
-  autobump after <date+1>" as remaining. Merge the cask PR the same day,
-  because both bumps use the branch `bump-xefm-X.Y.Z`. If a manual bump was
+  autobump after <date+1>" as remaining. Both bumps use the branch
+  `bump-xefm-X.Y.Z`, and autobump waits while the cask PR is still open, so
+  an unmerged cask PR holds back the formula. If a manual bump was
   tried anyway and failed, it has already edited the formula in the local
   tap checkout and left the edit uncommitted, and this Mac's own
   `brew upgrade` then offers a version with no bottle (404). Restore it:
   `git -C "$(brew --repo crftwr/tap)" checkout -- Formula/xefm.rb`.
-  When the autobump PR is up, run the tap's **brew pr-pull** workflow with the
-  PR number once CI passes (`gh workflow run publish.yml -R crftwr/homebrew-tap
-  -f pull_request=<n>`): it publishes the bottles and merges. If PuiKit raised
+  When test-bot passes on the autobump PR, a github-actions[bot] comment
+  mentions the owner with the exact command to run. That command runs the tap's
+  **brew pr-pull** workflow, which publishes the bottles and merges the PR:
+  `gh workflow run publish.yml -R crftwr/homebrew-tap -f pull_request=<n>
+  -f head_sha=<sha>`. **Never press Merge on a formula PR**, because that
+  publishes no bottles and installs of the new version 404 (1.9.0 and 1.10.0).
+  If it was button-merged anyway, add `-f already_merged=true`, which publishes
+  the PR's bottles with `brew pr-upload`. If PuiKit raised
   its PyObjC floor in this release, bump the hand-kept `pyobjc-core` /
   `pyobjc-framework-cocoa` resources under `on_macos` too. See
   `doc/dev/RELEASE_SYSTEM.md`, "The Homebrew tap".
