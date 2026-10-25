@@ -219,8 +219,17 @@ ifneq (,$(findstring MINGW,$(UNAME_S))$(findstring MSYS,$(UNAME_S))$(findstring 
 		echo "Error: 'py' launcher not found in PATH. Install Python from python.org first."; \
 		exit 1; \
 	fi
-	@echo "Using $$(py --version 2>&1) to create .venv..."
-	@py -m venv .venv
+	# 'py' is called once, through cmd, only to learn the real interpreter's
+	# path. Python's install manager puts 'py' in WindowsApps as an App
+	# Execution Alias, and MSYS2's sh launching that alias directly never
+	# returns: py prints its output and exits, and the shell keeps waiting.
+	@best=$$(cmd //c py -c "import sys; print(sys.executable)" | tr -d '\r'); \
+	if [ -z "$$best" ]; then \
+		echo "Error: 'py' did not report a Python interpreter."; \
+		exit 1; \
+	fi; \
+	echo "Using $$best ($$("$$best" --version 2>&1)) to create .venv..."; \
+	"$$best" -m venv .venv
 else
 	@echo "Searching for the latest python3 in PATH..."
 	@best=""; best_key=0; \
