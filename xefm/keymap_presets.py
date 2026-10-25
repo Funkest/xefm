@@ -175,6 +175,15 @@ _ORTHODOX = Preset(
         "quick_sort_ext": ["Ctrl-F4"],
         "quick_sort_date": ["Ctrl-F5"],
         "quick_sort_size": ["Ctrl-F6"],
+        # The viewers, as Lister: F7 searches, F3 / Shift-F3 find again —
+        # scoped, since F7 and F3 are the file list's new folder and view
+        # (#737). The isearch bar takes F3 / Shift-F3 from these too.
+        "text_viewer.isearch": ["F7"],
+        "text_viewer.search_next": ["F3"],
+        "text_viewer.search_prev": ["Shift-F3"],
+        "file_diff.isearch": ["F7"],
+        "file_diff.search_next": ["F3"],
+        "file_diff.search_prev": ["Shift-F3"],
     },
 )
 
@@ -237,6 +246,14 @@ def _native_bindings() -> dict:
         # Ctrl-Q always asks. Cmd-Q / Alt-F4 (quit_app) come with the AFX
         # table's desktop keys, which every preset starts from.
         "quit": ["Ctrl-Q"],
+        # The viewers find as Windows' own viewers do (#737): scoped, since
+        # Ctrl-F is the file list's find_files.
+        "text_viewer.isearch": ["Ctrl-F"],
+        "text_viewer.search_next": ["F3"],
+        "text_viewer.search_prev": ["Shift-F3"],
+        "file_diff.isearch": ["Ctrl-F"],
+        "file_diff.search_next": ["F3"],
+        "file_diff.search_prev": ["Shift-F3"],
     }
     from xefm.backend_detector import is_desktop_mode
     if not is_desktop_mode():
@@ -267,6 +284,13 @@ def _native_bindings() -> dict:
             "find_files": ["Command-F", "Ctrl-F"],
             "toggle_hidden": ["Command-Shift-.", "."],
             "command_palette": ["Command-Shift-P", "Ctrl-K"],
+            # The standard macOS find keys in the viewers.
+            "text_viewer.isearch": ["Command-F", "Ctrl-F"],
+            "text_viewer.search_next": ["Command-G", "F3"],
+            "text_viewer.search_prev": ["Command-Shift-G", "Shift-F3"],
+            "file_diff.isearch": ["Command-F", "Ctrl-F"],
+            "file_diff.search_next": ["Command-G", "F3"],
+            "file_diff.search_prev": ["Command-Shift-G", "Shift-F3"],
         })
     elif sys.platform == "win32":
         keys.update({

@@ -201,6 +201,8 @@ Vim や Vim 風のファイルマネージャーとの違いは次のとおり�
 
 ここに挙げたキーは、欄に断りがない限りどのプリセットでも同じです。どのビューアーも `Esc` で閉じ、`quit`、`help`、`isearch`、`edit_file` はファイル一覧の表と同じキーで使えます。Vim style では、テキストビューアーを `q` でも閉じられます。
 
+Orthodox と OS native では、ファイル一覧で文字を入力すると検索になるので、`isearch` にキーがありません。代わりにテキストビューアーとファイル差分ビューアーでは、手本にしているビューアーの検索キーを使います。Orthodox は Total Commander の Lister、OS native は各プラットフォーム標準の検索キーです。「次を検索」と「前を検索」は検索バーを開いている間も使え、バーを閉じたあとに押すと、直前の検索でバーを開き直して次または前の一致へ移動します。
+
 **テキストビューアー**
 
 | アクション名 | 動作 | キー |
@@ -216,6 +218,9 @@ Vim や Vim 風のファイルマネージャーとの違いは次のとおり�
 | `toggle_wrap` | 行の折り返しを切り替え | `W` |
 | `toggle_view_mode` | 整形表示と生テキスト表示を切り替え | `M` |
 | `change_encoding` | テキストのエンコーディングを選ぶ | `Shift-E` |
+| `isearch` | インクリメンタルサーチ | AFX style：`F`<br>Orthodox：`F7`<br>OS native：`Ctrl-F`（macOS アプリ：`Cmd-F`、`Ctrl-F`）<br>Vim style：`/` |
+| `text_viewer.search_next` | 直前の検索の次の一致へ | AFX style、Vim style：—<br>Orthodox：`F3`<br>OS native：`F3`（macOS アプリ：`Cmd-G`、`F3`） |
+| `text_viewer.search_prev` | 直前の検索の前の一致へ | AFX style、Vim style：—<br>Orthodox：`Shift-F3`<br>OS native：`Shift-F3`（macOS アプリ：`Cmd-Shift-G`、`Shift-F3`） |
 
 **画像ビューアー**
 
@@ -247,6 +252,9 @@ Vim や Vim 風のファイルマネージャーとの違いは次のとおり�
 | `file_diff.scroll_bottom` | 末尾へ | `End` |
 | `file_diff.scroll_left` | 左へスクロール | `←` |
 | `file_diff.scroll_right` | 右へスクロール | `→` |
+| `isearch` | インクリメンタルサーチ | AFX style：`F`<br>Orthodox：`F7`<br>OS native：`Ctrl-F`（macOS アプリ：`Cmd-F`、`Ctrl-F`）<br>Vim style：`/` |
+| `file_diff.search_next` | 直前の検索の次の一致へ | AFX style、Vim style：—<br>Orthodox：`F3`<br>OS native：`F3`（macOS アプリ：`Cmd-G`、`F3`） |
+| `file_diff.search_prev` | 直前の検索の前の一致へ | AFX style、Vim style：—<br>Orthodox：`Shift-F3`<br>OS native：`Shift-F3`（macOS アプリ：`Cmd-Shift-G`、`Shift-F3`） |
 
 **ディレクトリ差分ビューアー**
 

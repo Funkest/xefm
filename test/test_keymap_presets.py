@@ -97,12 +97,13 @@ class Apply(unittest.TestCase):
     def test_actions_this_xefm_lacks_are_skipped(self):
         """The table may name actions of features not merged yet; where the
         running XeFM lacks one, its keys stay free."""
-        from xefm.actions import FILER, registry
         config = _config_with()
         keymap_presets.apply(config, keymap_presets.ORTHODOX)
         for action in keymap_presets._ORTHODOX.bindings:
-            if registry.resolve(FILER, action) is None:
+            # Known in any context: the viewers' scoped search keys are (#737).
+            if not keymap_presets._known(action):
                 self.assertNotIn(action, config.KEY_BINDINGS, action)
+        self.assertIn("text_viewer.search_next", config.KEY_BINDINGS)
 
     def test_a_viewer_keeps_its_letters(self):
         config = _config_with()

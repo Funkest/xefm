@@ -1113,6 +1113,13 @@ _TEXT_VIEWER_ACTIONS = [
        default_keys=("LEFT",)),
     _a("text_viewer.scroll_right", TEXT_VIEWER, "Scroll right (unwrapped only)",
        default_keys=("RIGHT",)),
+    # Qualified, unlike the file list's 'search_next': the Vim style's 'n' is
+    # that one, and the diff viewer's 'n' jumps blocks. Unbound by default;
+    # the Orthodox and OS native presets give them their viewers' keys (#737).
+    _a("text_viewer.search_next", TEXT_VIEWER,
+       "Find the next match of the last search", default_keys=()),
+    _a("text_viewer.search_prev", TEXT_VIEWER,
+       "Find the previous match of the last search", default_keys=()),
 ]
 
 _IMAGE_VIEWER_ACTIONS = [
@@ -1167,6 +1174,10 @@ _FILE_DIFF_ACTIONS = [
        default_keys=("LEFT",)),
     _a("file_diff.scroll_right", FILE_DIFF, "Scroll right",
        default_keys=("RIGHT",)),
+    _a("file_diff.search_next", FILE_DIFF,
+       "Find the next match of the last search", default_keys=()),
+    _a("file_diff.search_prev", FILE_DIFF,
+       "Find the previous match of the last search", default_keys=()),
 ]
 
 _DIR_DIFF_ACTIONS = [
