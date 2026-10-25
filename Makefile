@@ -1,6 +1,6 @@
 # XeFM Makefile
 
-.PHONY: api-snapshot api-compat check-docs fix-docs skill-zip skill-references release-skill qa help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config keymap-reset venv clean-venv check-venv install-puikit
+.PHONY: api-snapshot api-compat check-docs fix-docs skill-zip skill-references release-skill qa help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-toolchainwindows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config keymap-reset venv clean-venv check-venv install-puikit
 
 # Python interpreter selection
 # All Python is run through the project virtual environment (.venv). There is no
@@ -181,6 +181,7 @@ help:
 	@echo "  uninstall-macos-dmg - Remove that installed XeFM.app"
 	@echo ""
 	@echo "Windows App Bundle:"
+	@echo "  windows-toolchain      - Install the MSVC compiler + Windows SDK with winget"
 	@echo "  windows-app            - Build self-contained Windows application bundle"
 	@echo "  clean-windows          - Remove windows_app/build/ (bundle, zip, .msix) + tiles"
 	@echo "  clean-windows-cache    - Remove the downloaded CPython embeddable zips"
@@ -988,6 +989,12 @@ WINDOWS_APP_SOURCES := $(wildcard windows_app/src/*.c) \
 $(WINDOWS_APP_BUNDLE): $(WINDOWS_APP_SOURCES)
 	@echo "Windows app bundle missing or stale; building it first..."
 	@powershell -ExecutionPolicy Bypass -File windows_app/build.ps1
+
+# The MSVC toolchain windows-app needs on a fresh machine, through winget: Build
+# Tools for Visual Studio with only the compiler and the Windows SDK. Idempotent;
+# see windows_app/install_toolchain.ps1.
+windows-toolchain:
+	@powershell -ExecutionPolicy Bypass -File windows_app/install_toolchain.ps1
 
 windows-app:
 	@echo "Building Windows application bundle..."
