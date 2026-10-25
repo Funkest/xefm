@@ -5,12 +5,13 @@ import hashlib
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
 import unittest
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest import mock
 
 from xefm import deps_cli
@@ -254,8 +255,17 @@ class SyncTest(_Fixture):
         # pip ran with the host packages as constraints, from ~/.xefm.
         argv = fake.argv
         self.assertEqual(argv[:4], ["py", "-m", "pip", "install"])
-        self.assertEqual(fake.requirements, f"-r {self.layout.requirements}\n")
+        self.assertEqual(fake.requirements,
+                         f"-r {shlex.quote(self.layout.requirements.as_posix())}\n")
         self.assertEqual(fake.kwargs["cwd"], str(self.home))
+
+    def test_the_include_line_survives_pip_s_shlex_split(self):
+        # pip reads "-r C:\\Users\\..." as escapes and loses the path (#749).
+        for path in (PureWindowsPath(r"C:\Users\John Doe\.xefm\requirements.txt"),
+                     PurePosixPath("/home/o'neil/.xefm/requirements.txt")):
+            with self.subTest(path=str(path)):
+                self.assertEqual(shlex.split(pp._include_line(path)),
+                                 ["-r", path.as_posix()])
 
     def test_constraints_pin_the_host_versions(self):
         self.write_requirements("pillow-heif\n")

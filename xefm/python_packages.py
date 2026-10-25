@@ -40,6 +40,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import shutil
 import site
 import subprocess
@@ -525,6 +526,14 @@ def sync(layout: Layout | None = None, python: str | None = None,
     return SyncResult(installed, pruned, pending_restart=not swapped)
 
 
+def _include_line(path) -> str:
+    """A requirements-file line that includes ``path``. pip splits the line
+    with shlex: a Windows backslash would be read as an escape and dropped
+    (#749), and a space would split the path. Forward slashes and quoting
+    survive both."""
+    return f"-r {shlex.quote(path.as_posix())}\n"
+
+
 def _pip_install(layout, python, host, extensions, log, run, popen, opener) -> None:
     pip = pip_command(python, layout, run=run, opener=opener)
     with tempfile.TemporaryDirectory(prefix="xefm-deps-") as tmp:
@@ -537,7 +546,7 @@ def _pip_install(layout, python, host, extensions, log, run, popen, opener) -> N
         wanted = Path(tmp) / "requirements.txt"
         parts = []
         if declares_anything(read_requirements(layout)):
-            parts.append(f"-r {layout.requirements}\n")
+            parts.append(_include_line(layout.requirements))
         for ext_id, reqs in sorted(extensions.items()):
             parts.append(f"# extension {ext_id}\n" + "".join(f"{r}\n" for r in reqs))
         wanted.write_text("".join(parts), encoding="utf-8")
