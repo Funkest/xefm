@@ -313,6 +313,8 @@ def read_manifest(root: Path) -> Manifest:
             data = tomllib.load(f)
     except FileNotFoundError:
         raise ManifestError(Problem("error", "(file)", f"no {MANIFEST} in {root}")) from None
+    except NotADirectoryError:
+        raise ManifestError(Problem("error", "(file)", f"{root} is not a directory")) from None
     except tomllib.TOMLDecodeError as exc:
         raise ManifestError(Problem("error", "(file)", f"not valid TOML: {exc}")) from None
     return Manifest(root, data)
@@ -1110,6 +1112,35 @@ def check_package(root: Path, *, others: Iterable[Manifest] = (),
     return manifest, check_manifest(manifest, others=others, machine=machine)
 
 
+def check_for_install(root: Path, layout: Layout | None = None, *,
+                      machine: bool = True) -> tuple[Optional[Manifest], list[Problem]]:
+    """:func:`check_package` as :func:`install` judges it, so a package that
+    passes installs (#743): an installed package of the same id is the one it
+    would replace, not a clash — but a *local* one is, since install never
+    overwrites it."""
+    layout = layout or Layout()
+    try:
+        manifest = read_manifest(root)
+    except ManifestError as exc:
+        return None, [exc.problem]
+    problems = check_manifest(manifest, others=_installed_others(manifest, layout),
+                              machine=machine)
+    target = layout.packages / manifest.id
+    if manifest.id and target.exists() and target.resolve() != Path(root).resolve() \
+            and manifest.id not in read_installed(layout):
+        problems.append(Problem("error", "extension.id", _local_clash(target)))
+    return manifest, problems
+
+
+def _installed_others(manifest: Manifest, layout: Layout) -> list[Manifest]:
+    """The packages beside the one being installed: every other id."""
+    return [m for m in discover(layout) if m.id != manifest.id]
+
+
+def _local_clash(target: Path) -> str:
+    return f"{target} already exists and was not installed by XeFM — move it away first"
+
+
 def errors(problems: Iterable[Problem]) -> list[Problem]:
     return [p for p in problems if p.severity == "error"]
 
@@ -1487,15 +1518,13 @@ def install(source: str, layout: Layout | None = None, *,
     with tempfile.TemporaryDirectory(prefix="xefm-ext-") as tmp:
         root = Path(fetched) if fetched is not None else fetch(source, Path(tmp), opener=opener)
         manifest = read_manifest(root)
-        others = [m for m in discover(layout) if m.id != manifest.id]
-        problems = check_manifest(manifest, others=others)
+        problems = check_manifest(manifest, others=_installed_others(manifest, layout))
         if errors(problems):
             raise InstallError(f"{manifest.id or source} did not pass the check",
                                problems)
         target = layout.packages / manifest.id
         if target.exists() and manifest.id not in installed:
-            raise InstallError(f"{target} already exists and was not installed "
-                               "by XeFM — move it away first")
+            raise InstallError(_local_clash(target))
         layout.packages.mkdir(parents=True, exist_ok=True)
         staging = layout.packages / f".{manifest.id}.installing"
         shutil.rmtree(staging, ignore_errors=True)

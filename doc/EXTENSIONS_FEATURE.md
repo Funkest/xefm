@@ -317,6 +317,18 @@ replacement.)
 
 ```bash
 xefm ext check ./hello-xefm
+xefm ext check ~/Downloads/hello-xefm.zip
+xefm ext check github:crftwr/xefm-extensions/compute-hash
+```
+
+The check takes anything `xefm ext install` takes, so a package can be checked
+straight from a download or a link, before it is installed. It first lists
+what the package adds — the same list an install shows before it asks:
+
+```
+Hello 0.1.0 (hello-xefm) adds:
+  action: hello.greet  (runs hello_xefm.actions:greet)
+  installs Python package from PyPI: PyYAML>=6
 ```
 
 The check validates the manifest without running any of the package's code.
