@@ -387,6 +387,16 @@ class SkillMatchesTheChecker(_Tmp):
         for word in ("config.py", "extension", "xefm ext check"):
             self.assertIn(word, description)
 
+    def test_no_markdown_file_holds_an_html_tag_a_skill_host_rejects(self):
+        # Amazon Quick refuses to publish a skill whose SKILL.md holds
+        # "HTML/script content" (#740); `--keys <script>` was enough.
+        tag = re.compile(r"<\s*/?\s*(script|style|iframe|object|embed|form|img|a)\b",
+                         re.IGNORECASE)
+        for path in sorted(ext.SKILL_DIR.rglob("*.md")):
+            for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                with self.subTest(file=path.name, line=n):
+                    self.assertIsNone(tag.search(line), line)
+
     def test_the_router_names_references_that_exist(self):
         cited = set(re.findall(r"`(references/[\w.-]+)`", ROUTER))
         self.assertEqual(cited, {"references/config.md", "references/extensions.md",

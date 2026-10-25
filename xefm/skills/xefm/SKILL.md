@@ -40,7 +40,7 @@ the XeFM the user runs (`XeFM X.Y.Z`); if it is not, skip this check.
 - **Never launch XeFM.** `xefm`, `python -m xefm` and the app itself open an
   interactive file manager that blocks until a person quits it. `xefm ext …`
   and `xefm skill` are safe: they never open a window. The one exception is
-  `xefm try --keys <script>`, which runs XeFM in a temporary home and a
+  `xefm try --keys steps.json`, which runs XeFM in a temporary home and a
   pseudo-terminal and exits when the script ends (`references/try.md`);
   without `--keys` it blocks like `xefm`.
 - **XeFM applies a change when the user asks it to.** Finish with: run
