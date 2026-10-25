@@ -20,8 +20,11 @@ The loop is always the same:
 4. `python -m pytest tests` in the package directory (see *Testing*).
 5. When the action opens a prompt, a dialog, a menu or a task:
    `xefm try --ext <dir> --keys steps.json` to see it run (see *See it run*).
-6. `xefm ext install <dir>` (add `--yes` only when the user has said to install).
-7. Tell the user to run **Tools ▸ Reload Configuration** in XeFM, or restart
+6. Before installing, show the user the `adds:` list that `xefm ext check`
+   prints first — what the package contributes and the Python packages it
+   installs from PyPI. Extensions run with the user's permissions.
+7. `xefm ext install <dir>` (add `--yes` only when the user has said to install).
+8. Tell the user to run **Tools ▸ Reload Configuration** in XeFM, or restart
    it.
 
 Never launch XeFM yourself with `xefm` (or `python -m xefm`): it opens an
@@ -463,6 +466,7 @@ catch you out.
 xefm ext install ./hello-xefm          # shows what it adds and asks
 xefm ext install github:me/hello-xefm  # a GitHub repo (manifest at the root)
 xefm ext install github:me/exts/hello  # one package in a subdirectory
+xefm ext check github:me/exts/hello    # takes the same sources: check before installing
 xefm ext list
 xefm ext disable hello-xefm | enable hello-xefm
 xefm ext uninstall hello-xefm          # asks before deleting its data

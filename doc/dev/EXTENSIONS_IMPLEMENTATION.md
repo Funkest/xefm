@@ -276,6 +276,16 @@ A directory with the same id that `extensions.toml` does not list is a local
 package and is never overwritten. A reinstall keeps the entry's `enabled`
 flag.
 
+`xefm ext check` runs step 1 the same way (into a temporary directory) and
+then `check_for_install`, which judges the package as step 2 does (#743).
+"The others" are the packages of *other* ids, since an installed package of
+the same id is the one an install replaces. A local package of the same id is
+reported as an error, because install refuses it. A package that checks clean
+therefore installs. `xefm ext install` without `--yes` fetches once: it shows
+the summary of that copy and installs it through `install(fetched=…)`, as the
+app's Install Extension does. Both commands print the summary through one
+helper, `_print_summary`.
+
 `uninstall` deletes `extension-data/<id>/` only when asked; the CLI asks
 interactively. `sync` reinstalls every listed package whose directory is
 missing. When the recorded source is a local file or folder that is gone and

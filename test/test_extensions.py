@@ -116,6 +116,13 @@ class Check(_Home):
         (problem,) = self.problems(self.src)
         self.assertIn("no xefm-extension.toml", problem.message)
 
+    def test_a_file_is_not_a_package(self):
+        """A path to a file is a problem to report, not a traceback (#743)."""
+        archive = self.src / "pkg.zip"
+        archive.write_bytes(b"PK")
+        (problem,) = self.problems(archive)
+        self.assertIn("is not a directory", problem.message)
+
     def test_bad_toml_names_the_problem(self):
         root, _ = self.package(manifest="[extension\n")
         (problem,) = self.problems(root)
@@ -883,6 +890,89 @@ class Cli(_Home):
         code, out = self.run_cli("check", str(bad))
         self.assertEqual(code, 1)
         self.assertIn("error: xefm-extension.toml: contributes.actions", out)
+
+    def test_check_shows_what_the_package_adds(self):
+        """The summary install shows before asking, so a package can be
+        reviewed before it is installed (#743) — also when the check fails."""
+        good, mod = self.package("adds-ext")
+        code, out = self.run_cli("check", str(good))
+        self.assertEqual(code, 0, out)
+        self.assertIn("adds-ext 0.1.0 (adds-ext) adds:", out)
+        self.assertIn(f"  action: adds-ext.greet  (runs {mod}.actions:greet)", out)
+        bad, _ = self.package(code={"actions.py": ""})
+        code, out = self.run_cli("check", str(bad))
+        self.assertEqual(code, 1)
+        self.assertIn(f"({bad.name}) adds:", out)
+
+    def test_check_takes_a_zip(self):
+        root, _ = self.package("zipped-ext")
+        archive = self.src / "zipped.zip"
+        with zipfile.ZipFile(archive, "w") as z:
+            for path in root.rglob("*"):
+                if path.is_file():
+                    z.write(path, f"zipped-ext-v1/{path.relative_to(root)}")
+        code, out = self.run_cli("check", str(archive))
+        self.assertEqual(code, 0, out)
+        self.assertIn("ok: zipped-ext 0.1.0", out)
+
+    def test_check_takes_a_github_source(self):
+        root, _ = self.package("remote-ext")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            for path in root.rglob("*"):
+                if path.is_file():
+                    z.write(path, f"exts-main/pkgs/remote-ext/{path.relative_to(root)}")
+        with patch.object(ext, "_open_url",
+                          lambda url: _no_release_asset(url, buf.getvalue())):
+            code, out = self.run_cli("check", "github:someone/exts/pkgs/remote-ext@main")
+        self.assertEqual(code, 0, out)
+        self.assertIn("ok: remote-ext 0.1.0", out)
+
+    def test_check_names_a_source_it_cannot_fetch(self):
+        code, out = self.run_cli("check", str(self.src / "nowhere"))
+        self.assertEqual(code, 1)
+        self.assertIn("is not a directory, a zip", out)
+        not_zip = self.src / "notes.txt"
+        not_zip.write_text("hello", encoding="utf-8")
+        code, out = self.run_cli("check", str(not_zip))
+        self.assertEqual(code, 1)
+        self.assertIn("is not a zip file", out)
+
+    def test_check_judges_an_upgrade_as_install_does(self):
+        """A newer copy of an installed package is an upgrade, not a clash of
+        ids; a copy of a *local* package's id is refused, as install refuses it."""
+        root, _ = self.package("up-ext")
+        ext.install(str(root), self.layout)
+        code, out = self.run_cli("check", str(root))
+        self.assertEqual(code, 0, out)
+        self.installed_package("mine-ext")
+        other = self.src / "elsewhere"
+        other.mkdir()
+        copy, _ = self.package("mine-ext", where=other)
+        code, out = self.run_cli("check", str(copy))
+        self.assertEqual(code, 1, out)
+        self.assertIn("was not installed by XeFM", out)
+
+    def test_install_fetches_once(self):
+        """The copy whose summary was shown is the one installed."""
+        root, _ = self.package("once-ext")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            for path in root.rglob("*"):
+                if path.is_file():
+                    z.write(path, f"once-main/{path.relative_to(root)}")
+        urls = []
+
+        def opener(url):
+            urls.append(url)
+            return _no_release_asset(url, buf.getvalue())
+
+        with patch.object(ext, "_open_url", opener), \
+                patch("builtins.input", return_value="y"):
+            code, out = self.run_cli("install", "github:someone/once@main")
+        self.assertEqual(code, 0, out)
+        self.assertIn("once-ext 0.1.0 (once-ext) adds:", out)
+        self.assertEqual(urls.count("https://codeload.github.com/someone/once/zip/main"), 1)
 
     def test_install_list_disable_uninstall(self):
         root, _ = self.package("cli-ext")

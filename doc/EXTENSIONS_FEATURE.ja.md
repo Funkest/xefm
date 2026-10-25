@@ -225,6 +225,16 @@ class Settings:
 
 ```bash
 xefm ext check ./hello-xefm
+xefm ext check ~/Downloads/hello-xefm.zip
+xefm ext check github:crftwr/xefm-extensions/compute-hash
+```
+
+検査は `xefm ext install` が受け付けるものなら何でも受け付けるので、ダウンロードしたファイルやリンクから直接、インストールする前にパッケージを検査できます。最初に、パッケージが追加するものを一覧表示します。インストールが確認を求める前に表示するものと同じ一覧です。
+
+```
+Hello 0.1.0 (hello-xefm) adds:
+  action: hello.greet  (runs hello_xefm.actions:greet)
+  installs Python package from PyPI: PyYAML>=6
 ```
 
 検査は、パッケージのコードを一切実行せずにマニフェストを検証します。報告される問題には、それぞれ関係するマニフェストのフィールドが示されます。

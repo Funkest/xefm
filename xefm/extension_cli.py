@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import tempfile
 from pathlib import Path
 
 from xefm import extensions as ext
@@ -22,8 +23,8 @@ def _parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     check = sub.add_parser("check", help="validate a package without running it")
-    check.add_argument("path", help="the package directory (the one holding "
-                       f"{ext.MANIFEST})")
+    check.add_argument("source", help="what install takes: a directory, a .zip, "
+                       "an https:// zip URL, or github:owner/repo[/path][@ref]")
     check.add_argument("--stable-only", action="store_true",
                        help="treat every use of a Preview API as an error")
 
@@ -171,48 +172,65 @@ def _print_problems(problems) -> None:
         print(problem)
 
 
+def _print_summary(manifest: ext.Manifest) -> None:
+    """What a package adds — the same block for ``check`` and ``install``."""
+    print(f"{manifest.name} {manifest.version} ({manifest.id}) adds:")
+    for line in ext.summarize(manifest) or ["(nothing)"]:
+        print(f"  {line}")
+
+
+def _check(args: argparse.Namespace, layout: ext.Layout, root: Path) -> int:
+    manifest, problems = ext.check_for_install(root, layout)
+    if manifest is not None:
+        _print_summary(manifest)
+    previews = ext.preview_uses(manifest) if manifest is not None else []
+    if args.stable_only:
+        previews = ext.stable_only(previews)
+    _print_problems(problems + previews)
+    apis = {p.message.split(" — ")[0] if " — " in p.message else p.where
+            for p in previews}
+    if apis:
+        print(f"{len(apis)} Preview API(s) in use; everything else this "
+              "package uses is stable.")
+    bad = ext.errors(problems + previews)
+    if not bad:
+        name = f"{manifest.id} {manifest.version}" if manifest else args.source
+        print(f"ok: {name}" + (f" ({len(problems)} warning(s))" if problems else ""))
+        if manifest is not None and manifest.data.get("settings") is not None:
+            print(f"settings: class {ext.config_class_name(manifest)} in config.py")
+    return 1 if bad else 0
+
+
 def main(argv: list[str] | None = None, layout: ext.Layout | None = None) -> int:
     args = _parser().parse_args(argv)
     layout = layout or ext.Layout()
 
     if args.command == "check":
-        root = Path(args.path)
-        others = [m for m in ext.discover(layout) if m.root.resolve() != root.resolve()]
-        manifest, problems = ext.check_package(root, others=others)
-        previews = ext.preview_uses(manifest) if manifest is not None else []
-        if args.stable_only:
-            previews = ext.stable_only(previews)
-        _print_problems(problems + previews)
-        apis = {p.message.split(" — ")[0] if " — " in p.message else p.where
-                for p in previews}
-        if apis:
-            print(f"{len(apis)} Preview API(s) in use; everything else this "
-                  "package uses is stable.")
-        bad = ext.errors(problems + previews)
-        if not bad:
-            name = f"{manifest.id} {manifest.version}" if manifest else str(root)
-            print(f"ok: {name}" + (f" ({len(problems)} warning(s))" if problems else ""))
-            if manifest is not None and manifest.data.get("settings") is not None:
-                print(f"settings: class {ext.config_class_name(manifest)} in config.py")
-        return 1 if bad else 0
+        # The same sources as install, fetched the same way, so checking a
+        # download or a link needs no unzip or clone first (#743).
+        with tempfile.TemporaryDirectory(prefix="xefm-ext-") as tmp:
+            try:
+                root = ext.fetch(args.source, Path(tmp))
+            except ext.InstallError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+            return _check(args, layout, root)
 
     if args.command == "install":
         try:
-            if not args.yes:
-                # Show what it adds before anything is copied: extensions run
-                # in-process, with no sandbox.
-                import tempfile
-                with tempfile.TemporaryDirectory(prefix="xefm-ext-") as tmp:
-                    root = ext.fetch(args.source, Path(tmp))
-                    manifest = ext.read_manifest(root)
-                    print(f"{manifest.name} {manifest.version} ({manifest.id}) adds:")
-                    for line in ext.summarize(manifest) or ["(nothing)"]:
-                        print(f"  {line}")
+            with tempfile.TemporaryDirectory(prefix="xefm-ext-") as tmp:
+                fetched = None
+                if not args.yes:
+                    # Show what it adds before anything is copied: extensions
+                    # run in-process, with no sandbox. The copy shown is the
+                    # one installed — fetched once.
+                    fetched = ext.fetch(args.source, Path(tmp))
+                    _print_summary(ext.read_manifest(fetched))
                     print("Extensions run inside XeFM with your permissions.")
                     if not _ask("Install it?"):
                         print("Not installed.")
                         return 1
-            manifest = ext.install(args.source, layout)
+                manifest = ext.install(args.source, layout, fetched=fetched)
         except ext.InstallError as exc:
             _print_problems(exc.problems)
             print(f"error: {exc}", file=sys.stderr)
