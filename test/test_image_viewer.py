@@ -15,6 +15,7 @@ Run with: python -m pytest test/test_image_viewer.py -v
 import os
 import struct
 import sys
+import time
 import zlib
 
 import pytest
@@ -110,10 +111,17 @@ def _settle(viewer):
     """Let a load the viewer sent to its worker thread finish, and run the
     animation tick that adopts it — what the backend's own loop does between
     frames. A no-op when nothing is out."""
-    if viewer._loader is not None:
-        viewer._loader.join(5)
-    if viewer._panel is not None:
-        viewer._panel.backend.run_animation_ticks()
+    # Every worker, not just the last: one overtaken by navigation is still
+    # out until it reports, and the tick waits for it.
+    deadline = time.monotonic() + 5
+    while True:
+        if viewer._loader is not None:
+            viewer._loader.join(max(0.0, deadline - time.monotonic()))
+        if viewer._panel is not None:
+            viewer._panel.backend.run_animation_ticks()
+        if viewer._inflight <= 0 or time.monotonic() > deadline:
+            return
+        time.sleep(0.01)
 
 
 def _render(backend, viewer):

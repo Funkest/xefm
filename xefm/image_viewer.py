@@ -434,7 +434,13 @@ class ImageViewer(Widget):
             return
 
         def worker() -> None:
-            self._load_results.append((gen, _resolve_slow(*job)))
+            # Always answer: the tick runs until every worker has reported.
+            try:
+                res = _resolve_slow(*job)
+            except Exception as e:
+                logger.error(f"Image load failed for {path}: {e}")
+                res = _Resolution(suffix)
+            self._load_results.append((gen, res))
 
         self._inflight += 1
         self._loader = threading.Thread(target=worker, name="xefm-image-load",
