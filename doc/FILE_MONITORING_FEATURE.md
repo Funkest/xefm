@@ -49,14 +49,15 @@ FILE_MONITORING_FALLBACK_POLL_INTERVAL_S = 5  # Polling interval for fallback mo
 - `FILE_MONITORING_MAX_RELOADS_PER_SECOND` (default: `5`) - Maximum number of automatic updates per second to prevent UI thrashing
 - `FILE_MONITORING_FALLBACK_POLL_INTERVAL_S` (default: `5`) - Polling interval in seconds when native monitoring is unavailable
 
-## Runtime Toggle
+## Turning Monitoring Off
 
-You can enable or disable monitoring while XeFM is running without restarting the application. Use the monitoring toggle command (check your key bindings) to switch monitoring on or off instantly.
+There is no command to switch monitoring on or off while XeFM is running. Set
+`FILE_MONITORING_ENABLED = False` in your configuration and restart XeFM; the
+setting is read once at startup, so **Reload Configuration** does not apply it.
 
-When you disable monitoring at runtime:
-- Automatic updates stop immediately
-- File lists only update after your actions
-- Monitoring can be re-enabled at any time
+With monitoring off:
+- File lists no longer update on their own
+- They update only after your own actions, or when you re-enter a directory
 
 ## Monitoring Modes
 
@@ -126,8 +127,7 @@ During automatic updates, XeFM preserves your context:
 
 **Check if monitoring is enabled:**
 1. Verify `FILE_MONITORING_ENABLED` is `True` in your configuration
-2. Try toggling monitoring off and on at runtime
-3. Restart XeFM to reload configuration
+2. Restart XeFM after changing it — the setting is read only at startup
 
 **Check for fallback mode indicator:**
 - If you see the fallback mode indicator, monitoring is working but using polling

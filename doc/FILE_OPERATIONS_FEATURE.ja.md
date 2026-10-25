@@ -110,7 +110,7 @@ CONFIRM_DUPLICATE = False   # default: True
 
 ## 削除
 
-**File → Move to Trash…**（`delete_files`、`Delete` キーでも実行できます）は、選択項目、またはカーソル位置の項目を**ゴミ箱**に移動します。ゴミ箱は Windows ではごみ箱（Recycle Bin）と呼ばれます。Finder、エクスプローラー、またはデスクトップのファイルマネージャーから元に戻せます。**File → Delete Permanently…**（`delete_permanently`、`Shift-Delete` キーでも実行できます）は、ゴミ箱を使わずに完全に削除します。どちらも先に確認します。[ゴミ箱への削除](TRASH_FEATURE.ja.md)を参照してください。
+**File → Move to Trash…**（`delete_files`、`Delete` キーでも実行できます）は、選択項目、またはカーソル位置の項目を**ゴミ箱**に移動します。ゴミ箱は Windows ではごみ箱（Recycle Bin）と呼ばれます。Finder、エクスプローラー、またはデスクトップのファイルマネージャーから元に戻せます。**File → Delete Permanently…**（`delete_permanently`、`Shift-Delete` キーでも実行できます）は、ゴミ箱を使わずに完全に削除します。どちらも先に確認します。AFX style では、これらのキーはマークした項目があるときだけ働きます。このプリセットのコピー、移動、アーカイブ作成のキーも同じです。何もマークしていなければ、削除のキーでは何も起きません。メニューのコマンドなら、カーソル位置の項目に対して動作します。[ゴミ箱への削除](TRASH_FEATURE.ja.md)を参照してください。
 
 ## 競合の解決
 

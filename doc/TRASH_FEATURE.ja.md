@@ -9,7 +9,7 @@
 | `delete_files` | **File → Move to Trash…**（Windows では **Move to Recycle Bin…**） | 選択項目（またはカーソル位置の項目）をゴミ箱へ移動 |
 | `delete_permanently` | **File → Delete Permanently…** | ゴミ箱を使わずに完全に削除 |
 
-`Delete` と `Shift-Delete` はどのプリセットでもこの 2 つを実行します。それ以外のキーはキーマッププリセットによって異なります。[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照してください。
+`Delete` と `Shift-Delete` はどのプリセットでもこの 2 つを実行します。それ以外のキーはキーマッププリセットによって異なります。[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照してください。何もマークしていないとき、メニューのコマンドと、AFX style 以外のプリセットのキーはカーソル位置の項目に対して動作します。AFX style では、`Delete` と `Shift-Delete` を含めてキーはマークした項目があるときだけ働きます。何もマークしていなければ何も起きないので、先に項目をマークするか、メニューを使ってください。
 
 どちらも先に確認を求めます。ゴミ箱への移動は元に戻せるので、その確認ダイアログの既定のボタンは *Move to Trash* です。完全な削除の既定は *Cancel* です。**File** メニューと右クリックメニューの両方に、どちらのコマンドもあります。
 

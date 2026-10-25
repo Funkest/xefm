@@ -13,15 +13,17 @@ rebind a key in `~/.xefm/config.py`, the menu updates to match.
 ## Platform Support
 
 - **macOS desktop mode**: a native `NSMenu` menu bar.
+- **Windows desktop mode**: the window's native Win32 menu bar.
 - **Terminal mode**: an in-window menu strip along the top row.
 
-The menu structure and shortcuts are the same in both.
+The menu structure and shortcuts are the same in all of them.
 
 ## Accessing the Menu Bar
 
 ### Launching Desktop Mode
 
-Open the installed **XeFM** app from Launchpad or Spotlight — see the
+Open the installed **XeFM** app from Launchpad or Spotlight on macOS, or the
+Start menu on Windows — see the
 [Desktop Mode Guide](DESKTOP_MODE_GUIDE.md#installing-the-desktop-app-package).
 (During XeFM development, `python3 -m xefm --backend gui` opens the same window
 from a checkout.)
@@ -255,9 +257,11 @@ The action isn't available in the current context (e.g. Copy with no selection,
 or Parent Directory at the root). Adjust the selection or location and it enables.
 
 ### A shortcut doesn't work
-Letter keys are case-sensitive, and the shortcut shown is whatever the action is
-currently bound to in `~/.xefm/config.py`. Check your key bindings if you've
-customized them.
+The shortcut shown is whatever the action is currently bound to in
+`~/.xefm/config.py`. A bare letter is the unshifted key whichever case it is
+written in (`q` and `Q` are the same binding); a shortcut shown as `Shift-Q`
+needs Shift. Check your key bindings if you've customized them — see
+[Key Bindings](KEY_BINDINGS_FEATURE.md).
 
 ## Related Features
 

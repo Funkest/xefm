@@ -28,7 +28,7 @@ XeFM には、ソースコード、設定ファイル、ログ、その他あら
 
 `isearch`、`edit_file`、`quit` のキーと、Vim style の追加のスクロールキーは、キーマッププリセットによって異なります。[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照してください。
 
-表示／編集のキーは設定の `KEY_BINDINGS` で割り当て直せます。矢印、ページ、Home、End のスクロールキーはビューアー専用で、常に有効です。
+固定の `Esc` とコピー／すべて選択のキーを除き、ここにあるキーはすべてアクションで、設定の `KEY_BINDINGS` で割り当て直せます。スクロールキーもアクションです（`text_viewer.scroll_up`／`scroll_down`、`text_viewer.page_up`／`page_down`、`text_viewer.scroll_top`／`scroll_bottom`、`text_viewer.scroll_left`／`scroll_right`）。`KEY_BINDINGS` に書かなければ、矢印、ページ、Home、End のキーのままです。
 
 ## タブとシンタックスハイライト
 
