@@ -136,11 +136,11 @@ file permissions to your terminal rather than to XeFM. See
 
 Desktop mode provides several advantages over terminal mode:
 
-- **Native Window**: Resizable macOS window with standard window controls
-- **High-Quality Rendering**: Smooth rendering using CoreGraphics
+- **Native Window**: Resizable Windows or macOS window with standard window controls
+- **High-Quality Rendering**: Smooth native rendering instead of a character grid
 - **Better Colors**: True RGB color support with accurate color reproduction
 - **Font Customization**: Choose your preferred monospace font and size
-- **Full-Screen Support**: Native macOS full-screen mode
+- **Full-Screen Support**: Native full-screen mode on macOS
 - **Window Persistence**: Window size and position are remembered
 
 ### Configuration
@@ -155,12 +155,15 @@ FONT_SIZE     = 12         # point size applied to both faces (8–72)
 ```
 
 The window's size and position are remembered **automatically** across runs (via
-the native macOS window autosave) — there are no window-geometry config keys.
+the native window's own autosave on Windows and macOS) — there are no
+window-geometry config keys.
 
 #### Available Fonts
 
-Common monospace fonts on macOS:
-- `Menlo` (default) - Apple's default monospace font
+With `MONO_FONT_NAME = None` (the default), XeFM uses its bundled monospace
+font, Noto Sans Mono. Any monospace font installed on the system can be named
+instead, for example `Consolas` on Windows, or one of these on macOS:
+- `Menlo` - Apple's default monospace font
 - `Monaco` - Classic Mac monospace font
 - `SF Mono` - San Francisco Mono (if installed)
 - `Courier New` - Traditional monospace font
@@ -747,8 +750,10 @@ Startup directories set with `--left`/`--right` override any saved pane history 
 - Try terminal mode first: `xefm`
 - Check console output for error messages
 
-#### Desktop mode on non-macOS systems
-Desktop mode only works on macOS. On other platforms, XeFM automatically falls back to terminal mode.
+#### Desktop mode on Linux
+Desktop mode works on Windows and macOS only. On Linux, `--backend gui` does not
+fall back to terminal mode — it fails to start; run XeFM without it to use
+terminal mode.
 
 #### Colors not working
 Check your terminal's color support and TERM environment variable

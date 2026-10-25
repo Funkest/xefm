@@ -312,7 +312,7 @@ For large files:
   slow transfer does not look stalled at 0%
 - A large object is streamed to or from disk rather than held in memory, so its
   size is not limited by available RAM
-- Uploads use multipart upload for files >5MB
+- Uploads larger than 8 MB (boto3's default threshold) use multipart upload
 - Copying between two S3 locations happens server-side — the bytes never travel
   down to your machine and back up
 
@@ -365,31 +365,17 @@ XeFM works with all S3 storage classes:
 
 ## Configuration Reference
 
-### Enable/Disable S3 Support
-
-In `~/.xefm/config.py`:
-
-```python
-# Enable S3 support
-S3_ENABLED = True
-```
-
-### Cache Settings
+S3 support needs no switch: it is always available, and an `s3://` path works
+as soon as AWS credentials are set up. The one S3 setting XeFM reads goes in
+`~/.xefm/config.py`:
 
 ```python
 # S3 cache TTL in seconds
 S3_CACHE_TTL = 60
 ```
 
-### Performance Tuning
-
-```python
-# Multipart upload threshold (bytes)
-S3_MULTIPART_THRESHOLD = 5 * 1024 * 1024  # 5MB
-
-# Multipart chunk size (bytes)
-S3_MULTIPART_CHUNKSIZE = 5 * 1024 * 1024  # 5MB
-```
+Transfers use boto3's own defaults (multipart above 8 MB, in 8 MB parts); XeFM
+has no setting to tune them.
 
 ## Examples
 

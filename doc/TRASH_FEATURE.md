@@ -14,6 +14,10 @@ deleted anywhere else.
 
 `Delete` and `Shift-Delete` run these two under every preset; their other keys
 depend on your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
+The menu commands, and the keys of every preset but AFX style, act on the item
+under the cursor when nothing is marked. AFX style binds its keys, `Delete` and
+`Shift-Delete` included, to marked items only: with nothing marked they do
+nothing, so mark the item first or use the menu.
 
 Both ask first. The Trash confirmation's default button is *Move to Trash*,
 because the move can be undone. The permanent delete's default is *Cancel*.

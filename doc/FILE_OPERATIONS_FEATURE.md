@@ -156,7 +156,10 @@ against duplicating a large tree by accident.
 selection, or the item under the cursor, to the **Trash**, called the Recycle
 Bin on Windows. You can restore it from Finder, Explorer or your desktop's file
 manager. **File → Delete Permanently…** (`delete_permanently`, also on
-`Shift-Delete`) deletes for good, without the Trash. Each asks first. See
+`Shift-Delete`) deletes for good, without the Trash. Each asks first. In AFX
+style their keys act only on marked items, as do that preset's keys for
+copying, moving and creating an archive; with nothing marked, the delete keys
+do nothing. The menu commands still take the item under the cursor. See
 [Deleting to the Trash](TRASH_FEATURE.md).
 
 ## Conflict resolution

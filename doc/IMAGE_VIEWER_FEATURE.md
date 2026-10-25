@@ -215,8 +215,9 @@ KEY_BINDINGS = {
 }
 ```
 
-`Home`/`End` are viewer-local and not rebindable, matching the text viewer's
-scroll keys.
+`Home`/`End` are the actions `image_viewer.first` and `image_viewer.last`,
+and can be rebound the same way. Leave them out of `KEY_BINDINGS` and they
+keep `Home`/`End`.
 
 If your config predates these actions (they are missing from your
 `KEY_BINDINGS`), the viewer keeps its historical keys: `n` / `p` step through

@@ -39,8 +39,12 @@ The viewer draws its own keys along the bottom, and `F1` inside it lists them al
 The keys of `isearch`, `edit_file` and `quit`, and Vim style's extra scroll
 keys, depend on your keymap preset — see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 
-The view/edit keys are rebindable in your config's `KEY_BINDINGS`; the arrow /
-page / home / end scroll keys are viewer-local and always active.
+Apart from `Esc` and the copy / select-all chords, which are fixed, every key
+here is an action you can rebind in your config's `KEY_BINDINGS`. The scroll keys are actions too —
+`text_viewer.scroll_up` / `scroll_down`, `text_viewer.page_up` / `page_down`,
+`text_viewer.scroll_top` / `scroll_bottom` and `text_viewer.scroll_left` /
+`scroll_right` — and keep the arrow / page / home / end keys unless you list
+them.
 
 ## Tabs & syntax highlighting
 
