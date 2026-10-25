@@ -163,7 +163,10 @@ gh release edit vX.Y.Z --notes-file <scratch>/release-note-x.y.z.md
   If it was button-merged anyway, add `-f already_merged=true`, which publishes
   the PR's bottles with `brew pr-upload`. If PuiKit raised
   its PyObjC floor in this release, bump the hand-kept `pyobjc-core` /
-  `pyobjc-framework-cocoa` resources under `on_macos` too. See
+  `pyobjc-framework-cocoa` resources under `on_macos` too, and `truststore`
+  there if `requirements.txt` raised its floor. A new requirement marked
+  for macOS only must be added to that block by hand: autobump resolves on
+  Ubuntu and never sees it. See
   `doc/dev/RELEASE_SYSTEM.md`, "The Homebrew tap".
 - `make release-status` must show all of it: `XeFM-<ver>-macos.dmg`,
   `XeFM-<ver>-win64.zip`, the sdist + wheel, and "PyPI: published".

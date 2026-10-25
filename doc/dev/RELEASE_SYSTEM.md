@@ -250,10 +250,13 @@ version with no bottle behind it (a 404). Restore it with
 `bump-formula-pr` regenerates the formula's Python resources. Its
 `pypi_packages exclude_packages:` stanza keeps Pillow (taken from Homebrew's
 formula), PuiKit's desktop-only PyObjC frameworks and the Windows-only packages
-out. PyObjC Core and Cocoa are kept by hand under `on_macos`, which
-regeneration leaves alone; the terminal app needs them for the Trash, Connect to
-Server and the OS image decoder. Bump those two by hand when PuiKit raises
-its PyObjC floor.
+out. PyObjC Core, Cocoa and truststore are kept by hand under `on_macos`, which
+regeneration leaves alone; the terminal app needs PyObjC for the Trash, Connect
+to Server and the OS image decoder, and truststore to verify HTTPS through
+Security.framework. Autobump resolves on Ubuntu, so any requirement marked for
+macOS only never reaches the formula on its own: add it to that block by hand.
+Bump PyObjC there when PuiKit raises its PyObjC floor, and truststore when
+`requirements.txt` raises its floor.
 
 Each bump opens a PR on the tap. Its CI (`brew test-bot`, macOS and Ubuntu)
 builds the formula's bottles. The formula PR is opened with the owner's own
