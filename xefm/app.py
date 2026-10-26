@@ -39,7 +39,6 @@ import threading
 import time
 import types
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path as _StdPath
 from urllib.parse import quote, unquote, urlsplit
 
@@ -124,6 +123,7 @@ from xefm.sort_dialog import show_sort_dialog
 from xefm.progress_manager import OperationType
 from xefm.diff_viewer import show_diff_viewer
 from xefm.directory_diff_viewer import show_directory_diff_viewer
+from xefm.worker_pool import DaemonPool
 from xefm.file_operations import (CloseGate, FileOperationService,
                                   format_op_errors, format_op_summary,
                                   serialized_log, transfer_workers)
@@ -7699,9 +7699,9 @@ class XeFMApp:
         # On a remote storage the walk's listings and the read-ahead share
         # one pool, so the search as a whole stays within what the storage
         # serves at once (#539). Locally there is no pool: one file at a time.
+        # Daemon threads: quitting mid-search drops the reads in flight.
         workers = tree_walk.parallel_reads(root)
-        pool = (ThreadPoolExecutor(max_workers=workers,
-                                   thread_name_prefix="xefm-search")
+        pool = (DaemonPool(workers, name="xefm-search-read")
                 if workers > 1 else None)
 
         def candidates():
@@ -7733,6 +7733,9 @@ class XeFMApp:
                         # text, the same text the viewer shows (#575).
                         lines = document_text.extract(e).lines
                     else:
+                        if read is not None and not content_read.finished(
+                                read, cancel):
+                            return
                         data = read.result() if read is not None else None
                         stream = lines = (
                             content_read.text_of(data) if data is not None

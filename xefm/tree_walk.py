@@ -17,10 +17,12 @@ listings. Local walks stay the plain depth-first walk they always were.
 
 from __future__ import annotations
 
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from collections import deque
+from concurrent.futures import FIRST_COMPLETED, wait
 from typing import Callable, Iterator, Optional, Tuple
 
 from xefm.path import concurrency, listdir_attrs
+from xefm.worker_pool import DaemonPool
 
 #: How often a parallel walk waiting on listings looks at its cancel flag.
 _CANCEL_POLL = 0.1
@@ -38,7 +40,7 @@ def parallel_reads(path) -> int:
 
 
 def walk(root, cancel, descend: Callable[[object, dict], bool], *,
-         pool: Optional[ThreadPoolExecutor] = None,
+         pool: Optional[DaemonPool] = None,
          on_error: Optional[Callable[[object, Exception], None]] = None
          ) -> Iterator[Tuple[object, dict]]:
     """Yield ``(entry, attrs)`` for every entry under ``root``
@@ -54,6 +56,12 @@ def walk(root, cancel, descend: Callable[[object, dict], bool], *,
     ceiling. Without one the walk makes its own, sized by
     :func:`parallel_reads`. A walk given a pool always uses it.
 
+    Either way the pool's threads are daemons (:mod:`xefm.worker_pool`), so
+    quitting during a walk does not wait for its listings, and the walk keeps
+    no more listings queued than the pool has workers — the directories it
+    has yet to list wait here, not in the pool, where a file read the same
+    search asks for would queue behind them.
+
     Order: each directory's entries come together and in its listing order.
     With one listing at a time the walk is depth-first; with several, a
     directory's entries come when its listing does, so the order across
@@ -65,7 +73,7 @@ def walk(root, cancel, descend: Callable[[object, dict], bool], *,
     if workers <= 1:
         yield from _walk_sequential(root, cancel, descend, on_error)
         return
-    own = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="xefm-walk")
+    own = DaemonPool(workers, name="xefm-walk")
     try:
         yield from _walk_parallel(root, cancel, descend, own, on_error)
     finally:
@@ -96,10 +104,18 @@ def _walk_sequential(root, cancel, descend, on_error=None):
 
 def _walk_parallel(root, cancel, descend, pool, on_error=None):
     """As many listings in flight as ``pool`` has workers. A directory is
-    queued the moment its parent's listing names it — before its siblings are
-    handed to the consumer — so the listings keep running while the consumer
-    works."""
-    pending = {pool.submit(listdir_attrs, root): root}
+    lined up the moment its parent's listing names it — before its siblings
+    are handed to the consumer — and sent to the pool as soon as a listing
+    ends, so the listings keep running while the consumer works."""
+    waiting = deque([root])
+    pending: dict = {}
+
+    def top_up() -> None:
+        while waiting and len(pending) < pool.size:
+            directory = waiting.popleft()
+            pending[pool.submit(listdir_attrs, directory)] = directory
+
+    top_up()
     try:
         while pending:
             done, _ = wait(pending, timeout=_CANCEL_POLL, return_when=FIRST_COMPLETED)
@@ -112,10 +128,11 @@ def _walk_parallel(root, cancel, descend, pool, on_error=None):
                 except Exception as e:
                     if on_error is not None:
                         on_error(directory, e)
+                    top_up()
                     continue
-                for entry, attrs in entries:
-                    if descend(entry, attrs):
-                        pending[pool.submit(listdir_attrs, entry)] = entry
+                waiting.extend(entry for entry, attrs in entries
+                               if descend(entry, attrs))
+                top_up()
                 for item in entries:
                     if cancel.is_set():
                         return

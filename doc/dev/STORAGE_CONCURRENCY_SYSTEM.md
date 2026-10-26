@@ -67,6 +67,22 @@ job is one listing, one file read, or one file transfer, and none of them waits
 on another job. The thread consuming the results holds nothing while it waits
 for one. That is all it takes to rule out a deadlock inside an operation.
 
+## Quitting mid-operation
+
+`concurrent.futures.ThreadPoolExecutor` joins its workers when the
+interpreter exits, after they finish every job started or queued. Quitting
+XeFM during a content search of a slow SSH host left the process alive after
+the window was gone, until every request in flight had come back. The walk and
+the content search therefore run on `xefm.worker_pool.DaemonPool`, whose
+threads are daemons like the search dialog's own worker: their results have
+nowhere to go once the app is quitting, and exit does not wait for them. A copy
+keeps the executor that finishes what it started.
+
+The walk also keeps no more listings queued in its pool than the pool has
+workers. The directories it has yet to list wait in the walk, not in the pool,
+where a file read from the same search would otherwise queue behind every
+directory of a wide tree.
+
 ## How each operation sizes itself
 
 ### Walking a tree — `xefm/tree_walk.py`
@@ -170,6 +186,22 @@ with 864 files of ~2 KiB each, plus 400 files of 8 KiB.
 A 100 MiB file copied down and back up arrived byte-identical (SHA-256), with
 no part file left behind.
 
+The same data on a real server, an EC2 host reached through SSM, ~29 ms SFTP
+round trip:
+
+| | before | after |
+|---|---|---|
+| disk usage | 19.5 s | 0.61 s |
+| content search | 258 s | 3.7 s |
+| copy 400 files SSH → local, tags not carried | 67.3 s | 8.9 s |
+| copy 400 files SSH → local | 647 s | 140 s |
+| copy 400 files local → SSH | 81.0 s | 9.8 s |
+
+A download carries each file's tags, and reading an SSH file's tags is an
+`ssh` command of its own (`SSHConnection.run_remote`), one login per file. Through
+SSM that login costs over a second, which is what the two download rows differ
+by.
+
 ## Known limits
 
 - **Copies between the local disk and SSH stop at 8**, though 32 measured faster
@@ -182,17 +214,20 @@ no part file left behind.
   real bucket.
 - **Same storage means same scheme**, which undercounts a copy between two SSH
   hosts or two buckets.
+- **Carrying tags from SSH costs a login per file** (see the measurements).
+  Batching the reads, or reusing one connection for them, is separate work.
 - `SEARCH_STRATEGY` is still declared and still read by nothing; the read-ahead
   is gated on `is_remote()` and the read ceiling instead.
 
 ## Tests
 
 - `test/test_tree_walk.py`: overlap, order, cancel, `on_error`, a shared pool,
-  and local walks staying sequential.
+  the queued listings held to the pool's size, local walks staying sequential,
+  and a process quitting mid-walk without waiting for its listings.
 - `test/test_content_read.py`: one open giving the same text as a second open
   (BOMs, line endings), read-ahead order, overlap, byte budget, what is left to
-  the caller, cancel, and a content search over a real `sftp-server` matching
-  the local one.
+  the caller, cancel (also while waiting on a read), the daemon pool, and a
+  content search over a real `sftp-server` matching the local one.
 - `test/test_disk_usage.py`: an SSH tree's totals match the same local tree's.
 - `test/test_parallel_copy.py`: the worker count for each pair of storages, the
   override, and an undeclared backend.

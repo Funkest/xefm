@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import io
 from collections import deque
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, Future, wait
 from typing import Callable, Iterable, Iterator, Optional, Tuple
 
 from xefm.text_encoding import sniff_bom
@@ -129,14 +129,15 @@ def _read_whole(path) -> Optional[bytes]:
 
 
 def read_ahead(candidates: Iterable[Tuple[object, dict]], cancel,
-               pool: ThreadPoolExecutor, workers: int,
+               pool, workers: int,
                worth_reading: Callable[[object, dict], bool]
                ) -> Iterator[Tuple[object, dict, Optional[Future]]]:
     """Yield ``(entry, attrs, read)`` for each of ``candidates``, in their
     order. ``read`` is a future of the whole file's bytes (``None`` once it
     turned out too large) for an entry ``worth_reading`` and no larger than
-    :data:`READ_AHEAD_FILE_MAX`, read on ``pool``; ``None`` for one the caller
-    reads itself.
+    :data:`READ_AHEAD_FILE_MAX`, read on ``pool`` (a
+    :class:`~xefm.worker_pool.DaemonPool`); ``None`` for one the caller reads
+    itself. Wait on it with :func:`finished`.
 
     The read never waits on anything but the storage, and the consumer holds
     nothing while it waits on a read, so sharing ``pool`` with the walk's
@@ -175,3 +176,16 @@ def read_ahead(candidates: Iterable[Tuple[object, dict]], cancel,
             if read is not None:
                 read.cancel()
 
+
+#: How often a wait on a read looks at the cancel flag.
+_CANCEL_POLL = 0.1
+
+
+def finished(read: Future, cancel) -> bool:
+    """Wait for ``read`` until it is done — True — or ``cancel`` is set —
+    False — so a cancelled search does not sit on a read of a slow storage."""
+    while not read.done():
+        if cancel.is_set():
+            return False
+        wait([read], timeout=_CANCEL_POLL, return_when=FIRST_COMPLETED)
+    return not cancel.is_set()

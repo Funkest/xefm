@@ -151,6 +151,42 @@ def test_stopping_drops_the_reads_not_started():
     assert len(log) == started
 
 
+def test_waiting_on_a_read_gives_up_when_the_search_is_cancelled():
+    from concurrent.futures import Future
+    cancel = threading.Event()
+    threading.Timer(0.1, cancel.set).start()
+    start = time.monotonic()
+    assert content_read.finished(Future(), cancel) is False
+    assert time.monotonic() - start < 1
+
+
+# --- the pool ------------------------------------------------------------------
+
+def test_the_daemon_pool_runs_jobs_and_hands_back_failures():
+    from xefm.worker_pool import DaemonPool
+    with DaemonPool(3) as pool:
+        assert [pool.submit(lambda i=i: i * 2).result() for i in range(5)] \
+            == [0, 2, 4, 6, 8]
+        with pytest.raises(ZeroDivisionError):
+            pool.submit(lambda: 1 / 0).result()
+        assert all(t.daemon for t in pool._threads) and len(pool._threads) <= 3
+
+
+def test_shutting_the_daemon_pool_down_cancels_what_has_not_started():
+    from xefm.worker_pool import DaemonPool
+    pool = DaemonPool(1)
+    gate = threading.Event()
+    running = pool.submit(gate.wait)
+    queued = [pool.submit(lambda: None) for _ in range(5)]
+    time.sleep(0.05)
+    pool.shutdown()
+    assert all(f.cancelled() for f in queued)
+    gate.set()
+    assert running.result(timeout=1) is True
+    with pytest.raises(RuntimeError):
+        pool.submit(lambda: None)
+
+
 # --- the search itself, over a real SFTP session ------------------------------
 
 def _bare_app():
