@@ -40,7 +40,7 @@ import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from puikit.backend import Style
 from puikit.event import Event, EventType
@@ -54,10 +54,11 @@ from xefm.archive import (ArchiveInUseError, get_archive_cache,
 from xefm.dialog_geometry import (OPEN_MS_VIEWER, animate_open, draw_title_bar,
                                   title_content_top)
 from xefm.diff_viewer import show_diff_viewer
-from xefm.path import Path, copy_to, move_to
+from xefm.path import Path, concurrency, copy_to, move_to
 from xefm.progress_manager import OperationType, ProgressManager
 from xefm.str_format import format_size, format_timestamp
 from xefm.task import Cancelled, Task, TaskManager
+from xefm.tree_walk import parallel_reads
 from xefm import trash as trash_mod
 
 #: Operation kind -> (verb label, progress-manager op type).
@@ -97,27 +98,6 @@ _OP_TYPE = {
 #: shot — instant, no byte bar).
 _CHUNK = 1024 * 1024
 _BYTE_BAR_MIN = 1024 * 1024
-
-#: How many transfers each kind of endpoint is worth running at once. A scheme
-#: missing from here allows exactly one: ``ssh`` shares a control-master
-#: connection per host whose progress state is per-connection rather than
-#: per-transfer, ``archive`` is a single forward stream, and a scheme XeFM does
-#: not know had better be assumed to be one of those.
-#:
-#: ``file`` covers a mounted network volume as well as a local disk, and
-#: deliberately does not distinguish them. Nothing in a path says which it is,
-#: and after :class:`CloseGate` nothing needs to: this number governs how many
-#: files are *worked on* at once, while the transfer a mounted volume defers to
-#: close happens one at a time regardless. 4 is where a local disk stopped
-#: gaining — measured ~1.3–1.9x at 2–4 workers on an APFS SSD and *worse* beyond
-#: that, between the GIL and filesystem metadata serialisation. A WebDAV mount
-#: gained nothing past 2, and loses nothing by being given 4 it will queue.
-#:
-#: The 8 for ``s3`` is the one number here with no measurement behind it, only
-#: the reasoning that per-object round-trip latency dominates. It also does not
-#: pass through CloseGate, since boto3 does the transfer rather than a POSIX
-#: close — so it is left alone until someone measures it.
-_SCHEME_WORKERS = {"file": 4, "s3": 8}
 
 #: macOS ``clonefile(2)``: a same-volume APFS copy is one copy-on-write
 #: syscall — instant regardless of size, sharing data blocks until either side
@@ -646,15 +626,15 @@ class FileOperationService:
         list of ``(target, dest_base, overwrite)`` for the survivors.
         ``overwrite`` is a bool, or an :class:`OverwriteOlder` for a folder
         merged under "overwrite older", whose files are decided one by one."""
-        conflicts = [t for t in targets if (dest_dir / t.name).exists()]
-        total = len(conflicts)
+        taken = _existing(task, [dest_dir / t.name for t in targets], dest_dir)
+        total = sum(taken)
         plan: list = []
         skipped = 0
         apply_all: Optional[str] = None
         idx = 0
-        for t in targets:
+        for t, exists in zip(targets, taken):
             dest = dest_dir / t.name
-            if not dest.exists():
+            if not exists:
                 plan.append((t, dest, False))
                 continue
             idx += 1
@@ -777,14 +757,12 @@ class FileOperationService:
                       dest_dir: Optional[Path]) -> int:
         """How many pool workers this operation may use; 1 means the sequential
         path runs unchanged. Only copy-shaped work is parallel at all; the number
-        itself is :func:`transfer_workers`' to decide, from the schemes at both
-        ends."""
+        itself is :func:`transfer_workers`' to decide, from what the storages at
+        both ends declare."""
         if kind not in ("copy", "duplicate", "move"):
             return 1
-        schemes = {t.scheme for t, _dest, _ow in plan}
-        if dest_dir is not None:
-            schemes.add(dest_dir.scheme)
-        return transfer_workers(self.config, schemes)
+        return transfer_workers(self.config, (t for t, _dest, _ow in plan),
+                                dest_dir)
 
     def _run_parallel(self, task: Task, kind: str, plan: list,
                       dest_dir: Optional[Path], prog: ProgressManager, log,
@@ -1219,26 +1197,46 @@ class CloseGate:
             yield
 
 
-def transfer_workers(config: Any, schemes) -> int:
-    """How many files an operation between ``schemes`` may have in flight.
+def transfer_workers(config: Any, sources: Iterable[Path],
+                     dest: Optional[Path] = None) -> int:
+    """How many files an operation reading ``sources`` and writing into
+    ``dest`` may have in flight.
 
     Three lines, in order:
 
-    1. An endpoint that allows only one transfer caps the whole operation at
-       one — and a scheme missing from :data:`_SCHEME_WORKERS` is treated as
-       one of those, because guessing upwards is the guess that hurts.
-    2. ``TRANSFER_CONCURRENCY`` overrides what follows: ``"none"`` for one, an
-       integer of at least one for that many, ``"auto"`` (the default) for
-       neither. Anything else is not a worker count and the table answers.
-    3. Otherwise the larger of the ends. The smaller end is not the bottleneck:
-       a local disk saturates at four *writes*, but reading four files off it
-       while S3 takes eight is no strain, and the operation is limited by
-       whichever side is slower to accept work.
+    1. What the storages declare (:func:`xefm.path.concurrency`): every
+       source's read ceiling and the destination's write ceiling, the smallest
+       of them. Each file in flight is a read at one end and a write at the
+       other, so neither end is asked for more than it said it serves. When a
+       source is the same storage as the destination, each file is both of
+       those requests against it, and the files in flight are held to half
+       its total. A storage that declares nothing serves one — guessing
+       upwards is the guess that hurts — and caps the operation at one.
+    2. ``TRANSFER_CONCURRENCY`` overrides the number from line 1, unless that
+       was one: ``"none"`` for one, an integer of at least one for that many,
+       ``"auto"`` (the default) for neither. Anything else is not a worker
+       count and the declarations answer.
+    3. No ``sources`` (an extraction, whose reader is serialised by its handler
+       whatever this returns) is sized by the destination alone.
 
     This is the whole worker-count decision. Safety is not part of it — that is
-    :class:`CloseGate`'s, unconditionally — which is why the table can afford
-    not to know whether a ``file`` path is a local disk or a mounted volume."""
-    if not set(schemes) <= set(_SCHEME_WORKERS):
+    :class:`CloseGate`'s, unconditionally — which is why ``file`` can afford
+    not to know whether a path is a local disk or a mounted volume.
+
+    "Same storage" is the same scheme, which over-counts two SSH hosts or two
+    buckets as one: the safe direction, since it only ever lowers the count."""
+    reads = {}
+    for src in sources:
+        if src.scheme not in reads:
+            reads[src.scheme] = concurrency(src).read
+    ceilings = list(reads.values())
+    if dest is not None:
+        ends = concurrency(dest)
+        ceilings.append(ends.write)
+        if dest.scheme in reads:
+            ceilings.append(max(1, ends.total // 2))
+    declared = min(ceilings, default=1)
+    if declared <= 1:
         return 1
     setting = getattr(config, "TRANSFER_CONCURRENCY", "auto")
     if setting == "none":
@@ -1251,8 +1249,8 @@ def transfer_workers(config: Any, schemes) -> int:
         if value >= 1:
             return value
         # 0, a negative, or something that is not a number at all: nothing a
-        # worker count can mean, so the table answers instead.
-    return max((_SCHEME_WORKERS[s] for s in schemes), default=1)
+        # worker count can mean, so the declarations answer instead.
+    return declared
 
 
 def serialized_log(log: Callable[[str], None]) -> Callable[[str], None]:
@@ -1303,6 +1301,23 @@ def _is_atomic_move(kind: str, target: Path, dest_dir: Optional[Path]) -> bool:
     if src_dev is not None and dest_dev is not None:
         return src_dev == dest_dev
     return True
+
+
+def _existing(task: Task, paths: list, where: Path) -> list:
+    """``[p.exists() for p in paths]``, the checks run side by side on a
+    remote storage that serves them (#540): a copy of many files into an SSH
+    directory otherwise spent most of its time asking about each destination
+    in turn, one round trip apiece, before sending anything. ``exists`` itself
+    is asked, not a listing of ``where`` matched by name, because only the
+    storage knows which names it treats as the same file (case, Unicode
+    normalisation)."""
+    workers = min(parallel_reads(where), len(paths))
+    if workers <= 1:
+        return [p.exists() for p in paths]
+    task.checkpoint()
+    with ThreadPoolExecutor(max_workers=workers,
+                            thread_name_prefix="xefm-exists") as pool:
+        return list(pool.map(lambda p: p.exists(), paths))
 
 
 def _merges_into(target: Path, dest: Optional[Path]) -> bool:

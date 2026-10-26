@@ -14,7 +14,10 @@ says so instead of summing zeros; see :func:`reports_allocation`.
 
 The walk is storage-agnostic: it descends via :func:`xefm.path.listdir_attrs`, one
 bulk call per directory (a bulk syscall locally, a single request over SSH),
-so no per-entry ``stat`` round trips happen on any backend.
+so no per-entry ``stat`` round trips happen on any backend. It goes through
+:func:`xefm.tree_walk.walk`, so a remote storage lists several directories at
+once (issue #541); the totals are sums, which do not care in what order the
+directories come.
 
 Symlinks are counted where they stand and never followed: following a link can
 revisit the same tree (a cycle) or pull in content outside the directory the
@@ -27,8 +30,7 @@ import threading
 from typing import Sequence
 
 from xefm.log_manager import getLogger
-from xefm import dir_scan
-from xefm.path import listdir_attrs
+from xefm import dir_scan, tree_walk
 
 logger = getLogger("DiskUsage")
 
@@ -161,33 +163,27 @@ class UsageScan:
         self.done = True
 
     def _walk(self, root, totals: RootTotals) -> None:
-        stack = [root]
-        while stack:
-            if self._cancel.is_set():
-                return
-            directory = stack.pop()
-            try:
-                entries = listdir_attrs(directory)
-            except Exception:
-                totals.errors += 1
+        def unlisted(_directory, _error) -> None:
+            totals.errors += 1
+
+        # A symlinked directory is counted as an entry but never descended
+        # into; a broken entry arrives as a size-0 file.
+        def descend(_entry, attrs) -> bool:
+            return attrs["is_dir"] and not attrs["is_link"]
+
+        for child, attrs in tree_walk.walk(root, self._cancel, descend,
+                                            on_error=unlisted):
+            if descend(child, attrs):
+                totals.dirs += 1
                 continue
-            for child, attrs in entries:
-                if self._cancel.is_set():
-                    return
-                # A symlinked directory is counted as an entry but never
-                # descended into; a broken entry arrives as a size-0 file.
-                if attrs["is_dir"] and not attrs["is_link"]:
-                    totals.dirs += 1
-                    stack.append(child)
-                else:
-                    totals.files += 1
-                    totals.bytes += attrs["size"]
-                    # .get, not [], because a backend outside this repository
-                    # (xefm.path_base is a published extension point) may
-                    # predate the key entirely — which is exactly the "cannot
-                    # say" case None already means.
-                    alloc = attrs.get("alloc")
-                    if alloc is None:
-                        totals.alloc_unknown += 1
-                    else:
-                        totals.alloc += alloc
+            totals.files += 1
+            totals.bytes += attrs["size"]
+            # .get, not [], because a backend outside this repository
+            # (xefm.path_base is a published extension point) may predate the
+            # key entirely — which is exactly the "cannot say" case None
+            # already means.
+            alloc = attrs.get("alloc")
+            if alloc is None:
+                totals.alloc_unknown += 1
+            else:
+                totals.alloc += alloc

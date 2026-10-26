@@ -216,8 +216,8 @@ _s3_client_create_lock = threading.Lock()
 
 #: How many connections a shared client keeps alive per S3 host. botocore's
 #: default of 10 is under what a copy asks for: up to 8 workers transfer at once
-#: (``_SCHEME_WORKERS["s3"]`` in file_operations) while the pane's listing and
-#: whatever the user is doing in the UI hit the same bucket. A request that finds
+#: (``S3PathImpl.READ_CONCURRENCY`` / ``WRITE_CONCURRENCY``) while the pane's
+#: listing and whatever the user is doing in the UI hit the same bucket. A request that finds
 #: the pool full opens a connection and then discards it — a fresh TLS handshake
 #: each time, which is the cost this whole module is trying not to pay.
 S3_MAX_POOL_CONNECTIONS = 16
@@ -424,6 +424,14 @@ class S3PathImpl(PathImpl):
                               'cache_for_search'})
     SEARCH_STRATEGY = 'buffered'
     DISPLAY_PREFIX = 'S3: '
+    # The shared client keeps S3_MAX_POOL_CONNECTIONS (16) alive per host, and
+    # a copy's eight transfers leave the rest to the pane's listing and the UI.
+    # The 8 has no measurement behind it, only the reasoning that per-object
+    # round-trip latency dominates — so it is left alone until someone
+    # measures it.
+    CONCURRENCY = 16
+    READ_CONCURRENCY = 8
+    WRITE_CONCURRENCY = 8
     
     @classmethod
     def create_path_with_metadata(cls, s3_uri: str, metadata: Dict[str, Any]) -> 'Path':

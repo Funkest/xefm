@@ -308,10 +308,26 @@ def test_parallel_progress_increments_are_not_lost(tmp_path, svc, monkeypatch):
 # --- worker-count selection ------------------------------------------------------
 
 class _Scheme:
-    """A stand-in path that only answers ``scheme``."""
+    """A stand-in path answering ``scheme`` and, through the real
+    ``Path._concurrency``, what that scheme's backend class declares."""
+
+    _IMPLS = {"file": "xefm.path.LocalPathImpl", "s3": "xefm.s3.S3PathImpl",
+              "ssh": "xefm.ssh.SSHPathImpl"}
 
     def __init__(self, scheme):
+        import importlib
+        from xefm.path import PathImpl
         self.scheme = scheme
+        name = self._IMPLS.get(scheme)
+        if name is None:
+            self._impl = PathImpl  # declares nothing: one at a time
+        else:
+            module, cls = name.rsplit(".", 1)
+            self._impl = getattr(importlib.import_module(module), cls)
+
+    def _concurrency(self):
+        from xefm.path import Path
+        return Path._concurrency(self)
 
 
 def _plan(*schemes):
@@ -319,50 +335,58 @@ def _plan(*schemes):
 
 
 def test_copy_workers_local(svc):
-    assert (svc._copy_workers("copy", _plan("file", "file"), _Scheme("file"))
-            == F._SCHEME_WORKERS["file"])
+    """Four files in flight, each a read and a write on the same disk: half of
+    its eight."""
+    assert svc._copy_workers("copy", _plan("file", "file"), _Scheme("file")) == 4
 
 
-def test_copy_workers_takes_the_larger_end(svc):
-    """The smaller end is not the bottleneck: reading four files off a local
-    disk while S3 accepts eight is no strain, so the operation is sized by
-    whichever side is slower to take work."""
-    for plan, dest in ((_plan("file"), _Scheme("s3")),
-                       (_plan("s3"), _Scheme("file"))):
-        assert svc._copy_workers("copy", plan, dest) == F._SCHEME_WORKERS["s3"]
+def test_copy_workers_reads_off_the_disk_while_s3_takes_eight(svc):
+    """Reading eight files off a local disk while S3 accepts eight is no
+    strain: the disk declares eight reads, S3 eight writes."""
+    assert svc._copy_workers("copy", _plan("file"), _Scheme("s3")) == 8
+    assert svc._copy_workers("copy", _plan("s3"), _Scheme("s3")) == 8
 
 
-def test_copy_workers_ssh_stays_sequential(svc):
-    assert svc._copy_workers("copy", _plan("file"), _Scheme("ssh")) == 1
-    assert svc._copy_workers("copy", _plan("ssh"), _Scheme("file")) == 1
+def test_copy_workers_writing_to_the_disk_from_a_remote(svc):
+    """The disk is not what a download waits on: eight, the disk's ceiling."""
+    assert svc._copy_workers("copy", _plan("s3"), _Scheme("file")) == 8
+    assert svc._copy_workers("copy", _plan("ssh"), _Scheme("file")) == 8
+
+
+def test_copy_workers_ssh_runs_files_side_by_side(svc):
+    """One SFTP session serves requests side by side (#538, #540)."""
+    assert svc._copy_workers("copy", _plan("file"), _Scheme("ssh")) == 8
+    # Same scheme at both ends: every file is a read and a write against it.
+    assert svc._copy_workers("copy", _plan("ssh"), _Scheme("ssh")) == 32
 
 
 def test_copy_workers_delete_stays_sequential(svc):
     assert svc._copy_workers("delete", _plan("file"), None) == 1
 
 
-def test_an_unknown_scheme_is_assumed_to_allow_one(svc):
-    """Guessing upwards is the guess that hurts, so a scheme not in the table is
-    treated like the ones known to allow a single transfer."""
+def test_an_undeclared_backend_is_assumed_to_allow_one(svc):
+    """Guessing upwards is the guess that hurts, so a backend that declares
+    nothing caps the operation at one, at either end."""
     assert svc._copy_workers("copy", _plan("ftp"), _Scheme("file")) == 1
+    assert svc._copy_workers("copy", _plan("file"), _Scheme("ftp")) == 1
+    assert svc._copy_workers("copy", _plan("file", "ftp"), _Scheme("s3")) == 1
 
 
-def test_transfer_concurrency_overrides_the_table(cfg):
+def test_transfer_concurrency_overrides_the_declarations(cfg):
     svc = FileOperationService(cfg)
     cfg.TRANSFER_CONCURRENCY = "none"
     assert svc._copy_workers("copy", _plan("file"), _Scheme("file")) == 1
     cfg.TRANSFER_CONCURRENCY = 3
     assert svc._copy_workers("copy", _plan("file"), _Scheme("s3")) == 3
     # ...but never past an endpoint that allows only one transfer.
-    assert svc._copy_workers("copy", _plan("ssh"), _Scheme("file")) == 1
+    assert svc._copy_workers("copy", _plan("ftp"), _Scheme("file")) == 1
 
 
-def test_a_nonsense_setting_falls_back_to_the_table(cfg):
+def test_a_nonsense_setting_falls_back_to_the_declarations(cfg):
     svc = FileOperationService(cfg)
     for value in (0, "many", None):
         cfg.TRANSFER_CONCURRENCY = value
-        assert (svc._copy_workers("copy", _plan("file"), _Scheme("file"))
-                == F._SCHEME_WORKERS["file"])
+        assert svc._copy_workers("copy", _plan("file"), _Scheme("file")) == 4
 
 
 def test_workers_one_takes_the_sequential_path(tmp_path, cfg, monkeypatch):

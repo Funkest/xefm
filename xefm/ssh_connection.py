@@ -468,9 +468,10 @@ class SSHConnection:
     # --- contents ---------------------------------------------------------------
 
     def read_file(self, remote_path: str,
-                  progress: Optional[ProgressCallback] = None) -> bytes:
+                  progress: Optional[ProgressCallback] = None, sink=None):
         """
-        Read file contents.
+        Read file contents — or, given a writable binary ``sink``, stream them
+        into it and return how many bytes that was.
 
         ``progress(done, total)`` is called as the transfer runs — 0 first, the
         full size last — and is the cancel point: whatever it raises stops the
@@ -483,14 +484,16 @@ class SSHConnection:
             SSHError: For other errors
         """
         return self._call('reading', remote_path,
-                          lambda c: c.read_file(remote_path, progress))
+                          lambda c: c.read_file(remote_path, progress, sink))
 
-    def write_file(self, remote_path: str, data: bytes,
-                   progress: Optional[ProgressCallback] = None):
+    def write_file(self, remote_path: str, data,
+                   progress: Optional[ProgressCallback] = None,
+                   size: Optional[int] = None):
         """
-        Write file contents, creating or replacing the file. ``progress`` works
-        as for :meth:`read_file`; a cancelled upload leaves however much had
-        arrived.
+        Write file contents, creating or replacing the file. ``data`` is
+        ``bytes`` or a readable binary stream (``size`` then scales the
+        progress). ``progress`` works as for :meth:`read_file`; a cancelled
+        upload leaves however much had arrived.
 
         Raises:
             SSHPermissionDeniedError: If permission is denied
@@ -499,7 +502,7 @@ class SSHConnection:
         """
         try:
             self._call('writing', remote_path,
-                       lambda c: c.write_file(remote_path, data, progress))
+                       lambda c: c.write_file(remote_path, data, progress, size))
         finally:
             # Written, partly written or cancelled: what was cached is stale.
             self._cache.invalidate_path(self.hostname, remote_path)

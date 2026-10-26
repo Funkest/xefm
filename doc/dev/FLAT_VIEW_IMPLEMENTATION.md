@@ -52,8 +52,9 @@ link's target (see
 [DIRECTORY_SCAN_SYSTEM.md](DIRECTORY_SCAN_SYSTEM.md)), so the `is_link` check
 is needed in addition.
 
-The walk uses `tree_walk`, so it lists several directories at once on backends
-that set `LISTING_CONCURRENCY` (SFTP). It runs on a `Task`, the same way
+The walk uses `tree_walk`, so it lists several directories at once on remote
+backends that serve several reads at once (SFTP, S3; see
+[STORAGE_CONCURRENCY_SYSTEM.md](STORAGE_CONCURRENCY_SYSTEM.md)). It runs on a `Task`, the same way
 `_run_list_command` does: the `ProgressDialog` stays in its busy phase showing
 `task.counted`, and Esc sets the flag. `tree_walk.walk` takes an object with
 `is_set()`, so `Task.cancelled` is wrapped in a `SimpleNamespace` rather than

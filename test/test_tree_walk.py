@@ -1,5 +1,5 @@
 """The search walk (``xefm.tree_walk``): depth-first one listing at a time, or
-several listings at once where the backend says so (SSH).
+several listings at once on a remote storage that serves them (SSH).
 
 Run with: python -m pytest test/test_tree_walk.py -v
 """
@@ -11,7 +11,7 @@ import uuid
 import pytest
 
 from xefm import tree_walk
-from xefm.path import Path, listing_concurrency
+from xefm.path import Concurrency, Path, concurrency
 
 
 class FakeDir:
@@ -25,8 +25,11 @@ class FakeDir:
         self.delay = delay
         self.log = log if log is not None else []
 
-    def _listing_concurrency(self):
-        return self.concurrency
+    def is_remote(self):
+        return True
+
+    def _concurrency(self):
+        return Concurrency(self.concurrency, self.concurrency, self.concurrency)
 
     def _listdir_attrs(self):
         self.log.append(self.name)
@@ -101,9 +104,31 @@ def test_cancel_stops_the_parallel_walk():
 
 
 def test_backends_declare_their_concurrency(tmp_path):
-    assert listing_concurrency(Path(str(tmp_path))) == 1
     from xefm.ssh import SSHPathImpl
-    assert SSHPathImpl.LISTING_CONCURRENCY > 1
+    local = Path(str(tmp_path))
+    assert concurrency(local).read > 1
+    # ...but a local walk stays one listing at a time: there are no round
+    # trips to overlap, and the pool costs more than the listings.
+    assert tree_walk.parallel_reads(local) == 1
+    assert SSHPathImpl.CONCURRENCY > 1
+
+
+def test_a_walk_reports_what_it_could_not_list():
+    errors = []
+    root = FakeDir("r", {"locked": None, "open": {"x": "file"}}, 4)
+    list(tree_walk.walk(root, threading.Event(), lambda e, a: a["is_dir"],
+                        on_error=lambda d, e: errors.append(d.name)))
+    assert errors == ["r/locked"]
+
+
+def test_a_walk_on_a_shared_pool_leaves_the_pool_running():
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        root = FakeDir("r", _tree(2, 3), 4)
+        names = sorted(e.name for e, _a in tree_walk.walk(
+            root, threading.Event(), lambda e, a: a["is_dir"], pool=pool))
+        assert names == _names(1, _tree(2, 3))
+        assert pool.submit(lambda: 7).result() == 7
 
 
 def test_an_ssh_tree_walk_over_a_real_sftp_server(tmp_path, monkeypatch):

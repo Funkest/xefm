@@ -127,7 +127,7 @@ new heuristics.
 |---|---|
 | `copy_to`, `move_to` | Two failure channels (`False` and exceptions). `overwrite` replaces a file but silently merges a directory. Copying behaves differently per storage. Bypasses XeFM's file operations (conflict dialog, job queue, progress, archive owners #516). Diverges from Python 3.14's `pathlib.Path.copy` / `move`. If extensions need copy or move, that gets designed as a separate Preview `ctx` API that goes through file operations. |
 | `listdir_attrs` | Returns the internal `dir_scan` record (`alloc`, `ok`, `cmp_name`, …) |
-| `listing_concurrency` | Internal tuning |
+| `concurrency` | Internal tuning |
 | `forget_cached_metadata` | Exposes a cache detail |
 | `get_display_title` | UI string whose format may change |
 | `get_extended_metadata` | Shaped for the info dialog (`format_hint`); #635 will change it |
@@ -196,7 +196,7 @@ PROGRAMS depends on these, and nothing else does their job. They become Stable.
 | `CAPABILITIES`, `SEARCH_STRATEGY` | low: the vocabulary mixes in search tuning | Preview |
 | `listdir_attrs()` | low: internal record shape | Preview |
 | `get_extended_metadata()` | low: #635 | Preview |
-| `forget_cached_metadata()`, `LISTING_CONCURRENCY` | low: implementation detail | Preview |
+| `forget_cached_metadata()`, `CONCURRENCY` / `READ_CONCURRENCY` / `WRITE_CONCURRENCY` | low: implementation detail | Preview |
 
 **C. Helpers a backend calls.** `child(name)`, `at(key)`, `key`, `UriStatResult`. Stable.
 

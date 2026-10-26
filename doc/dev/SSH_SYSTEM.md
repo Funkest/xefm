@@ -66,6 +66,15 @@ echoes.
   - Reading stops at EOF, not at the size `fstat` reported: a file that grows
     while it is read is read to its end. The size only bounds the window, so a
     tiny file does not get 32 requests.
+  - **Streaming.** `read_file(..., sink=f)` writes each chunk into `f` as it
+    lands instead of collecting the file, and `write_file` takes a readable
+    stream as well as `bytes`, reading it `CHUNK` at a time (`size=` scales the
+    progress). A transfer then holds one window — 1 MiB — rather than the whole
+    file, which is what lets a copy run several large files at once (#540).
+    `SSHPathImpl.download_to_stream` / `upload_from_stream` expose the pair
+    under the names S3's backend uses, and the local ⇄ SSH legs of
+    `_copy_file_cross_storage` go through them exactly as the local ⇄ S3 legs
+    do.
 - **Progress and cancel** come from the transfer loop itself: `progress(done,
   total)` is called as each chunk lands or is acknowledged — 0 first, the full
   size last — and whatever it raises leaves `read_file`/`write_file` unchanged
@@ -172,26 +181,50 @@ sends a `STAT` for every link in the listing, all in flight at once
 (`stat_many`); a broken link keeps its own attributes. `stat()` is `LSTAT`, then
 the same resolution if it is a link.
 
-## Walking a tree — `LISTING_CONCURRENCY`
+## Requests in flight — `CONCURRENCY`
 
-A search walks every directory under the pane. A walk that lists one directory,
-then the next, is bound by round trips × directories: on a deep tree over SFTP
-it spent nearly all its time waiting while the session sat idle.
-`xefm/tree_walk.py`'s `walk()` keeps up to the backend's
-`PathImpl.LISTING_CONCURRENCY` listings in flight instead, on a small thread
-pool; a directory is queued as soon as its parent's listing names it.
-`SSHPathImpl` sets 16; everything else stays at 1 and gets the old depth-first
-walk unchanged. Both search walks (`_iter_filename_matches`,
-`_iter_content_matches`) go through it.
+The session serves requests side by side, so `SSHPathImpl` declares
+`CONCURRENCY = 64` — what OpenSSH's own `sftp` keeps in flight by default
+(`-R`). The model behind the number, and how each operation sizes itself from
+it, is in [STORAGE_CONCURRENCY_SYSTEM.md](STORAGE_CONCURRENCY_SYSTEM.md). What
+it changes here:
 
-Measured against the real `sftp-server` behind a 40 ms round-trip delay line,
-259 directories / 906 entries: 53.4 s one directory at a time with four round
-trips each; 25.9 s with the READDIR read-ahead and unwaited CLOSE; 1.8 s with
-16 listings in flight as well.
+- **Walking a tree.** A walk that lists one directory, then the next, is bound
+  by round trips × directories: on a deep tree over SFTP it spent nearly all
+  its time waiting while the session sat idle. `xefm/tree_walk.py`'s `walk()`
+  keeps up to 64 listings in flight instead, on a small thread pool; a
+  directory is queued as soon as its parent's listing names it. Both search
+  walks (`_iter_filename_matches`, `_iter_content_matches`), the flat view and
+  disk usage (#541) go through it.
+- **A content search** opens each file once and reads the next small files
+  ahead on the same pool as the listings (#539, `xefm/content_read.py`).
+  `SSHPathImpl.open` fetches the whole file, and the search used to open each
+  file twice — once to sniff the encoding, once to read it.
+- **A copy** to or from SSH has several files in flight (#540): as many as the
+  other end's ceiling allows (8 against the local disk), half of the 64 between
+  two SSH paths. Before the copy starts, the conflict check asks whether each
+  destination exists; into an SSH directory those checks run side by side too,
+  or a 400-file upload spent 17 of its 21 seconds asking.
+
+Measured against the Tart VM's real `sshd` behind a 40 ms round-trip delay
+line, 259 directories / 864 files of ~2 KiB, and 400 files of 8 KiB:
+
+| | before | after |
+|---|---|---|
+| disk usage | 22.4 s | 0.68 s |
+| content search | 302 s | 3.2 s |
+| copy 400 files SSH → local | 80.3 s | 8.9 s |
+| copy 400 files local → SSH | 70.4 s | 7.5 s |
+
+Earlier, against a local `sftp-server` behind the same delay, the 259-directory
+walk went from 53.4 s (one directory at a time, four round trips each) to 25.9 s
+with the READDIR read-ahead and unwaited CLOSE, and 1.8 s with 16 listings in
+flight (#538).
 
 With several listings in flight, results arrive in the order the listings
 complete rather than strictly depth-first; each directory's own entries still
-come together and in order.
+come together and in order. A content search hands its results over in that
+same walk order.
 
 ## Bulk stat caching during `list_directory`
 
