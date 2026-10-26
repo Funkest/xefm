@@ -9160,6 +9160,7 @@ class XeFMApp:
             created = result.get("created") or []
             on_ready = (lambda p: self._select_by_name(p, created[0])) if created else None
             self._relist(pane, on_ready=on_ready)
+            self._relist_others_showing({str(pane["path"])}, besides=pane)
             self.log_info(format_op_summary("Duplicate", result))
             self._report_op_failures("Duplicate", result)
             self.panel.render()
@@ -9167,6 +9168,17 @@ class XeFMApp:
         self._fileops.duplicate(self.panel, targets, pane["path"],
                                 on_complete=on_complete, log=self.log_info)
         return False
+
+    def _relist_others_showing(self, dirs: set, besides: dict) -> None:
+        """Re-list every pane but ``besides`` that shows one of ``dirs`` (as
+        strings). An operation silences the watchers of the directories it
+        changes and drops their events (#243), so the other pane, when it is on
+        the same directory, is brought up to date only here — as
+        :meth:`_run_transfer` does for the panes showing its destination."""
+        for pane in (self.pm.left_pane, self.pm.right_pane):
+            if (pane is not besides and not pane.get("virtual")
+                    and str(pane["path"]) in dirs):
+                self._relist(pane)
 
     def _report_op_failures(self, verb: str, result: dict, z: int = 70) -> None:
         """Pop a message box naming the items that failed (and why), so a failure
@@ -9337,6 +9349,7 @@ class XeFMApp:
             # what it was on — or, when that was one of the files just deleted,
             # on the entry that took its place (#414).
             self._relist(pane)
+            self._relist_others_showing({str(t.parent) for t in targets}, besides=pane)
             self.log_info(format_op_summary(verb, result))
             self._report_op_failures(verb, result)
             self.panel.render()

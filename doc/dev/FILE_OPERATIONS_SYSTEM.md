@@ -141,7 +141,7 @@ The confirm prompt in `_start()` gets a duplicate-specific line ("Duplicate **N*
 Two entry points, one shared runner:
 
 - `duplicate_files()` — guards (virtual pane, read-only archive, empty targets), gathers `_selected_or_focused(pane)`, then delegates to `_run_duplicate`. Returns `True` on a synchronous guard bail, `False` after handoff — same contract as `copy_files()`.
-- `_run_duplicate(pane, targets)` — calls `self._fileops.duplicate(...)` with `pane["path"]` as the destination. `on_complete` clears the source selection, refreshes via `_refresh(pane, on_ready=lambda p: _select_by_name(p, created[0]))` so the cursor lands on the new copy, logs `format_op_summary("Duplicate", …)`, and reports failures.
+- `_run_duplicate(pane, targets)` — calls `self._fileops.duplicate(...)` with `pane["path"]` as the destination. `on_complete` clears the source selection, re-lists via `_relist(pane, on_ready=lambda p: _select_by_name(p, created[0]))` so the cursor lands on the new copy, re-lists the other pane too when it shows the same directory (`_relist_others_showing`), logs `format_op_summary("Duplicate", …)`, and reports failures.
 
 Reachability (no default key binding):
 
