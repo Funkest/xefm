@@ -236,3 +236,32 @@ def test_no_roots_is_born_done():
     assert scan.done is True
     assert scan.grand_totals() == (0, 0, 0, 0)
     assert scan.grand_alloc() == 0
+
+
+def test_an_ssh_tree_totals_what_the_same_local_tree_does(tmp_path, monkeypatch):
+    """Over SFTP the walk lists several directories at once (#541) and they
+    finish out of tree order; the totals are sums, so they come out the same."""
+    import uuid
+    from sftp_server_helper import SFTP_SERVER, remote
+    if SFTP_SERVER is None:
+        pytest.skip("no local sftp-server")
+    from xefm import ssh_connection as SC
+    spawn = SC._spawn_ssh
+    monkeypatch.setattr(SC, "_spawn_ssh", lambda cmd: spawn([SFTP_SERVER]))
+    root = tmp_path / "tree"
+    for i in range(5):
+        for j in range(4):
+            d = root / f"d{i}" / f"e{j}"
+            d.mkdir(parents=True)
+            (d / "f.txt").write_bytes(b"x" * (i * 10 + j))
+    host = f"test-{uuid.uuid4().hex[:8]}"
+    try:
+        remote_scan = UsageScan([Path(f"ssh://{host}{remote(root)}")])
+        remote_scan.run_sync()
+    finally:
+        SC.SSHConnectionManager.get_instance().close_connection(host)
+    local_scan = UsageScan([Path(str(root))])
+    local_scan.run_sync()
+    assert remote_scan.grand_totals() == local_scan.grand_totals()
+    assert local_scan.grand_totals() == (sum(i * 10 + j for i in range(5)
+                                              for j in range(4)), 20, 25, 0)

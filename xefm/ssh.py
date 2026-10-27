@@ -32,9 +32,13 @@ class SSHPathImpl(PathImpl):
                               'extraction_for_reading', 'cache_for_search'})
     SEARCH_STRATEGY = 'buffered'
     DISPLAY_PREFIX = 'SSH: '
-    # Every listing is round trips, and the host's one SFTP session serves
-    # requests side by side, so a tree walk lists this many directories at once.
-    LISTING_CONCURRENCY = 16
+    # Every request is round trips, and the host's one SFTP session serves
+    # requests side by side, so a walk lists this many directories at once and
+    # a copy has as many files in flight as the other end allows. 64 is what
+    # OpenSSH's own sftp keeps in flight by default (-R). Through a 40 ms round
+    # trip, 259 directories / 864 files: disk usage 1.58 s at 16, 0.88 s at 32,
+    # 0.62 s at 64; a content search 11.1 s, 5.7 s, 3.0 s.
+    CONCURRENCY = 64
     
     def __init__(self, uri: str):
         """
@@ -508,6 +512,25 @@ class SSHPathImpl(PathImpl):
         conn.write_file(self.remote_path, bytes_data)
         return len(bytes_data)
     
+    def download_to_stream(self, fileobj, progress_callback: Optional[callable] = None) -> int:
+        """Stream this file into the open binary file object ``fileobj``, a
+        window of chunks at a time rather than the whole file held in memory —
+        what lets a copy run several large files at once. Returns the bytes
+        transferred."""
+        conn = self._get_connection()
+        return conn.read_file(self.remote_path, progress=progress_callback,
+                              sink=fileobj)
+
+    def upload_from_stream(self, fileobj, total_bytes: int,
+                           progress_callback: Optional[callable] = None) -> int:
+        """Stream the open binary file object ``fileobj`` into this file,
+        creating or replacing it; ``total_bytes`` scales the progress. Returns
+        the bytes transferred."""
+        conn = self._get_connection()
+        conn.write_file(self.remote_path, fileobj, progress=progress_callback,
+                        size=total_bytes)
+        return total_bytes
+
     def write_bytes(self, data: bytes) -> int:
         """Open the file in bytes mode, write to it, and close the file"""
         conn = self._get_connection()

@@ -17,6 +17,7 @@ instead of paying a round trip per chunk.
 
 from __future__ import annotations
 
+import io
 import struct
 import threading
 from collections import deque
@@ -484,8 +485,11 @@ class SFTPClient:
             pass
 
     def read_file(self, path: str,
-                  progress: Optional[Callable[[int, int], None]] = None) -> bytes:
-        """The whole of file ``path``.
+                  progress: Optional[Callable[[int, int], None]] = None,
+                  sink=None):
+        """The whole of file ``path`` — or, given a writable binary ``sink``,
+        how many bytes were written into it, the file passing through
+        :data:`WINDOW` chunks at a time instead of being held whole.
 
         Reads are pipelined: up to :data:`WINDOW` requests of :data:`CHUNK`
         bytes are in flight, consumed in order. ``progress(done, total)`` is
@@ -502,6 +506,7 @@ class SFTPClient:
             if progress is not None:
                 progress(0, total)
             out = bytearray()
+            done = 0
             inflight: deque = deque()
             offset = 0          # next offset to ask for
             eof = False
@@ -519,7 +524,11 @@ class SFTPClient:
                     eof = True
                     break
                 data = _Reader(self._check((ptype, body), FXP_DATA)).bytes()
-                out += data
+                if sink is None:
+                    out += data
+                else:
+                    sink.write(data)
+                done += len(data)
                 if len(data) < CHUNK:
                     # A short read: the server may return less than asked for at
                     # any offset. Everything already in flight assumed a full
@@ -527,38 +536,51 @@ class SFTPClient:
                     inflight.clear()
                     offset = start + len(data)
                 if progress is not None:
-                    progress(len(out), max(total, len(out)))
+                    progress(done, max(total, done))
             if progress is not None:
-                progress(len(out), len(out))
-            return bytes(out)
+                progress(done, done)
+            return bytes(out) if sink is None else done
         finally:
             self._close_handle(handle, wait=False)
 
-    def write_file(self, path: str, data: bytes,
-                   progress: Optional[Callable[[int, int], None]] = None) -> None:
+    def write_file(self, path: str, data,
+                   progress: Optional[Callable[[int, int], None]] = None,
+                   size: Optional[int] = None) -> None:
         """Create or truncate ``path`` and write ``data`` to it, pipelined the
-        way :meth:`read_file` is. ``progress`` is called as each chunk is
+        way :meth:`read_file` is. ``data`` is ``bytes``, or a readable binary
+        stream read :data:`CHUNK` at a time until it ends — ``size`` then
+        scales the progress. ``progress`` is called as each chunk is
         acknowledged, and is the cancel point in the same way."""
+        if isinstance(data, (bytes, bytearray, memoryview)):
+            stream = io.BytesIO(data)
+            size = len(data)
+        else:
+            stream = data
         handle = self._open(path, FXF_WRITE | FXF_CREAT | FXF_TRUNC)
         try:
-            total = len(data)
+            total = size or 0
             if progress is not None:
                 progress(0, total)
-            view = memoryview(data)
             inflight: deque = deque()
             offset = 0
             done = 0
-            while offset < total or inflight:
-                while offset < total and len(inflight) < WINDOW:
-                    piece = view[offset:offset + CHUNK]
+            ended = False
+            while not ended or inflight:
+                while not ended and len(inflight) < WINDOW:
+                    piece = stream.read(CHUNK)
+                    if not piece:
+                        ended = True
+                        break
                     inflight.append((len(piece), self.submit(
                         FXP_WRITE, _string(handle) + _u64(offset) + _string(bytes(piece)))))
                     offset += len(piece)
-                size, future = inflight.popleft()
+                if not inflight:
+                    break
+                length, future = inflight.popleft()
                 self._ok(self.wait(future))
-                done += size
+                done += length
                 if progress is not None:
-                    progress(done, total)
+                    progress(done, max(total, done))
         except BaseException:
             self._close_handle(handle, wait=False)
             raise

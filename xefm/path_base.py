@@ -111,7 +111,8 @@ TIERS = {
                     "DISPLAY_PREFIX", "get_display_title",
                     "parse_uri", "root_prefix", "CAPABILITIES",
                     "SEARCH_STRATEGY", "listdir_attrs", "get_extended_metadata",
-                    "forget_cached_metadata", "LISTING_CONCURRENCY"),
+                    "forget_cached_metadata", "CONCURRENCY",
+                    "READ_CONCURRENCY", "WRITE_CONCURRENCY"),
     "helpers": ("child", "at", "key"),
 }
 
@@ -123,7 +124,8 @@ TIERS = {
 _PREVIEW_MEMBERS = ("DISPLAY_PREFIX", "get_display_title",
                     "parse_uri", "root_prefix", "CAPABILITIES",
                     "SEARCH_STRATEGY", "listdir_attrs", "get_extended_metadata",
-                    "forget_cached_metadata", "LISTING_CONCURRENCY")
+                    "forget_cached_metadata", "CONCURRENCY",
+                    "READ_CONCURRENCY", "WRITE_CONCURRENCY")
 
 
 class UriStatResult:

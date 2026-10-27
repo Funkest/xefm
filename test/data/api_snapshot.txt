@@ -84,12 +84,14 @@ stable	method	xefm.path.Path.write_bytes	[["self", "pk", null], ["data", "pk", n
 stable	method	xefm.path.Path.write_text	[["self", "pk", null], ["data", "pk", null], ["encoding", "pk", "None"], ["errors", "pk", "None"], ["newline", "pk", "None"]]
 stable	class	xefm.path_base.ReadOnlyPathImpl
 preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.CAPABILITIES	attribute
+preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.CONCURRENCY	attribute
 preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.DISPLAY_PREFIX	attribute
 stable	tier:overridable	xefm.path_base.ReadOnlyPathImpl.IS_REMOTE	attribute
-preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.LISTING_CONCURRENCY	attribute
+preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.READ_CONCURRENCY	attribute
 stable	tier:overridable	xefm.path_base.ReadOnlyPathImpl.READ_ONLY_MESSAGE	attribute
 stable	tier:required	xefm.path_base.ReadOnlyPathImpl.SCHEME	attribute
 preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.SEARCH_STRATEGY	attribute
+preview	tier:overridable	xefm.path_base.ReadOnlyPathImpl.WRITE_CONCURRENCY	attribute
 stable	tier:helpers	xefm.path_base.ReadOnlyPathImpl.at	method [["self", "pk", null], ["key", "pk", null]]
 stable	tier:helpers	xefm.path_base.ReadOnlyPathImpl.child	method [["self", "pk", null], ["name", "pk", null]]
 stable	tier:required	xefm.path_base.ReadOnlyPathImpl.exists	method [["self", "pk", null]]

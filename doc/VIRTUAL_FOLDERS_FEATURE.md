@@ -150,7 +150,8 @@ refusals — is XeFM's and should be left alone.
 | `CAPABILITIES`, `SEARCH_STRATEGY` | how XeFM reads and searches the content | Preview |
 | `listdir_attrs()` | list a directory and its sizes and times in one call | Preview |
 | `get_extended_metadata()` | storage-specific details; nothing shows them yet | Preview |
-| `forget_cached_metadata()`, `LISTING_CONCURRENCY` | caching and parallel listing | Preview |
+| `forget_cached_metadata()` | forget what the folder cached | Preview |
+| `CONCURRENCY`, `READ_CONCURRENCY`, `WRITE_CONCURRENCY` | how many requests the folder serves at once | Preview |
 
 `xefm ext check` names a Preview override when an extension defines one, and
 XeFM logs one line the first time such a class is defined.

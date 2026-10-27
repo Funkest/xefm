@@ -12,7 +12,7 @@ from concurrent.futures import CancelledError
 from abc import ABC, abstractmethod
 from pathlib import Path as PathlibPath, PurePath
 from datetime import datetime
-from typing import Union, Iterator, List, Optional, Any
+from typing import Union, Iterator, List, NamedTuple, Optional, Any
 from xefm import dir_scan
 from xefm import path_schemes
 from xefm.log_manager import getLogger
@@ -162,12 +162,17 @@ class PathImpl(ABC):
     #: space (``'S3: '``). Empty for local files, which need no marking.
     DISPLAY_PREFIX: str = ''
 
-    #: How many directories a tree walk may list at once (:mod:`xefm.tree_walk`).
-    #: 1 — one at a time, depth first — is right wherever a listing is cheap or
-    #: the storage gains nothing from being asked several things at once. A
-    #: backend whose listings are round trips over a connection that serves
-    #: requests side by side raises it.
-    LISTING_CONCURRENCY: int = 1
+    #: How many requests this storage serves at once: the ceiling on everything
+    #: one operation asks of it together, reads and writes alike. 1 — one thing
+    #: at a time — is the default because guessing upwards is the guess that
+    #: hurts. See :func:`concurrency`.
+    CONCURRENCY: int = 1
+
+    #: How many of those requests may be reads (a listing is a read), and how
+    #: many writes. ``None`` leaves it to :attr:`CONCURRENCY`; a larger number
+    #: is held to it.
+    READ_CONCURRENCY: Optional[int] = None
+    WRITE_CONCURRENCY: Optional[int] = None
 
     def __init_subclass__(cls, **kwargs):
         """Validate a backend's declarations as it is defined.
@@ -196,6 +201,26 @@ class PathImpl(ABC):
                 f"which is not one of {', '.join(sorted(SEARCH_STRATEGIES))} — "
                 f"using {PathImpl.SEARCH_STRATEGY!r}")
             cls.SEARCH_STRATEGY = PathImpl.SEARCH_STRATEGY
+
+        # LISTING_CONCURRENCY (Preview) was the read side alone; a backend
+        # written against it keeps its number as the total.
+        legacy = cls.__dict__.get("LISTING_CONCURRENCY")
+        if legacy is not None and "CONCURRENCY" not in cls.__dict__:
+            logger.warning(
+                f"{cls.__name__}.LISTING_CONCURRENCY is now CONCURRENCY "
+                f"(with READ_CONCURRENCY / WRITE_CONCURRENCY) — using "
+                f"{legacy!r} as CONCURRENCY")
+            cls.CONCURRENCY = legacy
+
+        for name in ("CONCURRENCY", "READ_CONCURRENCY", "WRITE_CONCURRENCY"):
+            value = getattr(cls, name)
+            if value is None and name != "CONCURRENCY":
+                continue
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                logger.warning(
+                    f"{cls.__name__}.{name} is {value!r}, which is not a count "
+                    f"of at least 1 — using {getattr(PathImpl, name)!r}")
+                setattr(cls, name, getattr(PathImpl, name))
 
     def supports(self, capability: str) -> bool:
         """Whether this backend has ``capability``.
@@ -556,6 +581,19 @@ class LocalPathImpl(PathImpl):
                               'file_editing', 'streaming_read'})
     SEARCH_STRATEGY = 'streaming'
     DISPLAY_PREFIX = ''
+    # Eight requests at once. A copy between two local paths is four files in
+    # flight — each a read and a write on this disk, so half of the eight —
+    # measured ~1.3–1.9x at 2–4 workers on an APFS SSD and *worse* beyond that,
+    # between the GIL and filesystem metadata serialisation. With the other
+    # end remote the disk is not what a copy waits on: a download from SSH
+    # through a 40 ms round trip kept gaining up to 32 files at once (17.5 s
+    # at 4, 8.9 s at 8), and eight reads off the disk while S3 takes them is
+    # no strain. This covers a mounted network volume as well as a local disk,
+    # and deliberately does not distinguish them: nothing in a path says which
+    # it is, and CloseGate (file_operations) serialises the transfer a mounted
+    # volume defers to close regardless. A WebDAV mount gained nothing past 2,
+    # and loses nothing by being given more it will queue.
+    CONCURRENCY = 8
 
     def __init__(self, path_obj: PathlibPath):
         """Initialize with a pathlib.Path object"""
@@ -1095,9 +1133,13 @@ class Path:
         """See :func:`listdir_attrs`."""
         return self._impl.listdir_attrs()
 
-    def _listing_concurrency(self) -> int:
-        """See :func:`listing_concurrency`."""
-        return max(1, int(getattr(self._impl, 'LISTING_CONCURRENCY', 1) or 1))
+    def _concurrency(self) -> 'Concurrency':
+        """See :func:`concurrency`."""
+        impl = self._impl
+        total = getattr(impl, 'CONCURRENCY', 1)
+        read = getattr(impl, 'READ_CONCURRENCY', None) or total
+        write = getattr(impl, 'WRITE_CONCURRENCY', None) or total
+        return Concurrency(total, min(read, total), min(write, total))
 
     def glob(self, pattern: str) -> Iterator['Path']:
         """Iterate over this subtree and yield all existing files matching pattern"""
@@ -1423,32 +1465,37 @@ class Path:
             dest_scheme = destination.scheme
             
             # Handle all cross-storage combinations with progress tracking.
-            # An S3 leg streams through boto3's managed transfer, which reports
-            # bytes as they move and never holds the whole object in memory; an
-            # SSH leg still passes whole ``bytes`` through its own progress
-            # hooks.
+            # A leg between the local disk and S3 or SSH streams — boto3's
+            # managed transfer, or the SFTP session a window of chunks at a
+            # time — reporting bytes as they move and never holding the whole
+            # file in memory, so a copy can run several large files at once
+            # (#540). Remote ↔ remote still passes whole ``bytes``.
             if source_scheme == 's3' and dest_scheme == 's3':
                 # S3 → S3: copied server-side, so no bytes cross the client
                 destination._impl.copy_from_s3(self._impl, progress_callback)
 
-            elif source_scheme == 'file' and dest_scheme == 's3':
-                # Local → S3
+            elif source_scheme == 'file' and dest_scheme in ('s3', 'ssh'):
+                # Local → S3 / SSH
                 with self.open('rb') as src:
                     destination._impl.upload_from_stream(
                         src, self.stat().st_size, progress_callback)
 
-            elif source_scheme == 's3' and dest_scheme == 'file':
-                # S3 → Local. The object lands in the file as it arrives, so a
-                # failure part way through would otherwise leave a truncated
-                # file that looks like a finished copy
+            elif source_scheme in ('s3', 'ssh') and dest_scheme == 'file':
+                # S3 / SSH → Local. The file lands as it arrives, so it lands
+                # beside the destination and takes its place only once whole:
+                # a failure part way through leaves neither a truncated file
+                # that looks like a finished copy nor, when overwriting, a
+                # lost original.
+                part = destination.parent / f".{destination.name}.xefm-part"
                 try:
-                    with destination.open('wb') as dst:
+                    with part.open('wb') as dst:
                         self._impl.download_to_stream(dst, progress_callback)
+                    os.replace(str(part), str(destination))
                 except BaseException:
                     # BaseException so a cancel (_CallbackAbort) also lands
-                    # here and the truncated file is still removed
+                    # here and the partial file is still removed
                     try:
-                        destination.unlink()
+                        part.unlink()
                     except OSError:
                         pass
                     raise
@@ -1471,27 +1518,6 @@ class Path:
                     except OSError:
                         pass
                     raise
-
-            elif source_scheme == 'file' and dest_scheme == 'ssh':
-                # Local → SSH
-                # Read from local file and write to remote
-                with self.open('rb') as src:
-                    data = src.read()
-
-                # Use progress-aware write if available and callback provided
-                if progress_callback:
-                    destination._impl.write_bytes_with_progress(data, progress_callback)
-                else:
-                    destination.write_bytes(data)
-
-            elif source_scheme == 'ssh' and dest_scheme == 'file':
-                # SSH → Local
-                # Read from remote and write to local file
-                if progress_callback:
-                    data = self._impl.read_bytes_with_progress(progress_callback)
-                else:
-                    data = self.read_bytes()
-                destination.write_bytes(data)
 
             elif source_scheme in ('s3', 'ssh') and dest_scheme in ('s3', 'ssh'):
                 # Remote → Remote across storage types (S3 ↔ SSH). The SSH side
@@ -1611,10 +1637,23 @@ def listdir_attrs(path) -> List[tuple]:
     return path._listdir_attrs()
 
 
-def listing_concurrency(path) -> int:
-    """How many directories a tree walk under ``path`` may list at once
-    (``PathImpl.LISTING_CONCURRENCY``)."""
-    return path._listing_concurrency()
+class Concurrency(NamedTuple):
+    """What a storage serves at once, from its declarations
+    (``PathImpl.CONCURRENCY`` / ``READ_CONCURRENCY`` / ``WRITE_CONCURRENCY``):
+    ``total`` requests, of which up to ``read`` reads and ``write`` writes."""
+    total: int
+    read: int
+    write: int
+
+
+def concurrency(path) -> Concurrency:
+    """How many requests the storage holding ``path`` serves at once.
+
+    The numbers are ceilings for one operation — a copy, a search, a disk-usage
+    walk — not shared across operations: each sizes its own pool from them, and
+    a request never waits on another operation's. Read and write default to
+    the total and never exceed it."""
+    return path._concurrency()
 
 
 def forget_cached_metadata(path) -> None:

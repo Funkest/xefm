@@ -1,5 +1,5 @@
 """The search walk (``xefm.tree_walk``): depth-first one listing at a time, or
-several listings at once where the backend says so (SSH).
+several listings at once on a remote storage that serves them (SSH).
 
 Run with: python -m pytest test/test_tree_walk.py -v
 """
@@ -11,7 +11,7 @@ import uuid
 import pytest
 
 from xefm import tree_walk
-from xefm.path import Path, listing_concurrency
+from xefm.path import Concurrency, Path, concurrency
 
 
 class FakeDir:
@@ -25,8 +25,11 @@ class FakeDir:
         self.delay = delay
         self.log = log if log is not None else []
 
-    def _listing_concurrency(self):
-        return self.concurrency
+    def is_remote(self):
+        return True
+
+    def _concurrency(self):
+        return Concurrency(self.concurrency, self.concurrency, self.concurrency)
 
     def _listdir_attrs(self):
         self.log.append(self.name)
@@ -86,6 +89,26 @@ def test_listings_overlap_when_the_backend_allows():
     assert parallel < sequential / 3
 
 
+def test_a_walk_keeps_no_more_listings_queued_than_the_pool_has_workers():
+    """The directories still to list wait in the walk, not in the pool, so a
+    read the same search asks for never queues behind a wide tree."""
+    from xefm.worker_pool import DaemonPool
+    with DaemonPool(4) as pool:
+        submitted = []
+        submit = pool.submit
+
+        def counting(fn, *args):
+            submitted.append(args)
+            assert pool._jobs.qsize() <= pool.size
+            return submit(fn, *args)
+        pool.submit = counting
+        root = FakeDir("r", _tree(2, 12), 4, delay=0.005)
+        assert len(list(tree_walk.walk(root, threading.Event(),
+                                       lambda e, a: a["is_dir"], pool=pool))) \
+            == 13 + 12 * 13 + 144 * 12
+        assert len(submitted) == 1 + 12 + 144
+
+
 def test_cancel_stops_the_parallel_walk():
     cancel = threading.Event()
     log = []
@@ -101,9 +124,31 @@ def test_cancel_stops_the_parallel_walk():
 
 
 def test_backends_declare_their_concurrency(tmp_path):
-    assert listing_concurrency(Path(str(tmp_path))) == 1
     from xefm.ssh import SSHPathImpl
-    assert SSHPathImpl.LISTING_CONCURRENCY > 1
+    local = Path(str(tmp_path))
+    assert concurrency(local).read > 1
+    # ...but a local walk stays one listing at a time: there are no round
+    # trips to overlap, and the pool costs more than the listings.
+    assert tree_walk.parallel_reads(local) == 1
+    assert SSHPathImpl.CONCURRENCY > 1
+
+
+def test_a_walk_reports_what_it_could_not_list():
+    errors = []
+    root = FakeDir("r", {"locked": None, "open": {"x": "file"}}, 4)
+    list(tree_walk.walk(root, threading.Event(), lambda e, a: a["is_dir"],
+                        on_error=lambda d, e: errors.append(d.name)))
+    assert errors == ["r/locked"]
+
+
+def test_a_walk_on_a_shared_pool_leaves_the_pool_running():
+    from xefm.worker_pool import DaemonPool
+    with DaemonPool(4) as pool:
+        root = FakeDir("r", _tree(2, 3), 4)
+        names = sorted(e.name for e, _a in tree_walk.walk(
+            root, threading.Event(), lambda e, a: a["is_dir"], pool=pool))
+        assert names == _names(1, _tree(2, 3))
+        assert pool.submit(lambda: 7).result() == 7
 
 
 def test_an_ssh_tree_walk_over_a_real_sftp_server(tmp_path, monkeypatch):
@@ -132,3 +177,46 @@ def test_an_ssh_tree_walk_over_a_real_sftp_server(tmp_path, monkeypatch):
         assert found == local and len(found) == 6 + 36 + 36
     finally:
         SC.SSHConnectionManager.get_instance().close_connection(host)
+
+
+
+_EXIT_SCRIPT = r"""
+import sys, threading, time
+sys.path.insert(0, {test_dir!r})
+from test_tree_walk import FakeDir, _tree
+from xefm import tree_walk
+
+def search():
+    # A search the user leaves running when they quit: a daemon thread, like
+    # the search dialog's, walking a remote tree whose listings are slow —
+    # a far host, a busy link.
+    root = FakeDir("r", _tree(2, 20), 8, delay={delay})
+    for _ in tree_walk.walk(root, threading.Event(), lambda e, a: a["is_dir"]):
+        pass
+
+threading.Thread(target=search, daemon=True).start()
+time.sleep(0.5)
+print("exiting", flush=True)
+"""
+
+
+def test_quitting_mid_walk_does_not_wait_for_its_listings():
+    """XeFM quit while a search walked a slow SSH host, and the process
+    stayed until every listing in flight had come back: the walk's pool
+    threads were ones Python joins at exit. A walk is work to drop on quit,
+    like the search dialog's own daemon thread."""
+    import os
+    import subprocess
+    import sys
+    test_dir = os.path.dirname(os.path.abspath(__file__))
+    proc = subprocess.Popen(
+        [sys.executable, "-c", _EXIT_SCRIPT.format(test_dir=test_dir, delay=30)],
+        cwd=os.path.dirname(test_dir), stdout=subprocess.PIPE, text=True)
+    try:
+        assert proc.stdout.readline().strip() == "exiting"
+        start = time.monotonic()
+        proc.wait(timeout=10)
+        assert time.monotonic() - start < 3
+    finally:
+        proc.kill()
+        proc.wait()

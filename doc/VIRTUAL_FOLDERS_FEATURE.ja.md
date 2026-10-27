@@ -124,7 +124,8 @@ class RegistryPathImpl(ReadOnlyPathImpl):
 | `CAPABILITIES`、`SEARCH_STRATEGY` | XeFM が内容をどう読み、どう検索するか | プレビュー |
 | `listdir_attrs()` | ディレクトリの一覧とそのサイズ・時刻を 1 回の呼び出しで取得 | プレビュー |
 | `get_extended_metadata()` | ストレージ固有の詳細。今はまだどこにも表示されません | プレビュー |
-| `forget_cached_metadata()`、`LISTING_CONCURRENCY` | キャッシュと並列での一覧取得 | プレビュー |
+| `forget_cached_metadata()` | フォルダーがキャッシュした内容を捨てる | プレビュー |
+| `CONCURRENCY`、`READ_CONCURRENCY`、`WRITE_CONCURRENCY` | フォルダーが同時に受けられる要求の数 | プレビュー |
 
 拡張機能がプレビューのオーバーライドを定義していると、`xefm ext check` がそれを示します。また、そのようなクラスが初めて定義されたときに、XeFM はログに 1 行を記録します。
 

@@ -93,7 +93,8 @@ from xefm import search_filters
 from xefm.isearch_bar import ISearchBar
 from xefm import filters
 from xefm import name_key
-from xefm import document_text, keymap_presets, os_index, similar_scan, tree_walk, xft
+from xefm import (content_read, document_text, keymap_presets, os_index,
+                  similar_scan, tree_walk, xft)
 from xefm.file_clipboard import FileClipboard, conflicts as clipboard_conflicts
 from xefm.quick_view import QuickView
 from xefm import event_log
@@ -122,12 +123,12 @@ from xefm.sort_dialog import show_sort_dialog
 from xefm.progress_manager import OperationType
 from xefm.diff_viewer import show_diff_viewer
 from xefm.directory_diff_viewer import show_directory_diff_viewer
+from xefm.worker_pool import DaemonPool
 from xefm.file_operations import (CloseGate, FileOperationService,
                                   format_op_errors, format_op_summary,
                                   serialized_log, transfer_workers)
 from xefm.task import Cancelled, Task, TaskManager, TaskStatus
 from xefm.text_dialog import show_markdown
-from xefm.text_encoding import sniff_bom
 from xefm.tips import tip_count
 from xefm.tips_dialog import show_tips_dialog
 from xefm import image_decoders
@@ -7656,31 +7657,16 @@ class XeFMApp:
 
     @staticmethod
     def _sniff_text_encoding(path, sample_size: int = 1024) -> str | None:
-        """The codec content search streams ``path`` with, or ``None`` for a file
-        with nothing to grep (binary, empty, unreadable). A Unicode BOM names the
-        text outright and must be honored *before* the NUL sniff — UTF-16/32 text
-        is full of NULs by construction and used to be skipped as binary (issue
-        #305); the self-detecting codec consumes the BOM so it never shadows a
-        line-1 match. Without a BOM, a NUL in the first chunk means binary, and
-        clean bytes read as UTF-8."""
+        """The codec content search reads ``path`` with, or ``None`` for a file
+        with nothing to grep (binary, empty, unreadable) — see
+        :func:`xefm.content_read.text_encoding`. The search itself sniffs from
+        the handle it reads with (:func:`xefm.content_read.open_text`)."""
         try:
             with path.open("rb") as f:
                 chunk = f.read(sample_size)
         except Exception:
             return None
-        if not chunk:
-            return None
-        bom = sniff_bom(chunk)
-        if bom is not None:
-            codec = bom[1]
-            if codec.startswith("utf-16"):
-                return "utf-16"
-            if codec.startswith("utf-32"):
-                return "utf-32"
-            return "utf-8-sig"
-        if b"\x00" in chunk:
-            return None
-        return "utf-8"
+        return content_read.text_encoding(chunk)
 
     def _iter_content_matches(self, root, regex, cancel, max_line: int = 200,
                               name_filter: str = "", *, recursive: bool = True,
@@ -7709,38 +7695,69 @@ class XeFMApp:
         # config registered — applied to the same entries the pane would show.
         match = filters.matcher(name_filter) if name_filter else None
         shows, descend = _search_rules(self.flm.show_hidden, recursive)
-        for e, attrs in tree_walk.walk(root, cancel, descend):
-            if attrs["is_dir"] or not shows(e, attrs):
-                continue
-            # The filter chips (#609), before a byte is read.
-            if keep is not None and not keep(e.name, attrs):
-                continue
-            try:
-                if match is not None and not match(e, attrs):
+
+        # On a remote storage the walk's listings and the read-ahead share
+        # one pool, so the search as a whole stays within what the storage
+        # serves at once (#539). Locally there is no pool: one file at a time.
+        # Daemon threads: quitting mid-search drops the reads in flight.
+        workers = tree_walk.parallel_reads(root)
+        pool = (DaemonPool(workers, name="xefm-search-read")
+                if workers > 1 else None)
+
+        def candidates():
+            for e, attrs in tree_walk.walk(root, cancel, descend, pool=pool):
+                if attrs["is_dir"] or not shows(e, attrs):
                     continue
-                if document_text.handles(e):
-                    # A PDF or an Office file is searched through its text,
-                    # the same text the viewer shows (#575).
-                    extracted = document_text.extract(e)
-                    for line_num, line in enumerate(extracted.lines, 1):
+                # The filter chips (#609), before a byte is read.
+                if keep is not None and not keep(e.name, attrs):
+                    continue
+                try:
+                    if match is not None and not match(e, attrs):
+                        continue
+                except Exception:
+                    continue
+                yield e, attrs
+
+        if pool is None:
+            files = ((e, attrs, None) for e, attrs in candidates())
+        else:
+            files = content_read.read_ahead(
+                candidates(), cancel, pool, workers,
+                lambda e, _attrs: not document_text.handles(e))
+        try:
+            for e, _attrs, read in files:
+                stream = None
+                try:
+                    if document_text.handles(e):
+                        # A PDF or an Office file is searched through its
+                        # text, the same text the viewer shows (#575).
+                        lines = document_text.extract(e).lines
+                    else:
+                        if read is not None and not content_read.finished(
+                                read, cancel):
+                            return
+                        data = read.result() if read is not None else None
+                        stream = lines = (
+                            content_read.text_of(data) if data is not None
+                            else content_read.open_text(e))
+                        if lines is None:
+                            continue
+                    for line_num, line in enumerate(lines, 1):
                         if cancel.is_set():
                             return
                         if regex.search(line):
                             yield {"path": e, "line": line_num,
                                    "text": line.strip()[:max_line]}
+                except Exception:
                     continue
-                encoding = self._sniff_text_encoding(e)
-                if encoding is None:
-                    continue
-                with e.open("r", encoding=encoding, errors="ignore") as f:
-                    for line_num, line in enumerate(f, 1):
-                        if cancel.is_set():
-                            return
-                        if regex.search(line):
-                            yield {"path": e, "line": line_num,
-                                   "text": line.strip()[:max_line]}
-            except Exception:
-                continue
+                finally:
+                    if stream is not None:
+                        stream.close()
+        finally:
+            if pool is not None:
+                # Reads and listings not started are dropped; ones running
+                # finish on their own and are discarded.
+                pool.shutdown(wait=False, cancel_futures=True)
 
     def _go_to_content_hit(self, hit) -> None:
         entry = hit["path"]
@@ -9803,13 +9820,13 @@ class XeFMApp:
     def _extract_workers(self, dest_dir=None) -> int:
         """How many members an extraction may have in flight.
 
-        The destination's number, from the same table a copy uses
+        The destination's write ceiling, through the same rule a copy uses
         (:func:`~xefm.file_operations.transfer_workers`) — the archive's own end
         is not in it, because the reader is serialised by the handler's claim
         whatever this returns, so the only thing a worker count can overlap here
-        is the writing."""
-        schemes = {dest_dir.scheme} if dest_dir is not None else {"file"}
-        return transfer_workers(getattr(self, "config", None), schemes)
+        is the writing. No destination is a local one."""
+        dest = dest_dir if dest_dir is not None else Path(".")
+        return transfer_workers(getattr(self, "config", None), (), dest)
 
     def _close_gate(self) -> CloseGate:
         """This extraction's gate on closing files — the copy engine's, because

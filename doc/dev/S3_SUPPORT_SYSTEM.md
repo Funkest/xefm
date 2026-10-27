@@ -147,7 +147,7 @@ session's own region doesn't open a second pool to an endpoint already connected
 **Pool size.** `S3_MAX_POOL_CONNECTIONS` (16) is passed as
 `botocore.config.Config(max_pool_connections=...)`. botocore's default of 10 is
 under what a copy asks for: up to 8 workers transfer at once
-(`_SCHEME_WORKERS["s3"]` in `file_operations`) while the pane's listing and the
+(`S3PathImpl.READ_CONCURRENCY` / `WRITE_CONCURRENCY`) while the pane's listing and the
 UI hit the same bucket, and a request that finds the pool full opens a
 connection and then discards it — a fresh handshake, which is the cost the
 sharing exists to avoid. The pool is per host, and S3 addresses buckets as
@@ -765,10 +765,13 @@ still wants whole objects, and caching a small file's body there is useful.
 - The total comes from `stat().st_size`, which reuses the `head_object` already
   cached by the `exists()` check in `copy_to()` — no extra API call.
 - Streaming means a failed download can leave a truncated file, so
-  `_copy_file_cross_storage()` unlinks the partial destination and re-raises.
+  `_copy_file_cross_storage()` downloads into `.<name>.xefm-part` beside the
+  destination and renames it into place only once whole; on failure the part
+  file is removed and the original, if any, is untouched.
 
-**Not covered**: S3 ↔ SSH copies still buffer the whole object, because the SSH
-implementation only deals in whole `bytes`. Each leg reports its own progress in
+**Not covered**: S3 ↔ SSH copies still buffer the whole object: each side
+streams to or from a file object, and joining the two would take a thread
+between them. Each leg reports its own progress in
 turn.
 
 #### Cancelling an In-Flight S3 Transfer

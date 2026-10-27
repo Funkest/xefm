@@ -710,7 +710,7 @@ Thin wrappers so the app never reaches into `_impl` / cache internals:
   which `run` folds into `done` / `entries` / `failures` after the loop.
 
   Each archive is read by `_extract_members`: **symmetric workers**
-  (`transfer_workers` on the destination's scheme) each take one member and carry it from
+  (`transfer_workers` on the destination's write ceiling) each take one member and carry it from
   claim to closed file, so a member's whole life — and its file handle's — stays
   on one thread. The archive is claimed one member at a time, but that lock
   lives with the cursor it protects, inside

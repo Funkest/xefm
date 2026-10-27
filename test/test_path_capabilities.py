@@ -125,6 +125,30 @@ class TestDeclarationValidation(unittest.TestCase):
 
         self.assertEqual(Weird.SEARCH_STRATEGY, PathImpl.SEARCH_STRATEGY)
 
+    def test_a_concurrency_that_is_not_a_count_falls_back(self):
+        class Weird(PathImpl):
+            CONCURRENCY = 0
+            READ_CONCURRENCY = "lots"
+
+        self.assertEqual(Weird.CONCURRENCY, 1)
+        self.assertIsNone(Weird.READ_CONCURRENCY)
+
+    def test_read_and_write_are_held_to_the_total(self):
+        class Small(LocalPathImpl):
+            CONCURRENCY = 3
+            READ_CONCURRENCY = 10
+            WRITE_CONCURRENCY = None
+
+        path = Path.__new__(Path)
+        path._impl = Small(Mock())
+        self.assertEqual(path._concurrency(), (3, 3, 3))
+
+    def test_the_old_listing_concurrency_becomes_the_total(self):
+        class Old(PathImpl):
+            LISTING_CONCURRENCY = 6
+
+        self.assertEqual(Old.CONCURRENCY, 6)
+
     def test_a_plain_set_is_accepted_and_frozen(self):
         """A config writes ``CAPABILITIES = {"streaming_read"}``; nobody should
         have to remember ``frozenset``."""

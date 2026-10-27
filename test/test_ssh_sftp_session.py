@@ -97,6 +97,35 @@ def test_round_trip_larger_than_the_window(conn, tree):
     assert seen == sorted(seen)
 
 
+def test_streaming_round_trip_larger_than_the_window(conn, tree):
+    """A stream in and a sink out (#540): the file passes through the window
+    instead of being held whole, and arrives the same."""
+    import io
+    data = os.urandom(CHUNK * WINDOW * 2 + 1234)
+    target = remote(tree) + "/sub dir/streamed.bin"
+    seen = []
+
+    class Trickle(io.RawIOBase):
+        """A source that hands over less than asked, the way a pipe can."""
+        def __init__(self):
+            self.rest = data
+
+        def readable(self):
+            return True
+
+        def read(self, n=-1):
+            piece, self.rest = self.rest[:1000], self.rest[1000:]
+            return piece
+
+    conn.write_file(target, Trickle(), size=len(data),
+                    progress=lambda done, total: seen.append((done, total)))
+    assert seen[0] == (0, len(data)) and seen[-1] == (len(data), len(data))
+    assert (tree / "sub dir" / "streamed.bin").read_bytes() == data
+    sink = io.BytesIO()
+    assert conn.read_file(target, sink=sink) == len(data)
+    assert sink.getvalue() == data
+
+
 def test_an_empty_file(conn, tree):
     conn.write_file(remote(tree) + "/empty", b"")
     assert conn.read_file(remote(tree) + "/empty") == b""
@@ -224,3 +253,50 @@ def test_a_login_that_fails_says_why():
     with pytest.raises(SC.SSHError, match="Host key verification failed"):
         conn.connect()
     assert not conn.is_connected()
+
+
+def test_copies_between_the_disk_and_ssh_stream_both_ways(tree, via_sftp_server):
+    """Local → SSH → local through ``copy_to``, with a file larger than the
+    window, lands the same bytes and leaves no part file behind."""
+    from xefm.path import copy_to
+    host = f"test-{uuid.uuid4().hex[:8]}"
+    manager = SC.SSHConnectionManager.get_instance()
+    data = os.urandom(CHUNK * WINDOW * 3 + 77)
+    (tree / "big.bin").write_bytes(data)
+    (tree / "back").mkdir()
+    try:
+        root = Path(f"ssh://{host}{remote(tree)}")
+        progress = []
+        copy_to(Path(str(tree / "big.bin")), root / "sub dir" / "up.bin",
+                progress_callback=lambda d, t: progress.append(d))
+        assert (tree / "sub dir" / "up.bin").read_bytes() == data
+        assert progress[-1] == len(data)
+        copy_to(root / "sub dir" / "up.bin", Path(str(tree / "back" / "down.bin")))
+        assert (tree / "back" / "down.bin").read_bytes() == data
+        assert os.listdir(tree / "back") == ["down.bin"]
+    finally:
+        manager.close_connection(host)
+
+
+def test_a_download_that_fails_keeps_the_file_it_would_replace(
+        tree, via_sftp_server, monkeypatch):
+    """The download lands beside the destination and replaces it only once
+    whole: overwriting with a copy that breaks off leaves the original."""
+    from xefm.path import copy_to
+    from xefm.ssh import SSHPathImpl
+    host = f"test-{uuid.uuid4().hex[:8]}"
+    manager = SC.SSHConnectionManager.get_instance()
+    (tree / "keep.txt").write_bytes(b"original")
+
+    def broken(self, fileobj, progress_callback=None):
+        fileobj.write(b"half")
+        raise SC.SSHConnectionLostError("gone")
+    monkeypatch.setattr(SSHPathImpl, "download_to_stream", broken)
+    try:
+        root = Path(f"ssh://{host}{remote(tree)}")
+        with pytest.raises(OSError):
+            copy_to(root / "b.txt", Path(str(tree / "keep.txt")), overwrite=True)
+        assert (tree / "keep.txt").read_bytes() == b"original"
+        assert not [n for n in os.listdir(tree) if n.endswith(".xefm-part")]
+    finally:
+        manager.close_connection(host)
