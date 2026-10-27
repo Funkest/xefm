@@ -601,6 +601,8 @@ def _retry_without_readonly(os_path: str, exc: PermissionError, remove):
     attribute back if it fails again; otherwise re-raise ``exc``."""
     if not _clear_readonly(os_path, exc):
         raise exc
+    # debug, not info: a Google Drive tree has one of these per directory.
+    logger.debug(f"Cleared the read-only attribute to remove: {os_path}")
     try:
         return remove()
     except OSError:

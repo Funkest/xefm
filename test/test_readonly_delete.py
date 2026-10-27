@@ -8,7 +8,8 @@ local removals now clear the attribute and try once more, and only after
 Windows has refused.
 
 The attribute needs no privilege to set (``SetFileAttributesW``), so these run
-on any Windows checkout; elsewhere they skip.
+on any Windows checkout; elsewhere they skip — all but the last class, which
+fakes what it needs and runs everywhere.
 
 Run with: python -m pytest test/test_readonly_delete.py -v
 """
@@ -187,6 +188,61 @@ class OnlyARefusalForTheAttributeIsRetried(ReadOnlyTestBase):
         Path(link).unlink()
         self.assertFalse(os.path.lexists(link))
         self.assertTrue(_attributes(target) & FILE_ATTRIBUTE_READONLY)
+
+
+# ---------------------------------------------------------------------------
+# How the move's rmtree hands its errors over (any platform)
+# ---------------------------------------------------------------------------
+
+
+class TheRmtreeCallbackOnEveryPython(unittest.TestCase):
+    """``_rmtree_local`` passes ``onexc`` from Python 3.12 and ``onerror``
+    before it, which hands over ``exc_info`` instead of the exception. Both
+    branches run here whatever the Python, by faking ``sys.version_info`` and
+    the ``shutil.rmtree`` that calls the callback."""
+
+    def run_rmtree(self, version, func, exc, entry="/tree/entry"):
+        """``_rmtree_local`` on ``version``, with an rmtree that fails ``func``
+        on ``entry`` with ``exc``; the ``_retry_without_readonly`` mock."""
+        fake_sys = mock.Mock(version_info=version, platform=sys.platform)
+
+        def fake_rmtree(path, **kwargs):
+            (keyword, callback), = kwargs.items()
+            self.assertEqual(keyword, "onexc" if version >= (3, 12) else "onerror")
+            callback(func, entry, exc if keyword == "onexc" else (type(exc), exc, None))
+
+        with mock.patch.object(xefm_path, "sys", fake_sys), \
+                mock.patch("shutil.rmtree", fake_rmtree), \
+                mock.patch.object(xefm_path, "_retry_without_readonly") as retry:
+            xefm_path._rmtree_local("/tree")
+        return retry
+
+    def test_a_refused_removal_reaches_the_retry(self):
+        for version in ((3, 11, 0), (3, 12, 0)):
+            with self.subTest(version=version):
+                exc = PermissionError(13, "Access is denied")
+                retry = self.run_rmtree(version, os.rmdir, exc)
+                retry.assert_called_once_with("/tree/entry", exc, mock.ANY)
+
+    def test_other_errors_are_raised_as_they_were(self):
+        for version in ((3, 11, 0), (3, 12, 0)):
+            for func, exc in ((os.unlink, FileNotFoundError(2, "gone")),
+                              (os.scandir, PermissionError(13, "Access is denied"))):
+                with self.subTest(version=version, func=func.__name__):
+                    with self.assertRaises(type(exc)) as raised:
+                        self.run_rmtree(version, func, exc)
+                    self.assertIs(raised.exception, exc)
+
+    def test_the_retry_removes_the_entry_rmtree_named(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        entry = os.path.join(d, "empty")
+        os.mkdir(entry)
+        retry = self.run_rmtree((3, 11, 0), os.rmdir,
+                                PermissionError(13, "Access is denied"), entry=entry)
+        _path, _exc, remove = retry.call_args.args
+        remove()
+        self.assertFalse(os.path.exists(entry))
 
 
 if __name__ == "__main__":
