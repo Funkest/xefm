@@ -147,6 +147,22 @@ def test_printable_check_covers_every_text_surface():
     assert printable_isearch_bindings(bindings) == []
 
 
+def test_terminal_shadowed_check_finds_ctrl_i_j_m_h():
+    # A terminal sends these as Tab, Enter and Backspace (#760).
+    from xefm.config import terminal_shadowed_bindings, terminal_shadowed_notice
+
+    bindings = {"favorites": ["Ctrl-J"], "rename": ["Shift-F6", "Ctrl-M"],
+                "copy_paths": ["Ctrl-P"], "go_parent": ["BACKSPACE"],
+                "isearch.next_match": ["Ctrl-I"], "help": {"keys": ["Ctrl-H"]},
+                "view_file": ["Ctrl-J x"]}
+    assert terminal_shadowed_bindings(bindings) == [
+        ("favorites", "Ctrl-J"), ("rename", "Ctrl-M"),
+        ("isearch.next_match", "Ctrl-I"), ("help", "Ctrl-H"),
+        ("view_file", "Ctrl-J x")]
+    assert "never fire" in terminal_shadowed_notice(bindings)
+    assert terminal_shadowed_notice({"copy_paths": ["Ctrl-P"]}) is None
+
+
 def test_printable_check_reads_a_surface_qualified_binding():
     from xefm.config import printable_text_bindings
 

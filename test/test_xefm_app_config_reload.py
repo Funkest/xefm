@@ -186,6 +186,36 @@ class ReloadConfig(ConfigReloadBase):
         self.assertIn("Config warning", logged)
         self.assertEqual(self.app.config.DEFAULT_SORT_MODE, 'bogus')
 
+    def _reload_logged(self, ctrl_letter_keys):
+        """Reload a config binding Ctrl-J on the memory backend with only
+        ``ctrl_letter_keys`` changed: True, False, or None for a PuiKit too old
+        to declare it."""
+        from puikit.capability import CapabilityProfile
+        caps = {k: v for k, v in self.backend.capabilities.items()
+                if k != "ctrl_letter_keys"}
+        if ctrl_letter_keys is not None:
+            caps["ctrl_letter_keys"] = ctrl_letter_keys
+        self._write_config("""
+            class Config:
+                KEY_BINDINGS = {'favorites': ['Ctrl-J']}
+        """)
+        with patch.object(type(self.backend), "capabilities",
+                          new=property(lambda _self: CapabilityProfile(caps))), \
+             patch.object(self.app, "log_info") as log:
+            self.app.reload_config()
+        return " ".join(str(c.args[0]) for c in log.call_args_list)
+
+    def test_a_ctrl_j_binding_is_reported_in_a_terminal(self):
+        # #760: Ctrl-J arrives as Enter there, so the binding never fires.
+        logged = self._reload_logged(False)
+        self.assertIn("'favorites' -> 'Ctrl-J'", logged)
+
+    def test_a_ctrl_j_binding_is_not_reported_in_the_desktop_app(self):
+        self.assertNotIn("Ctrl-J", self._reload_logged(True))
+
+    def test_a_puikit_without_the_capability_is_not_taken_for_a_terminal(self):
+        self.assertNotIn("Ctrl-J", self._reload_logged(None))
+
     def test_a_new_theme_joins_the_list_without_a_restart(self):
         # #708: the theme list was built once at launch, so a theme added by
         # config.py or a newly installed extension was missing until restart.

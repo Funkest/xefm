@@ -1249,6 +1249,51 @@ def printable_isearch_notice(bindings: dict, limit: int = 3) -> str | None:
             f"Use a modified or non-printable key (Shift-DOWN, F2, Ctrl-Y).")
 
 
+#: Ctrl+letters a terminal cannot send: their control codes are the bytes of
+#: these keys, which is what arrives (PuiKit keyboard contract §4a).
+TERMINAL_SHADOWED_CTRL_LETTERS = {"i": "Tab", "j": "Enter", "m": "Enter", "h": "Backspace"}
+
+
+def terminal_shadowed_bindings(bindings: dict) -> list[tuple[str, str]]:
+    """The ``(action, key)`` pairs where a config binds Ctrl-I, Ctrl-J, Ctrl-M or
+    Ctrl-H — keys that never fire in a terminal, where they arrive as Tab,
+    Enter and Backspace. They work in the desktop app, so this is reported only
+    where the backend says so (PuiKit's ``ctrl_letter_keys``), and only for what
+    ``config.py`` binds itself: a preset's keys are documented, not the user's
+    to fix. A key sequence is reported when any of its keys is one.
+    """
+    key_bindings = KeyBindings(bindings)
+    found: list[tuple[str, str]] = []
+    for action in bindings:
+        keys, _ = key_bindings.get_keys_for_action(action)
+        if isinstance(keys, str):
+            keys = [keys]
+        for expr in keys:
+            identity, mods, mode = key_bindings._parse_key_expression(expr)
+            parts = identity if mode == "seq" else ((identity, mods, mode),)
+            if any(part_mode == "key" and part_id in TERMINAL_SHADOWED_CTRL_LETTERS
+                   and "ctrl" in part_mods and "cmd" not in part_mods
+                   for part_id, part_mods, part_mode in parts):
+                found.append((action, expr))
+    return found
+
+
+def terminal_shadowed_notice(bindings: dict, limit: int = 3) -> str | None:
+    """One line naming bindings a terminal cannot deliver, or ``None`` (see
+    :func:`terminal_shadowed_bindings`)."""
+    pairs = terminal_shadowed_bindings(bindings)
+    if not pairs:
+        return None
+    shown = ", ".join(f"'{action}' -> '{key}'" for action, key in pairs[:limit])
+    more = len(pairs) - limit
+    if more > 0:
+        shown += f", and {more} more"
+    return (f"KEY_BINDINGS binds {len(pairs)} action(s) to Ctrl-I, Ctrl-J, Ctrl-M "
+            f"or Ctrl-H, which a terminal sends as Tab, Enter and Backspace, so "
+            f"here they never fire: {shown}. They work in the desktop app; add "
+            f"another key for the terminal.")
+
+
 def keys_label_for_action(action: str, fallback: str = "",
                           context: str | None = None) -> str:
     """Display string for an action's configured key(s) (so help/footers match
