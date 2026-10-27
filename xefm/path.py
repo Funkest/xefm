@@ -10,6 +10,7 @@ import fnmatch
 import io
 import errno
 from concurrent.futures import CancelledError
+from contextlib import contextmanager, nullcontext
 from abc import ABC, abstractmethod
 from pathlib import Path as PathlibPath, PurePath
 from datetime import datetime
@@ -574,7 +575,9 @@ class PathImpl(ABC):
 # such an entry, so the local removals clear the attribute and try once more
 # — only after Windows has refused, so a removal that works touches no
 # attribute. Google Drive for desktop, for one, marks every directory of its
-# mirrored folder read-only.
+# mirrored folder read-only. A ``replace`` onto a read-only file is refused
+# the same way and retried the same way: Explorer's Replace goes through one
+# without asking (issue #767).
 _ERROR_ACCESS_DENIED = 5
 
 
@@ -874,13 +877,18 @@ class LocalPathImpl(PathImpl):
         return Path(self._path.rename(target))
     
     def replace(self, target) -> 'Path':
-        """Replace this file or directory with the given target"""
+        """Replace this file or directory with the given target (a read-only
+        target file too, on Windows)"""
         if isinstance(target, Path):
             target = target._impl._path
         elif isinstance(target, LocalPathImpl):
             target = target._path
-        return Path(self._path.replace(target))
-    
+        try:
+            return Path(self._path.replace(target))
+        except PermissionError as exc:
+            return _retry_without_readonly(str(target), exc,
+                                           lambda: Path(self._path.replace(target)))
+
     def symlink_to(self, target, target_is_directory=False):
         """Make this path a symlink pointing to the target path"""
         if isinstance(target, Path):
@@ -1406,8 +1414,9 @@ class Path:
         
         # Cross-storage moving: copy then delete
         try:
-            # First copy to destination
-            success = self._copy_to(destination, overwrite=overwrite)
+            # First copy to destination, over a read-only file too (#767)
+            with readonly_lifted(destination) if overwrite else nullcontext():
+                success = self._copy_to(destination, overwrite=overwrite)
             if not success:
                 return False
             
@@ -1698,6 +1707,41 @@ def move_to(src: Path, destination: Path, overwrite: bool = False) -> bool:
     :func:`copy_to` and delete across two. Two directories merge when
     ``overwrite`` is set. The same caveat as :func:`copy_to` applies."""
     return src._move_to(destination, overwrite)
+
+
+@contextmanager
+def readonly_lifted(destination: Path):
+    """Let an overwrite of ``destination`` through its read-only attribute,
+    as Explorer's Replace does (issue #767): clear the attribute of a local
+    read-only file on Windows, and put it back if the overwrite fails. What
+    the overwrite leaves has the source's attributes, not the old file's.
+
+    Up front rather than on a refusal, like the removals: the copy that
+    overwrites takes one of several routes (``shutil.copy2``, a stream, a
+    download moved into place), each opening the file its own way. A
+    reparse point is left alone: ``os.chmod`` would reach its target."""
+    os_path = str(destination)
+    lifted = False
+    if sys.platform == 'win32' and destination.scheme == 'file':
+        try:
+            attrs = os.lstat(os_path).st_file_attributes
+            if (attrs & stat.FILE_ATTRIBUTE_READONLY
+                    and not attrs & (stat.FILE_ATTRIBUTE_REPARSE_POINT
+                                     | stat.FILE_ATTRIBUTE_DIRECTORY)):
+                os.chmod(os_path, stat.S_IWRITE)  # on Windows: the read-only bit only
+                lifted = True
+                logger.debug(f"Cleared the read-only attribute to overwrite: {os_path}")
+        except OSError:
+            pass
+    try:
+        yield
+    except BaseException:
+        if lifted:
+            try:
+                os.chmod(os_path, stat.S_IREAD)  # the old file stays, so as it was
+            except OSError:
+                pass
+        raise
 
 
 def listdir_attrs(path) -> List[tuple]:

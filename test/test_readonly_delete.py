@@ -1,4 +1,5 @@
-"""A permanent delete removes read-only entries on Windows.
+"""A permanent delete removes read-only entries on Windows, and Overwrite
+replaces a read-only file.
 
 Windows refuses to remove a file or directory that carries the read-only
 attribute — ``[WinError 5] Access is denied``, whatever the caller's rights —
@@ -6,6 +7,10 @@ and XeFM passed the refusal on: nothing in a Google Drive for desktop mirror,
 which marks every directory read-only, could be deleted (issue #759). The
 local removals now clear the attribute and try once more, and only after
 Windows has refused.
+
+Writing over such a file is refused the same way, so a copy or move answered
+with Overwrite failed. Explorer's Replace goes through without asking and
+leaves the source's attributes (issue #767); XeFM now does the same.
 
 The attribute needs no privilege to set (``SetFileAttributesW``), so these run
 on any Windows checkout; elsewhere they skip — all but the last class, which
@@ -27,9 +32,11 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
 from xefm import _config  # noqa: E402
+from xefm import file_operations  # noqa: E402
 from xefm import path as xefm_path  # noqa: E402
 from xefm.file_operations import FileOperationService, recursive_delete  # noqa: E402
 from xefm.path import Path, move_to  # noqa: E402
+from xefm.task import Task  # noqa: E402
 
 _WINDOWS = sys.platform == "win32"
 
@@ -188,6 +195,123 @@ class OnlyARefusalForTheAttributeIsRetried(ReadOnlyTestBase):
         Path(link).unlink()
         self.assertFalse(os.path.lexists(link))
         self.assertTrue(_attributes(target) & FILE_ATTRIBUTE_READONLY)
+
+
+# ---------------------------------------------------------------------------
+# Overwrite replaces a read-only file, as Explorer's Replace does (#767)
+# ---------------------------------------------------------------------------
+
+
+class OverwriteTestBase(ReadOnlyTestBase):
+    """src/a.txt ("new") and a read-only dst/a.txt ("old"), with every
+    conflict answered Overwrite."""
+
+    def setUp(self):
+        super().setUp()
+        self.src_dir = self.make("src", directory=True, attributes=0)
+        self.dst_dir = self.make("dst", directory=True, attributes=0)
+        self.src = os.path.join(self.src_dir, "a.txt")
+        self.dst = os.path.join(self.dst_dir, "a.txt")
+        for path, text in ((self.src, "new"), (self.dst, "old")):
+            with open(path, "w") as f:
+                f.write(text)
+        _mark(self.dst, FILE_ATTRIBUTE_READONLY)
+        patcher = mock.patch.object(Task, "ask",
+                                    lambda self, *a, **k: ("overwrite", True))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def run_op(self, kind):
+        cfg = _config.Config()
+        cfg.CONFIRM_COPY = cfg.CONFIRM_MOVE = False
+        result = {}
+        service = FileOperationService(cfg)
+        getattr(service, kind)(None, [Path(self.src)], Path(self.dst_dir),
+                               on_complete=result.update, background=False)
+        return result
+
+    def dst_text(self):
+        with open(self.dst) as f:
+            return f.read()
+
+    def dst_readonly(self):
+        return bool(_attributes(self.dst) & FILE_ATTRIBUTE_READONLY)
+
+
+@unittest.skipUnless(_WINDOWS, "the read-only attribute is Windows-only")
+class AReadOnlyFileIsOverwritten(OverwriteTestBase):
+    def test_pathlib_alone_refuses_it(self):
+        # What this is about: the plain overwrite fails.
+        with self.assertRaises(PermissionError):
+            shutil.copy2(self.src, self.dst)
+
+    def test_by_a_copy(self):
+        result = self.run_op("copy")
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(self.dst_text(), "new")
+        self.assertFalse(self.dst_readonly())  # the source's attributes
+
+    def test_by_a_streamed_copy(self):
+        # The route a large file takes: its own open(dest, "wb").
+        with mock.patch.object(file_operations, "_BYTE_BAR_MIN", 0):
+            result = self.run_op("copy")
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(self.dst_text(), "new")
+        self.assertFalse(self.dst_readonly())
+
+    def test_a_read_only_source_leaves_a_read_only_copy(self):
+        _mark(self.src, FILE_ATTRIBUTE_READONLY)
+        result = self.run_op("copy")
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(self.dst_text(), "new")
+        self.assertTrue(self.dst_readonly())
+
+    def test_by_a_move(self):
+        result = self.run_op("move")
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(self.dst_text(), "new")
+        self.assertFalse(os.path.exists(self.src))
+
+    def test_by_a_move_to_another_filesystem(self):
+        # The copy + delete move_to takes when a rename can't cross devices.
+        with mock.patch.object(xefm_path.LocalPathImpl, "replace",
+                               side_effect=OSError(18, "cross-device link")):
+            self.assertTrue(move_to(Path(self.src), Path(self.dst), overwrite=True))
+        self.assertEqual(self.dst_text(), "new")
+        self.assertFalse(os.path.exists(self.src))
+
+    def test_by_path_replace(self):
+        Path(self.src).replace(Path(self.dst))
+        self.assertEqual(self.dst_text(), "new")
+        self.assertFalse(self.dst_readonly())
+
+
+@unittest.skipUnless(_WINDOWS, "the read-only attribute is Windows-only")
+class AFailedOverwriteLeavesTheAttribute(OverwriteTestBase):
+    def test_a_failed_copy_puts_it_back(self):
+        with mock.patch.object(file_operations, "copy_to",
+                               side_effect=OSError("disk full")):
+            result = self.run_op("copy")
+        self.assertEqual(len(result["errors"]), 1)
+        self.assertEqual(self.dst_text(), "old")
+        self.assertTrue(self.dst_readonly())
+
+    def test_a_second_refusal_of_replace_puts_it_back(self):
+        _mark(self.dst, FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN)
+        with mock.patch.object(type(Path(self.src)._impl._path), "replace",
+                               autospec=True, side_effect=_denied) as replace:
+            with self.assertRaises(PermissionError):
+                Path(self.src).replace(Path(self.dst))
+        self.assertEqual(replace.call_count, 2)
+        self.assertEqual(_attributes(self.dst) & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN),
+                         FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN)
+
+    def test_a_skipped_conflict_touches_no_attribute(self):
+        with mock.patch.object(Task, "ask", lambda self, *a, **k: ("skip", True)), \
+                mock.patch.object(xefm_path.os, "chmod") as chmod:
+            self.run_op("copy")
+        chmod.assert_not_called()
+        self.assertEqual(self.dst_text(), "old")
 
 
 # ---------------------------------------------------------------------------

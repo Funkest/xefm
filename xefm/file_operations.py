@@ -38,7 +38,7 @@ import shutil
 import sys
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Optional
 
@@ -54,7 +54,7 @@ from xefm.archive import (ArchiveInUseError, get_archive_cache,
 from xefm.dialog_geometry import (OPEN_MS_VIEWER, animate_open, draw_title_bar,
                                   title_content_top)
 from xefm.diff_viewer import show_diff_viewer
-from xefm.path import Path, concurrency, copy_to, move_to
+from xefm.path import Path, concurrency, copy_to, move_to, readonly_lifted
 from xefm.progress_manager import OperationType, ProgressManager
 from xefm.str_format import format_size, format_timestamp
 from xefm.task import Cancelled, Task, TaskManager
@@ -957,7 +957,8 @@ class FileOperationService:
         except Exception:  # noqa: BLE001
             size = 0
         prog.file_bytes(slot, 0, size)
-        if dest.exists():
+        exists = dest.exists()
+        if exists:
             if not overwrite:
                 return False  # inner collision under a non-overwrite dir — leave it
             if isinstance(overwrite, OverwriteOlder):
@@ -967,13 +968,15 @@ class FileOperationService:
         overwrite = bool(overwrite)  # the storage layer takes a plain flag
         same = src.scheme == dest.scheme
         local = same and src.scheme == "file"
-        if local and not src.is_symlink() and _clone_file(src, dest, overwrite):
-            prog.file_bytes(slot, size, size)  # one syscall, all bytes landed
-            return True  # a clone carries every xattr, tags included
-        if not src.is_symlink() and (not same or size >= _BYTE_BAR_MIN):
-            self._copy_bytes(task, src, dest, size, overwrite, local, prog, slot)
-        else:
-            copy_to(src, dest, overwrite=overwrite)
+        # Overwriting a read-only file goes through, as in Explorer (#767)
+        with readonly_lifted(dest) if exists else nullcontext():
+            if local and not src.is_symlink() and _clone_file(src, dest, overwrite):
+                prog.file_bytes(slot, size, size)  # one syscall, all bytes landed
+                return True  # a clone carries every xattr, tags included
+            if not src.is_symlink() and (not same or size >= _BYTE_BAR_MIN):
+                self._copy_bytes(task, src, dest, size, overwrite, local, prog, slot)
+            else:
+                copy_to(src, dest, overwrite=overwrite)
         # Neither path keeps tags everywhere: copystat copies xattrs on Linux
         # only, and nothing carries them across storages (#585).
         if not src.is_symlink():
