@@ -5,6 +5,7 @@ XeFM Path - A pathlib-compatible Path class that can be extended for remote stor
 
 import os
 import stat
+import sys
 import fnmatch
 import io
 import errno
@@ -567,6 +568,67 @@ class PathImpl(ABC):
         pass
 
 
+# Windows refuses to remove an entry that carries FILE_ATTRIBUTE_READONLY
+# (ERROR_ACCESS_DENIED, whatever the caller's rights), where POSIX looks only
+# at the parent directory's permissions. A permanent delete is meant to remove
+# such an entry, so the local removals clear the attribute and try once more
+# — only after Windows has refused, so a removal that works touches no
+# attribute. Google Drive for desktop, for one, marks every directory of its
+# mirrored folder read-only.
+_ERROR_ACCESS_DENIED = 5
+
+
+def _clear_readonly(os_path: str, exc: PermissionError) -> bool:
+    """Drop the read-only attribute from ``os_path`` when that is why ``exc``
+    was raised; whether it was dropped. A reparse point (a symlink or a
+    junction) is left alone: ``os.chmod`` would reach its target."""
+    if sys.platform != 'win32' or getattr(exc, 'winerror', None) != _ERROR_ACCESS_DENIED:
+        return False
+    try:
+        attrs = os.lstat(os_path).st_file_attributes
+        if (not attrs & stat.FILE_ATTRIBUTE_READONLY
+                or attrs & stat.FILE_ATTRIBUTE_REPARSE_POINT):
+            return False
+        os.chmod(os_path, stat.S_IWRITE)  # on Windows: the read-only bit only
+    except OSError:
+        return False
+    return True
+
+
+def _retry_without_readonly(os_path: str, exc: PermissionError, remove):
+    """After ``remove()`` failed with ``exc``: when ``os_path`` was refused for
+    being read-only, clear that and call ``remove()`` once more, putting the
+    attribute back if it fails again; otherwise re-raise ``exc``."""
+    if not _clear_readonly(os_path, exc):
+        raise exc
+    try:
+        return remove()
+    except OSError:
+        try:
+            os.chmod(os_path, stat.S_IREAD)  # the entry stays, so as it was
+        except OSError:
+            pass
+        raise
+
+
+def _rmtree_local(os_path: str) -> None:
+    """``shutil.rmtree`` with the read-only retry of :meth:`LocalPathImpl.rmdir`
+    for every entry in the tree."""
+    import shutil
+
+    def retry(func, entry, exc):
+        if isinstance(exc, tuple):  # onerror (before 3.12) passes exc_info
+            exc = exc[1]
+        if func not in (os.rmdir, os.unlink, os.remove) or not isinstance(exc, PermissionError):
+            raise exc
+        _retry_without_readonly(os.fspath(entry), exc, lambda: func(entry))
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(os_path, onexc=retry)
+    else:
+        shutil.rmtree(os_path, onerror=retry)
+
+
 class LocalPathImpl(PathImpl):
     """
     Local file system implementation of PathImpl.
@@ -787,12 +849,19 @@ class LocalPathImpl(PathImpl):
         return self._path.mkdir(mode, parents, exist_ok)
     
     def rmdir(self):
-        """Remove this directory"""
-        return self._path.rmdir()
+        """Remove this directory (a read-only one too, on Windows)"""
+        try:
+            return self._path.rmdir()
+        except PermissionError as exc:
+            return _retry_without_readonly(str(self._path), exc, self._path.rmdir)
     
     def unlink(self, missing_ok=False):
-        """Remove this file or symbolic link"""
-        return self._path.unlink(missing_ok)
+        """Remove this file or symbolic link (a read-only one too, on Windows)"""
+        try:
+            return self._path.unlink(missing_ok)
+        except PermissionError as exc:
+            return _retry_without_readonly(str(self._path), exc,
+                                           lambda: self._path.unlink(missing_ok))
     
     def rename(self, target) -> 'Path':
         """Rename this file or directory to the given target"""
@@ -1348,9 +1417,8 @@ class Path:
                     self._impl.rmtree()
                 else:
                     # Use standard recursive delete
-                    import shutil
                     if source_scheme == 'file':
-                        shutil.rmtree(str(self))
+                        _rmtree_local(str(self))
                     else:
                         # For other remote schemes, delete recursively
                         self._delete_recursive()

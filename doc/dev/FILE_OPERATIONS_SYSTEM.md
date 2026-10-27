@@ -157,6 +157,8 @@ The same-directory copy relaxation lives in `_run_transfer()` (shared by `_trans
 ## Helpers
 
 - `recursive_delete(entry)` — delete a file or directory tree.
+
+  On Windows, a file or directory with the read-only attribute can't be removed (`ERROR_ACCESS_DENIED`, whatever the caller's rights). `LocalPathImpl.rmdir` / `unlink` therefore clear the attribute and try once more when that is why they were refused, and only then: a removal that works touches no attribute, and a second refusal puts the attribute back. Every local delete goes through them — `_delete_tree`, `recursive_delete`, and the source half of a move to another filesystem, whose `shutil.rmtree` gets the same retry. Google Drive for desktop marks every directory of its mirrored folder read-only, so without this nothing there could be deleted.
 - `_unique_dest(dest_dir, name, is_dir=…)` — the shared ` (N)` non-colliding-name scheme (used by duplicate and "Keep both").
 - `_is_atomic_move(kind, target, dest_dir)` — true when a move stays within one *filesystem* (a single rename); anything wider copies the tree then deletes the source.
 - `_entry_device(path)` — `st_dev` of the filesystem holding `path`, or `None` when it isn't local / can't be stat'ed.
