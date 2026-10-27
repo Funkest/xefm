@@ -53,7 +53,7 @@ METHODS = (
     (IDENTICAL, "Identical files — the same content"),
     (IMAGE, "Similar images — resized, re-encoded or lightly edited"),
     (VIDEO, "Similar videos — re-encoded, resized, or cut from a longer one"),
-    (AUDIO, "Similar audio — the same recording re-encoded or re-tagged"),
+    (AUDIO, "Similar audio — re-encoded, re-tagged, or cut from a longer one"),
 )
 LABELS = {IDENTICAL: "Identical files", IMAGE: "Similar images",
           VIDEO: "Similar videos", AUDIO: "Similar audio"}
