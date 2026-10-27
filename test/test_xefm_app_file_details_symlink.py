@@ -22,6 +22,7 @@ from xefm.state_manager import XeFMStateManager  # noqa: E402
 from puikit.backends import create_backend  # noqa: E402
 
 
+@unittest.skipIf(sys.platform == "win32", "symlinks need privileges on Windows")
 class FileDetailsSymlink(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

@@ -41,7 +41,8 @@ class LocalDrives(unittest.TestCase):
 
     def test_posix_includes_root(self):
         by_name = {r["name"]: r["path"] for r in self._rows("Linux")}
-        self.assertEqual(by_name.get("Root"), "/")
+        # "/" — spelled natively when the test itself runs on Windows.
+        self.assertEqual(by_name.get("Root"), str(xefm_app.Path("/")))
 
     def test_windows_lists_drive_letters_not_root(self):
         rows = self._rows("Windows", ["C:\\", "D:\\"])

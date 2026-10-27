@@ -38,10 +38,11 @@ class TestBuildXefmEnv(unittest.TestCase):
 
         env = build_xefm_env(left, right, left, right)
 
-        self.assertEqual(env['XEFM_LEFT_DIR'], '/L')
-        self.assertEqual(env['XEFM_RIGHT_DIR'], '/R')
-        self.assertEqual(env['XEFM_THIS_DIR'], '/L')
-        self.assertEqual(env['XEFM_OTHER_DIR'], '/R')
+        # The directories are local paths, so native: \L on Windows.
+        self.assertEqual(env['XEFM_LEFT_DIR'], str(Path('/L')))
+        self.assertEqual(env['XEFM_RIGHT_DIR'], str(Path('/R')))
+        self.assertEqual(env['XEFM_THIS_DIR'], str(Path('/L')))
+        self.assertEqual(env['XEFM_OTHER_DIR'], str(Path('/R')))
         self.assertEqual(env['XEFM_LEFT_SELECTED'], '"a.txt" "b c.txt"')
         self.assertEqual(env['XEFM_THIS_SELECTED'], '"a.txt" "b c.txt"')
         # No selection on the right: *_SELECTED is empty, and the focused file

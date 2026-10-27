@@ -18,7 +18,7 @@ from xefm.archive import (
     ArchiveError, ArchiveFormatError, ArchiveCorruptedError,
     ArchiveExtractionError, ArchiveNavigationError,
     ArchivePermissionError, ArchiveDiskSpaceError,
-    ZipHandler, TarHandler, ArchiveCache, ArchivePathImpl
+    ZipHandler, TarHandler, ArchiveCache, ArchivePathImpl, get_archive_cache
 )
 from xefm.path import Path
 
@@ -115,6 +115,7 @@ class TestNavigationErrors:
     def teardown_method(self):
         """Clean up test fixtures"""
         import shutil
+        get_archive_cache().clear()  # Windows cannot delete an open archive
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
     
@@ -154,6 +155,7 @@ class TestExtractionErrors:
     def teardown_method(self):
         """Clean up test fixtures"""
         import shutil
+        get_archive_cache().clear()  # Windows cannot delete an open archive
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
     
@@ -196,6 +198,7 @@ class TestArchivePathImplErrorHandling:
     def teardown_method(self):
         """Clean up test fixtures"""
         import shutil
+        get_archive_cache().clear()  # Windows cannot delete an open archive
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
     

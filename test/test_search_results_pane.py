@@ -284,7 +284,7 @@ class AppVirtual(unittest.TestCase):
         # scattered result reveals *where* it lives), via FilePane._display_name.
         fp = self.app._active_view()
         names = {fp._display_name(e) for e in self.app.active_pane()["files"]}
-        self.assertEqual(names, {"a/b/deep.txt", "top.txt"})
+        self.assertEqual(names, {os.path.join("a", "b", "deep.txt"), "top.txt"})
 
     def test_copy_names_copies_root_relative_paths(self):
         # Issue #433: the name column of a results pane shows a/b/deep.txt, so

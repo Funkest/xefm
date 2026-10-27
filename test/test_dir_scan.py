@@ -25,6 +25,19 @@ from xefm import dir_scan  # noqa: E402
 from xefm.path import Path, attrs_via_path, listdir_attrs  # noqa: E402
 
 
+# Creating a symlink needs a privilege a Windows user does not hold by default.
+_SYMLINKS = sys.platform != "win32"
+needs_symlinks = unittest.skipUnless(_SYMLINKS,
+                                     "symlinks need privileges on Windows")
+
+
+def _alloc(st):
+    """``st_blocks`` in bytes, or None where the platform has no such field
+    (Windows) — what every backend reports there too."""
+    blocks = getattr(st, 'st_blocks', None)
+    return None if blocks is None else blocks * 512
+
+
 def _reference(directory, name):
     """What the per-file route (stat/is_dir/is_symlink) reports — the contract
     every backend has to reproduce."""
@@ -39,7 +52,7 @@ def _reference(directory, name):
     is_dir = os.path.isdir(p)
     return {'is_dir': is_dir, 'is_link': is_link,
             'size': 0 if is_dir else st.st_size,
-            'alloc': 0 if is_dir else st.st_blocks * 512,
+            'alloc': 0 if is_dir else _alloc(st),
             'mtime': st.st_mtime, 'hidden': hidden, 'ok': True}
 
 
@@ -60,12 +73,13 @@ class _TreeBase(unittest.TestCase):
             f.truncate(64 << 20)
             f.seek((64 << 20) - 1)
             f.write(b"z")
-        os.symlink(os.path.join(self.tmp, "regular.txt"),
-                   os.path.join(self.tmp, "link_to_file"))
-        os.symlink(os.path.join(self.tmp, "subdir"),
-                   os.path.join(self.tmp, "link_to_dir"))
-        os.symlink(os.path.join(self.tmp, "nowhere"),
-                   os.path.join(self.tmp, "link_broken"))
+        if _SYMLINKS:
+            os.symlink(os.path.join(self.tmp, "regular.txt"),
+                       os.path.join(self.tmp, "link_to_file"))
+            os.symlink(os.path.join(self.tmp, "subdir"),
+                       os.path.join(self.tmp, "link_to_dir"))
+            os.symlink(os.path.join(self.tmp, "nowhere"),
+                       os.path.join(self.tmp, "link_broken"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def assertMatchesReference(self, scanned):
@@ -90,6 +104,7 @@ class ScanMatchesPerFileStat(_TreeBase):
     def test_the_bulk_backend_matches(self):
         self.assertMatchesReference(dir_scan._scan_bulk(self.tmp))
 
+    @needs_symlinks
     def test_a_symlink_reports_its_target_but_stays_flagged_as_a_link(self):
         got = dict(dir_scan.scan_dir(self.tmp))
         # is_dir/size describe the target; is_link describes the link itself.
@@ -99,6 +114,7 @@ class ScanMatchesPerFileStat(_TreeBase):
         self.assertEqual(got["link_to_file"]["size"], 1234)
         self.assertEqual(got["link_to_file"]["is_link"], True)
 
+    @unittest.skipIf(sys.platform == "win32", "Windows reports no st_blocks")
     def test_a_sparse_file_is_longer_than_it_is_big(self):
         got = dict(dir_scan.scan_dir(self.tmp))
         sparse = got["sparse.raw"]
@@ -117,6 +133,7 @@ class ScanMatchesPerFileStat(_TreeBase):
         # left to disagree.
         self.assertEqual(dict(dir_scan.scan_dir(self.tmp))["subdir"]["alloc"], 0)
 
+    @needs_symlinks
     def test_a_broken_symlink_is_reported_not_raised(self):
         got = dict(dir_scan.scan_dir(self.tmp))
         broken = got["link_broken"]

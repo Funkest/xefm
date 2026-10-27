@@ -108,10 +108,12 @@ class Breadcrumbs(unittest.TestCase):
         measure = len
         crumbs = xefm_app._breadcrumbs("/…/b/c", Path("/x/a/b/c"), 0.0, measure)
         targets = [(text_x0, str(target), child) for text_x0, _x1, target, child in crumbs]
-        self.assertIn((5, "/x/a/b/c", None), targets)
-        self.assertIn((3, "/x/a/b", "c"), targets)
-        self.assertFalse(any(t == "/x/a" for _, t, _c in targets), "… is not a place")
-        self.assertIn((0, "/", "x"), targets, "the leading / is the root")
+        # A local path is spelled with the native separator (\ on Windows).
+        self.assertIn((5, str(Path("/x/a/b/c")), None), targets)
+        self.assertIn((3, str(Path("/x/a/b")), "c"), targets)
+        self.assertFalse(any(t == str(Path("/x/a")) for _, t, _c in targets),
+                         "… is not a place")
+        self.assertIn((0, str(Path("/")), "x"), targets, "the leading / is the root")
 
     def test_home_abbreviation(self):
         home = os.path.expanduser("~")

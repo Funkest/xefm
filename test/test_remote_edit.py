@@ -76,7 +76,7 @@ class LocalCopyPath(unittest.TestCase):
         root = LocalPath("/r")
         path = local_copy_path(root, "ssh://host/../../etc/passwd")
         self.assertNotIn("..", path.parts)
-        self.assertEqual(path.parts[:2], ("/", "r"))
+        self.assertEqual(path.parts[:2], root.parts)  # ("/", "r")
 
     def test_characters_a_platform_refuses_are_replaced(self):
         path = local_copy_path(LocalPath("/r"), 's3://bucket/a:b?c.txt')

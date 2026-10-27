@@ -10696,7 +10696,10 @@ class XeFMApp:
             # os.sep too: "~\Documents" left as "\Documents" is rooted on
             # Windows, and joining it to home gave C:\Documents.
             target = Path.home() / text[1:].lstrip("/" + os.sep)
-        elif not os.path.isabs(text):
+        elif not (os.path.isabs(text) or text.startswith(("/", os.sep))):
+            # A rooted "\usr\lib" counts as absolute here: Python 3.13 stopped
+            # calling a path with no drive absolute on Windows, and joining it
+            # to an S3 pane gave s3://bucket/dir//usr/lib.
             target = Path(current) / text
         else:
             target = Path(text)

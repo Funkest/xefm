@@ -55,7 +55,8 @@ class NameKeyUnit(unittest.TestCase):
 
     def test_rel_name_under_root_keeps_the_directories(self):
         self.assertEqual(
-            name_key.rel_name(Path("/a/b/sub/c.txt"), Path("/a/b")), "sub/c.txt")
+            name_key.rel_name(Path("/a/b/sub/c.txt"), Path("/a/b")),
+            os.path.join("sub", "c.txt"))
 
     def test_rel_name_outside_root_falls_back_to_the_basename(self):
         self.assertEqual(
@@ -174,7 +175,8 @@ class VirtualPaneScope(_PaneCase):
         self.flm.refresh_files(pane)
         # By basename this would be a.txt then z.txt; by what the pane displays
         # it is aaa/ before bbb/.
-        self.assertEqual(self._rel(pane), ["aaa/z.txt", "bbb/a.txt"])
+        self.assertEqual(self._rel(pane), [os.path.join("aaa", "z.txt"),
+                                           os.path.join("bbb", "a.txt")])
 
     def test_isearch_matches_a_directory_component(self):
         paths = [self._touch("alpha/one.txt"), self._touch("beta/two.txt")]
@@ -182,13 +184,14 @@ class VirtualPaneScope(_PaneCase):
         self.flm.refresh_files(pane)
         hits = self.flm.find_matches(pane, "alpha", match_all=True,
                                      return_indices_only=True)
-        self.assertEqual([self._rel(pane)[i] for i in hits], ["alpha/one.txt"])
+        self.assertEqual([self._rel(pane)[i] for i in hits],
+                         [os.path.join("alpha", "one.txt")])
 
     def test_filter_matches_a_directory_component(self):
         paths = [self._touch("alpha/one.txt"), self._touch("beta/two.txt")]
         pane = self._virtual_pane(paths, filter_pattern="*alpha*")
         self.flm.refresh_files(pane)
-        self.assertEqual(self._rel(pane), ["alpha/one.txt"])
+        self.assertEqual(self._rel(pane), [os.path.join("alpha", "one.txt")])
 
     def test_a_directory_pane_is_unaffected(self):
         # The relative name of a direct child is its basename, so an ordinary

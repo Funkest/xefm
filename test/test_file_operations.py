@@ -250,6 +250,8 @@ def test_move_across_filesystems_counts_the_whole_subtree(tmp_path, svc, monkeyp
     assert items == 3
 
 
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="symlinks need privileges on Windows")
 def test_move_across_filesystems_keeps_source_when_a_file_fails(tmp_path, svc,
                                                                 monkeypatch):
     """A partial copy must not delete the source — the same rule the cross-storage
@@ -645,6 +647,8 @@ def test_failure_is_collected_in_errors(tmp_path, svc):
     assert path.endswith("gone.txt") and msg  # full path + a non-empty reason
 
 
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="symlinks need privileges on Windows")
 def test_inner_file_failure_is_skipped_not_fatal(tmp_path, svc):
     """One bad file inside a folder is skipped (recorded), the rest still copy, and
     the folder counts as done — not a wholesale failure."""

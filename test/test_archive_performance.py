@@ -12,6 +12,7 @@ Run with: python -m pytest test/test_archive_performance.py -v
 
 import sys
 import time
+import contextlib
 import tempfile
 import zipfile
 import tarfile
@@ -19,6 +20,17 @@ from pathlib import Path as PathlibPath
 
 from xefm.path import Path
 from xefm.archive import ArchiveCache, get_archive_cache, ArchivePathImpl
+
+
+@contextlib.contextmanager
+def _temp_dir():
+    """A TemporaryDirectory that closes the archives opened in it before it is
+    removed: on Windows an open archive cannot be deleted."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        try:
+            yield tmpdir
+        finally:
+            get_archive_cache().clear()
 
 
 def create_test_archive(archive_path: PathlibPath, num_files: int = 100, num_dirs: int = 10):
@@ -41,7 +53,7 @@ def test_cache_efficiency():
     print("\n=== Testing Cache Efficiency ===")
     
     # Create temporary directory for test archives
-    with tempfile.TemporaryDirectory() as temp_dir:
+    with _temp_dir() as temp_dir:
         temp_path = PathlibPath(temp_dir)
         
         # Create multiple test archives
@@ -122,7 +134,7 @@ def test_lazy_loading():
     cache = get_archive_cache()
     cache.clear()
     
-    with tempfile.TemporaryDirectory() as temp_dir:
+    with _temp_dir() as temp_dir:
         temp_path = PathlibPath(temp_dir)
         
         # Create a large archive (>1000 files to trigger lazy loading)
@@ -171,7 +183,7 @@ def test_memory_optimization():
     cache._max_open = 2
     cache._ttl = 300
     
-    with tempfile.TemporaryDirectory() as temp_dir:
+    with _temp_dir() as temp_dir:
         temp_path = PathlibPath(temp_dir)
         
         # Create multiple large archives
@@ -206,7 +218,7 @@ def test_hot_path_optimization():
     """Test hot path optimization in ArchivePathImpl"""
     print("\n=== Testing Hot Path Optimization ===")
     
-    with tempfile.TemporaryDirectory() as temp_dir:
+    with _temp_dir() as temp_dir:
         temp_path = PathlibPath(temp_dir)
         
         # Create test archive
@@ -261,7 +273,7 @@ def test_cache_statistics():
     cache._max_open = 3
     cache._ttl = 300
     
-    with tempfile.TemporaryDirectory() as temp_dir:
+    with _temp_dir() as temp_dir:
         temp_path = PathlibPath(temp_dir)
         
         # Create test archive

@@ -18,6 +18,13 @@ from xefm.disk_usage import UsageScan, reports_allocation
 from xefm.path import Path
 
 
+#: Windows reports no allocated size (its stat_result has no st_blocks), so a
+#: local directory there has no on-disk total to check — by design.
+needs_st_blocks = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows stat_result has no st_blocks, by design")
+
+
 def _sparse(path, length):
     """A file ``length`` bytes long holding one byte, the rest a hole."""
     with open(path, "wb") as f:
@@ -145,6 +152,7 @@ def test_cancel_stops_the_walk(tmp_path):
 
 # --- the on-disk total ------------------------------------------------------
 
+@needs_st_blocks
 def test_a_sparse_file_separates_the_two_totals(tmp_path):
     """The issue's shape: a file far longer than the space it takes up. The
     total that used to be labelled "Disk usage" is the first of these."""
@@ -163,6 +171,7 @@ def test_a_sparse_file_separates_the_two_totals(tmp_path):
     assert scan.grand_alloc() == totals.on_disk
 
 
+@needs_st_blocks
 def test_a_dense_tree_rounds_up_to_whole_blocks(tmp_path):
     """The other direction, and the common one: on disk exceeds the byte count
     because each file occupies a whole block."""
@@ -199,6 +208,7 @@ def test_one_unreported_entry_poisons_an_otherwise_known_total():
     assert scan.totals["fake://mixed"].on_disk is None
 
 
+@needs_st_blocks
 def test_grand_alloc_is_unknown_when_any_root_is(tmp_path):
     """Mixing a local directory with one from a backend that cannot report an
     allocation: the local root keeps its own figure, the selection's is gone."""
@@ -214,8 +224,7 @@ def test_grand_alloc_is_unknown_when_any_root_is(tmp_path):
 
 # --- which backends get the row at all --------------------------------------
 
-@pytest.mark.skipif(sys.platform == "win32",
-                    reason="Windows stat_result has no st_blocks, by design")
+@needs_st_blocks
 def test_a_local_directory_reports_allocation(tmp_path):
     assert reports_allocation(Path(str(tmp_path))) is True
 

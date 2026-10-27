@@ -19,6 +19,7 @@ Run with: python -m pytest test/test_s3_upload_cancel.py -v
 """
 
 import io
+import os
 import time
 import email.utils
 import threading
@@ -219,12 +220,15 @@ class TestCopyToCancel(unittest.TestCase):
         import tempfile
         transport = FakeS3Transport()
         dest = make_s3_path(transport)
-        with tempfile.NamedTemporaryFile(suffix='.mp4') as src_file:
-            src_file.write(b'\0' * 9 * MB)  # 2 parts: multipart, but cheap
-            src_file.flush()
+        # A closed file in a directory of its own, not a NamedTemporaryFile:
+        # Windows will not open a second handle on one that is still open.
+        with tempfile.TemporaryDirectory() as tmp:
+            src_name = os.path.join(tmp, 'video.mp4')
+            with open(src_name, 'wb') as src_file:
+                src_file.write(b'\0' * 9 * MB)  # 2 parts: multipart, but cheap
 
             with self.assertRaises(Cancelled):
-                copy_to(Path(src_file.name), 
+                copy_to(Path(src_name),
                     dest, overwrite=True,
                     progress_callback=cancelling_callback())
 

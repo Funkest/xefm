@@ -69,7 +69,9 @@ class Home(_Tmp):
         env = home.environment()
         self.assertEqual(env["HOME"], str(home.root))
         self.assertEqual(env["USERPROFILE"], str(home.root))
-        self.assertNotIn(str(Path.home()), env["HOME"])
+        # Not the user's home. (Not "outside" it either: on Windows the temp
+        # directory the home is made in lies under the user's profile.)
+        self.assertNotEqual(Path(env["HOME"]), Path.home())
 
     def test_no_package_at_all(self):
         """For a test or a demo of XeFM itself."""
@@ -113,7 +115,8 @@ class Home(_Tmp):
     def test_the_xefm_that_runs_is_the_terminal_one(self):
         argv = trial.xefm_argv(Path("/l"), Path("/r"))
         self.assertEqual(argv[argv.index("--backend") + 1], "tui")
-        self.assertEqual(argv[-4:], ["--left", "/l", "--right", "/r"])
+        self.assertEqual(argv[-4:], ["--left", str(Path("/l")),
+                                     "--right", str(Path("/r"))])
 
 
 @unittest.skipUnless(HAVE_KEYS, "needs quality-loop")

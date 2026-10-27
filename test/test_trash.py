@@ -95,6 +95,7 @@ class Freedesktop(unittest.TestCase):
         self.assertTrue(os.path.exists(path))
         self.assertEqual(list((self.trash / "info").iterdir()), [])
 
+    @unittest.skipIf(sys.platform == "win32", "a per-volume trash is named by uid")
     def test_another_volume_uses_its_own_trash_at_the_top(self):
         """The home trash on another device: the file's volume gets
         ``.Trash-$uid`` at its top, and the info records the path relative to

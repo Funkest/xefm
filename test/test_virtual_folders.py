@@ -146,7 +146,8 @@ def test_a_reload_replaces_the_whole_table(clean_schemes):
     load(PATH_SCHEMES={'hive': RegistryPathImpl})
     assert not path_schemes.is_uri('reg://x')
     assert path_schemes.is_uri('hive://x')
-    assert str(Path('reg://x')) == 'reg:/x'    # a plain path again
+    # A plain local path again, spelled natively: reg:/x, or reg:\x on Windows.
+    assert str(Path('reg://x')) == os.path.join('reg:', 'x')
 
 
 def test_no_path_schemes_at_all_is_not_a_problem(clean_schemes):

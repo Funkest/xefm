@@ -24,6 +24,13 @@ import pytest
 from xefm.external_programs import command_argv, resolve_command
 
 
+def _cased(argv):
+    """``argv`` with its program in the filesystem's case: on Windows
+    ``shutil.which`` spells the extension the way PATHEXT does (``prog.CMD``),
+    which names the same file as ``prog.cmd``."""
+    return [os.path.normcase(argv[0])] + argv[1:] if argv else argv
+
+
 @pytest.fixture
 def on_path(tmp_path):
     """A runnable ``prog`` in a directory of its own; returns (env, path)."""
@@ -35,12 +42,13 @@ def on_path(tmp_path):
 
 def test_a_bare_name_becomes_the_full_path_path_answers_with(on_path):
     env, stub = on_path
-    assert resolve_command(["prog"], env) == [stub]
+    assert _cased(resolve_command(["prog"], env)) == _cased([stub])
 
 
 def test_the_arguments_ride_along_untouched(on_path):
     env, stub = on_path
-    assert resolve_command(["prog", "-n", "a b.txt"], env) == [stub, "-n", "a b.txt"]
+    assert (_cased(resolve_command(["prog", "-n", "a b.txt"], env))
+            == _cased([stub, "-n", "a b.txt"]))
 
 
 def test_the_launch_environment_is_the_one_searched(on_path, monkeypatch):
@@ -49,13 +57,13 @@ def test_the_launch_environment_is_the_one_searched(on_path, monkeypatch):
     child's PATH too)."""
     env, stub = on_path
     monkeypatch.setenv("PATH", os.path.dirname(os.__file__))
-    assert resolve_command(["prog"], env) == [stub]
+    assert _cased(resolve_command(["prog"], env)) == _cased([stub])
 
 
 def test_without_an_environment_our_own_path_is_searched(on_path, monkeypatch):
     env, stub = on_path
     monkeypatch.setenv("PATH", env["PATH"])
-    assert resolve_command(["prog"]) == [stub]
+    assert _cased(resolve_command(["prog"])) == _cased([stub])
 
 
 def test_a_name_path_cannot_answer_is_left_alone(on_path):
@@ -71,7 +79,7 @@ def test_the_configured_command_is_never_mutated(on_path):
     user's config; it has to survive being launched more than once."""
     env, stub = on_path
     configured = ["prog", "--flag"]
-    assert resolve_command(configured, env)[0] == stub
+    assert _cased(resolve_command(configured, env))[0] == _cased([stub])[0]
     assert configured == ["prog", "--flag"]
 
 

@@ -465,7 +465,7 @@ class ArchiveByteProgress(unittest.TestCase):
         expectations, so the bar is "identical", not "plausible". (Restoring the
         mode on *extract* is not tested because zipfile never has — extractall
         leaves the umask default either way.)"""
-        self._marked_file()
+        marked = self._marked_file()
         arc = Path(os.path.join(self.tmp, "hooked.zip"))
         task, prog, _ = self._recording_task()
         self.app._write_archive(self.sources, arc, "zip", task=task, prog=prog)
@@ -481,12 +481,14 @@ class ArchiveByteProgress(unittest.TestCase):
                         i.compress_type, i.create_system)
 
         self.assertEqual(fields(str(arc)), fields(stock))
-        self.assertEqual(fields(str(arc))[0] >> 16, 0o100750)   # mode really is in there
+        # The mode really is in there: 0o100750 — or, on Windows, where chmod
+        # only sets the read-only bit, whatever mode the file ended up with.
+        self.assertEqual(fields(str(arc))[0] >> 16, os.stat(marked).st_mode)
 
     def test_tar_round_trip_preserves_mode_and_mtime(self):
         """tar *does* restore attributes on extract (the `data` filter keeps the
         mode bits it does not consider unsafe), so this one runs end to end."""
-        self._marked_file()
+        marked = self._marked_file()
         arc = Path(os.path.join(self.tmp, "meta.tar"))
         dest = Path(os.path.join(self.tmp, "meta-out"))
         task, prog, _ = self._recording_task()
@@ -494,7 +496,9 @@ class ArchiveByteProgress(unittest.TestCase):
         task, prog, _ = self._recording_task()
         self.app._extract_archive(arc, dest, "tar", task=task, prog=prog)
         out = os.path.join(str(dest), "src", "marked.sh")
-        self.assertEqual(os.stat(out).st_mode & 0o777, 0o750)
+        # 0o750, except on Windows, where chmod only sets the read-only bit.
+        self.assertEqual(os.stat(out).st_mode & 0o777,
+                         os.stat(marked).st_mode & 0o777)
         self.assertEqual(int(os.stat(out).st_mtime), 1000000000)
 
     def test_zip_extraction_still_sanitizes_member_paths(self):

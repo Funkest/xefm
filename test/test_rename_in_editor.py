@@ -81,8 +81,10 @@ class ParsePlan(_Dir):
 
     def test_a_trailing_space_is_kept(self):
         (a,) = self.make("a.txt")
-        plan = parse_plan([a], "a.txt \n")
-        self.assertEqual(plan.renames[0][1], "a.txt ")
+        # Not "a.txt ": Windows drops a trailing space when it looks a name up,
+        # so there that name is a.txt itself and the rename is refused.
+        plan = parse_plan([a], "b.txt \n")
+        self.assertEqual(plan.renames[0][1], "b.txt ")
 
     def test_line_count_change_is_refused(self):
         a, b = self.make("a.txt", "b.txt")

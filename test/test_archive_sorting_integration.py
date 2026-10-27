@@ -4,11 +4,24 @@ Integration test for archive sorting - verifies sorting works in FileManager con
 Run with: python -m pytest test/test_archive_sorting_integration.py -v
 """
 
+import contextlib
 import tempfile
 import zipfile
 from pathlib import Path as PathlibPath
+from xefm.archive import get_archive_cache
 from xefm.path import Path
 from xefm.config import get_config
+
+
+@contextlib.contextmanager
+def _temp_dir():
+    """A TemporaryDirectory that closes the archives opened in it before it is
+    removed: on Windows an open archive cannot be deleted."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        try:
+            yield tmpdir
+        finally:
+            get_archive_cache().clear()
 
 
 def create_test_archive(archive_path):
@@ -40,7 +53,7 @@ def test_pane_sorting_with_archives():
     """Test that pane data structure works correctly with archive sorting"""
     print("\n=== Integration Test: Pane Sorting with Archives ===")
     
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _temp_dir() as tmpdir:
         # Create test archive
         archive_path = PathlibPath(tmpdir) / 'test.zip'
         create_test_archive(archive_path)

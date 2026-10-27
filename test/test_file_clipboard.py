@@ -76,7 +76,8 @@ class Model(unittest.TestCase):
         panel.backend.set_clipboard_files(["/from/finder.pdf", "/from/finder2.pdf"])
         c = clip.contents()
         self.assertEqual((c.origin, [str(p) for p in c.paths]),
-                         ("os", ["/from/finder.pdf", "/from/finder2.pdf"]))
+                         ("os", [str(Path("/from/finder.pdf")),
+                                 str(Path("/from/finder2.pdf"))]))
         self.assertEqual(clip.status(), "[2 from another app]")
 
     def test_an_older_os_clipboard_does_not_win_over_a_remote_copy(self):
