@@ -221,14 +221,14 @@ pymigemo==0.0.1
 doc-files[pdf]>=0.1.0
 # similar-files finds identical and similar files for Find Similar Files
 # (#571). XeFM runs it as a program of its own (python -m similar_files) and
-# reads the .xft tree it writes; 0.2.1 is the floor because on Windows 0.2.0
-# could lose a scan's final status while XeFM was reading it, so a finished
-# scan showed as running, then lost (#620, similar-files#5). 0.2.0 is where
-# --status, --stop-file and --format tree arrived, and where the tree became
-# .xft (#613). Pure Python; the [image] extra adds only Pillow, which XeFM
+# reads the .xft tree it writes; 0.3.0 is the floor because it is where
+# Similar audio finds excerpts and tracks inside longer mixes, as the menu
+# and the docs say. 0.2.1 fixed a lost final status on Windows (#620,
+# similar-files#5). 0.2.0 is where --status, --stop-file and --format tree
+# arrived, and where the tree became .xft (#613). Pure Python; the [image] extra adds only Pillow, which XeFM
 # already requires. Video and audio need ffmpeg / fpcalc on PATH, which the
 # menu names when they are missing.
-similar-files[image]>=0.2.1
+similar-files[image]>=0.3.0
 # comtypes reaches Windows Search (the OS's own file index) over COM, for
 # index_search (#579): OLE DB against Search.CollatorDSO. Pure Python on
 # ctypes, Windows only. macOS needs nothing -- Spotlight is queried through

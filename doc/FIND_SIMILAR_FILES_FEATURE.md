@@ -10,7 +10,7 @@ don't need twice:
 | **Identical files** | the same content under different names or in different folders | nothing more |
 | **Similar images** | the same picture resized, re-encoded or lightly edited | nothing more |
 | **Similar videos** | the same video re-encoded or resized, and clips cut from a longer video | [ffmpeg](https://ffmpeg.org) on your `PATH` |
-| **Similar audio** | the same recording re-encoded, or with its tags changed | `fpcalc` from [Chromaprint](https://acoustid.org/chromaprint) on your `PATH` (`brew install chromaprint`, `apt install libchromaprint-tools`) |
+| **Similar audio** | the same recording re-encoded or with its tags changed, excerpts cut from a longer recording, and tracks inside a longer mix | `fpcalc` from [Chromaprint](https://acoustid.org/chromaprint) on your `PATH` (`brew install chromaprint`, `apt install libchromaprint-tools`) |
 
 The detection is done by [similar-files](https://github.com/crftwr/similar-files),
 which XeFM runs for you. A method that is missing something shows in the menu
@@ -78,7 +78,7 @@ same scan again picks up quickly.
   finished scans are kept.
 - If a scan ends without finishing (its process was killed, for example), the
   jobs list says so, and choosing it shows its log.
-- **similar-files comes with XeFM** (0.2 or later). Video and audio scans
+- **similar-files comes with XeFM** (0.3 or later). Video and audio scans
   still need ffmpeg and fpcalc, as listed above.
 
 ## See also

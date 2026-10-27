@@ -9,7 +9,7 @@
 | **Identical files** | 名前が違ったり別のフォルダーにあったりする、内容が同じファイル | 追加で必要なものはありません |
 | **Similar images** | サイズ変更、再エンコード、軽い編集をした同じ画像 | 追加で必要なものはありません |
 | **Similar videos** | 再エンコードやサイズ変更をした同じ動画、および長い動画から切り出したクリップ | `PATH` 上の [ffmpeg](https://ffmpeg.org) |
-| **Similar audio** | 再エンコードした、またはタグを変更した同じ録音 | `PATH` 上の [Chromaprint](https://acoustid.org/chromaprint) の `fpcalc`（`brew install chromaprint`、`apt install libchromaprint-tools`） |
+| **Similar audio** | 再エンコードした、またはタグを変更した同じ録音、長い録音から切り出した部分、および長いミックスに含まれる曲 | `PATH` 上の [Chromaprint](https://acoustid.org/chromaprint) の `fpcalc`（`brew install chromaprint`、`apt install libchromaprint-tools`） |
 
 検出は [similar-files](https://github.com/crftwr/similar-files) が行い、XeFM がそれを代わりに実行します。必要なものが足りない方法は、何をインストールすればよいかがメニューに表示されます。
 
@@ -55,7 +55,7 @@ XeFM が勝手に何かを削除することはありません。どのコピー
 - **ローカルフォルダーのみ。** マウントしたネットワーク共有はローカルとみなされます。`ssh://` や `s3://` 上のフォルダーは、今のところここからはスキャンできません。
 - **結果は `~/.xefm/scans/` に保存されます。** スキャンごとに 1 つのフォルダーがあり、結果ファイル（`result.xft`）とスキャンのログが入っています。ファイルのそばには何も書き込みません。完了したスキャンのうち、新しいものから 10 件が保存されます。
 - スキャンが完了せずに終わった場合（たとえばプロセスが強制終了された場合）は、ジョブ一覧にその旨が表示され、選ぶとそのログが表示されます。
-- **similar-files は XeFM に同梱されています**（0.2 以降）。動画と音声のスキャンには、上に挙げたとおり ffmpeg と fpcalc が別途必要です。
+- **similar-files は XeFM に同梱されています**（0.3 以降）。動画と音声のスキャンには、上に挙げたとおり ffmpeg と fpcalc が別途必要です。
 
 ## 関連項目
 
