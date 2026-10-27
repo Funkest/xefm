@@ -320,14 +320,16 @@ keyboard protocol on the VT input path) and Insert (absent on macOS).
 
 A terminal cannot deliver **Ctrl-I, Ctrl-J, Ctrl-M and Ctrl-H** either: their
 control codes are the bytes of Tab, Enter and Backspace, and that is what
-PuiKit delivers there (keyboard contract §4a). The desktop app gets the letter.
+PuiKit delivers there (keyboard contract §4a). The desktop app gets the letter,
+and so does the TUI in Windows Terminal or the classic console window, whose
+input records name the key pressed; PuiKit reports `ctrl_letter_keys` on there.
 `config.terminal_shadowed_bindings` finds such keys in what `config.py` binds
 itself (`keymap_presets.overrides`, not the preset laid under it), and
 `_load_user_entries` logs one line about them when the backend's
 `ctrl_letter_keys` capability is off. A PuiKit that predates the capability
 does not declare it at all, and is not taken for a terminal. The Orthodox
-preset's own `Ctrl-M` for `rename` is not reported; the preset page says it is
-desktop-only.
+preset's own `Ctrl-M` for `rename` is not reported; the preset page says where
+it works.
 
 `Ctrl-SPACE` satisfies every one of those and says what it does — Space is
 "select" in the file list, Ctrl is what makes a command of a key that would

@@ -79,8 +79,9 @@ keep some of them. On macOS, Terminal.app sends `Alt-<key>` only with **Use
 Option as Meta key** turned on, and a laptop keyboard may need `fn` for the
 function keys. If one does nothing, rebind it.
 
-`Ctrl-M` for `rename` works only in the desktop app. A terminal sends
-`Ctrl-M` as `Enter`, so there use `Shift-F6`.
+`Ctrl-M` for `rename` works in the desktop app, and on Windows also in Windows
+Terminal and the classic console window. Other terminals send `Ctrl-M` as
+`Enter`, so there use `Shift-F6`.
 
 ## OS native
 
