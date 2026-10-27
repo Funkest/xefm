@@ -70,7 +70,8 @@ from xefm.config import (KeyBindings, apply_wide_chars, config_manager,
                          get_builtin_handler_for_file, get_config,
                          get_drive_locations,
                          get_program_for_file, has_explicit_association,
-                         keys_label_for_action, printable_text_notice)
+                         keys_label_for_action, printable_text_notice,
+                         terminal_shadowed_notice)
 from xefm.dir_scan import is_hidden, alloc_from_stat
 from xefm.disk_usage import UsageScan, reports_allocation
 from xefm.file_list_manager import FileListManager
@@ -2159,6 +2160,14 @@ class XeFMApp:
             getattr(config, "KEY_BINDINGS", None) or {})
         if swallowed:
             self.log_info(f"Config warning: {swallowed}")
+        # Ctrl-I/J/M/H arrive as Tab/Enter/Backspace in a terminal, so a binding
+        # there looks ignored at random too. Only where the backend says so: a
+        # PuiKit too old to declare ctrl_letter_keys is not taken as a terminal.
+        caps = self.backend.capabilities
+        if "ctrl_letter_keys" in caps and not caps.supports("ctrl_letter_keys"):
+            shadowed = terminal_shadowed_notice(keymap_presets.overrides(config))
+            if shadowed:
+                self.log_info(f"Config warning: {shadowed}")
 
     def install_extension(self) -> None:
         """Ask for an extension package to install: a folder holding
