@@ -1256,8 +1256,9 @@ TERMINAL_SHADOWED_CTRL_LETTERS = {"i": "Tab", "j": "Enter", "m": "Enter", "h": "
 
 def terminal_shadowed_bindings(bindings: dict) -> list[tuple[str, str]]:
     """The ``(action, key)`` pairs where a config binds Ctrl-I, Ctrl-J, Ctrl-M or
-    Ctrl-H — keys that never fire in a terminal, where they arrive as Tab,
-    Enter and Backspace. They work in the desktop app, so this is reported only
+    Ctrl-H — keys that never fire in most terminals, where they arrive as Tab,
+    Enter and Backspace. They work in the desktop app and in the Windows
+    consoles that name the key pressed, so this is reported only
     where the backend says so (PuiKit's ``ctrl_letter_keys``), and only for what
     ``config.py`` binds itself: a preset's keys are documented, not the user's
     to fix. A key sequence is reported when any of its keys is one.
@@ -1289,9 +1290,9 @@ def terminal_shadowed_notice(bindings: dict, limit: int = 3) -> str | None:
     if more > 0:
         shown += f", and {more} more"
     return (f"KEY_BINDINGS binds {len(pairs)} action(s) to Ctrl-I, Ctrl-J, Ctrl-M "
-            f"or Ctrl-H, which a terminal sends as Tab, Enter and Backspace, so "
-            f"here they never fire: {shown}. They work in the desktop app; add "
-            f"another key for the terminal.")
+            f"or Ctrl-H, which this terminal sends as Tab, Enter and Backspace, so "
+            f"here they never fire: {shown}. They work in the desktop app and, on "
+            f"Windows, in Windows Terminal; add another key for this terminal.")
 
 
 def keys_label_for_action(action: str, fallback: str = "",
