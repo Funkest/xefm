@@ -24,7 +24,13 @@
 # PuiKit is XeFM's UI/rendering framework (the TUI/GUI backend layer), published
 # on PyPI as of 1.0. For co-development against a local checkout, ``make venv``
 # additionally installs it editable from ../puikit, which overrides this pin.
-# 1.15.0 is the floor, and a soft one: a phone photo stored landscape with an
+# 1.16.0 is the floor, and a soft one: on Windows a Ctrl-J/M/I/H binding also
+# pressed Enter, Tab or Backspace, so a Ctrl-J that opened a list chose its first
+# entry, and Windows Terminal and conhost now deliver those keys as the letter
+# (#760, puikit#179). The startup notice for a binding a terminal cannot send
+# reads the new ``ctrl_letter_keys`` capability; an older PuiKit does not
+# declare it and the notice stays quiet.
+# 1.15.0 was the previous floor, and a soft one: a phone photo stored landscape with an
 # EXIF orientation tag was stretched in the macOS GUI viewer and drawn sideways
 # elsewhere; PuiKit now draws and sizes every path upright, and turns a Pillow
 # decode upright in RasterImage.from_pillow (puikit#174). The metadata card's
@@ -192,7 +198,7 @@
 # itself from under a covering confirm box -- issue #333), and
 # ``MenuBar.open_menu`` / ``open_menu_mnemonic`` (keyboard menu activation --
 # issue #304).
-puikit>=1.15.0
+puikit>=1.16.0
 pygments
 boto3
 watchdog
