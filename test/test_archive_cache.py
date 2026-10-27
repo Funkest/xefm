@@ -40,15 +40,26 @@ class TestArchiveCache(unittest.TestCase):
             tf.add(str(temp_file1), arcname='file1.txt')
             temp_file1.unlink()
     
+        self._caches = []
+
+    def _cache(self, **kwargs):
+        """An ArchiveCache that tearDown closes, so the archives it opened can be
+        deleted — on Windows an open file cannot be."""
+        cache = ArchiveCache(**kwargs)
+        self._caches.append(cache)
+        return cache
+
     def tearDown(self):
         """Clean up test fixtures"""
         import shutil
+        for cache in self._caches:
+            cache.clear()
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
     
     def test_cache_initialization(self):
         """Test cache initialization with custom parameters"""
-        cache = ArchiveCache(max_open=3, ttl=60)
+        cache = self._cache(max_open=3, ttl=60)
         
         self.assertEqual(cache._max_open, 3)
         self.assertEqual(cache._ttl, 60)
@@ -57,7 +68,7 @@ class TestArchiveCache(unittest.TestCase):
     
     def test_get_handler_creates_handler(self):
         """Test that get_handler creates and caches a handler"""
-        cache = ArchiveCache(max_open=5, ttl=300)
+        cache = self._cache(max_open=5, ttl=300)
         archive_path = Path(self.zip_path)
         
         # Get handler for the first time
@@ -70,7 +81,7 @@ class TestArchiveCache(unittest.TestCase):
     
     def test_get_handler_returns_cached_handler(self):
         """Test that get_handler returns cached handler on subsequent calls"""
-        cache = ArchiveCache(max_open=5, ttl=300)
+        cache = self._cache(max_open=5, ttl=300)
         archive_path = Path(self.zip_path)
         
         # Get handler twice
@@ -83,7 +94,7 @@ class TestArchiveCache(unittest.TestCase):
     
     def test_get_handler_updates_access_time(self):
         """Test that get_handler updates access time"""
-        cache = ArchiveCache(max_open=5, ttl=300)
+        cache = self._cache(max_open=5, ttl=300)
         archive_path = Path(self.zip_path)
         
         # Get handler and record access time
@@ -101,7 +112,7 @@ class TestArchiveCache(unittest.TestCase):
     
     def test_lru_eviction(self):
         """Test LRU eviction when max_open is reached"""
-        cache = ArchiveCache(max_open=2, ttl=300)
+        cache = self._cache(max_open=2, ttl=300)
         
         # Create three archives
         zip_path1 = self.temp_path / 'test1.zip'
@@ -131,7 +142,7 @@ class TestArchiveCache(unittest.TestCase):
     
     def test_ttl_expiration(self):
         """Test that expired handlers are removed"""
-        cache = ArchiveCache(max_open=5, ttl=1)  # 1 second TTL
+        cache = self._cache(max_open=5, ttl=1)  # 1 second TTL
         archive_path = Path(self.zip_path)
         
         # Get handler
@@ -150,7 +161,7 @@ class TestArchiveCache(unittest.TestCase):
     
     def test_invalidate_specific_archive(self):
         """Test invalidating cache for specific archive"""
-        cache = ArchiveCache(max_open=5, ttl=300)
+        cache = self._cache(max_open=5, ttl=300)
         archive_path = Path(self.zip_path)
         
         # Get handler
@@ -166,7 +177,7 @@ class TestArchiveCache(unittest.TestCase):
     
     def test_clear_all_caches(self):
         """Test clearing all cached archives"""
-        cache = ArchiveCache(max_open=5, ttl=300)
+        cache = self._cache(max_open=5, ttl=300)
         
         # Create and cache multiple archives
         zip_path1 = self.temp_path / 'test1.zip'
@@ -190,7 +201,7 @@ class TestArchiveCache(unittest.TestCase):
     
     def test_get_stats(self):
         """Test cache statistics"""
-        cache = ArchiveCache(max_open=5, ttl=300)
+        cache = self._cache(max_open=5, ttl=300)
         
         # Get initial stats
         stats = cache.get_stats()
@@ -209,7 +220,7 @@ class TestArchiveCache(unittest.TestCase):
     
     def test_handler_format_detection(self):
         """Test that correct handler type is created for different formats"""
-        cache = ArchiveCache(max_open=5, ttl=300)
+        cache = self._cache(max_open=5, ttl=300)
         
         # Test ZIP handler
         zip_handler = cache.get_handler(Path(self.zip_path))
@@ -223,7 +234,7 @@ class TestArchiveCache(unittest.TestCase):
         """Test that cache operations are thread-safe"""
         import threading
         
-        cache = ArchiveCache(max_open=5, ttl=300)
+        cache = self._cache(max_open=5, ttl=300)
         archive_path = Path(self.zip_path)
         results = []
         

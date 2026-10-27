@@ -28,6 +28,10 @@ from xefm import app as xefm_app  # noqa: E402
 from xefm.state_manager import XeFMStateManager  # noqa: E402
 from puikit.backends import create_backend  # noqa: E402
 
+#: Windows reports no allocated size (no st_blocks), so a local directory there
+#: gets no "On disk" row at all — by design, rather than a row reading zero.
+_ON_DISK = sys.platform != "win32"
+
 
 class FileDetailsDiskUsage(unittest.TestCase):
     def setUp(self):
@@ -106,7 +110,10 @@ class FileDetailsDiskUsage(unittest.TestCase):
         self.assertNotIn("Disk usage", final)   # the label that named the wrong number
         # 3 files, each rounded up to its own 4 KB block: longer than the 350
         # bytes they hold, and a separate row saying so.
-        self.assertIn("| On disk | 12.0 KB (12,288 bytes) |", final)
+        if _ON_DISK:
+            self.assertIn("| On disk | 12.0 KB (12,288 bytes) |", final)
+        else:
+            self.assertNotIn("On disk", final)
         self.assertIn("| Contents | 3 files, 1 folders |", final)
         # The in-place swap must not yank the scroll position.
         self.assertEqual(dialog.md.offset, 1.0)
@@ -125,8 +132,11 @@ class FileDetailsDiskUsage(unittest.TestCase):
                          f"line count changed across updates: {sorted(shapes)}")
         # Both live segments have to be in the document for that to mean
         # anything: the per-root table rows and the multi-selection header.
-        self.assertIn("**On disk:**", sources[-1])
-        self.assertIn("| On disk |", sources[-1])
+        self.assertIn("**Total size:**", sources[-1])
+        self.assertIn("| Total size |", sources[-1])
+        if _ON_DISK:
+            self.assertIn("**On disk:**", sources[-1])
+            self.assertIn("| On disk |", sources[-1])
 
     def test_multi_selection_aggregates(self):
         dialog, sources = self._open_details(
@@ -137,7 +147,10 @@ class FileDetailsDiskUsage(unittest.TestCase):
         self.assertIn("**Total size:** 360 B (360 bytes)", final)
         # 16,384 = the directory's three blocks + the plain file's one. The
         # aggregate sums the walked roots and the selected plain files alike.
-        self.assertIn("**On disk:** 16.0 KB (16,384 bytes)", final)
+        if _ON_DISK:
+            self.assertIn("**On disk:** 16.0 KB (16,384 bytes)", final)
+        else:
+            self.assertNotIn("On disk", final)
         self.assertIn("**Total items:** 6 (4 files, 2 folders)", final)
         self.assertIn("| Total size | 350 B (350 bytes) |", final)
 

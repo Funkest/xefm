@@ -369,6 +369,8 @@ def test_a_missing_record_falls_back_to_reading_that_entry(tmp_path):
     assert 0 < calls <= 2, f"only the one uncovered entry may be read, got {calls}"
 
 
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="symlinks need privileges on Windows")
 def test_unreadable_entry_matches_nothing_but_is_still_a_counterpart(tmp_path):
     """A broken symlink satisfies no relation — nothing can be asserted about a
     target that isn't there — yet it is still an entry of that name, so the

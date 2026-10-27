@@ -27,6 +27,7 @@ via a :class:`~puikit.widgets.base.Widget`, following the
 from __future__ import annotations
 
 import itertools
+import os
 import queue
 import subprocess
 import threading
@@ -176,6 +177,10 @@ class DirectoryScanner:
             current = stack.pop()
             try:
                 relative = "" if current == root_path else str(current.relative_to(root_path))
+                # Keyed with '/' on every platform: the tree splits on it, and a
+                # Windows key of 'sub\a.txt' matched no node (Windows names
+                # cannot hold a backslash, so the swap loses nothing).
+                relative = relative.replace(os.sep, "/")
                 try:
                     st = current.stat()
                     is_dir = current.is_dir()

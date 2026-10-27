@@ -172,6 +172,8 @@ def test_parallel_copy_nested_folder(tmp_path, svc):
     assert (dst / "folder" / "y" / "y7.txt").read_text() == "y7"
 
 
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="symlinks need privileges on Windows")
 def test_parallel_inner_failure_keeps_folder_done(tmp_path, svc):
     """Same rule as sequential: one bad file inside a folder is recorded, the
     rest copy, and the folder still counts as done."""
@@ -232,6 +234,8 @@ def test_parallel_move_across_filesystems_files(tmp_path, svc, monkeypatch):
         assert not (src / n).exists()
 
 
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="symlinks need privileges on Windows")
 def test_parallel_move_dir_keeps_source_on_partial_copy(tmp_path, svc, monkeypatch):
     src, dst = tmp_path / "s", tmp_path / "d"
     src.mkdir(); dst.mkdir()

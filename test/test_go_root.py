@@ -89,7 +89,7 @@ class GoRoot(unittest.TestCase):
         pane = _pane("/Users/someone/projects")
         (dest, target, focus), = self._run(pane)
         self.assertIs(dest, pane)
-        self.assertEqual(str(target), "/")
+        self.assertEqual(str(target), os.sep)
         self.assertEqual(focus, "Users")
 
     def test_s3_stops_at_the_bucket(self):
@@ -110,7 +110,7 @@ class GoRoot(unittest.TestCase):
         """A search-results pane shows a result set, not its path — jumping to
         the root has to leave virtual mode even when the path already is one."""
         (dest, target, focus), = self._run(_pane("/", virtual=True))
-        self.assertEqual(str(target), "/")
+        self.assertEqual(str(target), os.sep)
 
 
 class DefaultBinding(unittest.TestCase):

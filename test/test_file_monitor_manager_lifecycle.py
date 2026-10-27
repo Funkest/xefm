@@ -6,6 +6,7 @@ update_monitored_directory, stop_monitoring, is_monitoring_enabled,
 get_monitoring_mode, and backend detection logic.
 """
 
+import sys
 import unittest
 import tempfile
 import shutil
@@ -185,9 +186,12 @@ class TestFileMonitorManagerLifecycle(unittest.TestCase):
         mode = self.manager._detect_monitoring_mode(s3_path)
         self.assertEqual(mode, "disabled")
 
-        s3_path2 = Path("/s3/bucket/path")
-        mode2 = self.manager._detect_monitoring_mode(s3_path2)
-        self.assertEqual(mode2, "disabled")
+        # The collapsed "/s3/" spelling is POSIX's; on Windows the same Path
+        # reads "\s3\bucket\path", an ordinary local directory.
+        if sys.platform != "win32":
+            s3_path2 = Path("/s3/bucket/path")
+            mode2 = self.manager._detect_monitoring_mode(s3_path2)
+            self.assertEqual(mode2, "disabled")
 
     def test_detect_ssh_path(self):
         """SSH/SFTP paths cannot be watched by watchdog, so monitoring is disabled (issue #181)"""

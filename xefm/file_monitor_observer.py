@@ -7,6 +7,7 @@ reporting for monitoring a single directory.
 
 import platform
 import sys
+import threading
 from pathlib import Path
 from typing import Callable, Optional
 from xefm.log_manager import getLogger
@@ -21,6 +22,45 @@ except ImportError:
     Observer = None
     PollingObserver = None
     FileSystemEventHandler = None
+
+
+if WATCHDOG_AVAILABLE and sys.platform == "win32":
+    import contextlib
+    from watchdog.observers.api import DEFAULT_OBSERVER_TIMEOUT, BaseObserver
+    from watchdog.observers.read_directory_changes import WindowsApiEmitter
+    from watchdog.observers.winapi import CancelIoEx, CloseHandle
+
+    class _WindowsApiEmitter(WindowsApiEmitter):
+        """watchdog's emitter, with its directory handle closed only once the
+        thread reading it has left.
+
+        watchdog closes the handle on the thread that calls ``stop()``, right
+        after one ``CancelIoEx``. A reader caught between two
+        ``ReadDirectoryChangesW`` calls misses that cancel, then calls again on
+        the closed handle — or on whatever reused its value, the next watcher's
+        directory handle as often as not — and the process dies with an access
+        violation. Re-pointing a pane stops one watcher and starts another, so
+        this is the everyday path, not a corner."""
+
+        def on_thread_stop(self) -> None:
+            handle = self._whandle
+            if not handle:
+                return
+            if threading.current_thread() is not self:
+                # Cancel until the reader is out: one cancel can land while it
+                # is between calls and has nothing pending to cancel.
+                while self.is_alive():
+                    with contextlib.suppress(OSError):
+                        CancelIoEx(handle, None)
+                    self.join(0.05)
+            self._whandle = None
+            CloseHandle(handle)
+
+    class _WindowsApiObserver(BaseObserver):
+        def __init__(self, *, timeout: float = DEFAULT_OBSERVER_TIMEOUT) -> None:
+            super().__init__(_WindowsApiEmitter, timeout=timeout)
+
+    Observer = _WindowsApiObserver
 
 
 if WATCHDOG_AVAILABLE:

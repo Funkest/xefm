@@ -8,7 +8,13 @@ import os
 from pathlib import Path
 import tempfile
 import shutil
+import sys
 
+import pytest
+
+
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="symlinks need privileges on Windows")
 def test_move_functionality():
     """Test the move functionality with various scenarios"""
     print("🧪 TESTING MOVE FUNCTIONALITY")

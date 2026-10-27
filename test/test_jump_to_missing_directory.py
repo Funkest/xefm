@@ -179,7 +179,9 @@ class ListingErrorsAreOneLine(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(said, [f"Directory not found: {missing}"])
 
-    @unittest.skipIf(os.geteuid() == 0, "root reads an unreadable directory")
+    @unittest.skipIf(sys.platform == "win32", "chmod cannot make a directory unreadable")
+    @unittest.skipIf(sys.platform != "win32" and os.geteuid() == 0,
+                     "root reads an unreadable directory")
     def test_an_unreadable_directory_says_so_once(self):
         locked = os.path.join(self.tmp, "locked")
         os.mkdir(locked)

@@ -160,7 +160,7 @@ def test_on_a_search_results_pane_the_name_is_the_path_shown(tmp_path):
                         "mode": "filename", "query": "q", "results": hits,
                         "meta": {}}}
     flm.refresh_files(pane)
-    assert seen == ["sub/a.txt"]
+    assert seen == [os.path.join("sub", "a.txt")]
 
 
 def test_an_entryinfo_built_from_a_bare_path_composes_too():

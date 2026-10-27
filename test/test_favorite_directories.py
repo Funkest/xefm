@@ -47,7 +47,8 @@ def no_filesystem(monkeypatch):
 def test_a_missing_directory_is_still_listed(with_favorites, no_filesystem):
     """The whole point: a favorite nobody can reach is a row like any other."""
     with_favorites([{"name": "Gone", "path": "/no/such/place"}])
-    assert get_config_favorites() == [{"name": "Gone", "path": "/no/such/place"}]
+    assert get_config_favorites() == [{"name": "Gone",
+                                       "path": str(Path("/no/such/place"))}]
 
 
 def test_an_unreachable_share_costs_no_round_trip(with_favorites, no_filesystem):
@@ -72,6 +73,8 @@ def test_tilde_is_expanded(with_favorites, no_filesystem):
     assert get_config_favorites() == [{"name": "Home", "path": str(Path.home())}]
 
 
+@pytest.mark.skipif(os.name == "nt",
+                    reason="symlinks need privileges on Windows")
 def test_a_symlinked_favorite_keeps_the_path_as_written(with_favorites):
     """``resolve()`` used to print the target instead. No other navigation in
     XeFM resolves the path it lands on, and the user named this one."""
@@ -94,7 +97,8 @@ def test_malformed_entries_are_skipped_and_warned(with_favorites, no_filesystem)
         "not-a-dict",
         {"name": "Good", "path": "/somewhere"},
     ])
-    assert get_config_favorites() == [{"name": "Good", "path": "/somewhere"}]
+    assert get_config_favorites() == [{"name": "Good",
+                                       "path": str(Path("/somewhere"))}]
 
 
 # --- the old name, FAVORITE_DIRECTORIES (#525) -------------------------------

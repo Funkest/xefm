@@ -263,7 +263,8 @@ def test_bash_is_narrowed_and_the_room_reaches_only_the_run_s_home():
         assert "Bash" not in session.allow and "Bash(*)" not in session.allow
         assert "Bash(xefm ext *)" in session.allow
         assert session.add_dirs == [product.home.xefm]
-        assert pathlib.Path.home() not in product.home.root.parents
+        if os.name != "nt":  # Windows keeps its temp directory in the profile
+            assert pathlib.Path.home() not in product.home.root.parents
         assert ROOT not in product.home.root.parents, "a room must not reach the checkout"
         assert session.env["PATH"].startswith(str(product.home.bin))
         policy = product.policy(ROOT / "cleanroom" / "x")
@@ -309,10 +310,13 @@ def _room(tmp_path, scenario, after, reply="Reload XeFM once to pick it up.", ca
     room = tmp_path / scenario.NAME
     for part in ("before", "after", "calls"):
         (room / "evidence" / part).mkdir(parents=True)
-    (room / "evidence" / "before" / "config.py").write_text(_fixture(scenario))
-    (room / "evidence" / "after" / "config.py").write_text(after)
-    (room / "evidence" / "calls" / "xefm-calls.log").write_text("".join(c + "\n" for c in calls))
-    (room / "transcript.jsonl").write_text(json.dumps({"type": "result", "result": reply}))
+    (room / "evidence" / "before" / "config.py").write_text(_fixture(scenario),
+                                                            encoding="utf-8")
+    (room / "evidence" / "after" / "config.py").write_text(after, encoding="utf-8")
+    (room / "evidence" / "calls" / "xefm-calls.log").write_text(
+        "".join(c + "\n" for c in calls), encoding="utf-8")
+    (room / "transcript.jsonl").write_text(
+        json.dumps({"type": "result", "result": reply}), encoding="utf-8")
     return room
 
 

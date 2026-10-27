@@ -10,7 +10,7 @@ import tarfile
 from pathlib import Path as PathlibPath
 
 from xefm.path import Path, copy_to
-from xefm.archive import ArchivePathImpl
+from xefm.archive import ArchivePathImpl, get_archive_cache
 
 
 class TestArchivePathImpl:
@@ -41,6 +41,7 @@ class TestArchivePathImpl:
     def teardown_method(self):
         """Clean up test fixtures"""
         import shutil
+        get_archive_cache().clear()  # Windows cannot delete an open archive
         if self.temp_path.exists():
             shutil.rmtree(str(self.temp_path))
     
@@ -319,6 +320,7 @@ class TestStreamingOutOfAnArchive:
 
     def teardown_method(self):
         import shutil
+        get_archive_cache().clear()  # Windows cannot delete an open archive
         if self.temp_path.exists():
             shutil.rmtree(str(self.temp_path))
 

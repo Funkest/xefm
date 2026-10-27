@@ -43,7 +43,7 @@ def test_remote_path_cleanup_optimization(tmp_path):
         path_str = str(self)
         exists_calls.append(path_str)
         # Simulate that only /tmp/existing_local exists
-        return path_str == "/tmp/existing_local"
+        return path_str == str(Path("/tmp/existing_local"))
     
     # Mock Path.is_remote() to identify remote paths
     def mock_is_remote(self):
@@ -63,8 +63,10 @@ def test_remote_path_cleanup_optimization(tmp_path):
         # Verify that exists() was only called for local paths
         print(f"exists() was called for: {exists_calls}")
         
-        # Should only check existence of local paths
-        expected_exists_calls = ["/tmp/existing_local", "/tmp/non_existing_local"]
+        # Should only check existence of local paths (spelled natively: a
+        # local Path uses \ on Windows)
+        expected_exists_calls = [str(Path("/tmp/existing_local")),
+                                 str(Path("/tmp/non_existing_local"))]
         assert set(exists_calls) == set(expected_exists_calls), \
             f"Expected exists() calls for {expected_exists_calls}, got {exists_calls}"
         

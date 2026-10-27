@@ -4,14 +4,27 @@ Test archive sorting support - verifies all sort modes work with archive entries
 Run with: python -m pytest test/test_archive_sorting.py -v
 """
 
+import contextlib
 import tempfile
 import zipfile
 import tarfile
 import time
 from pathlib import Path as PathlibPath
+from xefm.archive import get_archive_cache
 from xefm.path import Path
 from xefm.file_list_manager import FileListManager
 from xefm.config import get_config
+
+
+@contextlib.contextmanager
+def _temp_dir():
+    """A TemporaryDirectory that closes the archives opened in it before it is
+    removed: on Windows an open archive cannot be deleted."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        try:
+            yield tmpdir
+        finally:
+            get_archive_cache().clear()
 
 
 def create_test_archive(archive_path, archive_type='zip'):
@@ -102,7 +115,7 @@ def test_archive_sort_by_name():
     """Test sorting archive entries by name"""
     print("\n=== Test: Sort by Name ===")
     
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _temp_dir() as tmpdir:
         # Create test archive
         archive_path = PathlibPath(tmpdir) / 'test.zip'
         create_test_archive(archive_path, 'zip')
@@ -145,7 +158,7 @@ def test_archive_sort_by_size():
     """Test sorting archive entries by size"""
     print("\n=== Test: Sort by Size ===")
     
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _temp_dir() as tmpdir:
         # Create test archive
         archive_path = PathlibPath(tmpdir) / 'test.zip'
         create_test_archive(archive_path, 'zip')
@@ -188,7 +201,7 @@ def test_archive_sort_by_date():
     """Test sorting archive entries by modification date"""
     print("\n=== Test: Sort by Date ===")
     
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _temp_dir() as tmpdir:
         # Create test archive
         archive_path = PathlibPath(tmpdir) / 'test.zip'
         create_test_archive(archive_path, 'zip')
@@ -229,7 +242,7 @@ def test_archive_sort_by_extension():
     """Test sorting archive entries by extension"""
     print("\n=== Test: Sort by Extension ===")
     
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _temp_dir() as tmpdir:
         # Create test archive
         archive_path = PathlibPath(tmpdir) / 'test.zip'
         create_test_archive(archive_path, 'zip')
@@ -269,7 +282,7 @@ def test_archive_sort_by_type():
     """Test sorting archive entries by type"""
     print("\n=== Test: Sort by Type ===")
     
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _temp_dir() as tmpdir:
         # Create test archive
         archive_path = PathlibPath(tmpdir) / 'test.zip'
         create_test_archive(archive_path, 'zip')
@@ -300,7 +313,7 @@ def test_archive_directories_first():
     """Test that directories always come first regardless of sort mode"""
     print("\n=== Test: Directories First ===")
     
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _temp_dir() as tmpdir:
         # Create test archive
         archive_path = PathlibPath(tmpdir) / 'test.zip'
         create_test_archive(archive_path, 'zip')
@@ -340,7 +353,7 @@ def test_archive_sort_with_tar():
     """Test sorting works with tar archives"""
     print("\n=== Test: Sort with TAR Archive ===")
     
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with _temp_dir() as tmpdir:
         # Create test tar archive
         archive_path = PathlibPath(tmpdir) / 'test.tar'
         create_test_archive(archive_path, 'tar')

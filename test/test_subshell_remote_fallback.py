@@ -201,10 +201,12 @@ class TestSubshellRemoteFallback(unittest.TestCase):
         # Verify subprocess was called with the program command. The program
         # name is resolved against PATH before launching (#345), so it may
         # arrive as a full path - '/bin/echo' here, plain 'echo' where PATH has
-        # no such file (Windows, where it is a cmd.exe builtin).
+        # no such file (Windows, where it is a cmd.exe builtin), or an echo.EXE
+        # where one is on PATH (Git for Windows' usr/bin).
         mock_subprocess.assert_called_once()
         args, kwargs = mock_subprocess.call_args
-        self.assertTrue(args[0][0].endswith('echo'), args[0][0])
+        program = os.path.splitext(os.path.basename(args[0][0]))[0]
+        self.assertEqual(program.lower(), 'echo', args[0][0])
         self.assertEqual(args[0][1:], ['test'])
         
         # Verify environment variables are set correctly
@@ -250,10 +252,12 @@ class TestSubshellRemoteFallback(unittest.TestCase):
         # Verify subprocess was called with the program command. The program
         # name is resolved against PATH before launching (#345), so it may
         # arrive as a full path - '/bin/echo' here, plain 'echo' where PATH has
-        # no such file (Windows, where it is a cmd.exe builtin).
+        # no such file (Windows, where it is a cmd.exe builtin), or an echo.EXE
+        # where one is on PATH (Git for Windows' usr/bin).
         mock_subprocess.assert_called_once()
         args, kwargs = mock_subprocess.call_args
-        self.assertTrue(args[0][0].endswith('echo'), args[0][0])
+        program = os.path.splitext(os.path.basename(args[0][0]))[0]
+        self.assertEqual(program.lower(), 'echo', args[0][0])
         self.assertEqual(args[0][1:], ['test'])
         
         # Verify environment variables are set correctly

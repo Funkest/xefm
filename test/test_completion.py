@@ -105,6 +105,7 @@ def test_filepath_tilde_expansion(tmp_path, monkeypatch):
     (home / "projects").mkdir(parents=True)
     (home / "photos").mkdir()
     monkeypatch.setenv("HOME", str(home))  # os.path.expanduser reads $HOME on POSIX
+    monkeypatch.setenv("USERPROFILE", str(home))  # ...and %USERPROFILE% on Windows
     comp = FilepathCompleter(base_directory=str(tmp_path))
     text = "~" + SEP + "p"
     assert comp.get_candidates(text, len(text)) == ["photos" + SEP, "projects" + SEP]

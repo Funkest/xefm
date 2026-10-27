@@ -7,6 +7,7 @@ Run with: python -m pytest test/test_extension_python_packages.py -v
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 import unittest
@@ -143,8 +144,10 @@ class Sync(_Fixture):
         self.sync(fake)
         first, second = sorted([a, b])
         reqs = {a: "PyYAML>=6\n", b: "rawpy\nPyYAML\n"}
+        # Forward slashes, quoted: pip's shlex keeps a Windows path whole (#749).
+        include = shlex.quote(self.pp_layout.requirements.as_posix())
         self.assertEqual(fake.requirements,
-                         f"-r {self.pp_layout.requirements}\n"
+                         f"-r {include}\n"
                          f"# extension {first}\n{reqs[first]}"
                          f"# extension {second}\n{reqs[second]}")
         self.assertTrue(pp.synced_for(self.pp_layout, a, ["PyYAML>=6"]))

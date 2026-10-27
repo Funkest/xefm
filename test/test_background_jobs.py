@@ -404,8 +404,12 @@ def test_cancel_all_waits_for_the_workers_to_unwind(panel):
 
 # --- what the jobs list says (#599) -------------------------------------------
 
-def test_describe_operation_names_what_and_where(tmp_path):
+def test_describe_operation_names_what_and_where(tmp_path, monkeypatch):
     from xefm.file_operations import describe_operation
+    # A home the source is not under, so it is shown in full rather than as
+    # ~/… — on Windows the temp directory lies inside the user's profile.
+    for var in ("HOME", "USERPROFILE"):
+        monkeypatch.setenv(var, str(tmp_path / "home"))
     src = Path(str(tmp_path / "photos"))
     dst = Path("s3://bucket/backup")
     one = [Path(str(tmp_path / "photos" / "a.jpg"))]

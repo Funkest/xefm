@@ -145,8 +145,9 @@ class InTheApp(unittest.TestCase):
     def test_enter_on_a_saved_search_runs_it(self):
         saved = os.path.join(self.tmp, "Recent PDFs.savedSearch")
         with open(saved, "wb") as f:
+            # A Finder scope is a POSIX path, whatever this test runs on.
             f.write(plistlib.dumps({"RawQueryDict": {"RawQuery": "kind:pdf",
-                                                     "SearchScopes": [self.tmp]}}))
+                                                     "SearchScopes": ["/Volumes/Work"]}}))
         self.app._relist(self.app.pm.left_pane)
         self.app._settle_listings()
         seen = []
@@ -165,7 +166,7 @@ class InTheApp(unittest.TestCase):
             self._wait()
         finally:
             os_index.engine, os_index.search_saved = original_engine, original_saved
-        self.assertEqual(seen, [("kind:pdf", [self.tmp])])
+        self.assertEqual(seen, [("kind:pdf", ["/Volumes/Work"])])
         self.assertEqual(self.app.active_pane()["virtual"]["title"], "Recent PDFs")
 
     def test_a_remote_pane_is_refused(self):

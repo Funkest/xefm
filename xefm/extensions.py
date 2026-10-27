@@ -312,6 +312,10 @@ def read_manifest(root: Path) -> Manifest:
         with open(path, "rb") as f:
             data = tomllib.load(f)
     except FileNotFoundError:
+        # Windows reports a path through a file as missing, not as
+        # NotADirectoryError, so the file has to be told apart here.
+        if root.is_file():
+            raise ManifestError(Problem("error", "(file)", f"{root} is not a directory")) from None
         raise ManifestError(Problem("error", "(file)", f"no {MANIFEST} in {root}")) from None
     except NotADirectoryError:
         raise ManifestError(Problem("error", "(file)", f"{root} is not a directory")) from None

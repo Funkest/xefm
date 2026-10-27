@@ -487,13 +487,16 @@ class AppIntegration(unittest.TestCase):
             b.run_animation_ticks()
             self.assertEqual(len(dlg.results), 5)
 
-            # Accept the *last* streamed hit. The fed listing preserves the
-            # stream order here (the files are empty, so they tie under the pane's
-            # size sort), so the last result lands on the last row — a cursor left
-            # at the top would be a visible failure. Assert against the row where
-            # the picked hit actually landed, so the test is robust to sort order.
-            picked = dlg.results[-1]
-            dlg._accept_index(len(dlg.results) - 1)
+            # Accept a hit that cannot land on the top row, so a cursor left at
+            # the top is a visible failure: neither the first one streamed nor
+            # the first by path — the walk's order differs by platform (Windows
+            # streams sub4 first), and the pane may keep either. Assert against
+            # the row where the picked hit actually landed.
+            first_by_path = min(dlg.results, key=str)
+            index = next(i for i, hit in enumerate(dlg.results)
+                         if i > 0 and hit is not first_by_path)
+            picked = dlg.results[index]
+            dlg._accept_index(index)
             app._settle_listings()
 
             pane = app.active_pane()
