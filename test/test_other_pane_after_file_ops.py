@@ -15,6 +15,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -22,6 +23,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, ".."))
 
 from xefm import app as xefm_app  # noqa: E402
+from xefm.path import Path  # noqa: E402
 
 
 class OtherPaneTestBase(unittest.TestCase):
@@ -136,6 +138,76 @@ class APaneElsewhereIsLeftAlone(OtherPaneTestBase):
             self.delete()
 
         self.assertEqual([c.args[0] for c in relist.call_args_list], [self.pane()])
+
+
+class AVirtualOtherPaneIsASnapshot(OtherPaneTestBase):
+    """A search-results / imported-list / flat-view pane follows what is done
+    in it and Reread, not an operation in the other pane — even one that
+    removes rows it shows."""
+
+    def test_a_delete_does_not_re_list_a_flat_view_of_the_directory(self):
+        self.app.pm.switch_pane()
+        self.app.dispatch("flat_view")
+        deadline = time.monotonic() + 10
+        while self.app.tasks.has_active() and time.monotonic() < deadline:
+            self.backend.run_animation_ticks()
+            time.sleep(0.01)
+        self.backend.run_animation_ticks()
+        self.app._settle_listings()
+        self.app.pm.switch_pane()
+        other = self.other_pane()
+        self.assertIsNotNone(other["virtual"])
+        self.focus_on("b.txt")
+
+        with mock.patch.object(self.app, "_relist", wraps=self.app._relist) as relist:
+            self.delete()
+
+        self.assertEqual([c.args[0] for c in relist.call_args_list], [self.pane()])
+        self.assertIn("b.txt", self.names(other))
+
+
+class MoveTestBase(OtherPaneTestBase):
+    """A move that runs on this thread, without the confirm dialog."""
+
+    def setUp(self):
+        super().setUp()
+        self.app.config.CONFIRM_MOVE = False
+        real_move = self.app._fileops.move
+        self.app._fileops.move = (
+            lambda panel, targets, dest_dir, **kw: real_move(
+                panel, targets, dest_dir, background=False, **kw))
+
+    def move_focused_to(self, dest):
+        self.app._run_transfer("move", self.pane(),
+                               self.app._selected_or_focused(self.pane()), Path(dest))
+        self.app._settle_listings()
+
+
+class MoveReachesTheOtherPane(MoveTestBase):
+    """Move re-lists the panes on the destination and the ones on a source
+    directory too — the other pane, when a typed destination (Shift-M) took the
+    files from the directory both panes show."""
+
+    def test_a_move_elsewhere_leaves_the_other_pane_without_the_file(self):
+        self.focus_on("b.txt")
+
+        self.move_focused_to(self.elsewhere)
+
+        self.assertEqual(self.names(), ["a.txt", "c.txt"])
+        self.assertEqual(self.names(self.other_pane()), ["a.txt", "c.txt"])
+        self.assertTrue(os.path.exists(os.path.join(self.elsewhere, "b.txt")))
+
+
+class MoveIntoTheOtherPane(MoveTestBase):
+    SAME_DIRECTORY = False
+
+    def test_the_other_pane_on_the_destination_shows_the_file(self):
+        self.focus_on("b.txt")
+
+        self.move_focused_to(self.other_pane()["path"])
+
+        self.assertEqual(self.names(), ["a.txt", "c.txt"])
+        self.assertEqual(self.names(self.other_pane()), ["b.txt"])
 
 
 class DuplicateReachesTheOtherPane(OtherPaneTestBase):

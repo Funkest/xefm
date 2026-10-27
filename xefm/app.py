@@ -9186,12 +9186,16 @@ class XeFMApp:
                                 on_complete=on_complete, log=self.log_info)
         return False
 
-    def _relist_others_showing(self, dirs: set, besides: dict) -> None:
+    def _relist_others_showing(self, dirs: set, besides: dict | None) -> None:
         """Re-list every pane but ``besides`` that shows one of ``dirs`` (as
-        strings). An operation silences the watchers of the directories it
-        changes and drops their events (#243), so the other pane, when it is on
-        the same directory, is brought up to date only here — as
-        :meth:`_run_transfer` does for the panes showing its destination."""
+        strings) — the completion rule every file operation shares. An
+        operation silences the watchers of the directories it changes and drops
+        their events (#243), so the other pane, when it is on one of them, is
+        brought up to date only here.
+
+        A virtual pane (search results, an imported list, a flat view) is never
+        re-listed from here: it is a snapshot, updated by what is done *in* it
+        and by Reread, not by an operation in the other pane."""
         for pane in (self.pm.left_pane, self.pm.right_pane):
             if (pane is not besides and not pane.get("virtual")
                     and str(pane["path"]) in dirs):
@@ -9243,8 +9247,10 @@ class XeFMApp:
         """Copy or move ``targets`` from ``src_pane`` into ``dest_dir`` — the other
         pane's directory for C / M, a typed one for Shift-C / Shift-M. Callers
         have already cleared the destination as a writable directory. On
-        completion, every pane showing ``dest_dir`` is re-listed, and the source
-        too on a move. Same return contract as ``_transfer``."""
+        completion, every pane showing ``dest_dir`` is re-listed, and on a move
+        the source pane and every pane showing a source directory too
+        (:meth:`_relist_others_showing`). Same return contract as
+        ``_transfer``."""
         verb = "Copy" if kind == "copy" else "Move"
         # A virtual source spans many directories, so the single "same directory"
         # guard doesn't apply — the per-target dest-exists check below still holds.
@@ -9258,11 +9264,13 @@ class XeFMApp:
             return True
 
         def on_complete(result: dict) -> None:
-            dest = str(dest_dir)
-            for pane in (self.pm.left_pane, self.pm.right_pane):
-                if (pane is src_pane and kind == "move") or (
-                        not pane.get("virtual") and str(pane["path"]) == dest):
-                    self._relist(pane)
+            changed = {str(dest_dir)}
+            if kind == "move":
+                # The source directories lost entries too: the other pane may
+                # show one of them when the destination was typed (Shift-M).
+                changed |= {str(t.parent) for t in targets}
+                self._relist(src_pane)
+            self._relist_others_showing(changed, besides=src_pane if kind == "move" else None)
             src_pane["selected_files"].clear()
             self.log_info(format_op_summary(verb, result))
             self._report_op_failures(verb, result)
