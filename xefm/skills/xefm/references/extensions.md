@@ -222,6 +222,14 @@ The public names:
 - `ctx.run_program(command, *, terminal=False, cwd=None, env=None)` — run an
   external program; `terminal=True` hands it the terminal (TUI) or opens a
   terminal window (desktop)
+- `ctx.terminal_backend_suspended()` (Preview) — a context manager: inside the
+  `with`, XeFM's terminal backend steps aside and you run an interactive
+  program yourself with `subprocess` — `input=`, `stdout=subprocess.PIPE` and
+  the rest as in a shell (an `fzf` picker: choices in on stdin, the pick out
+  on stdout). Raises in the desktop app; check `ctx.is_terminal_backend`
+  (Preview) first. Pass `**ctx.program_env()` (Preview, `{'cwd', 'env'}` with
+  the `XEFM_*` variables) to the `subprocess` call. Never run an interactive
+  program with `subprocess` outside this block
 - `ctx.run_task(title, work, *, on_done=None, read_only=False)` (Preview) — run
   `work(job)` on a worker thread behind XeFM's progress dialog (Cancel, Run in
   background); see *Long work* below
@@ -333,6 +341,9 @@ def compute(ctx):
 - **It runs on the UI thread and XeFM waits.** Keep it short. Anything slow
   (reading whole files, a big walk, a network call) belongs in
   `ctx.run_task(...)`; an external tool in `ctx.run_program(...)`.
+- **`ctx` belongs to the UI thread.** Use it in the action and in callbacks
+  (`on_done`, `on_accept`, …), never inside `run_task`'s `work` or a thread of
+  your own; `run_program` and `terminal_backend_suspended` raise there.
 - **Prompts do not block.** `ctx.input`, `ctx.choose`, `ctx.confirm` return
   at once; put the rest of the action in the callback.
 - **Exceptions are caught at the boundary** and logged with a traceback; the
