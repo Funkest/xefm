@@ -7,11 +7,14 @@ corrupts the curses screen in TUI mode and is lost in desktop mode.
 Run with: python -m pytest test/test_run_program_output.py -v
 """
 
+import contextlib
 import os
 import queue
 import shutil
+import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import Mock, patch
@@ -317,6 +320,118 @@ class TestActionContextRunProgram(RunProgramBase):
     def test_an_empty_command_is_an_error(self):
         with self.assertRaises(ValueError):
             self.ctx().run_program([])
+
+    def test_off_the_ui_thread_is_an_error(self):
+        """Off the UI thread it would race the UI for the terminal and read the
+        panes from the wrong thread (#755)."""
+        errors = []
+
+        def worker():
+            try:
+                self.ctx().run_program(['ls'])
+            except RuntimeError as exc:
+                errors.append(exc)
+
+        t = threading.Thread(target=worker)
+        t.start()
+        t.join()
+        self.assertEqual(len(errors), 1)
+
+
+class TestTerminalBackendSuspended(RunProgramBase):
+    """``ctx.terminal_backend_suspended()`` and ``ctx.program_env()`` — run an
+    interactive program yourself and read what it prints (#755)."""
+
+    def ctx(self):
+        from xefm.user_api import ActionContext
+        return ActionContext(self.app)
+
+    def test_program_env_matches_what_run_program_gives(self):
+        launch = self.ctx().program_env()
+        self.assertEqual(os.path.realpath(launch['cwd']),
+                         os.path.realpath(self.tmp))
+        self.assertEqual(launch['env']['XEFM_ACTIVE'], '1')
+        self.assertEqual(os.path.realpath(launch['env']['XEFM_THIS_DIR']),
+                         os.path.realpath(self.tmp))
+
+    def test_program_env_is_a_fresh_dict_each_time(self):
+        ctx = self.ctx()
+        ctx.program_env()['env']['MINE'] = '1'
+        self.assertNotIn('MINE', ctx.program_env()['env'])
+
+    def test_subprocess_inside_reads_input_and_captures_stdout(self):
+        with patch('xefm.user_api.is_desktop_mode', return_value=False):
+            ctx = self.ctx()
+            with ctx.terminal_backend_suspended():
+                r = subprocess.run(
+                    [sys.executable, '-c',
+                     'import sys; print(sys.stdin.read().split()[1])'],
+                    input='alpha beta\n', text=True, stdout=subprocess.PIPE,
+                    **ctx.program_env())
+        self.assertEqual(r.stdout.strip(), 'beta')
+
+    def test_suspends_the_backend_and_rereads_the_panes(self):
+        events = []
+        real = self.backend.suspended
+
+        @contextlib.contextmanager
+        def suspended():
+            events.append('suspend')
+            with real():
+                yield
+            events.append('resume')
+
+        with patch('xefm.user_api.is_desktop_mode', return_value=False), \
+                patch.object(self.backend, 'suspended', suspended), \
+                patch.object(self.app, '_relist',
+                             side_effect=lambda pane: events.append('relist')):
+            with self.ctx().terminal_backend_suspended():
+                events.append('inside')
+        self.assertEqual(events, ['suspend', 'inside', 'resume',
+                                  'relist', 'relist'])
+
+    def test_terminal_is_taken_back_after_an_exception(self):
+        with patch('xefm.user_api.is_desktop_mode', return_value=False), \
+                patch.object(self.app, '_relist') as relist:
+            with self.assertRaises(KeyError):
+                with self.ctx().terminal_backend_suspended():
+                    raise KeyError('x')
+            self.assertEqual(relist.call_count, 2)
+            # Handed back, so it can be handed over again.
+            with self.ctx().terminal_backend_suspended():
+                pass
+
+    def test_nesting_is_an_error(self):
+        with patch('xefm.user_api.is_desktop_mode', return_value=False):
+            ctx = self.ctx()
+            with ctx.terminal_backend_suspended():
+                with self.assertRaises(RuntimeError):
+                    with ctx.terminal_backend_suspended():
+                        pass
+
+    def test_desktop_app_is_an_error(self):
+        with patch('xefm.user_api.is_desktop_mode', return_value=True):
+            ctx = self.ctx()
+            self.assertFalse(ctx.is_terminal_backend)
+            with self.assertRaises(RuntimeError):
+                with ctx.terminal_backend_suspended():
+                    pass
+
+    def test_off_the_ui_thread_is_an_error(self):
+        errors = []
+
+        def worker():
+            try:
+                with self.ctx().terminal_backend_suspended():
+                    pass
+            except RuntimeError as exc:
+                errors.append(exc)
+
+        with patch('xefm.user_api.is_desktop_mode', return_value=False):
+            t = threading.Thread(target=worker)
+            t.start()
+            t.join()
+        self.assertEqual(len(errors), 1)
 
 class TestSubshellEnv(RunProgramBase):
     def _subshell(self, shell):

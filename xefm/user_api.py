@@ -100,11 +100,13 @@ down with it. A malformed entry in any of the tables above is a validation
 warning that skips that entry, never a load failure.
 """
 
+import contextlib
 import inspect
 import re
+import threading
 import traceback
 from types import MappingProxyType
-from typing import Any, Callable, Iterable, Mapping, NamedTuple
+from typing import Any, Callable, Iterable, Iterator, Mapping, NamedTuple
 
 from xefm import actions as _actions
 from xefm import filters as _filters
@@ -794,21 +796,92 @@ class ActionContext:
 
         Never call :mod:`subprocess` directly for an interactive program: XeFM
         owns the terminal, and a child drawing on it unannounced leaves the
-        screen corrupted and the keyboard fought over (#454).
+        screen corrupted and the keyboard fought over (#454). To run one
+        yourself — to feed it input or read what it prints — do it inside
+        :meth:`terminal_backend_suspended`.
+
+        Call it on the UI thread, as an action or hook runs; from any other
+        thread it raises RuntimeError.
         """
+        self._require_ui_thread("run_program")
         from xefm.external_programs import command_argv
         argv = command_argv(command)
         if not argv:
             raise ValueError("run_program: the command is empty")
-        app = self._app
-        full_env, default_cwd = app._program_env(app.active_pane())
+        launch = self.program_env()
         if env:
-            full_env.update({str(k): str(v) for k, v in env.items()})
-        if cwd is None and app._is_local(default_cwd):
-            cwd = default_cwd
-        return app._launch_program(argv[0], argv,
-                                   cwd=str(cwd) if cwd is not None else None,
-                                   env=full_env, terminal=terminal)
+            launch["env"].update({str(k): str(v) for k, v in env.items()})
+        if cwd is None:
+            cwd = launch["cwd"]
+        return self._app._launch_program(
+            argv[0], argv, cwd=str(cwd) if cwd is not None else None,
+            env=launch["env"], terminal=terminal)
+
+    @preview
+    def program_env(self) -> dict[str, Any]:
+        """``{"cwd": ..., "env": ...}`` for a program you start yourself with
+        :mod:`subprocess` — ``subprocess.run(argv, **ctx.program_env())`` —
+        what :meth:`run_program` gives its own: the active pane's directory
+        (``None`` when the pane is not on the local disk, so the program runs in
+        XeFM's) and XeFM's environment with the ``XEFM_*`` variables added. The
+        dict is new on every call; change it as you like.
+        """
+        env, cwd = self._app._program_env(self._app.active_pane())
+        return {"cwd": str(cwd) if self._app._is_local(cwd) else None,
+                "env": env}
+
+    @property
+    @preview
+    def is_terminal_backend(self) -> bool:
+        """Whether XeFM is drawing in a terminal — the terminal app — so that
+        :meth:`terminal_backend_suspended` has a terminal to hand over. False in
+        the desktop app."""
+        return not is_desktop_mode()
+
+    @preview
+    @contextlib.contextmanager
+    def terminal_backend_suspended(self) -> Iterator[None]:
+        """Hand the terminal to programs you run yourself, inside a ``with``::
+
+            with ctx.terminal_backend_suspended():
+                r = subprocess.run(["fzf"], input="\\n".join(names), text=True,
+                                   stdout=subprocess.PIPE, **ctx.program_env())
+            if r.returncode == 0:
+                ctx.pane.cd(r.stdout.strip())
+
+        Inside, XeFM's terminal backend is suspended: the screen and the
+        keyboard belong to the terminal, and anything :mod:`subprocess` can do —
+        ``input``, capturing ``stdout`` or ``stderr`` on its own, ``Popen``,
+        several programs in a row — works as it would in a shell. On the way
+        out, an exception included, XeFM takes the terminal back, re-reads both
+        panes and repaints. It yields nothing.
+
+        Raises RuntimeError in the desktop app, which has no terminal to hand
+        over (check :attr:`is_terminal_backend` first), when called off the UI
+        thread, and when the terminal is already handed over.
+
+        What :meth:`run_program` does on top is yours to do here: hold the
+        screen after a failure if you want it held — a picker that exits
+        nonzero on Esc usually does not — and on Windows resolve a ``.cmd``
+        program with :func:`shutil.which`, since :mod:`subprocess` does not
+        search PATHEXT.
+        """
+        self._require_ui_thread("terminal_backend_suspended")
+        if not self.is_terminal_backend:
+            raise RuntimeError("terminal_backend_suspended: the desktop app "
+                               "has no terminal to hand over")
+        with self._app._terminal_suspended():
+            yield
+
+    def _require_ui_thread(self, api: str) -> None:
+        """Raise unless called on the thread that runs XeFM's UI. An API that
+        lends the terminal or reads the panes must not run beside the UI thread
+        that owns them."""
+        ui_thread = getattr(self._app, "_ui_thread", None)
+        if ui_thread is not None and threading.current_thread() is not ui_thread:
+            raise RuntimeError(
+                f"{api} must be called on XeFM's UI thread — from the action "
+                f"or hook itself, not from run_task's work or a thread of yours")
 
     # --- background work ---------------------------------------------------- #
 

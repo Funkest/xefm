@@ -205,6 +205,9 @@ ACTIONS = {
 | `ctx.choose(title, items, on_result=fn)` | （プレビュー）リストから選んでもらう（インデックス、または `None`）。`type='filter'` で検索できるリストになる |
 | `ctx.confirm(prompt, on_result=fn)` | （プレビュー）はい / いいえ |
 | `ctx.run_program(command, terminal=False)` | 外部プログラムを実行 — 後述 |
+| `ctx.terminal_backend_suspended()` | （Preview）`subprocess` で対話的なプログラムを自分で実行するための `with` ブロック — 後述 |
+| `ctx.program_env()` | （Preview）`subprocess` に渡す `{'cwd': ..., 'env': ...}`。`run_program` がプログラムに渡すものと同じ |
+| `ctx.is_terminal_backend` | （Preview）XeFM がターミナルで動いていて、引き渡すターミナルがあるかどうか |
 | `ctx.action_names()` | `invoke()` が受け付けるすべての名前 |
 | `ctx.actions()` | （プレビュー）同じアクションを、それぞれの `name`、`description`、`aliases`（以前の名前）、`keys`（`KEY_BINDINGS` を反映した、いま割り当てられているキー）付きで返す |
 
@@ -251,7 +254,7 @@ def show_names(ctx):
 
 ### 時間のかかる処理：`ctx.run_task`（Preview）
 
-アクションは UI スレッドで実行され、ウィンドウはその完了を待ちます。ファイル全体の読み込みやリモートのフォルダーなど、しばらくかかる処理は `ctx.run_task` に任せてください。`ctx.run_task` は、コピーと同じ進捗ダイアログ（**Cancel** と **Run in background** 付き）の裏で、関数をワーカースレッドで実行します。
+アクションは UI スレッドで実行され、ウィンドウはその完了を待ちます。`ctx` はそのスレッドのものです。アクションの中や `on_done` などのコールバックから使い、ほかのスレッドからは決して使わないでください。ファイル全体の読み込みやリモートのフォルダーなど、しばらくかかる処理は `ctx.run_task` に任せてください。`ctx.run_task` は、コピーと同じ進捗ダイアログ（**Cancel** と **Run in background** 付き）の裏で、関数をワーカースレッドで実行します。
 
 ```python
 import hashlib
@@ -325,9 +328,39 @@ def open_selection_in_vim(ctx):
 ```
 
 - `terminal=True` を付けない場合、プログラムはバックグラウンドで起動し、その出力はログペインに送られ、XeFM はそのまま動き続けます。
-- `terminal=True` を付けた場合、XeFM はターミナルをプログラムに引き渡し、終了を待ちます。エディターやページャーなど、画面に描画したりキーボードから読み込んだりするものにはこれが必要です。プログラムが終了すると両方のペインが読み直され、終了コードが返されます。終了コードが 0 以外の場合は、エラー出力を読めるよう、まず Enter を待ちます。デスクトップのウィンドウには引き渡すターミナルがないため、そこでは `terminal=True` での起動は拒否され、ログペインに 1 行表示されます。
+- `terminal=True` を付けた場合、XeFM はターミナルをプログラムに引き渡し、終了を待ちます。エディターやページャーなど、画面に描画したりキーボードから読み込んだりするものにはこれが必要です。プログラムが終了すると両方のペインが読み直され、終了コードが返されます。終了コードが 0 以外の場合は、エラー出力を読めるよう、まず Enter を待ちます。デスクトップのウィンドウには引き渡すターミナルがないため、そこではプログラムは代わりに [`TERMINAL`](EXTERNAL_TERMINAL_FEATURE.ja.md) のアプリケーションで開き、XeFM はその終了を待ちません。
 
-対話的なプログラムに対して自分で `subprocess.run()` を呼び出さないでください。ターミナルは XeFM が管理しているので、XeFM の知らないところでターミナルに描画したりキーボードから読み込んだりするプログラムは、画面を乱してしまいます。あるいは、両者が同じキーを待ち続けることになります。
+対話的なプログラムに対して自分で `subprocess.run()` を呼び出さないでください。ただし `ctx.terminal_backend_suspended()`（後述）の中は例外です。ターミナルは XeFM が管理しているので、XeFM の知らないところでターミナルに描画したりキーボードから読み込んだりするプログラムは、画面を乱してしまいます。あるいは、両者が同じキーを待ち続けることになります。
+
+### 対話的なプログラムを自分で実行する（Preview）
+
+`run_program` が返すのは終了コードだけです。プログラムに入力を渡したり、その出力を読んだりするには、`ctx.terminal_backend_suspended()` の中で自分で実行します。たとえば `fzf` のような選択ツールは、候補を stdin で受け取り、選ばれたものを出力します。`with` ブロックの中では XeFM が退き、画面とキーボードはターミナルのものになるので、`subprocess` はシェルの中と同じように動きます。
+
+```python
+import shutil
+import subprocess
+
+
+def fuzzy_cd(ctx):
+    fzf = shutil.which('fzf')
+    if not ctx.is_terminal_backend or fzf is None:
+        ctx.message('fuzzy_cd needs the terminal app and fzf')
+        return
+    folders = {e.name: e.path for e in ctx.pane.entries if e.is_dir}
+    with ctx.terminal_backend_suspended():
+        r = subprocess.run([fzf], input='\n'.join(folders), text=True,
+                           stdout=subprocess.PIPE, **ctx.program_env())
+    if r.returncode == 0:
+        ctx.pane.cd(folders[r.stdout.strip()])
+```
+
+- ブロックを抜けると、例外で抜けた場合も含めて、XeFM はターミナルを取り戻し、両方のペインを読み直して再描画します。
+- `ctx.program_env()` は、`run_program` が渡すのと同じものをプログラムに渡します。アクティブなペインのディレクトリと、[`XEFM_*` 変数](EXTERNAL_PROGRAMS_FEATURE.ja.md#環境変数)です。
+- 受け取るのは、答えが出てくるストリームだけにします。`fzf` は選ばれたものを stdout に出力し、画面はターミナルに描きます。`dialog` や `whiptail` はその逆なので、`stderr` を受け取ります。
+- `run_program` が加えて行っていることは、自分で行います。`run_program` は終了コードが 0 以外のときに Enter を待ちます（Esc で取り消した選択ツールでは、普通は待たないほうがよいでしょう）。また Windows では、`subprocess` が見つけられない `.cmd` のプログラムも見つけます。上の例のように、`shutil.which()` で得たパスを渡してください。
+- デスクトップアプリには引き渡すターミナルがないため、そこではこのブロックはエラーになります。先に `ctx.is_terminal_backend` を確かめてください。
+
+`ctx` のほかのすべてと同じく、これらはアクションが動く UI スレッドでのみ使えます。`ctx.run_task` の処理の中や、自分で立てたスレッドからは使えません。
 
 ### 自分のファイルリストを開く（Preview）
 

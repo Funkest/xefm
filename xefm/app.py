@@ -27,6 +27,7 @@ import argparse
 import getpass
 import importlib.util
 import itertools
+import contextlib
 import os
 import platform
 import queue
@@ -2097,6 +2098,8 @@ class XeFMApp:
         #: The thread that builds the app runs its event loop and is the only
         #: one that may touch the LogView; ``log_info`` queues from any other.
         self._ui_thread = threading.current_thread()
+        #: Set while :meth:`_terminal_suspended` has the terminal handed over.
+        self._terminal_handed_over = False
         self._orig_stdout = sys.stdout
         self._orig_stderr = sys.stderr
         sys.stdout = _StreamToLog("STDOUT", self._log_queue, on_write=self._wake_pump)
@@ -5034,7 +5037,7 @@ class XeFMApp:
         from xefm.external_programs import resolve_command
         result = None
         try:
-            with self.backend.suspended():
+            with self._terminal_suspended():
                 result = subprocess.run(resolve_command(argv, env),
                                         cwd=cwd, env=env)
                 if pause_on_error and result.returncode != 0:
@@ -5048,10 +5051,29 @@ class XeFMApp:
             self.log_info(f"Command not found: {argv[0]}")
         except Exception as exc:
             self.log_info(f"Command failed: {exc}")
-        self._relist(self.pm.left_pane)
-        self._relist(self.pm.right_pane)
-        self.panel.render()
         return result.returncode if result is not None else None
+
+    @contextlib.contextmanager
+    def _terminal_suspended(self):
+        """Hand the terminal to whatever runs inside, then take it back: the
+        backend's ``suspended()``, and on the way out — an exception included —
+        both panes re-read and a repaint, since the child may have changed files
+        while we were away. Shared by :meth:`_run_in_terminal` and
+        ``ctx.terminal_backend_suspended()`` (#755).
+
+        Not reentrant: a second hand-over while the terminal is already handed
+        over is a RuntimeError — there is nothing left to hand."""
+        if self._terminal_handed_over:
+            raise RuntimeError("the terminal is already handed over")
+        self._terminal_handed_over = True
+        try:
+            with self.backend.suspended():
+                yield
+        finally:
+            self._terminal_handed_over = False
+            self._relist(self.pm.left_pane)
+            self._relist(self.pm.right_pane)
+            self.panel.render()
 
     def _open_terminal(self, argv: list, *, cwd: str | None, env: dict,
                        pause_on_error: bool = False) -> bool:

@@ -282,6 +282,9 @@ summary with no further page.
 | `ctx.choose(title, items, on_result=fn)` | (Preview) pick from a list (index, or `None`); `type='filter'` for a searchable one |
 | `ctx.confirm(prompt, on_result=fn)` | (Preview) yes / no |
 | `ctx.run_program(command, terminal=False)` | run an external program — see below |
+| `ctx.terminal_backend_suspended()` | (Preview) a `with` block in which you run an interactive program yourself with `subprocess` — see below |
+| `ctx.program_env()` | (Preview) `{'cwd': ..., 'env': ...}` for `subprocess`: what `run_program` gives its programs |
+| `ctx.is_terminal_backend` | (Preview) whether XeFM is running in a terminal, so there is a terminal to hand over |
 | `ctx.action_names()` | every name `invoke()` accepts |
 | `ctx.actions()` | (Preview) the same actions, each with its `name`, `description`, `aliases` (names it used to have) and `keys` (bound right now, after your `KEY_BINDINGS`) |
 
@@ -345,7 +348,9 @@ To copy without showing anything, `ctx.copy_text(text)`.
 
 ### Slow work: `ctx.run_task` (Preview)
 
-Your action runs on the UI thread, and the window waits for it. Work that takes
+Your action runs on the UI thread, and the window waits for it. `ctx` belongs
+to that thread: use it from the action and from callbacks such as `on_done`,
+never from another thread. Work that takes
 a while — reading whole files, a remote folder — goes to `ctx.run_task`, which
 runs a function on a worker thread behind the same progress dialog a copy uses,
 with **Cancel** and **Run in background**:
@@ -454,12 +459,56 @@ def open_selection_in_vim(ctx):
   or reads the keyboard needs. When it exits, both panes are re-read and the
   exit code is returned. A nonzero exit waits for Enter first, so its error
   output stays readable. The desktop window has no terminal to hand over, so
-  there a `terminal=True` launch is refused with a line in the log pane.
+  there the program opens in your [`TERMINAL`](EXTERNAL_TERMINAL_FEATURE.md)
+  application instead, and XeFM does not wait for it.
 
-Don't call `subprocess.run()` yourself for an interactive program. XeFM owns
-the terminal, and a program that draws on it or reads the keyboard behind
-XeFM's back leaves the screen garbled — or both of them waiting for the same
-key.
+Don't call `subprocess.run()` yourself for an interactive program, except
+inside `ctx.terminal_backend_suspended()` (below). XeFM owns the terminal, and
+a program that draws on it or reads the keyboard behind XeFM's back leaves the
+screen garbled — or both of them waiting for the same key.
+
+### Running an interactive program yourself (Preview)
+
+`run_program` returns only the exit code. To give a program input or read what
+it prints — a picker such as `fzf`, which takes its choices on stdin and prints
+the one picked — run it yourself inside `ctx.terminal_backend_suspended()`.
+Inside the `with` block XeFM steps aside: the screen and the keyboard belong to
+the terminal, and `subprocess` works as it would in a shell.
+
+```python
+import shutil
+import subprocess
+
+
+def fuzzy_cd(ctx):
+    fzf = shutil.which('fzf')
+    if not ctx.is_terminal_backend or fzf is None:
+        ctx.message('fuzzy_cd needs the terminal app and fzf')
+        return
+    folders = {e.name: e.path for e in ctx.pane.entries if e.is_dir}
+    with ctx.terminal_backend_suspended():
+        r = subprocess.run([fzf], input='\n'.join(folders), text=True,
+                           stdout=subprocess.PIPE, **ctx.program_env())
+    if r.returncode == 0:
+        ctx.pane.cd(folders[r.stdout.strip()])
+```
+
+- When the block ends, an exception included, XeFM takes the terminal back,
+  re-reads both panes and repaints.
+- `ctx.program_env()` gives the program what `run_program` would: the active
+  pane's directory and the [`XEFM_*` variables](EXTERNAL_PROGRAMS_FEATURE.md#environment-variables).
+- Capture only the stream that carries the answer. `fzf` prints the pick on
+  stdout and draws on the terminal; `dialog` and `whiptail` are the other way
+  round, so capture their `stderr`.
+- What `run_program` does on top is yours to do: it waits for Enter after a
+  nonzero exit (a picker cancelled with Esc usually should not), and on Windows
+  it finds `.cmd` programs, which `subprocess` does not — pass the path from
+  `shutil.which()`, as above.
+- The desktop app has no terminal to hand over, so there the block raises an
+  error: check `ctx.is_terminal_backend` first.
+
+Like everything on `ctx`, these work only on the UI thread, where your action
+runs — not inside `ctx.run_task`'s work or a thread of your own.
 
 ### Opening your own list of files (Preview)
 
