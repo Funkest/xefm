@@ -177,7 +177,7 @@ folder's once it is calculated) can be used in any layout.
 | Type | Formats (the first is the default) |
 |---|---|
 | `size` | `compact` (`12.3K`), `bytes` (`12,345`) |
-| `time` | `short`, `full` — `DATE_FORMAT` picks between them by default — `iso`, `relative` (`5 min ago`) |
+| `time` | `short`, `full` — `DATE_FORMAT` picks between them by default — `iso`, `relative` (`5 min ago`), `recent` (`13:24` today, `10/21` this year, `2024` before) |
 | `enum` | `letter` (the value itself), `word` (its label from `values`) — both in its color |
 | `tags` | `dots`, `names` |
 | `count` | `number` |

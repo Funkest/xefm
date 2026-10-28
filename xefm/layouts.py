@@ -134,6 +134,23 @@ def _fmt_relative(value, entry):
     return f"{int(days // 365)} yr ago"
 
 
+def _fmt_recent(value, entry):
+    """As short as the age allows: the time for today, the day for this year,
+    the year before that — ``13:24``, ``10/21``, ``2024``."""
+    if value is None:
+        return "" if entry.ok else "---"
+    try:
+        when = datetime.fromtimestamp(value)
+    except (OverflowError, OSError, ValueError):
+        return "---"
+    now = datetime.now()
+    if when.date() == now.date():
+        return when.strftime("%H:%M")
+    if when.year == now.year:
+        return when.strftime("%m/%d")
+    return str(when.year)
+
+
 def _enum_spec(row, value) -> dict:
     attr = row.attr
     return (attr.values.get(value) if attr is not None else None) or {}
@@ -181,7 +198,8 @@ FORMATS: dict[str, dict[str, Format]] = {
     "time": {"short": Format(_time_formatter("%y-%m-%d %H:%M"), 14, "right", True),
              "full": Format(_time_formatter("%Y-%m-%d %H:%M:%S"), 19, "right", True),
              "iso": Format(_time_formatter("%Y-%m-%d %H:%M"), 16, "right", True),
-             "relative": Format(_fmt_relative, 10, "right", True, refresh=60.0)},
+             "relative": Format(_fmt_relative, 10, "right", True, refresh=60.0),
+             "recent": Format(_fmt_recent, 5, "right", True, refresh=60.0)},
     "enum": {"letter": Format(_fmt_letter, 1), "word": Format(_fmt_word, 10)},
     "tags": {"dots": Format(_fmt_dots, MARKER_MAX_WIDTH),
              "names": Format(_fmt_names, 16)},

@@ -136,7 +136,7 @@ class Config:
 | 型 | 書式（最初のものが既定） |
 |---|---|
 | `size` | `compact`（`12.3K`）、`bytes`（`12,345`） |
-| `time` | `short`、`full`（既定ではこの 2 つを `DATE_FORMAT` が選びます）、`iso`、`relative`（`5 min ago`） |
+| `time` | `short`、`full`（既定ではこの 2 つを `DATE_FORMAT` が選びます）、`iso`、`relative`（`5 min ago`）、`recent`（今日なら `13:24`、今年なら `10/21`、それより前は `2024`） |
 | `enum` | `letter`（値そのもの）、`word`（`values` のラベル）。どちらもその値の色で表示 |
 | `tags` | `dots`、`names` |
 | `count` | `number` |

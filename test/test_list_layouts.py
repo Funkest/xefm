@@ -209,6 +209,14 @@ class Formats(unittest.TestCase):
         self.assertEqual(self.render("time", "relative", now - 3 * 86400)[0].text,
                          "3 days ago")
 
+    def test_recent_time_is_as_short_as_its_age_allows(self):
+        from datetime import datetime
+        now = datetime.now()
+        self.assertEqual(self.render("time", "recent", now.timestamp())[0].text,
+                         now.strftime("%H:%M"))
+        old = datetime(2019, 3, 4, 5, 6).timestamp()
+        self.assertEqual(self.render("time", "recent", old)[0].text, "2019")
+
     def test_enum_values_give_letter_and_word_their_color(self):
         values = {"M": {"label": "Modified", "color": "yellow"}}
         (cell,) = self.render("enum", "word", "M", values=values)

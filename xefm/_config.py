@@ -808,7 +808,8 @@ class Config:
     #
     # Formats by type: 'size' -- 'compact' (12.3K, the default) or 'bytes';
     # 'time' -- 'short', 'full' (DATE_FORMAT picks between the two by
-    # default), 'iso' or 'relative' ("5 min ago"); 'enum' -- 'letter' or
+    # default), 'iso', 'relative' ("5 min ago") or 'recent' (13:24 today,
+    # 10/21 this year, 2024 before that); 'enum' -- 'letter' or
     # 'word' (its label from 'values'); 'tags' -- 'dots' or 'names'; 'count'
     # -- 'number'; 'text' -- 'text'. A function of yours takes (value, entry)
     # and returns text, or a Cell to give it a color: color is 'muted',
