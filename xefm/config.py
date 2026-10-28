@@ -1535,7 +1535,7 @@ def get_file_associations():
 #: ``edit``), whose values are command lines, these name a handler XeFM
 #: implements itself:
 #:   'viewer'   -- the built-in text/markdown viewer
-#:   'navigate' -- browse the file as an archive (jar, whl, ... )
+#:   'navigate' -- browse the file as an archive, told apart by its bytes
 #:   'list'     -- open the file as a file list, one path per line (m3u8, lst)
 BUILTIN_HANDLERS = ('viewer', 'navigate', 'list')
 

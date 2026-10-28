@@ -932,7 +932,8 @@ class Config:
     #                           a built-in handler, NOT a program to launch:
     #                             'viewer'   - the built-in text/markdown viewer
     #                             'navigate' - browse the file as an archive
-    #                                          (handy for *.jar, *.whl, ...)
+    #                                          (for one XeFM does not
+    #                                          recognise by its name)
     #                             'list'     - open the file as a file list,
     #                                          one path per line (*.m3u8, ...)
     #                             None       - do nothing
@@ -1036,11 +1037,32 @@ class Config:
         # configuration and shows a placeholder for binaries, including for
         # files with no extension or an unknown one that a list would miss.
         #
-        # Zip-shaped archives XeFM does not enter by extension. This one *is*
-        # worth stating, because it cannot be sniffed: .docx and .xlsx are zip
-        # files too, and you want Word for those, not a file listing.
+        # Archives under another name. ENTER browses .zip, .tar, .7z and the
+        # other archive names by itself; these are packages that are an archive
+        # inside but named for what they hold, and 'navigate' browses them like
+        # one -- XeFM tells the format from the file's bytes. Add a name of your
+        # own here, or take one out to have ENTER open the viewer instead.
+        #
+        # Zip-based documents are deliberately absent: .docx, .xlsx, .epub and
+        # .odt are zip files too, and you want the document, not a listing of
+        # its XML. The same goes the other way: 'enter': None or 'viewer' on
+        # *.zip stops ENTER browsing a zip.
         {
-            'pattern': ['*.jar', '*.whl', '*.egg'],
+            'pattern': [
+                '*.jar', '*.war', '*.ear',                    # Java
+                '*.apk', '*.aab', '*.aar',                    # Android
+                '*.ipa',                                      # iOS
+                '*.whl', '*.egg',                             # Python
+                '*.nupkg', '*.snupkg',                        # NuGet
+                '*.vsix',                                     # VS Code
+                '*.xpi',                                      # Firefox add-on
+                '*.appx', '*.msix', '*.appxbundle', '*.msixbundle',  # Windows apps
+                '*.gem',                                      # Ruby (tar)
+                '*.crate',                                    # Rust (tar.gz)
+                '*.ova',                                      # VM appliance (tar)
+                '*.cbz', '*.cbt', '*.cbr', '*.cb7',           # comic books
+                '*.kmz',                                      # Google Earth
+            ],
             'enter': 'navigate',
         },
         # Playlists are file lists: ENTER shows the files a playlist names in the

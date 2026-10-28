@@ -15,9 +15,22 @@ unpacking it to disk first.
 | Python 3.14+ | **Zstandard TAR** (`.tar.zst`, `.tzst`) |
 | With libarchive | **7-Zip** (`.7z`), **RAR** (`.rar`), **ISO 9660** disc images (`.iso`), **Cabinet** (`.cab`), **cpio** (`.cpio`), **RPM packages** (`.rpm`) |
 
-**Create:** everything above except `.rar`, `.cab` and `.rpm`, which XeFM can
-read but not write — nothing writes RAR but WinRAR, and libarchive has no writer
-for the other two. Typing one of those names at the create prompt says so rather
+Packages that are an archive under another name are browsed too, through a
+rule in the default [File Associations](FILE_ASSOCIATIONS_FEATURE.md#two-tiers-of-open):
+Java (`.jar`, `.war`, `.ear`), Android (`.apk`, `.aab`, `.aar`), iOS (`.ipa`),
+Python (`.whl`, `.egg`), NuGet (`.nupkg`, `.snupkg`), `.vsix`, `.xpi`, Windows
+app packages (`.appx`, `.msix`, `.appxbundle`, `.msixbundle`), `.gem`, `.crate`,
+`.ova`, comic books (`.cbz`, `.cbt`, `.cbr`, `.cb7`) and `.kmz`. That rule gives
+them the `'navigate'` handler, and XeFM tells the format from the file's
+contents, so a name you add to it — or to a rule of your own — browses as long
+as the file is one of the formats in the table. Documents that are zip files
+inside, such as `.docx`, `.xlsx` and `.epub`, are deliberately left out: Enter
+shows them in the viewer. Extracting goes by the name alone, so these packages
+are browsed but not extracted.
+
+**Create:** everything in the table except `.rar`, `.cab` and `.rpm`, which
+XeFM can read but not write — nothing writes RAR but WinRAR, and libarchive has
+no writer for the other two. Typing one of those names at the create prompt says so rather
 than quietly making a `.tar.gz`. A `.7z` created by XeFM uses LZMA2, the same
 compression 7-Zip itself writes by default; no format can be given a password
 (see [Supported encryption](#supported-encryption)).
