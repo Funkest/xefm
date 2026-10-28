@@ -11,7 +11,7 @@ for the keys yours are on, or find them in the **Go** menu). Keys depend on your
 | Action | Dialog | What it lists |
 |--------|--------|---------------|
 | `favorites` | Favorites | Your favorite directories and files |
-| `history` | History | Directories you have already visited in this pane |
+| `history` | History | Directories you have already visited, in either pane |
 | `drives` | Drives | Storage locations and volumes (and S3 buckets, if available) |
 | `connect_server` | Connect to Server | Saved servers, plus the ones found on the network (macOS and Windows) |
 
@@ -194,8 +194,10 @@ so, and **Esc** closes it without moving the pane.
 
 ## History
 
-Choose **Go ▸ History…** (`history`) to open a searchable list of directories you have already visited in
-the current pane, and jump back to any of them. Each pane keeps its own history.
+Choose **Go ▸ History…** (`history`) to open a searchable list of directories you have already visited,
+and jump back to any of them. The history is shared: both panes, and every
+[tab](FOLDER_TABS_FEATURE.md), add to one list, so a directory visited only in
+the right pane is listed when History is opened from the left one.
 
 The **remove** key forgets the highlighted directory. Every visit to it is
 dropped, not just the most recent one, and the change is saved immediately. It

@@ -363,7 +363,7 @@ location, and `cursor_top` / `cursor_bottom` go to the first / last item.
 |--------|---------------|
 | `favorites` | Your favorite directories and files |
 | `jump_to_path` | Jump to a path (a file path lands the cursor on the file) |
-| `history` | Directories this pane has visited |
+| `history` | Directories visited in either pane |
 | `sync_current_to_other` | Point the other pane at this one's directory |
 | `sync_other_to_current` | Point this pane at the other one's directory |
 
