@@ -825,7 +825,11 @@ class ActionContext:
         (``None`` when the pane is not on the local disk, so the program runs in
         XeFM's) and XeFM's environment with the ``XEFM_*`` variables added. The
         dict is new on every call; change it as you like.
+
+        It reads the panes, so call it on the UI thread; from any other thread
+        it raises RuntimeError.
         """
+        self._require_ui_thread("program_env")
         env, cwd = self._app._program_env(self._app.active_pane())
         return {"cwd": str(cwd) if self._app._is_local(cwd) else None,
                 "env": env}

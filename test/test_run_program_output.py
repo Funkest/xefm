@@ -359,6 +359,20 @@ class TestTerminalBackendSuspended(RunProgramBase):
         ctx.program_env()['env']['MINE'] = '1'
         self.assertNotIn('MINE', ctx.program_env()['env'])
 
+    def test_program_env_off_the_ui_thread_is_an_error(self):
+        errors = []
+
+        def worker():
+            try:
+                self.ctx().program_env()
+            except RuntimeError as exc:
+                errors.append(exc)
+
+        t = threading.Thread(target=worker)
+        t.start()
+        t.join()
+        self.assertEqual(len(errors), 1)
+
     def test_subprocess_inside_reads_input_and_captures_stdout(self):
         with patch('xefm.user_api.is_desktop_mode', return_value=False):
             ctx = self.ctx()
