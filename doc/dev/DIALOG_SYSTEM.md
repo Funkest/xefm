@@ -215,6 +215,9 @@ Migemo. One matcher, so the dialogs and the pane's isearch cannot drift apart â€
 `_label_hit` is `search_match.hit` on `to_label(value)`, with the query compiled
 once per keystroke (and once per streamed batch in `add_items`, where regex
 generation would otherwise repeat per row).
+Passing rows are ordered best match first by `search_match.rank`, a stable sort
+on the label (#742; see
+[FILTER_LIST_RANKING_IMPLEMENTATION.md](FILTER_LIST_RANKING_IMPLEMENTATION.md)).
 `up`/`down`/`pageup`/`pagedown`
 drive the selection even while the field holds focus; Enter accepts the selected
 value via `on_accept`; a click selects/activates a row.

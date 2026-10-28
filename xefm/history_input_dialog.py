@@ -163,8 +163,12 @@ class HistoryInputDialog(FocusContainer, Widget):
 
     def _refilter(self) -> None:
         tokens = search_match.compile_query(self.query)
-        self.filtered = [v for v in self.all_items
-                         if search_match.hit(tokens, self.to_label(v))]
+        # Best match first (#742), the way FilterListDialog ranks; the sort is
+        # stable, so rows that rank alike keep the history's own order.
+        self.filtered = sorted(
+            (v for v in self.all_items
+             if search_match.hit(tokens, self.to_label(v))),
+            key=lambda v: search_match.rank(tokens, self.to_label(v)))
         self.list.set_items([self.to_label(v) for v in self.filtered])
         self.list.selected = -1
         self.list.offset = 0

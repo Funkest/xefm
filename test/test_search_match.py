@@ -160,5 +160,7 @@ def test_dialog_streamed_rows_take_the_active_query():
 def test_pane_and_dialog_agree(flm, pane, pattern):
     dialog_rows = filtered(list(NAMES), pattern)
     pane_rows = list(NAMES) if not pattern.strip() else isearch(flm, pane, pattern)
-    assert dialog_rows == pane_rows
+    # The same rows match; the dialog puts its best matches first (#742) while
+    # the pane keeps the listing order, so the order is not compared here.
+    assert sorted(dialog_rows) == sorted(pane_rows)
 

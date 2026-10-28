@@ -35,7 +35,9 @@ zooming an image) are not listed; open that viewer and press **F1** for its keys
 
 - **Type** part of a name to narrow the list. Words separated by spaces must all
   match, in any order: `sel all` finds `select_all` and `toggle_select_items`.
-  Romaji finds Japanese names through Migemo, as in every other picker.
+  Romaji finds Japanese names through Migemo, as in every other picker, and the
+  best matches come first, also as there: `copy` lists `copy_files` above
+  `clipboard_copy`.
 - **↑/↓**, **Page Up/Page Down** move through the list.
 - **Enter** runs the highlighted action on the active pane.
 - **F1** opens a help page for the highlighted action: what it does, its keys,
