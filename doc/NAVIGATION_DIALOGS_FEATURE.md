@@ -29,7 +29,11 @@ Every navigation dialog uses the same list-picker controls:
   incremental search: matching is case-insensitive and hits anywhere in the row,
   several keywords separated by spaces all have to match (`work src` finds
   `Projects — /home/me/work/src`), `*` and `?` wildcards work (`*.py`), and
-  romaji finds Japanese entries through Migemo (`kensaku` finds `検索`)
+  romaji finds Japanese entries through Migemo (`kensaku` finds `検索`).
+  The best matches come first: a row that starts with what you typed, then one
+  where it starts a word (after a space, `/`, `_`, `-` or `.`), then one where
+  it is inside a word, so `doc` puts `Documents` above a favorite whose path
+  merely ends in `/docs`. Rows that match equally well keep the list's own order
 - **Backspace** to remove filter characters
 - **Up/Down** to move through results
 - **Page Up/Page Down** to scroll by page

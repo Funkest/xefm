@@ -59,6 +59,7 @@ shared drop-shadow intent the other PuiKit modals use.
 
 from __future__ import annotations
 
+import bisect
 import queue
 import threading
 from typing import Any, Callable, Iterator, Sequence
@@ -199,6 +200,9 @@ class FilterListDialog(FocusContainer, Widget):
         self._panel: Any = None
         # Values currently passing the filter, parallel to ``self.list.items``.
         self.filtered: list[Any] = list(self.all_items)
+        # Each filtered value's ``search_match.rank``, parallel to ``filtered``
+        # and sorted, so a streamed row can be inserted where it ranks.
+        self._ranks: list[Any] = [(0, 0)] * len(self.filtered)
 
         #: Optional background loader (see the module docstring): runs once on a
         #: worker thread when the dialog opens, yielding values that stream in
@@ -264,26 +268,47 @@ class FilterListDialog(FocusContainer, Widget):
         comes from ``search_match.compile_query``, hoisted out of the row loop."""
         return search_match.hit(tokens, self.to_label(value))
 
+    def _ranked(self, values: Sequence[Any],
+                tokens: Sequence[search_match.Token]) -> list[tuple[Any, Any]]:
+        """``(rank, value)`` for each of ``values`` passing the filter, best
+        match first (#742); a stable sort, so rows that rank alike — every row,
+        under an empty query — keep the order they were given in."""
+        ranked = [(search_match.rank(tokens, self.to_label(v)), v)
+                  for v in values if self._label_hit(v, tokens)]
+        ranked.sort(key=lambda pair: pair[0])
+        return ranked
+
     def _refilter(self, text: str) -> None:
         tokens = search_match.compile_query(text)
-        self.filtered = [v for v in self.all_items if self._label_hit(v, tokens)]
+        ranked = self._ranked(self.all_items, tokens)
+        self._ranks = [r for r, _v in ranked]
+        self.filtered = [v for _r, v in ranked]
         self.list.set_items(self._rows(self.filtered))
         self.list.selected = 0
 
     def add_items(self, values: Sequence[Any]) -> None:
-        """Append ``values`` below the existing rows, re-applying the active
-        filter text. Appending never reorders: rows already passing the filter
-        keep their indices, so the selection and scroll position carry over
-        (unlike ``_refilter``, which resets both for a changed query)."""
+        """Add streamed ``values`` to the rows, re-applying the active filter
+        text. Each one goes where its rank puts it — after every row that ranks
+        as well, so with no query they simply append, as before ranking.
+
+        The highlighted row stays highlighted, and the scroll position carries
+        over (unlike ``_refilter``, which resets both for a changed query) —
+        except at the top: a highlight still on the first row stays on the first
+        row, which is the best match so far, whatever just arrived."""
         if not values:
             return
         self.all_items.extend(values)
         tokens = search_match.compile_query(self.filter_edit.text)
-        matches = [v for v in values if self._label_hit(v, tokens)]
-        if not matches:
+        ranked = self._ranked(values, tokens)
+        if not ranked:
             return
-        self.filtered.extend(matches)
         selected, offset = self.list.selected, self.list.offset
+        for rank, value in ranked:
+            index = bisect.bisect_right(self._ranks, rank)
+            self._ranks.insert(index, rank)
+            self.filtered.insert(index, value)
+            if 0 < selected and index <= selected:
+                selected += 1
         self.list.set_items(self._rows(self.filtered))
         self.list.selected = selected
         self.list.offset = offset
@@ -308,6 +333,7 @@ class FilterListDialog(FocusContainer, Widget):
         if not self.on_remove(value):
             return False
         del self.filtered[index]
+        del self._ranks[index]
         try:
             self.all_items.remove(value)
         except ValueError:

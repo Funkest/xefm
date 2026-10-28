@@ -24,6 +24,7 @@ the loop that runs again for each streamed batch of rows
 from __future__ import annotations
 
 import fnmatch
+import functools
 import re
 from typing import Sequence
 
@@ -67,6 +68,85 @@ def hit(tokens: Sequence[Token], text: str, *, match_all: bool = True) -> bool:
             or (regex is not None and migemo_search.search_nfc(regex, text))
             for glob, regex in tokens)
     return all(hits) if match_all else any(hits)
+
+
+#: How well a token hit a label, best first: at the very start, at the start of
+#: a word (after a space, ``/``, ``_``, ``-``, ``.`` or any other non-word
+#: character), or somewhere inside a word.
+TIER_LABEL_START, TIER_WORD_START, TIER_INSIDE = 0, 1, 2
+
+
+def rank(tokens: Sequence[Token], text: str) -> tuple[int, int]:
+    """A sort key for a ``text`` that passed :func:`hit` — smaller is a better
+    match — so a filter list can put its best matches first (#742).
+
+    Each token's best occurrence is graded by where it starts (the ``TIER_*``
+    above). The row takes its *worst* token's tier, since every token has to
+    match; between rows of one tier the one whose tokens all match earlier
+    comes first. Sort with a stable sort, so equal keys keep the list's own
+    order — and an empty query, which ranks every row alike, changes nothing.
+
+    Only the label is ranked: the lists match nothing else, so ranking cannot
+    find a row that :func:`hit` would not. Ranking on more than the label is
+    sketched in ``doc/dev/FILTER_LIST_RANKING_IMPLEMENTATION.md``.
+    """
+    folded = name_key.nfc(text).lower()
+    tier = position = 0
+    for glob, regex in tokens:
+        token_tier, token_pos = _best_occurrence(glob, regex, folded)
+        tier = max(tier, token_tier)
+        position = max(position, token_pos)
+    return tier, position
+
+
+def _best_occurrence(glob: str, regex: "re.Pattern | None",
+                     folded: str) -> tuple[int, int]:
+    """``(tier, start)`` of a token's best occurrence in ``folded`` — the
+    lowercased NFC label — or ``(TIER_INSIDE, len(folded))`` when its position
+    cannot be told (a hit that only the raw, un-normalized text gave)."""
+    best = (TIER_INSIDE, len(folded))
+    for start in _starts(glob, regex, folded):
+        if start == 0:
+            tier = TIER_LABEL_START
+        elif not folded[start - 1].isalnum():
+            tier = TIER_WORD_START
+        else:
+            tier = TIER_INSIDE
+        best = min(best, (tier, start))
+    return best
+
+
+def _starts(glob: str, regex: "re.Pattern | None", folded: str):
+    """Every position where the token begins a match in ``folded``: the glob
+    without the "contains" stars :func:`compile_query` wrapped it in, and the
+    Migemo regex's non-ASCII hits, the same ones :func:`hit` counts."""
+    core = _core_regex(glob.strip('*'))
+    if core is None:
+        yield 0
+    else:
+        for start in range(len(folded)):
+            if core.match(folded, start):
+                yield start
+    if regex is not None:
+        for m in regex.finditer(folded):
+            if m.end() > m.start() and not m.group().isascii():
+                yield m.start()
+
+
+@functools.lru_cache(maxsize=64)
+def _core_regex(core: str) -> "re.Pattern | None":
+    """``core`` — a token's glob without its "contains" stars — as a regex that
+    matches *from* a given position, or ``None`` for an empty core (a token of
+    stars alone, which matches anywhere and so starts at 0)."""
+    if not core:
+        return None
+    # fnmatch anchors its translation at the end (``\\Z``, or ``\\z`` from
+    # Python 3.14); without the anchor, ``match(text, pos)`` finds the core
+    # starting at ``pos`` whatever follows it.
+    pattern = fnmatch.translate(core)
+    if pattern.endswith(('\\Z', '\\z')):
+        pattern = pattern[:-2]
+    return re.compile(pattern)
 
 
 def dead_end(pattern: str, *, migemo: bool = True) -> bool:
