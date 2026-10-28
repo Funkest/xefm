@@ -282,6 +282,8 @@ summary with no further page.
 | `ctx.choose(title, items, on_result=fn)` | (Preview) pick from a list (index, or `None`); `type='filter'` for a searchable one |
 | `ctx.confirm(prompt, on_result=fn)` | (Preview) yes / no |
 | `ctx.run_program(command, terminal=False)` | run an external program — see below |
+| `ctx.copy(items, dest, on_done=fn)` | (Preview) copy files the way **File → Copy to Other Pane** does — confirmation, conflict dialog, progress — and hear how each fared; see below |
+| `ctx.move(items, dest, on_done=fn)` | (Preview) the same, moving |
 | `ctx.terminal_backend_suspended()` | (Preview) a `with` block in which you run an interactive program yourself with `subprocess` — see below |
 | `ctx.program_env()` | (Preview) `{'cwd': ..., 'env': ...}` for `subprocess`: what `run_program` gives its programs |
 | `ctx.is_terminal_backend` | (Preview) whether XeFM is running in a terminal, so there is a terminal to hand over |
@@ -509,6 +511,41 @@ def fuzzy_cd(ctx):
 
 Like everything on `ctx`, these work only on the UI thread, where your action
 runs — not inside `ctx.run_task`'s work or a thread of your own.
+
+### Copying and moving files (Preview)
+
+`ctx.copy(items, dest)` and `ctx.move(items, dest)` run the same operation as
+**File → Copy to Other Pane** and **File → Move to Other Pane**: the confirmation, the conflict dialog when
+a name is taken, the progress dialog with **Cancel** and **Run in background**.
+You choose the items and the destination:
+
+```python
+def backup_selection(ctx):
+    def done(ctx, outcome):
+        if outcome.status == 'done':
+            failed = [r for r in outcome.value if r.status == 'failed']
+            ctx.message(f'Backed up {len(outcome.value) - len(failed)} item(s)')
+
+    ctx.copy(ctx.pane.selected(), '/Volumes/Backup/inbox', on_done=done)
+```
+
+- `items` takes what `ctx.pane.selected()` returns, paths, or absolute path
+  strings. Nothing falls back to the item under the cursor: pass
+  `[ctx.pane.focused]` yourself if that is what you want.
+- `dest` is a folder, created if it is missing. It can be on SSH or S3, but
+  not inside an archive, and an item cannot be copied into its own folder —
+  both are errors at once.
+- The call returns at once. `on_done(ctx, outcome)` runs when the operation is
+  over — after a wait in the job queue or in the background, too — with a
+  new `ctx`:
+  - `outcome.status` is `'done'`, `'cancelled'` (at the confirmation, in the
+    conflict dialog or during the run) or `'failed'` (the operation broke;
+    `outcome.error` says why).
+  - `outcome.value` lists one result per item, in the order given:
+    `r.source`, `r.dest`, `r.status` (`'done'`, `'skipped'` in the conflict
+    dialog, or `'failed'`) and `r.errors`, the `(name, message)` pairs for what
+    went wrong under it. A folder whose files mostly copied is `'done'`, with
+    the ones that did not in `r.errors`.
 
 ### Opening your own list of files (Preview)
 

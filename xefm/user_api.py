@@ -102,6 +102,7 @@ warning that skips that entry, never a load failure.
 
 import contextlib
 import inspect
+import os
 import re
 import threading
 import traceback
@@ -145,6 +146,8 @@ __all__ = [
     "extension",
     # background work
     "TaskJob", "TaskOutcome",
+    # what ctx.copy / ctx.move report per item
+    "ItemResult",
     # what ctx.actions() describes
     "ActionInfo",
     # building Markdown for ctx.show_markdown
@@ -600,7 +603,8 @@ class TaskJob:
 
 @preview
 class TaskOutcome:
-    """How a :meth:`ActionContext.run_task` ended, handed to its ``on_done``.
+    """How a :meth:`ActionContext.run_task` ended, handed to its ``on_done`` —
+    and likewise how a :meth:`ActionContext.copy` or ``move`` ended.
 
     ``status`` is ``"done"`` (``value`` is what the work returned),
     ``"cancelled"`` or ``"failed"`` (``error`` is the exception, whose
@@ -620,6 +624,35 @@ class TaskOutcome:
 
     def __repr__(self) -> str:
         return f"<TaskOutcome {self.status}>"
+
+
+@preview
+class ItemResult:
+    """How one item fared in a file operation started from the API —
+    :meth:`ActionContext.copy` or :meth:`ActionContext.move` — a list of which
+    is the ``value`` of the :class:`TaskOutcome` its ``on_done`` gets.
+
+    ``source`` is the item as given; ``dest`` where it went (or would have);
+    ``status`` is ``"done"``, ``"skipped"`` (passed over in the conflict
+    dialog) or ``"failed"``. ``errors`` lists ``(name, message)`` for what
+    went wrong under it: a folder can be ``"done"`` with a file inside it in
+    ``errors``, and is ``"failed"`` only when nothing of it got through."""
+
+    __slots__ = ("source", "dest", "status", "errors")
+
+    def __init__(self, source: Path, dest: Path | None, status: str,
+                 errors: Iterable[tuple[str, str]] = ()):
+        self.source = source
+        self.dest = dest
+        self.status = status
+        self.errors = list(errors)
+
+    @property
+    def ok(self) -> bool:
+        return self.status == "done"
+
+    def __repr__(self) -> str:
+        return f"<ItemResult {self.status} {self.source}>"
 
 
 @preview
@@ -714,6 +747,25 @@ def _call_problem(func: Callable, n_args: int, shape: str) -> str | None:
     except ValueError:
         return None
     return None
+
+
+def _operation_path(item: Any, what: str) -> Path:
+    """An item or destination of a file operation as a :class:`Path`: an
+    :class:`EntryInfo`'s path, a :class:`Path` as is, a string only when it is
+    absolute (a local path or a URI) — a relative one would resolve against
+    whatever XeFM's own working directory happens to be."""
+    if isinstance(item, EntryInfo):
+        return item.path
+    if isinstance(item, Path):
+        return item
+    if isinstance(item, os.PathLike):
+        item = os.fspath(item)
+    if isinstance(item, str):
+        if "://" not in item and not os.path.isabs(item):
+            raise ValueError(f"{what}: {item!r} is not an absolute path")
+        return Path(item)
+    raise ValueError(f"{what}: expected an EntryInfo, a Path or a str, "
+                     f"not {type(item).__name__}")
 
 
 # --------------------------------------------------------------------------- #
@@ -931,6 +983,85 @@ class ActionContext:
             app.panel.render()
 
         app.tasks.submit(task, app.panel, run=run, on_done=done)
+
+    # --- file operations ---------------------------------------------------- #
+
+    @preview
+    def copy(self, items: Iterable["EntryInfo | Path | str"], dest: "Path | str",
+             *, on_done: Callable[["ActionContext", TaskOutcome], None]
+             | None = None) -> None:
+        """Copy ``items`` into the directory ``dest`` the way the built-in copy
+        does — its confirmation, the conflict dialog, the job queue, progress
+        with Cancel and *Run in background* — then re-list the panes showing
+        ``dest``. Returns at once.
+
+        ``items`` takes what ``ctx.pane.selected()`` returns, paths, or
+        absolute path strings; which items to copy is yours to decide (an empty
+        list copies nothing). ``dest`` is a directory, created if missing; it
+        may be on SSH or S3, never inside an archive.
+
+        ``on_done(ctx, outcome)`` runs on the UI thread once the operation is
+        over — not when it is handed to the queue — and never before ``copy``
+        returns, with a new ``ctx``. ``outcome`` is a :class:`TaskOutcome`:
+        ``"done"`` with ``value`` a list of :class:`ItemResult`, one per item;
+        ``"cancelled"`` (at the confirmation, in the conflict dialog or during
+        the run) with the items settled so far; ``"failed"`` with ``error``
+        when the operation itself broke.
+
+        Wrong arguments raise ValueError at once: a relative path string, an
+        archive destination, or an item whose own folder is ``dest``.
+        """
+        self._transfer("copy", items, dest, on_done)
+
+    @preview
+    def move(self, items: Iterable["EntryInfo | Path | str"], dest: "Path | str",
+             *, on_done: Callable[["ActionContext", TaskOutcome], None]
+             | None = None) -> None:
+        """Move ``items`` into the directory ``dest`` — :meth:`copy`, but a
+        move: the panes showing an item's old folder are re-listed too, and an
+        item inside an archive is a ValueError, since an archive cannot give
+        one up."""
+        self._transfer("move", items, dest, on_done)
+
+    def _transfer(self, kind: str, items, dest, on_done) -> None:
+        self._require_ui_thread(kind)
+        app = self._app
+        targets = [_operation_path(item, f"{kind}: item") for item in items]
+        dest_dir = _operation_path(dest, f"{kind}: dest")
+        if app._is_archive(dest_dir):
+            raise ValueError(f"{kind}: {dest_dir} is inside an archive, "
+                             f"which is read-only")
+        for target in targets:
+            if str(target.parent) == str(dest_dir):
+                raise ValueError(f"{kind}: {target} is already in {dest_dir}")
+            if kind == "move" and app._is_archive(target):
+                raise ValueError(f"move: {target} is inside an archive — "
+                                 f"copy it instead")
+
+        def report(outcome: TaskOutcome) -> None:
+            if on_done is not None:
+                run_guarded(f"{kind} completion", on_done,
+                            ActionContext(app), outcome)
+
+        def complete(result: dict) -> None:
+            error = result.get("error")
+            if error is not None:
+                _report_exception(f"{kind.capitalize()}", error)
+                outcome = TaskOutcome("failed", error=error)
+            else:
+                value = [ItemResult(t, d, status, errors)
+                         for t, d, status, errors in result.get("targets", [])]
+                outcome = TaskOutcome(
+                    "cancelled" if result.get("cancelled") else "done", value)
+            app._call_later(lambda: report(outcome))
+
+        def declined() -> None:
+            app._call_later(lambda: report(TaskOutcome("cancelled", [])))
+
+        if not targets:
+            app._call_later(lambda: report(TaskOutcome("done", [])))
+            return
+        app._transfer_for_api(kind, targets, dest_dir, complete, declined)
 
     # --- talking to the user ------------------------------------------------ #
 

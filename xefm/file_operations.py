@@ -260,17 +260,24 @@ class FileOperationService:
     def copy(self, panel: Any, targets: list, dest_dir: Path, *,
              on_complete: Optional[Callable[[dict], None]] = None,
              log: Optional[Callable[[str], None]] = None,
-             z: int = 70, background: bool = True) -> None:
+             z: int = 70, background: bool = True,
+             on_declined: Optional[Callable[[], None]] = None) -> None:
         """Copy ``targets`` into ``dest_dir`` (each becomes ``dest_dir/name``),
-        confirming per ``CONFIRM_COPY`` then resolving conflicts per file."""
-        self._start(panel, "copy", targets, dest_dir, on_complete, log, z, background)
+        confirming per ``CONFIRM_COPY`` then resolving conflicts per file.
+        ``on_declined`` is called instead of ``on_complete`` when the user
+        cancels at the confirmation, before anything ran."""
+        self._start(panel, "copy", targets, dest_dir, on_complete, log, z, background,
+                    on_declined=on_declined)
 
     def move(self, panel: Any, targets: list, dest_dir: Path, *,
              on_complete: Optional[Callable[[dict], None]] = None,
              log: Optional[Callable[[str], None]] = None,
-             z: int = 70, background: bool = True) -> None:
-        """Move ``targets`` into ``dest_dir``, confirming per ``CONFIRM_MOVE``."""
-        self._start(panel, "move", targets, dest_dir, on_complete, log, z, background)
+             z: int = 70, background: bool = True,
+             on_declined: Optional[Callable[[], None]] = None) -> None:
+        """Move ``targets`` into ``dest_dir``, confirming per ``CONFIRM_MOVE``;
+        ``on_declined`` as for :meth:`copy`."""
+        self._start(panel, "move", targets, dest_dir, on_complete, log, z, background,
+                    on_declined=on_declined)
 
     def duplicate(self, panel: Any, targets: list, dest_dir: Path, *,
                   on_complete: Optional[Callable[[dict], None]] = None,
@@ -411,7 +418,8 @@ class FileOperationService:
 
     def _start(self, panel: Any, kind: str, targets: list, dest_dir: Optional[Path],
                on_complete, log, z: int, background: bool,
-               note: Optional[str] = None) -> None:
+               note: Optional[str] = None,
+               on_declined: Optional[Callable[[], None]] = None) -> None:
         """Show the initial ``CONFIRM_*`` prompt (main thread), then submit the
         operation as a linear task. The prompt is skipped when its config flag is
         off; conflicts are *not* mentioned here — they are detected and resolved
@@ -473,6 +481,8 @@ class FileOperationService:
                 if log is not None:
                     log(f"{verb} {len(targets)} item(s) in the background")
             else:
+                if on_declined is not None:
+                    on_declined()
                 panel.render()
 
         show_message_box(panel, message, title=verb, icon=icon, buttons=buttons,
@@ -511,8 +521,12 @@ class FileOperationService:
         # user selected); ``items`` is the total individual entries actually
         # processed (recursive); ``errors`` collects (name, message) per failed
         # target so the caller can show them rather than bury them in the log.
+        # ``targets`` holds one ``(target, dest, status, errors)`` per top-level
+        # target whose outcome is known — ``status`` ``"done"`` / ``"skipped"`` /
+        # ``"failed"``, ``errors`` its own ``(name, message)`` pairs — in the
+        # order the targets were given. A target a cancel cut off has none.
         result = {"done": 0, "skipped": 0, "failed": 0, "cancelled": False,
-                  "items": 0, "errors": []}
+                  "items": 0, "errors": [], "targets": []}
         if kind == "trash":
             # The targets that turned out to have no trash (online-only items
             # in cloud storage, #765) — also in ``errors``, which the caller
@@ -535,7 +549,11 @@ class FileOperationService:
                         for t in targets]
                 result["created"] = [dest.name for _t, dest, _o in plan]
             else:
-                plan, result["skipped"] = self._resolve(task, targets, dest_dir, z, panel)
+                skipped: list = []
+                plan, result["skipped"] = self._resolve(task, targets, dest_dir, z,
+                                                        panel, skipped_out=skipped)
+                result["targets"] += [(t, dest_dir / t.name, "skipped", [])
+                                      for t in skipped]
             plan = self._release_archives(kind, plan, result, log)
             if kind in ("copy", "duplicate", "move"):
                 self._tag_ahead[task.id] = ahead = tags.CarryAhead()
@@ -584,11 +602,17 @@ class FileOperationService:
                     # ``errors`` and don't sink the target.
                     if ok > 0 or len(errors) == before:
                         result["done"] += 1
+                        status = "done"
                     else:
                         result["failed"] += 1
+                        status = "failed"
+                    result["targets"].append((target, dest_base, status,
+                                              errors[before:]))
         except Cancelled:
             result["cancelled"] = True
         finally:
+            order = {id(t): i for i, t in enumerate(targets)}
+            result["targets"].sort(key=lambda r: order.get(id(r[0]), len(order)))
             self._tag_ahead.pop(task.id, None)
             for d in mutated:
                 self.monitor.release_path(d)
@@ -612,6 +636,8 @@ class FileOperationService:
             except ArchiveInUseError as exc:
                 result["errors"].append((str(target), str(exc)))
                 result["failed"] += 1
+                result.setdefault("targets", []).append(
+                    (target, dest_base, "failed", [(str(target), str(exc))]))
                 if log is not None:
                     log(f"{_VERB[kind]} failed for {target.name}: {exc}")
                 continue
@@ -636,10 +662,11 @@ class FileOperationService:
         return list(dirs.values())
 
     def _resolve(self, task: Task, targets: list, dest_dir: Path, z: int,
-                 panel: Any) -> tuple[list, int]:
+                 panel: Any, skipped_out: Optional[list] = None) -> tuple[list, int]:
         """Detect top-level conflicts and resolve each, file-by-file, through the
         task's UI bridge. Returns ``(plan, skipped)`` where plan is a
-        list of ``(target, dest_base, overwrite)`` for the survivors.
+        list of ``(target, dest_base, overwrite)`` for the survivors; the
+        skipped targets themselves go to ``skipped_out`` when given.
         ``overwrite`` is a bool, or an :class:`OverwriteOlder` for a folder
         merged under "overwrite older", whose files are decided one by one."""
         taken = _existing(task, [dest_dir / t.name for t in targets], dest_dir)
@@ -673,6 +700,8 @@ class FileOperationService:
                 action = "overwrite" if _dest_is_older(t, dest) else "skip"
             if action == "skip":
                 skipped += 1
+                if skipped_out is not None:
+                    skipped_out.append(t)
             elif action == "keep_both":
                 plan.append((t, _unique_dest(dest_dir, t.name, is_dir=t.is_dir()), False))
             else:  # overwrite
@@ -886,8 +915,13 @@ class FileOperationService:
                     # nothing but errors. Cancelled targets are not judged.
                     if sync_ok[i] + per_async[i] > 0 or not per_errors[i]:
                         result["done"] += 1
+                        status = "done"
                     else:
                         result["failed"] += 1
+                        status = "failed"
+                    target, dest_base, _overwrite = plan[i]
+                    result.setdefault("targets", []).append(
+                        (target, dest_base, status, list(per_errors[i])))
 
     def _copy_file_job(self, task: Task, src: Path, dest: Path, overwrite: bool,
                        prog: ProgressManager, log, verb: str, errors: list,

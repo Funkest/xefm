@@ -471,6 +471,7 @@ under local pytest and at the release pre-tag check.
   `min_xefm` to the release that ships this.
 - Follow-up issues:
   - A `ctx` copy/move API that goes through file operations, if one is needed.
+    (Done: `ctx.copy` / `ctx.move`, #716 — see §10.)
   - Stabilizing the Preview tiers of `PATH_SCHEMES` once a real extension uses
     them.
 
@@ -498,3 +499,69 @@ deprecation works" as part of the compatibility promise).
    must say why.
 
 Preview APIs need none of this: they change or go in any release.
+
+## 10. Operations from the API — dedicated calls, one shape (#716)
+
+Added with `ctx.copy` / `ctx.move`. An action reaches a built-in operation
+through a **dedicated call**, added where one is needed, not through a general
+way to run any action with its inputs given up front.
+
+### 10.1 The shape every dedicated call follows
+
+- **Items** are `Iterable[EntryInfo | Path | str]`, so `ctx.pane.selected()`
+  passes as is; a string must be absolute (a local path or a URI). A
+  directory argument is `Path | str`.
+- **Which items** is the caller's to decide. No call applies "the selection,
+  else the focused item" — `PaneApi.selected()` already leaves that rule to
+  its caller.
+- **Asynchronous by contract.** The call returns `None` at once and takes
+  `on_done(ctx, outcome)`, run on the UI thread exactly once, with a new
+  `ctx`, and never before the call returns (`XeFMApp._call_later`). This
+  holds even where the operation could finish at once, because a
+  confirmation added later would make it asynchronous.
+- **The outcome** is `TaskOutcome`: `done` / `cancelled` / `failed`, `value`,
+  `error`. No new outcome type.
+- **Per-item results**, where an operation has them, are a list of
+  `ItemResult(source, dest, status, errors)`, in the order the items were
+  given; `status` is `done` / `skipped` / `failed`, and `errors` holds the
+  `(name, message)` pairs under that item. A folder is `done` with an inner
+  file in `errors`, and `failed` only when nothing of it got through. On
+  cancel, `value` holds the items whose outcome is known.
+- **Confirmations stay.** The confirmation, the conflict dialog and the
+  permanent-delete fallback (#765) are shown even when the API starts the
+  operation. Nothing skips them.
+- **UI thread only**, like the rest of `ctx`; checked on entry.
+- **Wrong arguments raise `ValueError` at once** — a caller's bug, not an
+  outcome.
+
+`ctx.delete`, `ctx.trash` and the like, if they come, follow the same shape.
+
+### 10.2 Set aside: `invoke()` with inputs
+
+`ctx.invoke(name, operands=..., args=...)` would have made every action
+callable with its inputs: `operands` the panes' state (`this` / `other` /
+`left` / `right`, each a `dir`, `selected` and `focused`, as dataclasses), and
+`args` the values an action prompts for today (a name, a pattern). It was set
+aside because:
+
+- What `operands` means differs by action. For a file operation it is a
+  hypothetical state — the panes on screen do not move. For `filter`, `sort`
+  or a cursor action it only makes sense applied to the real panes. One
+  argument with two meanings, chosen per action.
+- Every action author would have one more thing to consider: which operands
+  their action reads, and in which of the two meanings.
+- Built-in actions read pane state directly in many places
+  (`self.pm.active_pane`, `pane["selected_files"]`, …). A hypothetical state
+  swapped in for the call would be gone by an operation's later ticks — after
+  its prompt or the conflict dialog.
+
+`invoke()` stays as it is.
+
+### 10.3 Future idea: `args`
+
+If a dedicated call ever needs the values a built-in prompts for, the shape
+considered was a per-action dataclass (`CreateDirectoryArgs(name="build")`),
+declared in the action's metadata (#718) so the snapshot covers it. A value
+given skips its prompt; one not given is still asked for. Safety
+confirmations are not `args` and are never skipped by them. Nothing needs
+this yet.
