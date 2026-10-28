@@ -4379,8 +4379,12 @@ class XeFMApp:
                 pane["path"] = entry
                 self._refresh(pane, on_ready=self._restore_remembered_cursor)
                 self.log_info(f"Entered {entry.name}/")
-            elif self._readable_archive_format(entry.name) and not self._is_archive(entry):
-                # A recognised archive file: browse it as a virtual directory via
+            elif (self._readable_archive_format(entry.name) and not self._is_archive(entry)
+                  and not get_builtin_handler_for_file(entry.name)[0]):
+                # A recognised archive file with no 'enter' rule of its own (a
+                # rule can say 'viewer' or None for an .apk, #776, and _enter_file
+                # browses it the same way for 'navigate'): browse it as a virtual
+                # directory via
                 # its archive:// URI. The listing/navigation machinery then treats
                 # it like any other (remote) directory — ArchivePathImpl backs
                 # iterdir/is_dir/read_bytes and returns the real containing dir as
@@ -4406,8 +4410,8 @@ class XeFMApp:
 
         An ``enter`` rule in FILE_ASSOCIATIONS picks the handler: ``'viewer'``
         for the built-in viewer, ``'navigate'`` to browse the file as an
-        archive (useful for zip-shaped formats XeFM does not recognise by
-        extension, like ``.jar`` or ``.whl``), ``'list'`` to open it as a file
+        archive (for one whose name XeFM does not recognise; the archive cache
+        then tells the format from its bytes, #776), ``'list'`` to open it as a file
         list (an ``.m3u8`` playlist, a ``.lst``), or ``None`` to do nothing.
 
         With no rule, the default stands: the built-in viewer — the same one V

@@ -98,6 +98,7 @@ replaced an if/elif chain in `ArchiveCache._create_handler` plus two
 | --- | --- |
 | `register_archive_format(fmt)` | add, replacing any entry with the same label |
 | `archive_format_for_name(name)` | the matching `ArchiveFormat`, or `None` |
+| `archive_format_for_content(path)` | the format the file's leading bytes name, or `None` |
 | `archive_format_label(name)` | its label — `'zip'`, `'tar.gz'`, `'7z'` |
 | `archive_strip_suffix(name)` | the name with its archive suffix removed |
 | `archive_readable_formats()` | every registered format, for enumeration |
@@ -117,6 +118,37 @@ Three rules hold for anything registered:
 - **Worker-thread safe.** Handlers are built and driven from the listing worker,
   so nothing reached through the registry may touch the UI, and handlers for
   different archives run on different threads at once.
+
+#### Packages, documents, and the name-then-content order (#776)
+
+The registry holds only the archive names proper (`.zip`, `.tar.gz`, `.7z`, …).
+Packages that are an archive under another name — `.jar`, `.apk`, `.whl`,
+`.nupkg`, `.gem`, `.crate`, `.cbz` and the rest — are browsed through a
+`'navigate'` rule in the shipped `FILE_ASSOCIATIONS` (`xefm/_config.py`)
+instead of being registered. The list was a registry constant for a while
+during #776 and moved out: as a rule it is visible and editable in the user's
+config.py, and taking a name out of it is the same edit as putting one in. What
+joins it: a container XeFM has no other way to show inside itself. Zip-based
+*documents* (`.docx`, OpenDocument, `.epub`, iWork) stay out, because the viewer
+shows the ones doc-files reads and the user wants the application for the rest.
+Which of those two a zip is cannot be told from its bytes, which is why the list
+is of names.
+
+The bytes still have a use: `archive_format_for_content` matches
+`_ARCHIVE_SIGNATURES` (zip, gzip/bzip2/xz/zstd for the compressed tars, `ustar`
+at 257, 7z, rar, cab, rpm, cpio, ISO's `CD001` at 32769) and returns the
+registered format with that label. It is only ever the second question.
+`ArchiveCache._create_handler` asks the name first, so a `.docx` is never sniffed
+into a listing; it reaches the content only for a name nothing registered,
+which in practice means an `archive://` URI built by a FILE_ASSOCIATIONS
+`'navigate'` rule. Before #776 that rule — documented for `*.jar` — always
+failed with "Unsupported archive format". A signature whose reader did not
+register (7z without libarchive) gives `None`, so the error is the same one.
+
+Only browsing goes through the content. Extraction (`U`), the extraction
+survey and create still go by name, so a `.jar` is browsed but not extracted —
+as before #776. Extending `U` to the content would also need a destination
+name, since there is no archive suffix to strip.
 
 Registration happens at import: `_register_builtin_formats()` at the bottom of
 `xefm/archive.py` for zip and tar, then `register_libarchive_formats()` for
@@ -321,9 +353,10 @@ open — a remote download, a tar.gz index — holds up only that archive.
 Metrics come from `get_stats()` (`open_archives`, `owned_archives`,
 `cache_hits`, `cache_misses`, `hit_rate`, `evictions`, `avg_open_time`, …).
 
-`_create_handler` is a lookup in the registry (§1.1) — `archive_format_for_name`
-then `fmt.factory(archive_path)` — raising `ArchiveFormatError` when nothing
-registered reads the name. A process-wide instance is returned
+`_create_handler` is a lookup in the registry (§1.1) — `archive_format_for_name`,
+then `archive_format_for_content` when the name matched nothing, then
+`fmt.factory(archive_path)` — raising `ArchiveFormatError` when neither found a
+registered format. A process-wide instance is returned
 by `get_archive_cache()`, which reads `ARCHIVE_CACHE_MAX_OPEN` /
 `ARCHIVE_CACHE_TTL` from config (falling back to 5 / 300).
 
@@ -425,6 +458,15 @@ file and Enter is pressed, it remembers the cursor and sets the pane path to
 archive root is the archive file's containing directory, "up" exits the archive
 naturally. Nested archives (an archive inside a browsed archive) are not
 supported.
+
+A FILE_ASSOCIATIONS `'enter'` rule that matches the archive's name is asked
+before the archive branch: `_open` takes that branch only when
+`get_builtin_handler_for_file` reports no rule, and otherwise hands the file to
+`_enter_file`, which carries out `'viewer'`, `'list'`, `None` — or `'navigate'`,
+which builds the same URI. Before #776 a recognised archive was browsed whatever
+the rules said. Now FILE_ASSOCIATIONS has the last word in both directions:
+`'navigate'` adds a name (the package rule), and `'enter': None` or `'viewer'`
+on `*.zip` takes one away.
 
 ### Error handling
 

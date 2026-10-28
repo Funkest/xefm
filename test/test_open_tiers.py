@@ -135,19 +135,28 @@ def shipped_defaults(monkeypatch):
 class TestShippedDefaults:
     """The defaults in _config.py, which is what a new user starts from."""
 
-    @pytest.mark.parametrize("filename", ['lib.jar', 'pkg.whl', 'old.egg'])
-    def test_zip_shaped_files_navigate(self, filename):
+    @pytest.mark.parametrize("filename", [
+        'lib.jar', 'pkg.whl', 'old.egg', 'App.APK', 'pkg.nupkg', 'gem.gem',
+        'serde-1.0.crate', 'comic.cbz', 'comic.cbr'])
+    def test_packages_navigate(self, filename):
+        """Archives under another name: browsed by a rule, not by the archive
+        registry, so that the list is the user's to change (#776)."""
+        from xefm.archive import archive_format_label
         assert get_builtin_handler_for_file(filename) == (True, 'navigate')
+        assert archive_format_label(filename) is None
 
     @pytest.mark.parametrize("filename", ['mix.m3u', 'Group (3).M3U8'])
     def test_playlists_open_as_lists(self, filename):
         assert get_builtin_handler_for_file(filename) == (True, 'list')
 
-    @pytest.mark.parametrize("filename", ['sheet.xlsx', 'report.docx'])
+    @pytest.mark.parametrize("filename", ['sheet.xlsx', 'report.docx', 'book.epub',
+                                          'text.odt'])
     def test_office_files_do_not_navigate(self, filename):
-        """They are zip files underneath, which is exactly why 'navigate'
-        cannot be sniffed — you want Word here, not a file listing."""
+        """They are zip files underneath, which is exactly why the package
+        rule leaves them out — you want Word here, not a file listing."""
+        from xefm.archive import archive_format_label
         assert get_builtin_handler_for_file(filename) == (False, None)
+        assert archive_format_label(filename) is None
 
     @pytest.mark.parametrize("filename", ['notes.txt', 'app.py', 'Makefile', 'x.qqq'])
     def test_text_files_need_no_rule_at_all(self, filename):

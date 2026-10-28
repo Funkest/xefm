@@ -93,7 +93,7 @@ handler** rather than a program to launch:
 | Value | Effect |
 |---|---|
 | `'viewer'` | Open in the built-in text/markdown viewer |
-| `'navigate'` | Browse the file as an archive (useful for `*.jar`, `*.whl`) |
+| `'navigate'` | Browse the file as an archive, whatever its name; XeFM tells the format from its contents |
 | `'list'` | Open the file as a [file list](FILE_LIST_IMPORT_FEATURE.md#from-a-file), one path per line (the default for `*.m3u`, `*.m3u8`) |
 | `None` | Do nothing |
 | *(no rule)* | XeFM's default: enter directories and archives, view files |
@@ -320,21 +320,34 @@ Once configured, XeFM will use these associations when you:
 Enter uses the **enter** action. It never launches an external program.
 
 **Behavior**:
-1. Directories are entered and recognized archives are browsed — always, and
-   not configurable; this is what Enter means structurally
-2. For a plain file, checks associations for an 'enter' handler
-3. `'viewer'` opens the built-in viewer; `'navigate'` browses the file as an
+1. Directories are entered — always, and not configurable; this is what Enter
+   means structurally
+2. Recognized [archives](ARCHIVE_FEATURE.md) are browsed, unless an 'enter'
+   rule matches them
+3. For any other file, checks associations for an 'enter' handler
+4. `'viewer'` opens the built-in viewer; `'navigate'` browses the file as an
    archive; `'list'` opens it as a file list; `None` does nothing
-4. With no rule, opens the built-in viewer
-5. Unless XeFM has no built-in way to show the file — a PNG, say — in which case
+5. With no rule, opens the built-in viewer
+6. Unless XeFM has no built-in way to show the file — a PNG, say — in which case
    it logs a warning naming the key bound to `open_with_os`, rather than
    opening a viewer on content it cannot render
 
-Step 5 is why images currently report *"No built-in viewer for photo.png —
+Step 6 is why images currently report *"No built-in viewer for photo.png —
 press <key> to open it in an external program"* — the message names whatever key
 `open_with_os` is bound to, so it follows your config. Setting
 `'enter': 'viewer'` on such a pattern overrides this and opens the viewer
 anyway, which shows a binary placeholder.
+
+Step 2 works the same way. A rule stops Enter from browsing an archive, and
+`'navigate'` makes it browse a file XeFM does not recognize by name — a `.docx`,
+or a zip with an extension of its own. The default associations already have
+one such rule, for packages like `.jar`, `.apk` and `.whl` (see
+[Archives](ARCHIVE_FEATURE.md)); add a name to it, or take one out.
+
+```python
+{'pattern': '*.zip', 'enter': None},           # Enter on a .zip does nothing
+{'pattern': '*.docx', 'enter': 'navigate'},    # Enter lists the .docx's XML
+```
 
 #### open_with_os - Open Externally
 `open_with_os` uses the **open** action.

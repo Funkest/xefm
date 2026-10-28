@@ -1550,6 +1550,50 @@ def archive_readable_formats() -> Tuple[ArchiveFormat, ...]:
     return tuple(ARCHIVE_HANDLERS)
 
 
+#: Leading bytes that name a format, as ``(offset, magic, label)``, checked in
+#: order. Only consulted when the name says nothing: compressed tars come before
+#: plain ``ustar`` because a ``.tgz``'s magic is gzip's, not tar's, and ISO's is
+#: deep in the file because the first 32 KiB of a disc image are reserved.
+_ARCHIVE_SIGNATURES: Tuple[Tuple[int, bytes, str], ...] = (
+    (0, b'PK\x03\x04', 'zip'),
+    (0, b'PK\x05\x06', 'zip'),          # an empty zip
+    (0, b'\x1f\x8b', 'tar.gz'),
+    (0, b'BZh', 'tar.bz2'),
+    (0, b'\xfd7zXZ\x00', 'tar.xz'),
+    (0, b'\x28\xb5\x2f\xfd', 'tar.zst'),
+    (257, b'ustar', 'tar'),
+    (0, b'7z\xbc\xaf\x27\x1c', '7z'),
+    (0, b'Rar!\x1a\x07', 'rar'),
+    (0, b'MSCF', 'cab'),
+    (0, b'\xed\xab\xee\xdb', 'rpm'),
+    (0, b'07070', 'cpio'),              # odc (070707) and newc (070701/070702)
+    (32769, b'CD001', 'iso'),
+)
+_SIGNATURE_BYTES = max(offset + len(magic) for offset, magic, _ in _ARCHIVE_SIGNATURES)
+
+
+def archive_format_for_content(path) -> Optional[ArchiveFormat]:
+    """The registered format ``path``'s leading bytes say it is, or None when
+    they match no signature, or one whose reader did not register (7z without
+    libarchive).
+
+    The fallback for a file whose name :func:`archive_format_for_name` does not
+    know — what a FILE_ASSOCIATIONS ``'navigate'`` rule leads to, on a ``.jar``
+    or an ``.apk`` that is a zip inside (#776). Which zip-shaped names Enter
+    browses is FILE_ASSOCIATIONS' to say, not this function's: a ``.docx`` is a
+    zip too."""
+    try:
+        with path.open('rb') as f:
+            head = f.read(_SIGNATURE_BYTES)
+    except OSError as exc:
+        getLogger('Archive').info(f"Cannot read {path.name} to identify it: {exc}")
+        return None
+    for offset, magic, label in _ARCHIVE_SIGNATURES:
+        if head[offset:offset + len(magic)] == magic:
+            return next((fmt for fmt in ARCHIVE_HANDLERS if fmt.label == label), None)
+    return None
+
+
 def _register_builtin_formats() -> None:
     """Register the formats the Python standard library reads — always present,
     with no native dependency behind them."""
@@ -1882,7 +1926,10 @@ class ArchiveCache:
         Raises:
             ArchiveFormatError: If archive format is not supported
         """
-        fmt = archive_format_for_name(archive_path.name)
+        # By name first, then by content: an archive:// URI on a name nothing
+        # registered comes from a 'navigate' rule, which asked for this (#776).
+        fmt = (archive_format_for_name(archive_path.name)
+               or archive_format_for_content(archive_path))
         if fmt is None:
             raise ArchiveFormatError(
                 f"Unsupported archive format: {archive_path.name.lower()}")
