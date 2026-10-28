@@ -1403,3 +1403,79 @@ def test_background_submit_without_ticks_falls_back_inline():
     assert prompts == ["skip"]        # ask() resolved headlessly, no dialog pump
     assert panel._layers == []        # dialog closed, not stranded
     assert not tm.has_active()
+
+
+# --- carrying tags from a source that pays per request (#763) ----------------
+
+class _CostlyTags(F.tags.TagStore):
+    """A source store like SSH's: every request is a login, so a copy must ask
+    for many files at once."""
+    cheap = False
+
+    def __init__(self, tagged):
+        self.tagged, self.batches, self.single = tagged, [], 0
+
+    def read(self, path):
+        self.single += 1
+        return self.tagged.get(os.path.basename(str(path)), [])
+
+    def read_many(self, paths):
+        self.batches.append(sorted(os.path.basename(str(p)) for p in paths))
+        return {str(p): self.tagged.get(os.path.basename(str(p)), []) for p in paths}
+
+
+class _RecordingTags(F.tags.TagStore):
+    def __init__(self):
+        self.written = {}
+
+    def read(self, path):
+        return []
+
+    def write(self, path, tags):
+        self.written[os.path.basename(str(path))] = [t.name for t in tags]
+
+
+@pytest.mark.parametrize("workers", [1, 4])
+def test_copy_reads_costly_source_tags_once_per_folder(svc, tmp_path, monkeypatch,
+                                                      workers):
+    src = tmp_path / "src"
+    (src / "sub").mkdir(parents=True)
+    for name in ("a.txt", "b.txt", "sub/c.txt", "sub/d.txt"):
+        (src / name).write_text("x")
+    (src / "e.txt").write_text("x")
+    dst = tmp_path / "dst"
+    dst.mkdir()
+    Tag = F.tags.Tag
+    source = _CostlyTags({"b.txt": [Tag("Work")], "sub": [Tag("Red", 6)],
+                          "d.txt": [Tag("Home")]})
+    dest = _RecordingTags()
+    src_root = os.path.realpath(src)
+    monkeypatch.setattr(F.tags, "store_for", lambda p: source if os.path.realpath(
+        str(p)).startswith(src_root) else dest)
+    # A clone carries the xattrs itself; a remote source never clones.
+    monkeypatch.setattr(F, "_clone_file", lambda *a: False)
+    monkeypatch.setattr(svc, "_copy_workers", lambda *a: workers)
+
+    res = _run_sync(svc, svc.copy, [_P(src / "a.txt"), _P(src / "b.txt"),
+                                    _P(src / "sub")], _P(dst))
+
+    assert res["done"] == 3 and not res["errors"]
+    assert source.single == 0, "no file's tags are read one login at a time"
+    assert source.batches == [["a.txt", "b.txt", "sub"], ["c.txt", "d.txt"]]
+    assert dest.written == {"b.txt": ["Work"], "sub": ["Red"], "d.txt": ["Home"]}
+
+
+def test_copy_skips_reading_ahead_when_tags_cannot_land(svc, tmp_path, monkeypatch):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.txt").write_text("x")
+    dst = tmp_path / "dst"
+    dst.mkdir()
+    source = _CostlyTags({})
+    src_root = os.path.realpath(src)
+    monkeypatch.setattr(F.tags, "store_for", lambda p: source if os.path.realpath(
+        str(p)).startswith(src_root) else None)
+
+    _run_sync(svc, svc.copy, [_P(src / "a.txt")], _P(dst))
+
+    assert source.batches == [] and source.single == 0

@@ -252,6 +252,8 @@ class FileOperationService:
         #: One large file closed at a time — where the destination transfers a
         #: file at its close, that is the only concurrency worth refusing.
         self.close_gate = CloseGate()
+        #: Source tags read ahead for each running copy, by task id (#763).
+        self._tag_ahead: dict[int, tags.CarryAhead] = {}
 
     # --- public API ----------------------------------------------------------
 
@@ -359,6 +361,8 @@ class FileOperationService:
             steps = self._release_archives(
                 "copy", [(src, dest, ow) for src, dest, ow in copies], result, log)
             steps = [("copy", src, dest, ow) for src, dest, ow in steps]
+            self._tag_ahead[task.id] = ahead = tags.CarryAhead()
+            ahead.read((src, dest) for _k, src, dest, _ow in steps)
             doomed = self._release_archives(
                 "delete", [(p, None, False) for p in deletes], result, log)
             # To the trash wherever there is one (#603): a Mirror can delete a
@@ -397,6 +401,7 @@ class FileOperationService:
         except Cancelled:
             result["cancelled"] = True
         finally:
+            self._tag_ahead.pop(task.id, None)
             for d in mutated.values():
                 self.monitor.release_path(d)
             prog.finish_operation()
@@ -532,6 +537,11 @@ class FileOperationService:
             else:
                 plan, result["skipped"] = self._resolve(task, targets, dest_dir, z, panel)
             plan = self._release_archives(kind, plan, result, log)
+            if kind in ("copy", "duplicate", "move"):
+                self._tag_ahead[task.id] = ahead = tags.CarryAhead()
+                ahead.read((t, dest) for t, dest, _ow in plan
+                           if not (_is_atomic_move(kind, t, dest_dir)
+                                   and not _merges_into(t, dest)))
 
             if dest_dir is not None:
                 try:
@@ -579,6 +589,7 @@ class FileOperationService:
         except Cancelled:
             result["cancelled"] = True
         finally:
+            self._tag_ahead.pop(task.id, None)
             for d in mutated:
                 self.monitor.release_path(d)
             prog.finish_operation()
@@ -931,9 +942,13 @@ class FileOperationService:
                 errors.append((str(src), str(exc)))
                 return 0
             prog.update_progress(src.name)  # counted once it exists, like files
-            tags.carry(src, dest)  # a folder's Finder / xdg tags, best-effort
+            self._carry_tags(task, src, dest)  # a folder's tags, best-effort
             ok = 1  # the directory itself
-            for child in src.iterdir():
+            children = list(src.iterdir())
+            ahead = self._tag_ahead.get(task.id)
+            if ahead is not None:
+                ahead.read((child, dest / child.name) for child in children)
+            for child in children:
                 ok += self._copy_tree(task, child, dest / child.name,
                                       overwrite, prog, log, verb, errors, submit)
             return ok
@@ -991,8 +1006,17 @@ class FileOperationService:
         # Neither path keeps tags everywhere: copystat copies xattrs on Linux
         # only, and nothing carries them across storages (#585).
         if not src.is_symlink():
-            tags.carry(src, dest)
+            self._carry_tags(task, src, dest)
         return True
+
+    def _carry_tags(self, task: Task, src: Path, dest: Path) -> None:
+        """Give ``dest`` the tags of ``src``, from what this task read ahead
+        when it has (#763)."""
+        ahead = self._tag_ahead.get(task.id)
+        if ahead is not None:
+            ahead.carry(src, dest)
+        else:
+            tags.carry(src, dest)
 
     @staticmethod
     def _remote_progress(task: Task, prog: ProgressManager, slot: int):
