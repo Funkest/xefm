@@ -576,6 +576,27 @@ def test_invoke_runs_a_builtin_by_name(app_with):
     assert len(app.active_pane()["selected_files"]) == 5
 
 
+def test_actions_describe_each_action_with_its_current_keys(app_with):
+    captured = {}
+
+    def probe(ctx):
+        captured["infos"] = {a.name: a for a in ctx.actions()}
+        captured["names"] = ctx.action_names()
+
+    # select_all rebound, so the keys read back are the config's own
+    bindings = dict(keymap_afx.bindings(), select_all=["Shift-Z"])
+    app, _ = app_with(ACTIONS={"probe": {"func": probe, "description": "Look around"}},
+                      KEY_BINDINGS=bindings)
+    app.dispatch("probe")
+    infos = captured["infos"]
+    assert list(infos) == captured["names"]
+    assert infos["select_all"].keys == ("Shift-Z",)
+    assert "isearch" in infos and "search" in infos["isearch"].aliases
+    assert infos["select_all"].description
+    assert infos["probe"].description == "Look around"
+    assert infos["probe"].keys == ()
+
+
 def test_an_action_that_raises_leaves_the_app_running(app_with):
     def boom(ctx):
         raise ValueError("bad action")

@@ -18,7 +18,7 @@ English \| [日本語](CUSTOMIZATION_FEATURE.ja.md)
 >
 > Preview: `EVENT_HOOKS`, `MENU_ITEMS`, `IMAGE_DECODERS`, `LEXERS`, the
 > prompts (`ctx.input` / `choose` / `confirm`), `ctx.run_task`,
-> `ctx.show_markdown`, `ctx.copy_text` and `pane.open_list`. A config that
+> `ctx.show_markdown`, `ctx.copy_text`, `ctx.actions` and `pane.open_list`. A config that
 > uses a Preview table gets one line in the log pane saying so, and the first
 > call to a Preview function logs one line naming it.
 
@@ -283,6 +283,7 @@ summary with no further page.
 | `ctx.confirm(prompt, on_result=fn)` | (Preview) yes / no |
 | `ctx.run_program(command, terminal=False)` | run an external program — see below |
 | `ctx.action_names()` | every name `invoke()` accepts |
+| `ctx.actions()` | (Preview) the same actions, each with its `name`, `description`, `aliases` (names it used to have) and `keys` (bound right now, after your `KEY_BINDINGS`) |
 
 And each pane:
 
