@@ -80,12 +80,25 @@ def line_count(entry):
         return sum(1 for _ in f)
 
 def git_status(directory, entries):
-    out = subprocess.run(['git', 'status', '--porcelain', '-z', '.'],
-                         cwd=directory, capture_output=True, text=True)
-    codes = {}
-    for item in out.stdout.split('\0'):
-        if len(item) > 3:
-            codes[item[3:].rstrip('/').split('/')[-1]] = item[:2].strip()[:1]
+    try:
+        def git(*args):
+            return subprocess.run(['git', *args], cwd=str(directory), check=True,
+                                  capture_output=True, text=True).stdout
+        prefix = git('rev-parse', '--show-prefix').strip()
+        items = git('status', '--porcelain', '-z', '--', '.').split('\0')
+    except (OSError, subprocess.CalledProcessError):
+        return [None] * len(entries)        # not a Git working tree
+    codes, skip = {}, False
+    for item in items:
+        if skip or len(item) < 4:
+            skip = False
+            continue
+        code, path = item[:2], item[3:]
+        skip = code[0] in 'RC'              # a rename's old path follows
+        if path.startswith(prefix):
+            # the entry here the change is in: a file, or the folder holding it
+            name = path[len(prefix):].split('/')[0]
+            codes.setdefault(name, code.strip()[:1])
     return [codes.get(e.path.name) for e in entries]
 
 class Config:
