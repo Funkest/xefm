@@ -591,15 +591,70 @@ def carry(src, dest) -> None:
     a store. Best-effort: a copy never fails over its tags. A same-store local
     copy that already kept them (clonefile, Linux copystat) is rewritten with
     the same value, which is harmless."""
+    _carry(src, dest, None)
+
+
+def _carry(src, dest, known) -> None:
+    """:func:`carry`, using ``known`` — what a :class:`CarryAhead` read for
+    ``src`` (its tags, or the error reading them) — instead of reading, when
+    given."""
     src_store, dest_store = store_for(src), store_for(dest)
     if src_store is None or dest_store is None:
         return
     try:
-        tags = src_store.read(src)
+        if isinstance(known, Exception):
+            raise known
+        tags = src_store.read(src) if known is None else known
         if tags:
             dest_store.write(dest, [new_tag(t.name, dest_store, [t]) for t in tags])
     except (TagError, OSError) as exc:
         logger.warning(f"Tags not copied to {dest}: {exc}")
+
+
+class CarryAhead:
+    """Source tags read ahead of a copy, so carrying them costs one request per
+    batch instead of one per file (#763).
+
+    :func:`carry` reads one file's tags at a time, which is nothing on a local
+    disk and a whole ``ssh`` login on an SSH host. A copy calls :meth:`read`
+    with what it is about to copy — the selected targets, then each folder's
+    children as it enters it — and :meth:`carry` in place of :func:`carry`.
+    Only sources whose store is not :attr:`TagStore.cheap` are read ahead, and
+    only where the destination has a store, since nothing else would use the
+    answer. Safe to call from the copy's pool workers."""
+
+    #: Paths per remote command: the command line carries every path, and an
+    #: SSH host takes it as a single argument to the login shell.
+    BATCH = 256
+
+    def __init__(self):
+        import threading
+        self._lock = threading.Lock()
+        self._known: dict = {}
+
+    def read(self, pairs: Iterable) -> None:
+        """Read ahead the tags of the sources in ``(src, dest)`` pairs."""
+        groups: dict = {}
+        for src, dest in pairs:
+            store = store_for(src)
+            if store is None or store.cheap or store_for(dest) is None:
+                continue
+            groups.setdefault(id(store), (store, []))[1].append(src)
+        for store, paths in groups.values():
+            for i in range(0, len(paths), self.BATCH):
+                batch = paths[i:i + self.BATCH]
+                try:
+                    found = store.read_many(batch)
+                except (TagError, OSError) as exc:
+                    found = {str(p): exc for p in batch}
+                with self._lock:
+                    self._known.update(found)
+
+    def carry(self, src, dest) -> None:
+        """:func:`carry`, from what :meth:`read` found for ``src`` if it did."""
+        with self._lock:
+            known = self._known.pop(str(src), None)
+        _carry(src, dest, known)
 
 
 # --- the file list's view of tags ------------------------------------------------

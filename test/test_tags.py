@@ -18,7 +18,7 @@ import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
@@ -406,3 +406,31 @@ class AppIntegration(_Tmp):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CarryAheadBatches(unittest.TestCase):
+    def test_reads_in_batches_and_a_failed_batch_is_not_retried_per_file(self):
+        class Costly(tags.TagStore):
+            cheap = False
+
+            def __init__(self):
+                self.calls = []
+
+            def read(self, path):
+                raise AssertionError("read one at a time")
+
+            def read_many(self, paths):
+                self.calls.append(len(paths))
+                raise tags.TagError(5, "ssh failed")
+
+        source, dest = Costly(), Mock()
+        ahead = tags.CarryAhead()
+        ahead.BATCH = 2
+        with patch.object(tags, "store_for",
+                          side_effect=lambda p: source if p.startswith("s") else dest):
+            ahead.read([(f"s{i}", f"d{i}") for i in range(5)])
+            with patch.object(tags.logger, "warning") as warning:
+                ahead.carry("s0", "d0")
+        self.assertEqual(source.calls, [2, 2, 1])
+        warning.assert_called_once()
+        dest.write.assert_not_called()
