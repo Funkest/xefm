@@ -460,6 +460,7 @@ class XeFMStateManager(StateManager):
             'scroll_offset': pane_data.get('scroll_offset', 0),
             'sort_mode': pane_data.get('sort_mode', 'name'),
             'sort_reverse': pane_data.get('sort_reverse', False),
+            'layout': pane_data.get('layout'),
             'filter_pattern': pane_data.get('filter_pattern', ''),
             'selected_files': list(pane_data.get('selected_files', set()))
         }

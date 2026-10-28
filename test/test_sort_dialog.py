@@ -156,7 +156,7 @@ class SortDialogApp(unittest.TestCase):
         dlg = self._open()
         self.assertEqual(dlg._index, 0)
         dlg.handle_event(_key("up"))                    # wraps to the bottom
-        self.assertEqual(dlg._index, 3)
+        self.assertEqual(dlg._index, len(dlg._keys) - 1)
         dlg.handle_event(_key("down"))
         self.assertEqual(dlg._index, 0)
         dlg.handle_event(_key("down"))

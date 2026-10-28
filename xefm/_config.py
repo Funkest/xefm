@@ -351,16 +351,17 @@ class Config:
     # it shows, IMAGE_DECODERS lets you add picture formats the image viewer
     # does not read yet, PATH_SCHEMES lets you add a browsable folder that
     # is not a folder, LEXERS lets you color a language the text viewer
-    # does not know, and MENU_ITEMS puts an action in a menu.
+    # does not know, MENU_ITEMS puts an action in a menu, and ATTRIBUTES,
+    # LAYOUTS and LAYOUT_RULES change what the file list's rows show.
     #
     # STABLE AND PREVIEW: this is API version 1 (xefm.user_api.API_VERSION).
     # ACTIONS, SORT_KEYS, FILTERS and PATH_SCHEMES, and the panes and entries
     # your functions are handed, are stable: a change that would break them
     # comes with a new API_VERSION and a line in the release notes. EVENT_HOOKS,
-    # MENU_ITEMS, IMAGE_DECODERS, LEXERS and a few ctx methods (run_task,
-    # show_markdown, the prompts) are Preview and may change in any release;
-    # XeFM logs one line when a config uses them. doc/CUSTOMIZATION_FEATURE.md
-    # has the full list.
+    # MENU_ITEMS, IMAGE_DECODERS, LEXERS, ATTRIBUTES, LAYOUTS, LAYOUT_RULES and
+    # a few ctx methods (run_task, show_markdown, the prompts) are Preview and
+    # may change in any release; XeFM logs one line when a config uses them.
+    # doc/CUSTOMIZATION_FEATURE.md has the full list.
     #
     # Both reload with the rest of the config ('reload_config'), so iterating on
     # an action is edit-then-reload -- no restart.
@@ -722,6 +723,158 @@ class Config:
     # 'always'. Your items gather in a group of their own near the foot of
     # each menu, in the order written here.
     MENU_ITEMS = {}
+
+    # --- ATTRIBUTES -------------------------------------------------------
+    # Values XeFM can know about each entry beyond its name, size and date --
+    # a Git status, a line count, an image's dimensions. Defining one shows it
+    # nowhere: LAYOUTS below decides where it appears. XeFM has a few of its
+    # own already: 'name', 'ext', 'size', 'mtime', 'tags' and 'total_size' (a
+    # folder's recursive size, counted by View > Calculate Folder Sizes).
+    #
+    # A function computes the value, on a background thread. Either one call
+    # per entry:
+    #
+    #     def line_count(entry):
+    #         with open(entry.path, 'rb') as f:
+    #             return sum(1 for _ in f)
+    #
+    # ...or one call per directory, returning a list of values in the order
+    # of `entries` -- for a source that answers a whole directory at once,
+    # where a call per file would be hundreds of processes:
+    #
+    #     import subprocess                    # at the top of this file
+    #
+    #     def git_status(directory, entries):
+    #         out = subprocess.run(['git', 'status', '--porcelain', '-z', '.'],
+    #                              cwd=directory, capture_output=True, text=True)
+    #         codes = {}
+    #         for item in out.stdout.split('\0'):
+    #             if len(item) > 3:
+    #                 name = item[3:].rstrip('/').split('/')[-1]
+    #                 codes[name] = item[:2].strip()[:1]
+    #         return [codes.get(e.path.name) for e in entries]
+    #
+    #     ATTRIBUTES = {
+    #         'lines': {'label': 'Lines', 'type': 'count', 'entry': line_count},
+    #         'git': {
+    #             'label': 'Git status', 'type': 'enum', 'directory': git_status,
+    #             'values': {                  # each value's meaning, and a color
+    #                 'M': {'label': 'Modified',  'color': 'yellow'},
+    #                 'A': {'label': 'Added',     'color': 'green'},
+    #                 '?': {'label': 'Untracked', 'color': 'muted'},
+    #             },
+    #         },
+    #     }
+    #
+    # 'type' is how the value is shown and compared: 'text', 'count', 'size'
+    # (bytes), 'time' (a timestamp), 'enum' (one of 'values'), or 'tags'.
+    # 'where' lists the storage it is asked about -- 'local' (the default),
+    # 'archive', 'ssh', 's3' -- since a call per file is cheap on a disk and
+    # a request each on S3.
+    #
+    # Values are worked out for every row of a folder as soon as a layout on
+    # screen shows them, so a definition should answer a folder's worth in no
+    # time. One that cannot -- it reads every file whole, it walks a tree --
+    # says 'compute': 'on_request' and is computed only for the entries you
+    # ask about: View > Compute Values, for the selection or the entry under
+    # the cursor (total_size has its own View > Calculate Folder Sizes).
+    #
+    # A value is None until it arrives. A function that fails costs its value
+    # and says so once in the log pane. Your own functions can read a value
+    # XeFM already has with entry.attr('git') -- it never waits for one.
+    ATTRIBUTES = {}
+
+    # --- LAYOUTS ----------------------------------------------------------
+    # How a file list row is drawn: which columns, in what order, how each
+    # value is written, and what marks a column's text. View > Layout picks
+    # one per tab. The built-in 'default' is what you see now:
+    #
+    #     'columns': ['name' (with 'tags' as a marker), 'ext', 'total_size',
+    #                 {'attr': 'mtime', 'priority': 1}]
+    #
+    # A column is an attribute's name, or a dict:
+    #
+    #     {'attr': 'mtime',            # what to show
+    #      'format': 'relative',      # how (below), or a function of yours
+    #      'width': 10,               # cells; the format's own by default
+    #      'align': 'right',          # 'left' or 'right'
+    #      'priority': 1,             # dropped first when the pane is narrow
+    #      'markers': [...]}          # marks beside the text, below
+    #
+    # Every layout has a 'name' column, and it takes the width the others
+    # leave. A column with a 'priority' is dropped when the name would get
+    # narrower than 12 cells, lowest first; one without stays. Leave out
+    # 'ext' and the extension stays in the name.
+    #
+    # Formats by type: 'size' -- 'compact' (12.3K, the default) or 'bytes';
+    # 'time' -- 'short', 'full' (DATE_FORMAT picks between the two by
+    # default), 'iso' or 'relative' ("5 min ago"); 'enum' -- 'letter' or
+    # 'word' (its label from 'values'); 'tags' -- 'dots' or 'names'; 'count'
+    # -- 'number'; 'text' -- 'text'. A function of yours takes (value, entry)
+    # and returns text, or a Cell to give it a color: color is 'muted',
+    # 'accent', 'accent2', 'text', a name ('red', 'green', 'yellow', 'blue',
+    # 'purple', 'orange', 'gray') or an (r, g, b). value is None while it is
+    # being computed. Give it a 'width'.
+    #
+    #     from xefm.user_api import Cell       # at the top of this file
+    #
+    #     GIT_MARK = {'M': Cell('●', color='yellow'),
+    #                 'A': Cell('+', color='green'),
+    #                 '?': Cell('?', color='muted')}
+    #
+    #     def git_mark(value, entry):
+    #         return GIT_MARK.get(value, '')
+    #
+    # A marker is drawn beside the text of the column it is in -- after it by
+    # default, or with 'side': 'before' -- as the tag dots are drawn after the
+    # name. It is an attribute's name or {'attr', 'format', 'side',
+    # 'max_width'}; 'max_width' (3 cells by default) is all it may take. A
+    # marker with nothing to show takes no room at all.
+    #
+    #     LAYOUTS = {
+    #         'git': {
+    #             'label': 'Git',
+    #             'columns': [
+    #                 {'attr': 'name', 'markers': [
+    #                     'tags',
+    #                     {'attr': 'git', 'format': git_mark, 'side': 'before',
+    #                      'max_width': 1},
+    #                 ]},
+    #                 'ext',
+    #                 'size',
+    #                 {'attr': 'mtime', 'format': 'relative', 'priority': 1},
+    #             ],
+    #         },
+    #         'compact': {'label': 'Name and size', 'columns': ['name', 'size']},
+    #     }
+    #
+    # Replacing 'default' itself needs 'override': True. A column whose
+    # attribute nothing defines is left out, with a line in the log pane.
+    #
+    # The sort dialog lists the computed columns of the pane's layout (Git
+    # status above) after its own keys. Sorting by one orders this folder
+    # only, by the values already there; going to another folder goes back to
+    # the pane's own sort.
+    LAYOUTS = {}
+
+    # --- LAYOUT_RULES -----------------------------------------------------
+    # Which layout a folder gets when its tab is on Automatic (View > Layout
+    # > Automatic, where every tab starts). A list of (condition, layout)
+    # pairs, the first that matches wins; nothing matching means 'default'.
+    # A condition is a path pattern or a function of the folder's path, which
+    # runs on a background thread and may look at the disk:
+    #
+    #     def in_git_tree(path):
+    #         return any((p / '.git').exists() for p in (path, *path.parents))
+    #
+    #     LAYOUT_RULES = [
+    #         ('s3://*', 'compact'),
+    #         (in_git_tree, 'git'),
+    #     ]
+    #
+    # Only this file has rules: an extension may bring a layout, but whether
+    # a folder uses it is yours to say.
+    LAYOUT_RULES = []
 
 
     # Favorites (J) - the places and files you jump to by name.

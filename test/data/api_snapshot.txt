@@ -5,10 +5,12 @@ stable	capability	capability.file_editing
 stable	capability	capability.streaming_read
 stable	capability	capability.write_operations
 stable	table	config.ACTIONS	context,description,func,override
+preview	table	config.ATTRIBUTES	compute,directory,entry,label,type,values,where
 preview	table	config.EVENT_HOOKS
 preview	names	config.EVENT_HOOKS.events	directory_changed,file_open,quit,startup
 stable	table	config.FILTERS	label,match,pattern
 preview	table	config.IMAGE_DECODERS	label,open
+preview	table	config.LAYOUTS	columns,kind,label,override
 preview	table	config.LEXERS
 preview	table	config.MENU_ITEMS	label,menus,when
 stable	table	config.PATH_SCHEMES	class,override
@@ -16,10 +18,12 @@ preview	table-key	config.PATH_SCHEMES.override
 stable	table	config.SORT_KEYS	explain,hotkey,key,label,override
 stable	sections	manifest	contributes,extension,requires,settings
 stable	section	manifest.contributes.actions	entry,description
+preview	section	manifest.contributes.attributes
 preview	section	manifest.contributes.event_hooks
 stable	section	manifest.contributes.filters
 preview	section	manifest.contributes.image_decoders
 stable	section	manifest.contributes.key_suggestions
+preview	section	manifest.contributes.layouts
 preview	section	manifest.contributes.lexers
 preview	section	manifest.contributes.menus
 stable	section	manifest.contributes.path_schemes
@@ -138,9 +142,14 @@ preview	attribute	xefm.user_api.ActionInfo.aliases
 preview	attribute	xefm.user_api.ActionInfo.description
 preview	attribute	xefm.user_api.ActionInfo.keys
 preview	attribute	xefm.user_api.ActionInfo.name
+preview	class	xefm.user_api.Cell
+preview	attribute	xefm.user_api.Cell.bold
+preview	attribute	xefm.user_api.Cell.color
+preview	attribute	xefm.user_api.Cell.italic
 stable	data	xefm.user_api.DEPRECATED_APIS	mappingproxy
 stable	class	xefm.user_api.EntryInfo
 stable	constructor	xefm.user_api.EntryInfo.__init__	[["self", "pk", null], ["path", "pk", null], ["is_dir", "kw", "False"], ["is_link", "kw", "False"]]
+preview	method	xefm.user_api.EntryInfo.attr	[["self", "pk", null], ["name", "pk", null]]
 stable	attribute	xefm.user_api.EntryInfo.is_dir
 stable	property	xefm.user_api.EntryInfo.is_file	ro
 stable	attribute	xefm.user_api.EntryInfo.is_link

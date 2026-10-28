@@ -804,6 +804,7 @@ For detailed information about specific features, see these dedicated guides:
 - [Rename in the Editor](RENAME_IN_EDITOR_FEATURE.md) - Rename many files by editing their names in your text editor
 - [Select by Pattern](SELECT_BY_PATTERN_FEATURE.md) - Select or unselect every file matching a pattern
 - [File Tags](FILE_TAGS_FEATURE.md) - Read and write the tags your system keeps, and search by tag
+- [File List Layouts](FILE_LIST_LAYOUTS_FEATURE.md) - Choose and define which columns a row shows, folder sizes, and your own values such as a Git status
 - [Archive Feature](ARCHIVE_FEATURE.md) - Create, extract, and browse archives (incl. password-protected)
 - [File Details Feature](FILE_DETAILS_FEATURE.md) - Viewing detailed file information
 - [Searching the OS Index](OS_INDEX_SEARCH_FEATURE.md) - Spotlight and Windows Search, results as a list

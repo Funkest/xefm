@@ -665,6 +665,7 @@ AWS の認証情報とバケットの権限を確認してください
 - [エディターでの名前の変更](RENAME_IN_EDITOR_FEATURE.ja.md) - テキストエディターで名前を編集して、多数のファイルの名前を変更
 - [パターンで選択](SELECT_BY_PATTERN_FEATURE.ja.md) - パターンにマッチするすべてのファイルを選択／解除
 - [ファイルのタグ](FILE_TAGS_FEATURE.ja.md) - システムが管理するタグの読み書きと、タグによる検索
+- [ファイルリストのレイアウト](FILE_LIST_LAYOUTS_FEATURE.ja.md) - 行に表示する列の選択と定義、フォルダーのサイズ、Git の状態などの独自の値
 - [アーカイブ](ARCHIVE_FEATURE.ja.md) - アーカイブの作成、展開、ブラウズ（パスワード付きも含む）
 - [ファイルの詳細](FILE_DETAILS_FEATURE.ja.md) - ファイルの詳しい情報の表示
 - [OS のインデックス検索](OS_INDEX_SEARCH_FEATURE.ja.md) - Spotlight と Windows Search の結果を一覧として表示

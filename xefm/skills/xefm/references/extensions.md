@@ -122,7 +122,12 @@ Rules the check enforces — each violation is an `error:` naming the field:
   assignment or import). The check reads the file; it does not import it.
 - Contribution kinds: `actions`, `event_hooks`, `sort_keys`, `filters`,
   `image_decoders`, `path_schemes`, `lexers`, `themes`, `menus`,
-  `key_suggestions`.
+  `attributes`, `layouts`, `key_suggestions`.
+- An `attributes` entry is a table like its `ATTRIBUTES` entry, with
+  `entry` or `directory` a reference (`"pkg.git:status"`). A `layouts` entry
+  is plain data like its `LAYOUTS` entry; a column's or marker's `format` is
+  a built-in format's name or a reference. A package never contributes
+  `LAYOUT_RULES`: which layout a folder uses is the user's choice.
 - A `menus` entry is keyed by one of the package's own actions: `menus` is a
   list of `"file"` (the File menu) and `"context"` (a row's context menu),
   `label` the text shown, and the optional `when` greys it out unless it
@@ -143,7 +148,8 @@ Rules the check enforces — each violation is an `error:` naming the field:
 
 What each table entry *does* is the same as the `config.py` table it feeds —
 `ACTIONS`, `EVENT_HOOKS`, `SORT_KEYS`, `FILTERS`, `IMAGE_DECODERS`,
-`PATH_SCHEMES`, `LEXERS`, `THEMES`, `MENU_ITEMS`. Each is documented, with the shape of
+`PATH_SCHEMES`, `LEXERS`, `THEMES`, `MENU_ITEMS`, `ATTRIBUTES`, `LAYOUTS`.
+Each is documented, with the shape of
 its values, in the comment above it in `references/config-template.md`; for a
 `sort_keys`, `filters`, `image_decoders` or `path_schemes` entry the
 referenced object is exactly the value that table would hold.
@@ -167,7 +173,7 @@ modules, and from each only the names in its `__all__`:
 - `xefm.user_api.__all__` — `API_VERSION`, `PREVIEW_APIS`,
   `DEPRECATED_APIS`, `ActionContext`, `PaneApi`, `EntryInfo`, `HookEvent`, `extension`,
   `TaskJob`, `TaskOutcome`, `ItemResult`, `ActionInfo`, `md_code_block`,
-  `md_escape`, `xefm_tool`, `xefm_python`, `is_desktop_mode`
+  `md_escape`, `Cell`, `xefm_tool`, `xefm_python`, `is_desktop_mode`
 - `xefm.path_base.__all__` — `ReadOnlyPathImpl`, `UriPathImpl`,
   `UriStatResult`
 

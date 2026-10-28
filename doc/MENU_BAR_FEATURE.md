@@ -168,6 +168,9 @@ the mouse for the first, take the whole buffer with the second. See
 | Search Tags… | `find_by_tag` *(ships unbound)* — see [File Tags](FILE_TAGS_FEATURE.md) |
 | Reread | `reread` |
 | Show Hidden Files | `toggle_hidden` |
+| Layout ▸ | (submenu: Automatic and every layout — also `choose_layout`) — see [File List Layouts](FILE_LIST_LAYOUTS_FEATURE.md) |
+| Calculate Folder Sizes | `calculate_folder_sizes` *(ships unbound)* |
+| Compute Values | `compute_values` *(ships unbound)* |
 | Reverse Sort | *(menu only)* |
 | Sort By ▸ | (submenu: Name / Extension / Size / Date — also the `quick_sort_*` actions) |
 | Theme ▸ | (submenu of installed themes) |

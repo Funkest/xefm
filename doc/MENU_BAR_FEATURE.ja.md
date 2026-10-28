@@ -139,6 +139,9 @@ XeFM には **File**、**Edit**、**Go**、**Select**、**View**、**Tools**、*
 | Search Tags… | `find_by_tag` *（既定でキー未割り当て）* — [ファイルのタグ](FILE_TAGS_FEATURE.ja.md)を参照 |
 | Reread | `reread` |
 | Show Hidden Files | `toggle_hidden` |
+| Layout ▸ | （サブメニュー：Automatic とすべてのレイアウト。`choose_layout` でも可）— [ファイルリストのレイアウト](FILE_LIST_LAYOUTS_FEATURE.ja.md)を参照 |
+| Calculate Folder Sizes | `calculate_folder_sizes` *（既定でキー未割り当て）* |
+| Compute Values | `compute_values` *（既定でキー未割り当て）* |
 | Reverse Sort | *（メニューのみ）* |
 | Sort By ▸ | （サブメニュー：Name / Extension / Size / Date。`quick_sort_*` アクションでも可） |
 | Theme ▸ | （インストール済みテーマのサブメニュー） |

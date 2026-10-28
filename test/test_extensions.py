@@ -582,6 +582,40 @@ class Load(_Home):
         config.ACTIONS[f"{root.name}.greet"]["func"](types.SimpleNamespace())
         self.assertEqual(sys.modules[f"{mod}.actions"].calls, [])
 
+    def test_attribute_and_layout_contributions(self):
+        """An attribute's provider and a layout's format are references; the
+        rest of each is data, as in config.py (#633, #756)."""
+        root, mod = self.installed_package(manifest='''
+            [extension]
+            id = "{id}"
+            version = "0.1.0"
+            api_version = 1
+
+            [contributes.attributes."{id}.kind"]
+            label = "Kind"
+            type = "enum"
+            directory = "{mod}.attrs:kinds"
+
+            [contributes.layouts."{id}"]
+            label = "Kinds"
+            columns = ["name", {{ attr = "{id}.kind", format = "{mod}.attrs:mark" }}]
+        ''', code={"attrs.py": '''
+            def kinds(directory, entries):
+                return ["k" for _ in entries]
+
+            def mark(value, entry):
+                return value or ""
+        '''})
+        self.assertEqual(ext.errors(ext.check_package(root)[1]), [])
+        config = _config()
+        ext.load(config, self.layout)
+        attrs = sys.modules[f"{mod}.attrs"]
+        spec = config.ATTRIBUTES[f"{root.name}.kind"]
+        self.assertEqual(spec["type"], "enum")
+        self.assertEqual(spec["directory"](None, [1, 2]), ["k", "k"])
+        column = config.LAYOUTS[root.name]["columns"][1]
+        self.assertIs(column["format"], attrs.mark)
+
     def test_data_contributions(self):
         self.installed_package(manifest='''
             [extension]

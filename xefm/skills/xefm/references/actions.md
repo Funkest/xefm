@@ -122,6 +122,9 @@ the user picked in **Tools ▸ Advanced ▸ Keymap…**; ask which if `KEY_PRESE
 | `copy_log_all` | Copy the whole log to the clipboard | — | — |
 | `toggle_hidden` | Show or hide hidden files | `.` | `.` |
 | `toggle_color_scheme` | Cycle to the next color theme | — | — |
+| `choose_layout` | Choose how the pane draws its rows | — | — |
+| `calculate_folder_sizes` | Calculate the total size of folders | — | — |
+| `compute_values` | Compute the layout's on-request values | — | — |
 | `redraw` | Redraw the screen | `F5` | — |
 | `reread` | Re-read both panes' directories | — | `F2`, `Ctrl-R` |
 | `menu` | Open the menu bar | `F10`, `ALT` | `F9`, `F10`, `ALT` |

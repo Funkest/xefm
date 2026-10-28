@@ -69,12 +69,14 @@ PREVIEW_APIS: set[str] = {
     # config.py tables. ACTIONS, SORT_KEYS, FILTERS and PATH_SCHEMES are
     # stable; replacing a built-in scheme is not.
     *(f"config.{table}" for table in (
-        "EVENT_HOOKS", "IMAGE_DECODERS", "LEXERS", "MENU_ITEMS")),
+        "EVENT_HOOKS", "IMAGE_DECODERS", "LEXERS", "MENU_ITEMS",
+        "ATTRIBUTES", "LAYOUTS", "LAYOUT_RULES")),
     "config.PATH_SCHEMES.override",
     # xefm-extension.toml. actions, sort_keys, filters, path_schemes and
     # key_suggestions are stable.
     *(f"manifest.contributes.{kind}" for kind in (
-        "event_hooks", "image_decoders", "lexers", "themes", "menus")),
+        "event_hooks", "image_decoders", "lexers", "themes", "menus",
+        "attributes", "layouts")),
     "manifest.extension.updates",
     "manifest.settings",
     "manifest.requires",

@@ -110,8 +110,10 @@ from types import MappingProxyType
 from typing import Any, Callable, Iterable, Iterator, Mapping, NamedTuple
 
 from xefm import actions as _actions
+from xefm import attributes as _attributes
 from xefm import filters as _filters
 from xefm import image_decoders as _image_decoders
+from xefm import layouts as _layouts
 from xefm import lexer_registry as _lexers
 from xefm import name_key
 from xefm import path_schemes as _path_schemes
@@ -123,6 +125,12 @@ from xefm.path import Path, PathImpl
 from xefm.path_base import UriPathImpl
 from xefm.preview import DEPRECATED_APIS as _DEPRECATED_APIS
 from xefm.preview import PREVIEW_APIS as _PREVIEW_APIS, preview
+
+
+#: A piece of formatted text and its look — what a ``LAYOUTS`` format may
+#: return. Defined beside the layouts that draw it; published here.
+Cell = preview(_layouts.Cell)
+_PREVIEW_APIS.add("xefm.user_api.Cell")
 
 
 class _SeededStat(NamedTuple):
@@ -152,6 +160,8 @@ __all__ = [
     "ActionInfo",
     # building Markdown for ctx.show_markdown
     "md_code_block", "md_escape",
+    # what a LAYOUTS format may return
+    "Cell",
     # for PROGRAMS and the rest of config.py; also importable, for configs
     # written before they lived here, from xefm.external_programs and
     # xefm.backend_detector — those three names only
@@ -177,6 +187,9 @@ TABLE_KEYS: dict[str, tuple[str, ...]] = {
     "IMAGE_DECODERS": ("open", "label"),
     "PATH_SCHEMES": ("class", "override"),
     "MENU_ITEMS": ("menus", "label", "when"),
+    "ATTRIBUTES": ("label", "type", "entry", "directory", "values", "where",
+                   "compute"),
+    "LAYOUTS": _layouts.LAYOUT_KEYS,
 }
 
 #: The menus ``MENU_ITEMS`` can put an action in: the menu bar's File menu, and
@@ -297,6 +310,24 @@ class EntryInfo:
     def size(self) -> int:
         st = self._stat_result()
         return int(getattr(st, "st_size", 0) or 0)
+
+    @preview
+    def attr(self, name: str):
+        """The value of attribute ``name`` (``config.ATTRIBUTES``, or a built-in
+        such as ``'tags'`` or ``'total_size'``) for this entry, as far as XeFM
+        already knows it — ``None`` while it is being computed, when it was
+        never asked for, or when there is none. Never computes and never waits,
+        so it is as cheap in an action on the UI thread as in a sort key.
+
+        ``'name'``, ``'ext'``, ``'size'`` and ``'mtime'`` are always known."""
+        if name in ("name", "ext", "size", "mtime"):
+            record = {"cmp_name": self.name, "is_dir": self.is_dir, "ok": True,
+                      "size": self.size, "mtime": self.mtime}
+            return _attributes.sync_value(name, self.path, record)
+        value = _attributes.lookup(str(self.path), name)
+        if value is None and name == "total_size" and not self.is_dir:
+            return self.size
+        return value
 
     @property
     def mtime(self) -> float:
@@ -1334,6 +1365,8 @@ class LoadResult(NamedTuple):
     lexers: int
     menu_items: int = 0
     scheme_overrides: int = 0
+    attributes: int = 0
+    layouts: int = 0
 
 
 def load_user_entries(config, registry=None) -> LoadResult:
@@ -1368,6 +1401,8 @@ def _process_user_entries(config, registry, apply: bool) -> LoadResult:
         _path_schemes.unregister_source("user")
         _lexers.clear()
         menu_entries.clear()
+        _attributes.clear()
+        _layouts.clear()
 
     warnings: list[str] = []
     count = 0
@@ -1513,9 +1548,59 @@ def _process_user_entries(config, registry, apply: bool) -> LoadResult:
             menu_entries.append(entry)
         menu_count += 1
 
+    attr_count = 0
+    attr_names = set(_attributes.BUILTIN)
+    for name, spec in _items(getattr(config, "ATTRIBUTES", None), "ATTRIBUTES", warnings):
+        attr, problem = _attributes.build(name, spec)
+        if problem:
+            warnings.append(problem)
+            continue
+        if apply:
+            _attributes.register(attr)
+        attr_names.add(name)
+        attr_count += 1
+
+    layout_count = 0
+    layout_names = {_layouts.DEFAULT}
+    for name, spec in _items(getattr(config, "LAYOUTS", None), "LAYOUTS", warnings):
+        layout, problem = _layouts.build(name, spec)
+        if problem:
+            warnings.append(problem)
+            continue
+        unknown = sorted(n for n in layout.attributes() if n not in attr_names)
+        if unknown:
+            # Loaded anyway: the rest of the layout is fine, and the column
+            # appears once the attribute does (an extension enabled later).
+            warnings.append(
+                f"LAYOUTS['{name}'] names attribute(s) nothing defines: "
+                f"{', '.join(unknown)} — those columns are left out")
+        if apply:
+            _layouts.register(layout)
+        layout_names.add(name)
+        layout_count += 1
+
+    rules = []
+    table = getattr(config, "LAYOUT_RULES", None)
+    if table is not None and not isinstance(table, (list, tuple)):
+        warnings.append("LAYOUT_RULES must be a list of (pattern or function, "
+                        "layout name) pairs")
+        table = ()
+    for i, spec in enumerate(table or ()):
+        rule, problem = _layouts.build_rule(i, spec)
+        if problem:
+            warnings.append(problem)
+            continue
+        if rule[1] not in layout_names:
+            warnings.append(f"LAYOUT_RULES[{i}] names the layout '{rule[1]}', "
+                            f"which LAYOUTS does not define; the rule is skipped")
+            continue
+        rules.append(rule)
+    if apply:
+        _layouts.set_rules(rules)
+
     return LoadResult(warnings, count, hook_count, sort_count, filter_count,
                       decoder_count, scheme_count, lexer_count, menu_count,
-                      scheme_overrides)
+                      scheme_overrides, attr_count, layout_count)
 
 
 def _items(value, label: str, warnings: list[str]):
@@ -1805,7 +1890,8 @@ def _build_path_scheme(name, spec) -> tuple[type | None, str | None]:
 
 def preview_notice(*, hooks: int = 0, image_decoders: int = 0,
                    lexers: int = 0, menu_items: int = 0,
-                   scheme_overrides: int = 0) -> str | None:
+                   scheme_overrides: int = 0, attributes: int = 0,
+                   layouts: int = 0) -> str | None:
     """The one line a config gets in the log pane when it uses a Preview
     table, or ``None`` when it uses none. ``ACTIONS``, ``SORT_KEYS``,
     ``FILTERS`` and ``PATH_SCHEMES`` (short of replacing a built-in scheme)
@@ -1816,6 +1902,8 @@ def preview_notice(*, hooks: int = 0, image_decoders: int = 0,
         (image_decoders, "image decoder(s)"),
         (lexers, "lexer(s)"),
         (menu_items, "menu item(s)"),
+        (attributes, "attribute(s)"),
+        (layouts, "layout(s)"),
         (scheme_overrides, "built-in scheme override(s)")) if count]
     if not parts:
         return None

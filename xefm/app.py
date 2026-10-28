@@ -85,6 +85,8 @@ from xefm.connect_dialog import open_connect_server, run_connecting
 from xefm.input_dialog import show_input
 from xefm.choice_dialog import show_choice_dialog
 from xefm import favorites
+from xefm import attributes
+from xefm import layouts
 from xefm import tags
 from xefm import trash
 from xefm import netmount
@@ -1961,11 +1963,11 @@ class XeFMApp:
             on_drop_query=lambda i, paths, op: self._drop_effect("right", i, paths, op),
             on_nav=lambda step: self._on_nav_button("right", step),
         )
-        # Tag markers (#585): each pane reads the tags of the rows it draws on a
-        # worker, which flags a repaint through the pump when they land.
-        self._tags_dirty = False
-        for view in (self.left_view, self.right_view):
-            view.tag_cache = tags.TagCache(on_ready=self._on_tags_ready)
+        # Attribute values (#633) — tags, a layout's extra columns — are
+        # computed on workers, which flag a repaint through the pump when they
+        # land.
+        self._attrs_dirty = False
+        attributes.on_ready = self._on_attrs_ready
         # Same chrome inset as the bars: the log's surface fills its slot, its
         # text breathes in from the frame (BAR_PAD_PX on GUI, flush on the grid).
         self.log = LogView(max_lines=2000, auto_scroll=True, wrap=True, padding_px=BAR_PAD_PX)
@@ -2146,6 +2148,8 @@ class XeFMApp:
                                 image_decoders=loaded.image_decoders,
                                 lexers=loaded.lexers,
                                 menu_items=loaded.menu_items,
+                                attributes=loaded.attributes,
+                                layouts=loaded.layouts,
                                 scheme_overrides=loaded.scheme_overrides)
         if notice:
             self.log_info(notice)
@@ -2627,6 +2631,7 @@ class XeFMApp:
         pane['sort_mode'] = (saved_mode if sort_keys.is_known(saved_mode)
                              else pane['sort_mode'])
         pane['sort_reverse'] = state.get('sort_reverse', pane['sort_reverse'])
+        pane['layout'] = state.get('layout') if isinstance(state.get('layout'), str) else None
         pane['filter_pattern'] = state.get('filter_pattern', pane['filter_pattern'])
 
     def _display_height(self) -> int:
@@ -2738,7 +2743,7 @@ class XeFMApp:
         captured = self._drain_captured_output()
         scans = self._pump_scans()
         trees = self._pump_xft()
-        tagged, self._tags_dirty = getattr(self, "_tags_dirty", False), False
+        tagged, self._attrs_dirty = getattr(self, "_attrs_dirty", False), False
         synced = self._pump_python_packages()
         updates = self._pump_extension_updates()
         fetched = self._pump_extension_fetch()
@@ -2770,9 +2775,9 @@ class XeFMApp:
                 getLogger("Main").error(f"Deferred call failed: {exc}")
         return ran
 
-    def _on_tags_ready(self) -> None:
-        """Worker thread: tags for drawn rows landed; ask for a repaint."""
-        self._tags_dirty = True
+    def _on_attrs_ready(self) -> None:
+        """Worker thread: attribute values landed; ask for a repaint."""
+        self._attrs_dirty = True
         self._wake_pump()
 
     #: Log-pane styles for captured streams. stdout leaves its color unset so it
@@ -2903,12 +2908,18 @@ class XeFMApp:
         filter_pattern = pane["filter_pattern"]
         sort_mode = pane["sort_mode"]
         sort_reverse = pane["sort_reverse"]
+        overlay = self._sort_overlay(pane)
 
         def worker() -> None:
             result = self.flm.compute_listing(
                 path, filter_pattern=filter_pattern,
                 sort_mode=sort_mode, sort_reverse=sort_reverse,
+                overlay=overlay,
             )
+            if result.get("ok"):
+                # LAYOUT_RULES may touch the filesystem (is this a Git working
+                # tree?), so they are asked here rather than on the UI thread.
+                result["layout_auto"] = layouts.resolve(path)
             # drop_if_unchanged tracks keep_visible here: a re-list nobody
             # asked for is the case worth dropping. The re-sort path posts False.
             self._result_queue.put((pane_name, gen, result, on_ready,
@@ -3014,6 +3025,10 @@ class XeFMApp:
             # blanked by an in-flight navigation must install the result even when
             # it compares equal (an empty directory would otherwise match the
             # blank pane and leave it stuck "loading" forever).
+            if "layout_auto" in result and \
+                    result["layout_auto"] != pane.get("_layout_auto"):
+                pane["_layout_auto"] = result["layout_auto"]
+                applied = True
             if (drop_if_unchanged and not pane.get("loading")
                     and self._listing_unchanged(pane, result)):
                 # Nothing to redraw, but the entries are a fresher snapshot than
@@ -3622,6 +3637,7 @@ class XeFMApp:
         sort_reverse = pane["sort_reverse"]
         rel_root = virtual.get("root")
         derive_root = entering and rel_root is None
+        overlay = None if entering else self._sort_overlay(pane)
 
         def prepare(p: dict, result: dict) -> bool:
             if entering:
@@ -3654,7 +3670,7 @@ class XeFMApp:
             result = self.flm.compute_virtual_listing(
                 listed, filter_pattern=filter_pattern, sort_mode=sort_mode,
                 sort_reverse=sort_reverse, rel_root=rel_root,
-                derive_root=derive_root, **read)
+                derive_root=derive_root, overlay=overlay, **read)
             result["total"] = len(listed)
             result.update(extra)
             self._result_queue.put((pane_name, gen, result, on_ready,
@@ -3717,6 +3733,7 @@ class XeFMApp:
         sort_reverse = pane["sort_reverse"]
         virtual = pane.get("virtual")
         rel_root = virtual.get("root") if virtual else None
+        overlay = self._sort_overlay(pane)
 
         anchor = self._cursor_anchor(pane) if keep_cursor else None
 
@@ -3729,12 +3746,33 @@ class XeFMApp:
         def worker() -> None:
             result = self.flm.recompute_from_snapshot(
                 entries, filter_pattern=filter_pattern, sort_mode=sort_mode,
-                sort_reverse=sort_reverse, rel_root=rel_root)
+                sort_reverse=sort_reverse, rel_root=rel_root, overlay=overlay)
             self._result_queue.put((pane_name, gen, result, landed, True, False))
             self._wake_pump()
 
         threading.Thread(target=worker, name=f"xefm-sort-{pane_name}",
                          daemon=True).start()
+
+    def _sort_overlay(self, pane: dict):
+        """``(name, values, reverse)`` for the attribute sort put over
+        ``pane``'s own, or None.
+
+        An attribute sort holds for the directory it was chosen in, across
+        re-reads of it, and is dropped the moment the pane is somewhere else —
+        the pane's own sort mode, which it never replaced, applies again. The
+        values are what the pane already has (``AttributeStore.snapshot``): a
+        sort never waits for one, and a row without one goes last."""
+        spec = pane.get("sort_overlay")
+        if not spec:
+            return None
+        if spec["path"] != str(pane["path"]) or not attributes.is_known(spec["attr"]):
+            pane["sort_overlay"] = None
+            return None
+        entries = pane.get("_listing_entries") or ()
+        records = {str(p): a for p, a in entries}
+        values = attributes.store_of(pane).snapshot(
+            spec["attr"], [p for p, _a in entries], records)
+        return (spec["attr"], values, spec["reverse"])
 
     def _refresh(self, pane: dict, *, on_ready=None) -> None:
         """Re-list ``pane`` after a directory change: reset the cursor, record
@@ -3869,6 +3907,9 @@ class XeFMApp:
                 "menu": (self.menu_bar.open_menu, None),
                 "redraw": (lambda: None, True),
                 "reread": (self.reread, False),
+                "choose_layout": (self.choose_layout, False),
+                "calculate_folder_sizes": (self.calculate_folder_sizes, True),
+                "compute_values": (self.compute_values, True),
                 "choose_keymap": (self.choose_keymap, False),
                 # --- cursor ---
                 "cursor_up": (self._act_cursor_up, True),
@@ -4672,6 +4713,7 @@ class XeFMApp:
         for side in ("left", "right"):
             tabs = [{"path": str(t["path"]), "sort_mode": t["sort_mode"],
                      "sort_reverse": t["sort_reverse"],
+                     "layout": t.get("layout"),
                      "filter_pattern": t.get("filter_pattern", "")}
                     for t in self.pm.tabs[side]]
             self.state_manager.set_state(
@@ -4707,6 +4749,8 @@ class XeFMApp:
             if sort_keys.is_known(mode):
                 tab["sort_mode"] = mode
             tab["sort_reverse"] = bool(entry.get("sort_reverse", tab["sort_reverse"]))
+            layout = entry.get("layout")
+            tab["layout"] = layout if isinstance(layout, str) else None
             tab["filter_pattern"] = entry.get("filter_pattern", "") or ""
             tabs.append(tab)
         self.pm.tabs[side] = tabs
@@ -4951,6 +4995,12 @@ class XeFMApp:
                      shortcut=sc("reread")),
             MenuItem("Show Hidden Files", on_select=lambda: self._menu("toggle_hidden"),
                      checked=lambda: self.flm.show_hidden, shortcut=sc("toggle_hidden")),
+            MenuItem("Layout", submenu=self._layout_menu()),
+            MenuItem("Calculate Folder Sizes",
+                     on_select=lambda: self._menu("calculate_folder_sizes"),
+                     enabled=has_files, shortcut=sc("calculate_folder_sizes")),
+            MenuItem("Compute Values", on_select=lambda: self._menu("compute_values"),
+                     enabled=has_files, shortcut=sc("compute_values")),
             MenuItem("Reverse Sort", on_select=self._toggle_reverse,
                      checked=lambda: self.active_pane()["sort_reverse"]),
             MenuItem("Sort By", submenu=sort_menu),
@@ -5619,10 +5669,113 @@ class XeFMApp:
         self.panel.dispatch_event(event)
         return True
 
+    def choose_layout(self) -> None:
+        """View > Layout…: how the active pane draws its rows (#756). The
+        choice is the tab's, kept across sessions; "Automatic" hands it back to
+        ``LAYOUT_RULES``."""
+        pane = self.active_pane()
+        picked = layouts.get(pane.get("_layout_auto")) or layouts.get(layouts.DEFAULT)
+        rows = [("", f"Automatic ({picked.label})")]
+        rows += [(layout.name, layout.label) for layout in layouts.all_layouts()]
+
+        def chosen(value) -> None:
+            if value is not None:
+                self._set_layout(pane, value or None)
+            self.panel.render()
+
+        show_choice_dialog(self.panel, "Layout", rows,
+                           current=pane.get("layout") or "", on_result=chosen)
+        self.panel.render()
+
+    def _set_layout(self, pane: dict, name: str | None) -> None:
+        """Fix ``pane``'s layout to ``name``, or None to follow the rules."""
+        pane["layout"] = name
+        suffix = "" if name else " (automatic)"
+        self.log_info(f"Layout: {layouts.effective(pane).label}{suffix}")
+        self.panel.render()
+
+    def _layout_menu(self) -> Menu:
+        """View > Layout ▸ — the same choice as :meth:`choose_layout`, rebuilt
+        on open so a config reload's layouts appear in it."""
+        def is_current(name):
+            return lambda: self.active_pane().get("layout") == name
+        return Menu(
+            MenuItem("Automatic", on_select=lambda: self._set_layout(self.active_pane(), None),
+                     checked=is_current(None)),
+            SEPARATOR,
+            *[MenuItem(layout.label,
+                       on_select=(lambda n=layout.name: self._set_layout(self.active_pane(), n)),
+                       checked=is_current(layout.name))
+              for layout in layouts.all_layouts()],
+            title="Layout")
+
+    def calculate_folder_sizes(self) -> None:
+        """Count the total size of the selected folders — the one under the
+        cursor when nothing is selected, every folder here when that is a file
+        — and show it in the size column. That is the ``total_size``
+        attribute, computed only on request because it walks the whole tree.
+        Leaving the directory stops it."""
+        pane = self.active_pane()
+        records = {str(p): a for p, a in pane.get("_listing_entries") or ()}
+
+        def is_dir(p) -> bool:
+            return bool(records.get(str(p), {}).get("is_dir"))
+
+        selected = [f for f in pane["files"] if str(f) in pane["selected_files"]]
+        focused = self._focused_entry()
+        if selected:
+            dirs = [p for p in selected if is_dir(p)]
+        elif focused is not None and is_dir(focused):
+            dirs = [focused]
+        else:
+            dirs = [p for p in pane["files"] if is_dir(p)]
+        if not dirs:
+            self.log_info("No folder to calculate")
+            return
+        self.log_info(f"Calculating the size of {len(dirs)} folder(s)…")
+
+        def done(count: int, cancelled: bool) -> None:
+            if cancelled:
+                self._call_later(lambda: self.log_info("Folder sizes: stopped"))
+            else:
+                self._call_later(lambda: self.log_info(
+                    f"Folder sizes: {count} folder(s) calculated"))
+
+        attributes.store_of(pane).request("total_size", dirs, records, on_done=done)
+
+    def compute_values(self) -> None:
+        """Compute the on-request attributes the active pane's layout shows —
+        an ``ATTRIBUTES`` entry with ``'compute': 'on_request'``, and folder
+        totals — for the selection, or the entry under the cursor."""
+        pane = self.active_pane()
+        records = {str(p): a for p, a in pane.get("_listing_entries") or ()}
+        targets = self._selected_or_focused(pane)
+        names = sorted(n for n in layouts.effective(pane).attributes()
+                       if (a := attributes.get(n)) is not None
+                       and a.compute == "on_request")
+        if not targets or not names:
+            self.log_info("Nothing to compute: the layout shows no value "
+                          "computed on request")
+            return
+        store = attributes.store_of(pane)
+        for name in names:
+            label = attributes.get(name).label
+
+            def done(count: int, cancelled: bool, label=label) -> None:
+                self._call_later(lambda: self.log_info(
+                    f"{label}: {'stopped' if cancelled else f'{count} computed'}"))
+
+            store.request(name, targets, records, on_done=done)
+        self.log_info(f"Computing {', '.join(attributes.get(n).label for n in names)} "
+                      f"for {len(targets)} item(s)…")
+
     def reread(self) -> None:
         """Read both panes' directories again — Total Commander's F2. File
         monitoring usually makes it unnecessary; it is for a location nothing
-        watches (a network share, a remote) and for a listing in doubt."""
+        watches (a network share, a remote) and for a listing in doubt. Every
+        attribute value is asked for again too (#633)."""
+        attributes.store_of(self.pm.left_pane).clear()
+        attributes.store_of(self.pm.right_pane).clear()
         self._relist(self.pm.left_pane)
         self._relist(self.pm.right_pane)
         self.log_info("Re-read both panes")
@@ -6017,18 +6170,57 @@ class XeFMApp:
         the key, Left/Right the order, F/E/S/T apply a key directly, with an
         example of the resulting order at the bottom (issue #237)."""
         pane = self.active_pane()
+        overlay = self._sort_overlay(pane)
 
         def on_result(result) -> None:
             if result is not None:
-                pane["sort_mode"], pane["sort_reverse"] = result
+                mode, reverse = result
+                if mode.startswith(self._ATTR_SORT):
+                    pane["sort_overlay"] = {"attr": mode[len(self._ATTR_SORT):],
+                                            "reverse": reverse,
+                                            "path": str(pane["path"])}
+                else:
+                    pane["sort_mode"], pane["sort_reverse"] = mode, reverse
+                    pane["sort_overlay"] = None
                 self._resort(pane)
                 self.log_info(f"Sort: {self.flm.get_sort_description(pane)}")
             self.panel.render()
 
-        show_sort_dialog(self.panel, mode=pane["sort_mode"],
-                         reverse=pane["sort_reverse"],
+        if overlay is not None:
+            mode, reverse = self._ATTR_SORT + overlay[0], overlay[2]
+        else:
+            mode, reverse = pane["sort_mode"], pane["sort_reverse"]
+        show_sort_dialog(self.panel, mode=mode, reverse=reverse,
+                         extra=self._attribute_sort_rows(pane),
                          region=self._active_pane_region(), on_result=on_result)
         self.panel.render()
+
+    #: The sort dialog's mode prefix for an attribute sort (``attr:git.status``).
+    _ATTR_SORT = "attr:"
+
+    def _attribute_sort_rows(self, pane: dict) -> list:
+        """The sort dialog's rows for the pane's layout: one per column whose
+        attribute is not already a sort key, offered once every row has its
+        value (an on-request one at once — rows not computed go last)."""
+        layout = layouts.effective(pane)
+        store = attributes.store_of(pane)
+        entries = pane.get("_listing_entries") or ()
+        records = {str(p): a for p, a in entries}
+        files = pane.get("files") or []
+        rows, seen = [], set()
+        for col in layout.columns:
+            name = col.attr
+            attr = attributes.get(name)
+            if attr is None or name in seen or name in attributes.SORT_MODE_OF:
+                continue
+            seen.add(name)
+            ready = store.ready(name, files, records)
+            note = ("this folder only" if ready
+                    else "still computing — this folder only")
+            if attr.compute == "on_request":
+                note = "this folder only — rows not calculated go last"
+            rows.append((self._ATTR_SORT + name, attr.label, ready, note))
+        return rows
 
     #: Keyboard nudge for the pane boundary / log height (fraction of the split),
     #: and the page size (lines) for keyboard log scrolling.
@@ -6110,6 +6302,7 @@ class XeFMApp:
         same mode again toggles the sort direction.
         The current reverse setting is kept when switching to a new mode."""
         pane = self.active_pane()
+        pane["sort_overlay"] = None
         if pane["sort_mode"] == mode:
             pane["sort_reverse"] = not pane["sort_reverse"]
         else:
@@ -6119,6 +6312,7 @@ class XeFMApp:
 
     def _set_sort(self, mode: str) -> None:
         pane = self.active_pane()
+        pane["sort_overlay"] = None
         pane["sort_mode"] = mode
         self._resort(pane)
         self.log_info(f"Sort: {self.flm.get_sort_description(pane)}")
@@ -6126,6 +6320,11 @@ class XeFMApp:
 
     def _toggle_reverse(self) -> None:
         pane = self.active_pane()
+        if self._sort_overlay(pane) is not None:
+            pane["sort_overlay"]["reverse"] = not pane["sort_overlay"]["reverse"]
+            self._resort(pane)
+            self.panel.render()
+            return
         pane["sort_reverse"] = not pane["sort_reverse"]
         self._resort(pane)
         self.log_info(f"Sort: {self.flm.get_sort_description(pane)}")
@@ -6578,12 +6777,10 @@ class XeFMApp:
             if tag.name.casefold() not in seen:
                 seen.add(tag.name.casefold())
                 out.append(tag)
-        for view in (self.left_view, self.right_view):
-            cache = getattr(view, "tag_cache", None)
-            for key, tag in list(cache.seen.items()) if cache else []:
-                if key not in seen:
-                    seen.add(key)
-                    out.append(tag)
+        for key, tag in list(tags.SEEN.items()):
+            if key not in seen:
+                seen.add(key)
+                out.append(tag)
         return out
 
     def _remember_tags(self, applied: list) -> None:
@@ -6599,9 +6796,7 @@ class XeFMApp:
                  if not (isinstance(i, list) and i
                          and str(i[0]).casefold() == tag.name.casefold())]
         self.state_manager.set_state("tags.known", known)
-        for view in (self.left_view, self.right_view):
-            if getattr(view, "tag_cache", None):
-                view.tag_cache.seen.pop(tag.name.casefold(), None)
+        tags.SEEN.pop(tag.name.casefold(), None)
         self.log_info(f"Forgot tag {tag.name} (files keep it)")
         return True
 
@@ -6671,9 +6866,9 @@ class XeFMApp:
             for line in res.get("failed", []):
                 self.log_info(f"Tags not changed: {line}")
             self.log_info(message + f" ({res.get('changed', 0)} item(s))")
-            for view in (self.left_view, self.right_view):
-                if getattr(view, "tag_cache", None):
-                    view.tag_cache.forget(targets)
+            for side in ("left", "right"):
+                for tab in self.pm.tabs[side]:
+                    attributes.store_of(tab).forget(targets, "tags")
             self.panel.render()
 
         if store.cheap:
@@ -11898,10 +12093,21 @@ class XeFMApp:
             self._ask_keymap_preset()
         else:
             self._maybe_show_startup_tip()
+        self._layout_refresh_tick(first=True)
         try:
             self.backend.run_event_loop(self.on_event)
         finally:
             self._restore_streams()
+
+    def _layout_refresh_tick(self, first: bool = False) -> None:
+        """Repaint while a pane draws a column that goes stale on its own — a
+        relative time ("5 min ago") — at the shortest interval one asked for;
+        otherwise just look again later."""
+        due = [v.refresh_interval for v in (self.left_view, self.right_view)
+               if v.refresh_interval]
+        if due and not first:
+            self.panel.render()
+        self.panel.call_later(min(due) if due else 30.0, self._layout_refresh_tick)
 
     def _restore_streams(self) -> None:
         """Put the real stdout/stderr back so anything printed after the event

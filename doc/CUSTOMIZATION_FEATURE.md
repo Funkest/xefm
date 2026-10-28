@@ -16,7 +16,8 @@ English \| [日本語](CUSTOMIZATION_FEATURE.ja.md)
 > `ctx.message`, `ctx.action_names`; and `xefm_tool`, `xefm_python` and
 > `is_desktop_mode` for `PROGRAMS`.
 >
-> Preview: `EVENT_HOOKS`, `MENU_ITEMS`, `IMAGE_DECODERS`, `LEXERS`, the
+> Preview: `EVENT_HOOKS`, `MENU_ITEMS`, `IMAGE_DECODERS`, `LEXERS`,
+> `ATTRIBUTES`, `LAYOUTS`, `LAYOUT_RULES`, `entry.attr`, `Cell`, the
 > prompts (`ctx.input` / `choose` / `confirm`), `ctx.run_task`,
 > `ctx.show_markdown`, `ctx.copy_text`, `ctx.actions` and `pane.open_list`. A config that
 > uses a Preview table gets one line in the log pane saying so, and the first
@@ -791,6 +792,18 @@ Like a sort key, `match` may run on a background thread, so keep it to
 arithmetic, strings and quick filesystem questions.
 
 ---
+
+## What the file list shows: `ATTRIBUTES`, `LAYOUTS` and `LAYOUT_RULES` (Preview)
+
+`ATTRIBUTES` adds values XeFM can know about each entry — a Git status, a line
+count — computed by your functions in the background. `LAYOUTS` decides which
+columns a row has, how each value is written and what marks the names, and
+`LAYOUT_RULES` which layout a folder gets. They have a page of their own:
+[File List Layouts](FILE_LIST_LAYOUTS_FEATURE.md).
+
+Any of your functions can read a value XeFM already has with
+`entry.attr('git')`. It never computes one and never waits — it is `None`
+until the value is there — so it is as cheap in an action as in a sort key.
 
 ## Your own picture formats: `IMAGE_DECODERS` (Preview)
 

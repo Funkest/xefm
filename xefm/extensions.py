@@ -170,10 +170,12 @@ CONTRIBUTION_TABLES = {
     "lexers": "LEXERS",
     "themes": "THEMES",
     "menus": "MENU_ITEMS",
+    "attributes": "ATTRIBUTES",
+    "layouts": "LAYOUTS",
 }
 #: Kinds whose entries may be plain data rather than a code reference — the
 #: tier that runs no code at all.
-_DATA_KINDS = {"themes", "filters", "lexers", "menus"}
+_DATA_KINDS = {"themes", "filters", "lexers", "menus", "layouts"}
 
 _KNOWN_SECTIONS = {"extension", "contributes", "requires", "settings"}
 _KNOWN_EXTENSION_KEYS = {"id", "version", "api_version", "min_xefm", "name",
@@ -280,12 +282,23 @@ class Manifest:
 def _refs_in(value) -> list[tuple[str, str]]:
     """The code references inside one contribution value: the value itself
     when it is a reference string, its ``entry`` when it is a table, each item
-    when it is a list (an event's hooks)."""
+    when it is a list (an event's hooks). An attribute's ``directory`` and a
+    layout's ``format``, in its columns and their markers, are references
+    too."""
     if isinstance(value, str):
         return [("", value)] if ":" in value else []
     if isinstance(value, dict):
-        entry = value.get("entry")
-        return [(".entry", entry)] if isinstance(entry, str) else []
+        out = []
+        for key in ("entry", "directory", "format"):
+            ref = value.get(key)
+            if isinstance(ref, str) and (key == "entry" or ":" in ref):
+                out.append((f".{key}", ref))
+        for key in ("columns", "markers"):
+            items = value.get(key)
+            if isinstance(items, list):
+                out += [(f".{key}" + sub, ref) for sub, ref in _refs_in(items)
+                        if sub]
+        return out
     if isinstance(value, list):
         out = []
         for i, item in enumerate(value):
@@ -997,6 +1010,22 @@ def _check_contribution(kind: str, key: str, value, action_names: set) -> Option
         return "must be 'module:function' or { entry = ..., description = ... }"
     if kind == "menus":
         return _check_menu(key, value, action_names)
+    if kind == "attributes":
+        # Its own table — 'entry' here is the provider, beside the rest of the
+        # attribute, not the "this table is a reference" shorthand.
+        if isinstance(value, str):
+            return None if ":" in value else "must be a table or 'module:name'"
+        if not isinstance(value, dict):
+            return "must be a table with entry or directory = 'module:function'"
+        from xefm.user_api import TABLE_KEYS
+        unknown = sorted(set(value) - set(TABLE_KEYS["ATTRIBUTES"]))
+        if unknown:
+            return (f"unknown keys {', '.join(unknown)} — known: "
+                    f"{', '.join(TABLE_KEYS['ATTRIBUTES'])}")
+        refs = [value[k] for k in ("entry", "directory") if k in value]
+        if len(refs) != 1 or not isinstance(refs[0], str) or ":" not in refs[0]:
+            return "needs exactly one of entry or directory = 'module:function'"
+        return None
     if kind == "event_hooks":
         from xefm.user_api import EVENTS
         if key not in EVENTS:
@@ -2088,6 +2117,15 @@ def _value_for(kind: str, value, manifest: Manifest, handle: ExtensionHandle,
         items = value if isinstance(value, list) else [value]
         return [_in_extension(handle, _import_ref(root, ref), missing=missing)
                 for ref in items]
+    if kind == "attributes" and isinstance(value, dict):
+        spec = dict(value)
+        for k in ("entry", "directory"):
+            if k in spec:
+                spec[k] = _in_extension(handle, _import_ref(root, spec[k]),
+                                        missing=missing)
+        return spec
+    if kind == "layouts" and isinstance(value, dict):
+        return _layout_refs(value, root, handle, missing)
     if isinstance(value, dict) and "entry" in value:
         return _import_ref(root, value["entry"])
     if isinstance(value, str) and ":" in value and kind != "lexers":
@@ -2095,6 +2133,30 @@ def _value_for(kind: str, value, manifest: Manifest, handle: ExtensionHandle,
     if kind == "lexers" and isinstance(value, str) and _REF_RE.match(value):
         return _import_ref(root, value)
     return value
+
+
+def _layout_refs(spec: dict, root, handle, missing: list) -> dict:
+    """A ``[contributes.layouts]`` table with each ``format = 'module:function'``
+    in its columns and markers imported — a built-in format is a plain name
+    and has no colon."""
+    def fmt(item):
+        if isinstance(item, dict) and isinstance(item.get("format"), str) \
+                and ":" in item["format"]:
+            item = dict(item)
+            item["format"] = _in_extension(handle, _import_ref(root, item["format"]),
+                                           missing=missing)
+        return item
+
+    spec = dict(spec)
+    columns = []
+    for col in spec.get("columns") or ():
+        col = fmt(col)
+        if isinstance(col, dict) and col.get("markers"):
+            col = dict(col)
+            col["markers"] = [fmt(m) for m in col["markers"]]
+        columns.append(col)
+    spec["columns"] = columns
+    return spec
 
 
 def load(config, layout: Layout | None = None, *,

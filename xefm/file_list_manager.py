@@ -98,7 +98,7 @@ class FileListManager:
                            if k in keys}
 
     def compute_listing(self, path, *, filter_pattern=None, sort_mode='filename',
-                        sort_reverse=False):
+                        sort_reverse=False, overlay=None):
         """Read ``path`` and return its listing as a plain dict — **no pane
         mutation**, so this is safe to call on a worker thread.
 
@@ -130,7 +130,7 @@ class FileListManager:
 
             return self._assemble_listing(
                 all_entries, filter_pattern=filter_pattern,
-                sort_mode=sort_mode, sort_reverse=sort_reverse)
+                sort_mode=sort_mode, sort_reverse=sort_reverse, overlay=overlay)
 
         except ArchiveNavigationError as e:
             # Archive navigation error - path doesn't exist in archive
@@ -178,7 +178,7 @@ class FileListManager:
     def compute_virtual_listing(self, paths, *, filter_pattern=None,
                                 sort_mode='filename', sort_reverse=False,
                                 rel_root=None, derive_root=False, cancel=None,
-                                entries=None):
+                                entries=None, overlay=None):
         """Build a listing dict from an explicit list of ``Path`` objects — a
         virtual pane (a search-results feed, an imported list) — instead of
         reading a directory. **No pane mutation**, so a worker thread can call
@@ -216,7 +216,8 @@ class FileListManager:
                 [p for p, _ in probed.entries]) or name_key.WHOLE_PATH
         result = self._assemble_listing(
             probed.entries, filter_pattern=filter_pattern,
-            sort_mode=sort_mode, sort_reverse=sort_reverse, rel_root=rel_root)
+            sort_mode=sort_mode, sort_reverse=sort_reverse, rel_root=rel_root,
+            overlay=overlay)
         result['root'] = rel_root
         result['survivors'] = [p for p, _ in probed.entries]
         result['missing'] = probed.missing
@@ -224,7 +225,8 @@ class FileListManager:
         return result
 
     def _assemble_listing(self, entries, *, filter_pattern=None,
-                          sort_mode='filename', sort_reverse=False, rel_root=None):
+                          sort_mode='filename', sort_reverse=False, rel_root=None,
+                          overlay=None):
         """Turn ``[(Path, attrs), …]`` into a listing dict: apply the filename
         filter, sort, and build the display cache — all from ``attrs``, with no
         filesystem access at all.
@@ -252,6 +254,8 @@ class FileListManager:
             paths = self._apply_filter_pattern(paths, attrs, filter_pattern)
 
         files = self.sort_entries(paths, sort_mode, sort_reverse, attrs=attrs)
+        if overlay is not None:
+            files = self._sort_by_overlay(files, attrs, overlay)
         return {"ok": True, "files": files,
                 "file_info": self._build_file_info(files, attrs=attrs),
                 "entries": entries}
@@ -310,7 +314,7 @@ class FileListManager:
 
     def recompute_from_snapshot(self, entries, *, filter_pattern=None,
                                 sort_mode='filename', sort_reverse=False,
-                                rel_root=None):
+                                rel_root=None, overlay=None):
         """:meth:`recompute_listing` with the pane taken out of it — every input
         passed in, nothing read from pane state, so a worker thread can call it.
 
@@ -320,7 +324,38 @@ class FileListManager:
         be able to hold the UI thread."""
         return self._assemble_listing(
             entries, filter_pattern=filter_pattern,
-            sort_mode=sort_mode, sort_reverse=sort_reverse, rel_root=rel_root)
+            sort_mode=sort_mode, sort_reverse=sort_reverse, rel_root=rel_root,
+            overlay=overlay)
+
+    def _sort_by_overlay(self, files, attrs, overlay):
+        """Re-order an already sorted listing by an attribute's values — the
+        sort a pane puts over its own for this directory only.
+
+        ``overlay`` is ``(name, values, reverse)``, ``values`` a snapshot of
+        what the pane already had (``{str(path): value}``): nothing here
+        computes one. Directories still lead; within each group the rows with a
+        value come in its order, then the rest, last whichever way the sort
+        runs, in the order the pane's own sort gave them. Values that will not
+        compare lose the overlay rather than the listing, logged once."""
+        from xefm import attributes
+        name, values, reverse = overlay
+        attr = attributes.get(name)
+        kind = attr.type if attr is not None else "text"
+
+        def group(members):
+            known = [e for e in members if values.get(str(e)) is not None]
+            rest = [e for e in members if values.get(str(e)) is None]
+            known.sort(key=lambda e: attributes.sort_key(kind, values[str(e)]),
+                       reverse=reverse)
+            return known + rest
+
+        try:
+            dirs = [e for e in files if attrs.get(str(e), {}).get('is_dir')]
+            others = [e for e in files if not attrs.get(str(e), {}).get('is_dir')]
+            return group(dirs) + group(others)
+        except Exception as e:
+            self.logger.error(f"Sort by '{name}' failed ({e}); keeping the pane's own order")
+            return files
 
     def _build_file_info(self, files, attrs=None):
         """Populate the per-entry display cache (size/date strings, is_dir) once
@@ -549,6 +584,12 @@ class FileListManager:
         """Get a human-readable description of the current sort mode, using the
         same key names the sort dialog and the menu show (Filename / Extension /
         Size / Timestamp)."""
+        overlay = pane_data.get('sort_overlay')
+        if overlay and overlay.get('path') == str(pane_data.get('path')):
+            from xefm import attributes
+            attr = attributes.get(overlay['attr'])
+            arrow = '↓' if overlay['reverse'] else '↑'
+            return f"{attr.label if attr else overlay['attr']} {arrow} (this folder)"
         mode = pane_data['sort_mode']
         reverse = pane_data['sort_reverse']
 
