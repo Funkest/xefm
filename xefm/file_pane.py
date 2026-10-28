@@ -828,25 +828,35 @@ class FilePane(Widget):
     def _marker_groups(self, markers, side, value_of, row_for, entry_factory,
                        measure) -> list:
         """The non-empty markers on ``side`` as ``[(cells, width)]``, each cut to
-        its ``max_width``. A marker with nothing to say takes no room at all."""
+        its ``max_width``. A marker with nothing to say takes no room at all.
+
+        ``max_width`` counts cells, and a glyph is counted as the whole cells it
+        rounds to: a proportional ``●`` measures a little over one cell on a GUI,
+        and must still fit a marker one cell wide (the old tag dots were capped
+        by count, three, not by width). A single glyph is never cut — eliding
+        it leaves nothing, which is how a one-cell marker vanished."""
         groups = []
         for marker, attr, resolved in markers:
             if marker.side != side:
                 continue
             cells = layouts.render(resolved, value_of(marker.attr),
                                    row_for(attr), entry_factory)
-            kept, width = [], 0.0
+            kept, width, units = [], 0.0, 0
             for cell in cells:
                 w = measure(cell.text)
-                if width + w > marker.max_width:
-                    room = marker.max_width - width
-                    if not kept and room > 0:
-                        text = elide(cell.text, room, where="end", measure=measure)
-                        kept.append(layouts.Cell(text, cell.color, cell.bold, cell.italic))
-                        width += measure(text)
+                u = max(1, round(w))
+                if units + u > marker.max_width:
+                    if not kept:
+                        if len(cell.text) > 1:
+                            text = elide(cell.text, marker.max_width, where="end",
+                                         measure=measure)
+                            cell = layouts.Cell(text, cell.color, cell.bold, cell.italic)
+                        kept.append(cell)
+                        width += measure(cell.text)
                     break
                 kept.append(cell)
                 width += w
+                units += u
             if kept:
                 groups.append((kept, width))
         return groups

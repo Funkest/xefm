@@ -329,6 +329,26 @@ class Drawing(_Tree):
         self.assertTrue(row.rstrip().endswith("10"))
         self.assertNotIn(".txt ", row.replace("a.txt", ""))   # no ext column
 
+    def test_a_one_cell_marker_survives_a_glyph_wider_than_one_cell(self):
+        """A proportional ● measures a little over a cell on a GUI; elided to
+        fit, it vanished and left only its space (hand check, 2026-10-28)."""
+        view = FilePane({"files": []}, config=_Config())
+        marker = layouts.Marker("x", side="before", max_width=1)
+        resolved = layouts.resolve_format(lambda v, e: Cell("●", color="yellow"),
+                                          attributes.Attribute("x", "X"))
+        wide = lambda s: 1.15 * len(s)   # noqa: E731
+        (group,) = view._marker_groups([(marker, None, resolved)], "before",
+                                       lambda n: "M", lambda a: layouts.Row(),
+                                       lambda: None, wide)
+        self.assertEqual([c.text for c in group[0]], ["●"])
+        dots = layouts.Marker("tags", max_width=3)
+        three = layouts.resolve_format(lambda v, e: [Cell("●")] * 5,
+                                       attributes.Attribute("tags", "T"))
+        (group,) = view._marker_groups([(dots, None, three)], "after",
+                                       lambda n: 1, lambda a: layouts.Row(),
+                                       lambda: None, wide)
+        self.assertEqual(len(group[0]), 3)   # by count, as the tag dots were
+
     def test_a_column_with_a_priority_goes_first_on_a_narrow_pane(self):
         _load(LAYOUTS={"two": {"columns": ["name", {"attr": "mtime", "priority": 1},
                                            "size"]}})
