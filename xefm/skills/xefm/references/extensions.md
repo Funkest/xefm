@@ -234,8 +234,11 @@ The public names:
 - `md_code_block(text, lang="")` and `md_escape(text)` (Preview; import them from
   `xefm.user_api`) — build that Markdown safely: a code block whose fence no
   line of `text` can close, and a file name escaped for prose
-- `ctx.input(prompt, default="", *, title="", on_accept=None, on_cancel=None)`
-  (Preview)
+- `ctx.input(prompt, default="", *, title="", on_accept=None, on_cancel=None,
+  complete=None)` (Preview) — `complete="path"` or `"directory"` adds the Tab
+  path completion the built-in dialogs use, remote paths included; a relative
+  path (`./x`, `x`) completes against the active pane's directory, and the
+  answer is the text as typed (join it to `ctx.pane.path` yourself)
 - `ctx.choose(title, items, *, type="choice", on_result=None)` (Preview) — `type` is
   `"choice"` or `"filter"`; `on_result` gets the index or `None`
 - `ctx.confirm(prompt, *, title="Confirm", on_result=None)` (Preview) — `on_result` gets

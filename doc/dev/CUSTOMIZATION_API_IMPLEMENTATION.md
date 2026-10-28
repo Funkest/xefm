@@ -311,6 +311,52 @@ modal to build that on — every dialog is a layer pushed onto the panel with an
 been a nested event loop, which is a much larger commitment than a preview API
 should make.
 
+### `input(complete=...)` is the built-in dialogs' completer (#717)
+
+`complete="path"` / `"directory"` hands `show_input` a `FilepathCompleter`
+built the way Jump to Path builds one: the active pane's directory as the base,
+the panes' hidden-files toggle, `directories_only` for `"directory"`. Remote
+completion (#674) comes with it. The base is what makes `./` mean the current
+pane's directory — the ask from #528, which had imported
+`xefm.completion.FilepathCompleter` itself. The answer is not resolved: a
+config may want the typed text for something other than a path, and
+resolving is one join against `ctx.pane.path`. The value is a string rather
+than a `bool` so other kinds of completion can join it without a second
+keyword.
+
+**How `complete=` can grow (not built).** Nothing asks for more yet; when
+something does, widen the accepted types and keep the strings as shorthand.
+That stays compatible: today's calls keep working, the API snapshot records the
+keyword's name and default rather than its accepted types, and an older XeFM
+handed a new form fails the `in ("path", "directory")` check as a logged
+`ValueError`, not a crash.
+
+- **Options for path completion** — a base other than the active pane, a
+  hidden-files choice of the caller's own. Prefer a small public class in
+  `xefm.user_api`, say `PathCompletion(base=..., directories_only=...,
+  hidden=...)`, starting `@preview` like `ActionInfo`, over a dict such as
+  `{"kind": "path", "base": ...}`. A dict would match the tables' dict forms,
+  but its keys go unchecked until use, a misspelt one is silently ignored, and
+  pinning them would need a `TABLE_KEYS`-style schema of their own; a class
+  validates when it is built and shows up in `help()`. `"path"` would then
+  mean `PathCompletion()`.
+- **Completion that is not paths** — tag names, hosts, a config's own
+  vocabulary. Take a plain callable, `fn(text) -> list[str]`, and wrap it in
+  a `Completer` inside `ActionContext.input`.
+
+Two rules hold whichever form arrives:
+
+- **Nothing internal crosses the façade.** Do not accept
+  `xefm.completion.FilepathCompleter` or PuiKit's `Completer` protocol as the
+  argument: either would freeze the completion internals and PuiKit's
+  interface into the public API. Only a type defined in `xefm.user_api`, or a
+  plain function, goes in.
+- **A completion callable runs off the UI thread.** `show_input` drives its
+  completer through `CompletionController(..., threaded=True)`, so an
+  extension's function would be called on a worker thread. It must not touch
+  `ctx`, the same rule as `run_task`'s `work`, and the user docs must say so
+  where the callable form is introduced.
+
 ### `run_program` shares the picker's launcher
 
 `ctx.run_program()` is the `PROGRAMS` picker's launch path with the argv
