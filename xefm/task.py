@@ -426,7 +426,7 @@ class TaskManager:
         self._finish(task)
         if job.on_done is not None:
             try:
-                job.on_done(task.result or _empty_result())
+                job.on_done(_result_of(task))
             except Exception as exc:  # noqa: BLE001 — logged, teardown completes
                 logger.error(f"Task completion callback failed: {exc}")
         self._start_next()
@@ -523,7 +523,7 @@ class TaskManager:
             task.result = run(task)
         except BaseException as exc:  # noqa: BLE001
             task.error = exc
-        return task.result or _empty_result()
+        return _result_of(task)
 
     def _finish(self, task: Task) -> None:
         if task.error is not None:
@@ -538,6 +538,15 @@ class TaskManager:
 
 def _empty_result() -> dict:
     return {"done": 0, "skipped": 0, "failed": 0, "cancelled": False}
+
+
+def _result_of(task: Task) -> dict:
+    """What a finished task hands its ``on_done``: its result, and under
+    ``"error"`` the exception its worker raised, if it raised."""
+    result = task.result or _empty_result()
+    if task.error is not None:
+        result = dict(result, error=task.error)
+    return result
 
 
 def transfer_bytes_text(transfer: dict) -> str:

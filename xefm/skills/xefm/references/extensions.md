@@ -166,8 +166,8 @@ modules, and from each only the names in its `__all__`:
 
 - `xefm.user_api.__all__` — `API_VERSION`, `PREVIEW_APIS`,
   `DEPRECATED_APIS`, `ActionContext`, `PaneApi`, `EntryInfo`, `HookEvent`, `extension`,
-  `TaskJob`, `TaskOutcome`, `ActionInfo`, `md_code_block`, `md_escape`, `xefm_tool`,
-  `xefm_python`, `is_desktop_mode`
+  `TaskJob`, `TaskOutcome`, `ItemResult`, `ActionInfo`, `md_code_block`,
+  `md_escape`, `xefm_tool`, `xefm_python`, `is_desktop_mode`
 - `xefm.path_base.__all__` — `ReadOnlyPathImpl`, `UriPathImpl`,
   `UriStatResult`
 
@@ -230,6 +230,13 @@ The public names:
   (Preview) first. Pass `**ctx.program_env()` (Preview, `{'cwd', 'env'}` with
   the `XEFM_*` variables) to the `subprocess` call. Never run an interactive
   program with `subprocess` outside this block
+- `ctx.copy(items, dest, *, on_done=None)` / `ctx.move(...)` (Preview) — copy
+  or move files through XeFM's own operation (confirmation, conflict dialog,
+  progress, job queue). `items`: `EntryInfo`s, paths or absolute strings —
+  pass `ctx.pane.selected()` or `[ctx.pane.focused]` yourself. Returns at
+  once; `on_done(ctx, outcome)` gets a `TaskOutcome` whose `value` is a list
+  of `ItemResult` (`source`, `dest`, `status` done/skipped/failed, `errors`).
+  Never copy or move files with `shutil` or the path's own methods instead
 - `ctx.run_task(title, work, *, on_done=None, read_only=False)` (Preview) — run
   `work(job)` on a worker thread behind XeFM's progress dialog (Cancel, Run in
   background); see *Long work* below

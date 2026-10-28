@@ -205,6 +205,8 @@ ACTIONS = {
 | `ctx.choose(title, items, on_result=fn)` | （プレビュー）リストから選んでもらう（インデックス、または `None`）。`type='filter'` で検索できるリストになる |
 | `ctx.confirm(prompt, on_result=fn)` | （プレビュー）はい / いいえ |
 | `ctx.run_program(command, terminal=False)` | 外部プログラムを実行 — 後述 |
+| `ctx.copy(items, dest, on_done=fn)` | （Preview）**File → Copy to Other Pane** と同じように（確認、競合ダイアログ、進捗付きで）ファイルをコピーし、それぞれの結果を受け取る — 後述 |
+| `ctx.move(items, dest, on_done=fn)` | （Preview）同じく移動 |
 | `ctx.terminal_backend_suspended()` | （Preview）`subprocess` で対話的なプログラムを自分で実行するための `with` ブロック — 後述 |
 | `ctx.program_env()` | （Preview）`subprocess` に渡す `{'cwd': ..., 'env': ...}`。`run_program` がプログラムに渡すものと同じ |
 | `ctx.is_terminal_backend` | （Preview）XeFM がターミナルで動いていて、引き渡すターミナルがあるかどうか |
@@ -361,6 +363,26 @@ def fuzzy_cd(ctx):
 - デスクトップアプリには引き渡すターミナルがないため、そこではこのブロックはエラーになります。先に `ctx.is_terminal_backend` を確かめてください。
 
 `ctx` のほかのすべてと同じく、これらはアクションが動く UI スレッドでのみ使えます。`ctx.run_task` の処理の中や、自分で立てたスレッドからは使えません。
+
+### ファイルのコピーと移動（Preview）
+
+`ctx.copy(items, dest)` と `ctx.move(items, dest)` は、**File → Copy to Other Pane** や **File → Move to Other Pane** と同じ操作を実行します。確認、名前が既にある場合の競合ダイアログ、**Cancel** と **Run in background** の付いた進捗ダイアログも同じです。対象のアイテムとコピー先は自分で決めます。
+
+```python
+def backup_selection(ctx):
+    def done(ctx, outcome):
+        if outcome.status == 'done':
+            failed = [r for r in outcome.value if r.status == 'failed']
+            ctx.message(f'Backed up {len(outcome.value) - len(failed)} item(s)')
+
+    ctx.copy(ctx.pane.selected(), '/Volumes/Backup/inbox', on_done=done)
+```
+
+- `items` には、`ctx.pane.selected()` が返すもの、パス、絶対パスの文字列を渡せます。カーソル位置のアイテムに自動で切り替わることはありません。それが必要なら、自分で `[ctx.pane.focused]` を渡してください。
+- `dest` はフォルダーで、なければ作成されます。SSH や S3 の上でもかまいませんが、アーカイブの中は指定できません。また、アイテムをそれ自身のフォルダーにはコピーできません。どちらも呼び出した時点でエラーになります。
+- 呼び出しはすぐに戻ります。`on_done(ctx, outcome)` は、操作が終わったときに新しい `ctx` を渡して実行されます。ジョブキューで待った場合やバックグラウンドで実行した場合も同じです。
+  - `outcome.status` は `'done'`、`'cancelled'`（確認、競合ダイアログ、実行中のいずれかで取り消した場合）、`'failed'`（操作自体が失敗した場合。理由は `outcome.error`）のいずれかです。
+  - `outcome.value` は、アイテムごとの結果を渡した順に並べたリストです。`r.source`、`r.dest`、`r.status`（`'done'`、競合ダイアログでの `'skipped'`、`'failed'`）、`r.errors`（その下で起きた失敗の `(name, message)` の組）を持ちます。ほとんどのファイルをコピーできたフォルダーは `'done'` になり、コピーできなかったものは `r.errors` に入ります。
 
 ### 自分のファイルリストを開く（Preview）
 

@@ -2095,6 +2095,8 @@ class XeFMApp:
         # it on the monitoring pump. Redirected last, once everything above has
         # initialized, and undone in ``run``'s finally.
         self._log_queue: queue.Queue = queue.Queue()
+        #: Callables :meth:`_call_later` queued for the UI thread's next pump.
+        self._later: queue.Queue = queue.Queue()
         #: The thread that builds the app runs its event loop and is the only
         #: one that may touch the LogView; ``log_info`` queues from any other.
         self._ui_thread = threading.current_thread()
@@ -2740,8 +2742,33 @@ class XeFMApp:
         synced = self._pump_python_packages()
         updates = self._pump_extension_updates()
         fetched = self._pump_extension_fetch()
+        later = self._pump_later()
         return (listed or loading or captured or scans or trees or tagged or synced
-                or updates or fetched)
+                or updates or fetched or later)
+
+    def _call_later(self, fn: "Callable[[], None]") -> None:
+        """Run ``fn`` on the UI thread on a later pump, never inside the current
+        call — what lets a public API promise its ``on_done`` never runs before
+        the call that took it returns (#716). Callable from any thread."""
+        self._later.put(fn)
+        self._wake_pump()
+
+    def _pump_later(self) -> bool:
+        """UI thread: run what :meth:`_call_later` queued. Returns True if
+        anything ran, so the pump repaints."""
+        ran = False
+        later = getattr(self, "_later", None)
+        while later is not None:
+            try:
+                fn = later.get_nowait()
+            except queue.Empty:
+                return ran
+            ran = True
+            try:
+                fn()
+            except Exception as exc:  # noqa: BLE001 — one callback, not the pump
+                getLogger("Main").error(f"Deferred call failed: {exc}")
+        return ran
 
     def _on_tags_ready(self) -> None:
         """Worker thread: tags for drawn rows landed; ask for a repaint."""
@@ -9310,6 +9337,33 @@ class XeFMApp:
         op = self._fileops.copy if kind == "copy" else self._fileops.move
         op(self.panel, targets, dest_dir, on_complete=on_complete, log=self.log_info)
         return False
+
+    def _transfer_for_api(self, kind: str, targets: list, dest_dir,
+                          on_complete: "Callable[[dict], None]",
+                          on_declined: "Callable[[], None]") -> None:
+        """``ctx.copy`` / ``ctx.move`` (#716): the same operation C / M start —
+        confirmation, conflict dialog, job queue, progress — on targets and a
+        destination the caller chose, then the same completion: every pane
+        showing the destination or a moved item's directory is re-listed, the
+        summary logged and failures reported. ``on_complete(result)`` follows
+        with the service's result; ``on_declined()`` instead when the user
+        cancels at the confirmation. The caller has already checked the
+        arguments."""
+        verb = "Copy" if kind == "copy" else "Move"
+
+        def done(result: dict) -> None:
+            changed = {str(dest_dir)}
+            if kind == "move":
+                changed |= {str(t.parent) for t in targets}
+            self._relist_others_showing(changed, besides=None)
+            self.log_info(format_op_summary(verb, result))
+            self._report_op_failures(verb, result)
+            on_complete(result)
+            self.panel.render()
+
+        op = self._fileops.copy if kind == "copy" else self._fileops.move
+        op(self.panel, targets, dest_dir, on_complete=done, log=self.log_info,
+           on_declined=on_declined)
 
     def _transfer_to_path(self, kind: str) -> bool:
         """Prompt for a destination directory, then copy / move the active pane's

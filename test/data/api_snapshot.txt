@@ -117,12 +117,14 @@ preview	method	xefm.user_api.ActionContext.actions	[["self", "pk", null]]
 stable	property	xefm.user_api.ActionContext.api_version	ro
 preview	method	xefm.user_api.ActionContext.choose	[["self", "pk", null], ["title", "pk", null], ["items", "pk", null], ["type", "kw", "'choice'"], ["on_result", "kw", "None"]]
 preview	method	xefm.user_api.ActionContext.confirm	[["self", "pk", null], ["prompt", "pk", null], ["title", "kw", "'Confirm'"], ["on_result", "kw", "None"]]
+preview	method	xefm.user_api.ActionContext.copy	[["self", "pk", null], ["items", "pk", null], ["dest", "pk", null], ["on_done", "kw", "None"]]
 preview	method	xefm.user_api.ActionContext.copy_text	[["self", "pk", null], ["text", "pk", null]]
 preview	method	xefm.user_api.ActionContext.input	[["self", "pk", null], ["prompt", "pk", null], ["default", "pk", "''"], ["title", "kw", "''"], ["on_accept", "kw", "None"], ["on_cancel", "kw", "None"], ["complete", "kw", "None"]]
 stable	method	xefm.user_api.ActionContext.invoke	[["self", "pk", null], ["action_name", "pk", null]]
 preview	property	xefm.user_api.ActionContext.is_terminal_backend	ro
 stable	property	xefm.user_api.ActionContext.left	ro
 stable	method	xefm.user_api.ActionContext.message	[["self", "pk", null], ["text", "pk", null]]
+preview	method	xefm.user_api.ActionContext.move	[["self", "pk", null], ["items", "pk", null], ["dest", "pk", null], ["on_done", "kw", "None"]]
 stable	property	xefm.user_api.ActionContext.other	ro
 stable	property	xefm.user_api.ActionContext.pane	ro
 preview	method	xefm.user_api.ActionContext.program_env	[["self", "pk", null]]
@@ -149,6 +151,12 @@ stable	property	xefm.user_api.EntryInfo.size	ro
 stable	property	xefm.user_api.EntryInfo.stem	ro
 stable	property	xefm.user_api.EntryInfo.suffix	ro
 preview	class	xefm.user_api.HookEvent
+preview	class	xefm.user_api.ItemResult
+preview	attribute	xefm.user_api.ItemResult.dest
+preview	attribute	xefm.user_api.ItemResult.errors
+preview	property	xefm.user_api.ItemResult.ok	ro
+preview	attribute	xefm.user_api.ItemResult.source
+preview	attribute	xefm.user_api.ItemResult.status
 stable	data	xefm.user_api.PREVIEW_APIS	frozenset
 stable	class	xefm.user_api.PaneApi
 stable	method	xefm.user_api.PaneApi.activate	[["self", "pk", null]]
