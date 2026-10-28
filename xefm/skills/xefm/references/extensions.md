@@ -166,7 +166,7 @@ modules, and from each only the names in its `__all__`:
 
 - `xefm.user_api.__all__` — `API_VERSION`, `PREVIEW_APIS`,
   `DEPRECATED_APIS`, `ActionContext`, `PaneApi`, `EntryInfo`, `HookEvent`, `extension`,
-  `TaskJob`, `TaskOutcome`, `md_code_block`, `md_escape`, `xefm_tool`,
+  `TaskJob`, `TaskOutcome`, `ActionInfo`, `md_code_block`, `md_escape`, `xefm_tool`,
   `xefm_python`, `is_desktop_mode`
 - `xefm.path_base.__all__` — `ReadOnlyPathImpl`, `UriPathImpl`,
   `UriStatResult`
@@ -241,6 +241,9 @@ The public names:
 - `ctx.confirm(prompt, *, title="Confirm", on_result=None)` (Preview) — `on_result` gets
   `True`/`False`
 - `ctx.api_version`, `ctx.action_names()`
+- `ctx.actions()` (Preview) — the same actions as `ActionInfo` records: `name`,
+  `description`, `aliases` (old names that still resolve) and `keys` (bound in
+  the file list right now, `KEY_BINDINGS` applied; empty when unbound)
 - `extension(__name__)` (Preview) — this package's handle (below); import it from
   `xefm.user_api`
 

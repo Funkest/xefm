@@ -398,6 +398,17 @@ readable in the source.
 `ctx.copy_text(text)` is `XeFMApp._set_text_clipboard` — one clipboard, so a
 text copy clears the files XeFM was holding, as Copy Name(s) does.
 
+### `actions()` and `ActionInfo` (#718)
+
+`ctx.actions()` is `registry.actions(FILER)` — the same list, in the same order,
+as `action_names()` — with each action's keys read from `app.keys`, the
+`KeyBindings` the file list dispatches with. So `keys` is what a key press
+would do right now: the preset's table, `KEY_BINDINGS` on top, a scoped
+`'filer.<action>'` rebind honored. `ActionInfo` is a slotted record built per
+call rather than the registry's own `Action`, which carries `func`, `source`
+and the template-key machinery an extension has no business holding on to.
+`action_names()` stays as it is: it is stable, and this is not yet.
+
 ### `MENU_ITEMS`: XeFM places the item (#632)
 
 Keyed by action name, `{"menus": [...], "label": ..., "when": ...}`, loaded by

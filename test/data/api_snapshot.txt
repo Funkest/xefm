@@ -113,6 +113,7 @@ stable	constructor	xefm.path_base.UriStatResult.__init__	[["self", "pk", null], 
 stable	version	xefm.user_api.API_VERSION	1
 stable	class	xefm.user_api.ActionContext
 stable	method	xefm.user_api.ActionContext.action_names	[["self", "pk", null]]
+preview	method	xefm.user_api.ActionContext.actions	[["self", "pk", null]]
 stable	property	xefm.user_api.ActionContext.api_version	ro
 preview	method	xefm.user_api.ActionContext.choose	[["self", "pk", null], ["title", "pk", null], ["items", "pk", null], ["type", "kw", "'choice'"], ["on_result", "kw", "None"]]
 preview	method	xefm.user_api.ActionContext.confirm	[["self", "pk", null], ["prompt", "pk", null], ["title", "kw", "'Confirm'"], ["on_result", "kw", "None"]]
@@ -127,6 +128,11 @@ stable	property	xefm.user_api.ActionContext.right	ro
 stable	method	xefm.user_api.ActionContext.run_program	[["self", "pk", null], ["command", "pk", null], ["terminal", "kw", "False"], ["cwd", "kw", "None"], ["env", "kw", "None"]]
 preview	method	xefm.user_api.ActionContext.run_task	[["self", "pk", null], ["title", "pk", null], ["work", "pk", null], ["on_done", "kw", "None"], ["read_only", "kw", "False"]]
 preview	method	xefm.user_api.ActionContext.show_markdown	[["self", "pk", null], ["title", "pk", null], ["source", "pk", null]]
+preview	class	xefm.user_api.ActionInfo
+preview	attribute	xefm.user_api.ActionInfo.aliases
+preview	attribute	xefm.user_api.ActionInfo.description
+preview	attribute	xefm.user_api.ActionInfo.keys
+preview	attribute	xefm.user_api.ActionInfo.name
 stable	data	xefm.user_api.DEPRECATED_APIS	mappingproxy
 stable	class	xefm.user_api.EntryInfo
 stable	constructor	xefm.user_api.EntryInfo.__init__	[["self", "pk", null], ["path", "pk", null], ["is_dir", "kw", "False"], ["is_link", "kw", "False"]]

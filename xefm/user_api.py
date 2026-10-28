@@ -62,6 +62,7 @@ Everything else is Preview, marked one API at a time (:mod:`xefm.preview`):
 ``open_list``, the prompts (``input`` / ``choose`` / ``confirm`` — whether
 the callback shape is livable is not settled), ``run_task`` and its job and
 outcome, ``show_markdown`` / ``copy_text`` and the Markdown helpers,
+``actions()`` and :class:`ActionInfo`,
 ``extension()``, ``EVENT_HOOKS`` and :class:`HookEvent`, and the
 ``IMAGE_DECODERS``, ``PATH_SCHEMES``, ``LEXERS`` and ``MENU_ITEMS`` tables.
 A config that uses a Preview table gets one line in the log pane saying so at
@@ -142,6 +143,8 @@ __all__ = [
     "extension",
     # background work
     "TaskJob", "TaskOutcome",
+    # what ctx.actions() describes
+    "ActionInfo",
     # building Markdown for ctx.show_markdown
     "md_code_block", "md_escape",
     # for PROGRAMS and the rest of config.py; also importable, for configs
@@ -617,6 +620,28 @@ class TaskOutcome:
         return f"<TaskOutcome {self.status}>"
 
 
+@preview
+class ActionInfo:
+    """One action, as :meth:`ActionContext.actions` describes it.
+
+    ``name`` is what ``invoke()`` takes; ``description`` the one line the
+    command palette shows; ``aliases`` the names it used to have, which still
+    resolve to it; ``keys`` the keys bound to it in the file list right now —
+    the keymap preset's, with ``KEY_BINDINGS`` applied — empty when unbound."""
+
+    __slots__ = ("name", "description", "aliases", "keys")
+
+    def __init__(self, name: str, description: str = "",
+                 aliases: tuple[str, ...] = (), keys: tuple[str, ...] = ()):
+        self.name = name
+        self.description = description
+        self.aliases = tuple(aliases)
+        self.keys = tuple(keys)
+
+    def __repr__(self) -> str:
+        return f"<ActionInfo {self.name}>"
+
+
 # --------------------------------------------------------------------------- #
 # Extension packages
 # --------------------------------------------------------------------------- #
@@ -943,6 +968,15 @@ class ActionContext:
     def action_names(self) -> list[str]:
         """Every action name ``invoke()`` accepts — the file list's."""
         return _actions.registry.names(_actions.FILER)
+
+    @preview
+    def actions(self) -> list[ActionInfo]:
+        """Every action ``invoke()`` accepts, as :class:`ActionInfo` — in the
+        order :meth:`action_names` lists them."""
+        keys = self._app.keys
+        return [ActionInfo(a.name, a.description, a.aliases,
+                           keys.get_keys_for_action(a.name, _actions.FILER)[0])
+                for a in _actions.registry.actions(_actions.FILER)]
 
 
 def _guard(what: str, func: Callable | None, *, arity: int) -> Callable | None:
