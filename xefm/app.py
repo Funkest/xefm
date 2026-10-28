@@ -9377,7 +9377,7 @@ class XeFMApp:
         to_trash = not permanent and all(trash.available(t) for t in targets)
         verb = "Trash" if to_trash else "Delete"
 
-        def on_complete(result: dict) -> None:
+        def on_complete(result: dict, verb: str = verb) -> None:
             pane["selected_files"].clear()
             # _relist, not _refresh: nothing navigated, so the cursor stays on
             # what it was on — or, when that was one of the files just deleted,
@@ -9385,7 +9385,19 @@ class XeFMApp:
             self._relist(pane)
             self._relist_others_showing({str(t.parent) for t in targets}, besides=pane)
             self.log_info(format_op_summary(verb, result))
-            self._report_op_failures(verb, result)
+            # What turned out to have no trash (#765) is offered a permanent
+            # delete below, so it is not also reported as a failure.
+            no_trash = result.get("no_trash") or []
+            names = {str(t) for t in no_trash}
+            self._report_op_failures(verb, {**result, "errors": [
+                e for e in result.get("errors", []) if e[0] not in names]})
+            if no_trash:
+                self._fileops.delete(
+                    self.panel, no_trash, log=self.log_info,
+                    on_complete=lambda r: on_complete(r, "Delete"),
+                    note=(f"These are online-only files in cloud storage, which "
+                          f"the {trash.NAME} does not take. Download them first "
+                          "to keep them recoverable."))
             self.panel.render()
 
         if to_trash:

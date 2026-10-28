@@ -161,6 +161,40 @@ class MacOS(unittest.TestCase):
             with self.assertRaises(OSError) as caught:
                 _REAL_TRASH_MACOS("/x/a.txt")
         self.assertIn("does not support", caught.exception.strerror)
+        self.assertNotIsInstance(caught.exception, trash.NoTrashError)
+
+    def test_an_online_only_item_refused_has_no_trash(self):
+        # #765: a cloud storage provider refuses to let a dataless item out,
+        # with an error that blames permissions or the volume.
+        class Error:
+            def localizedDescription(self):
+                return "you don't have permission to access it."
+
+        class Manager:
+            def trashItemAtURL_resultingItemURL_error_(self, url, _r, _e):
+                return False, None, Error()
+
+        class Url:
+            fileURLWithPath_ = staticmethod(lambda p: p)
+
+        with patch.object(trash, "_mac_manager", lambda: (Manager(), Url)), \
+                patch.object(trash, "_online_only", return_value=True):
+            with self.assertRaises(trash.NoTrashError) as caught:
+                _REAL_TRASH_MACOS("/x/a.dmg")
+        self.assertIn("online-only", caught.exception.strerror)
+        self.assertNotIn("OneDrive", caught.exception.strerror)
+
+    def test_online_only_is_the_dataless_flag(self):
+        class St:
+            def __init__(self, flags):
+                self.st_flags = flags
+
+        with patch.object(trash.os, "lstat", return_value=St(0x40000000)):
+            self.assertTrue(trash._online_only("/x"))
+        with patch.object(trash.os, "lstat", return_value=St(0x20)):
+            self.assertFalse(trash._online_only("/x"))
+        with patch.object(trash.os, "lstat", side_effect=FileNotFoundError()):
+            self.assertFalse(trash._online_only("/x"))
 
 
 class Availability(unittest.TestCase):
@@ -229,6 +263,24 @@ class AppDelete(unittest.TestCase):
         self.assertEqual(kind, "delete")
         self.assertIsNone(kw.get("note"))
 
+    def test_what_has_no_trash_is_offered_a_permanent_delete(self):
+        # #765: online-only items come back from the trash task as no_trash;
+        # K then confirms a permanent delete of just those, and does not also
+        # report them as failures.
+        reported = []
+        self.app._report_op_failures = lambda verb, result, **kw: reported.append(result)
+        with patch.object(trash, "available", return_value=True):
+            self.app.delete_files()
+        _kind, targets, kw = self.calls[0]
+        (b,) = targets
+        kw["on_complete"]({"done": 0, "skipped": 0, "failed": 1, "cancelled": False,
+                           "items": 0, "errors": [(str(b), trash.ONLINE_ONLY)],
+                           "no_trash": [b]})
+        self.assertEqual(reported[0]["errors"], [])
+        kind, again, kw = self.calls[1]
+        self.assertEqual((kind, again), ("delete", [b]))
+        self.assertIn("online-only", kw["note"])
+
     def test_delete_to_trash_false_makes_k_permanent(self):
         self.app.config.DELETE_TO_TRASH = False
         with patch.object(trash, "available", return_value=True):
@@ -273,6 +325,23 @@ class EngineTrash(unittest.TestCase):
         result = results[0]
         self.assertEqual(result["done"], 1)
         self.assertEqual(result["errors"][0][1], "Permission denied")
+        self.assertEqual(result["no_trash"], [])
+
+    def test_a_target_with_no_trash_is_listed_as_such(self):
+        from xefm.path import Path
+        results = []
+
+        def send(path):
+            raise trash.NoTrashError(45, trash.ONLINE_ONLY, str(path))
+
+        targets = [Path(p) for p in self.paths]
+        with patch.object(trash, "send", send):
+            self.service.trash(None, targets, on_complete=results.append,
+                               background=False)
+        result = results[0]
+        self.assertEqual(result["no_trash"], targets)
+        self.assertEqual(result["failed"], 2)
+        self.assertEqual(len(result["errors"]), 2)
 
 
 if __name__ == "__main__":
