@@ -35,6 +35,14 @@ Some places have no Trash:
 There, `delete_files` deletes for good, and its confirmation says *There is no Trash here,
 so these are deleted for good* before anything happens.
 
+On macOS, cloud storage folders (OneDrive, Google Drive, Dropbox and the like)
+can keep a file online only, downloading it when it is opened. Some services do
+not let such a file into the Trash, and Finder offers to delete it permanently
+instead. XeFM does the same: it tries the Trash first, and if the file is
+online-only and does not go, it asks whether to delete it for good. To keep it
+recoverable, download the file first, then delete it again. The service may
+also keep deleted files in its own recycle bin online.
+
 ## Which Trash
 
 | System | Where deleted files go |

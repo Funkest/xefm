@@ -508,6 +508,11 @@ class FileOperationService:
         # target so the caller can show them rather than bury them in the log.
         result = {"done": 0, "skipped": 0, "failed": 0, "cancelled": False,
                   "items": 0, "errors": []}
+        if kind == "trash":
+            # The targets that turned out to have no trash (online-only items
+            # in cloud storage, #765) — also in ``errors``, which the caller
+            # may take them out of when it offers a permanent delete instead.
+            result["no_trash"] = []
         prog = task.progress
         mutated = self._mutated_dirs(kind, targets, dest_dir) if self.monitor else []
         for d in mutated:
@@ -554,7 +559,7 @@ class FileOperationService:
                     try:
                         ok = self._execute_one(task, kind, target, dest_base,
                                                overwrite, dest_dir, prog, log,
-                                               errors)
+                                               errors, result.get("no_trash"))
                     except Cancelled:
                         raise
                     except Exception as exc:  # noqa: BLE001 — unexpected; record + go on
@@ -709,16 +714,22 @@ class FileOperationService:
     def _execute_one(self, task: Task, kind: str, target: Path,
                      dest_base: Optional[Path], overwrite: bool,
                      dest_dir: Optional[Path], prog: ProgressManager, log,
-                     errors: list) -> int:
+                     errors: list, no_trash: Optional[list] = None) -> int:
         """Process one top-level target, returning the count of individual entries
         that succeeded and appending ``(path, reason)`` to ``errors`` for any that
-        failed. A single bad entry never aborts the rest of the target."""
+        failed. A single bad entry never aborts the rest of the target. A trash
+        target that turned out to have no trash is also added to ``no_trash``."""
         if kind == "delete":
             return self._delete_tree(task, target, prog, log, errors)
         if kind == "trash":
             prog.update_progress(target.name)
             try:
                 trash_mod.send(target)
+            except trash_mod.NoTrashError as exc:
+                errors.append((str(target), exc.strerror or str(exc)))
+                if no_trash is not None:
+                    no_trash.append(target)
+                return 0
             except OSError as exc:
                 errors.append((str(target), exc.strerror or str(exc)))
                 return 0

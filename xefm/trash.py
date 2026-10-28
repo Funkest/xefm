@@ -8,7 +8,9 @@ keeps a private trash:
 
 - **macOS** — ``NSFileManager trashItemAtURL:``, which is what Finder calls:
   the item lands in the Trash of its volume and *Put Back* knows where it came
-  from. PyObjC comes with PuiKit on macOS, terminal installs included.
+  from. PyObjC comes with PuiKit on macOS, terminal installs included. An
+  online-only item in cloud storage that the provider will not let go raises
+  :class:`NoTrashError`, and ``K`` offers a permanent delete, as Finder does.
 - **Windows** — ``SHFileOperationW`` with ``FOF_ALLOWUNDO``: the Recycle Bin.
   Only on fixed drives: on a USB stick or a network share the same call
   *deletes permanently without saying so*, so those report no trash here and
@@ -44,6 +46,18 @@ logger = getLogger("Trash")
 NAME = {"darwin": "Trash", "win32": "Recycle Bin"}.get(sys.platform, "Trash")
 
 
+#: Why an online-only item did not go to the trash — every cloud storage
+#: provider's, so it names none.
+ONLINE_ONLY = (f"an online-only file in cloud storage, which the {NAME} does not "
+               "take — download it first, or delete it permanently")
+
+
+class NoTrashError(OSError):
+    """:func:`send` found that ``path`` has no trash after all — an
+    online-only item its cloud storage provider will not let into the trash.
+    Nothing was deleted; the caller may offer a permanent delete instead."""
+
+
 def _local(path) -> Optional[str]:
     text = str(path)
     return None if "://" in text else text
@@ -59,6 +73,18 @@ def _mac_manager():
     return NSFileManager.defaultManager(), NSURL
 
 
+#: ``st_flags`` bit of a File Provider placeholder whose contents live only in
+#: the cloud (``ls -lO`` shows ``dataless``).
+_SF_DATALESS = getattr(stat, "SF_DATALESS", 0x40000000)
+
+
+def _online_only(path: str) -> bool:
+    try:
+        return bool(getattr(os.lstat(path), "st_flags", 0) & _SF_DATALESS)
+    except OSError:
+        return False
+
+
 def _trash_macos(path: str) -> None:
     pair = _mac_manager()
     if pair is None:
@@ -67,6 +93,13 @@ def _trash_macos(path: str) -> None:
     ok, _where, error = manager.trashItemAtURL_resultingItemURL_error_(
         nsurl.fileURLWithPath_(path), None, None)
     if not ok:
+        # A cloud storage provider may refuse to let an online-only item out
+        # of its folder (#765: OneDrive does, with an error that blames
+        # permissions or the volume). Finder then offers a permanent delete;
+        # so does the caller, given NoTrashError. Which providers refuse is
+        # theirs to decide, so this is asked after the attempt, not before.
+        if _online_only(path):
+            raise NoTrashError(errno.ENOTSUP, ONLINE_ONLY, path)
         message = error.localizedDescription() if error is not None else "failed"
         raise OSError(errno.EIO, str(message), path)
 
@@ -221,7 +254,8 @@ def available(path) -> bool:
 
 def send(path) -> None:
     """Move ``path`` (a file or a whole directory) to the system's trash.
-    Raises OSError with the reason when it cannot; nothing is deleted then."""
+    Raises OSError with the reason when it cannot — :class:`NoTrashError`
+    when the item turns out to have no trash; nothing is deleted then."""
     local = _local(path)
     if local is None:
         raise OSError(errno.ENOTSUP, "remote and archived items have no trash", str(path))
