@@ -278,7 +278,7 @@ summary with no further page.
 | `ctx.show_markdown(title, source)` | (Preview) show Markdown in a scrollable dialog, with a Copy button on each code block — see below |
 | `ctx.copy_text(text)` | (Preview) put text on the clipboard |
 | `ctx.run_task(title, work, on_done=fn)` | (Preview) run slow work in the background, with a progress dialog — see below |
-| `ctx.input(prompt, default, on_accept=fn)` | (Preview) ask for a line of text |
+| `ctx.input(prompt, default, on_accept=fn)` | (Preview) ask for a line of text; `complete='path'` (or `'directory'`) adds Tab completion of paths, as Jump to Path has — relative to the active pane |
 | `ctx.choose(title, items, on_result=fn)` | (Preview) pick from a list (index, or `None`); `type='filter'` for a searchable one |
 | `ctx.confirm(prompt, on_result=fn)` | (Preview) yes / no |
 | `ctx.run_program(command, terminal=False)` | run an external program — see below |

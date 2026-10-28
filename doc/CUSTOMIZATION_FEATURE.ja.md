@@ -201,7 +201,7 @@ ACTIONS = {
 | `ctx.show_markdown(title, source)` | （プレビュー）Markdown をスクロールできるダイアログに表示し、各コードブロックに Copy ボタンを付ける — 後述 |
 | `ctx.copy_text(text)` | （プレビュー）テキストをクリップボードに置く |
 | `ctx.run_task(title, work, on_done=fn)` | （プレビュー）時間のかかる処理を進捗ダイアログ付きでバックグラウンドで実行 — 後述 |
-| `ctx.input(prompt, default, on_accept=fn)` | （プレビュー）1 行のテキストを入力してもらう |
+| `ctx.input(prompt, default, on_accept=fn)` | （プレビュー）1 行のテキストを入力してもらう。`complete='path'`（または `'directory'`）を付けると、Jump to Path と同じくパスを Tab で補完できる — 相対パスはアクティブなペインが起点 |
 | `ctx.choose(title, items, on_result=fn)` | （プレビュー）リストから選んでもらう（インデックス、または `None`）。`type='filter'` で検索できるリストになる |
 | `ctx.confirm(prompt, on_result=fn)` | （プレビュー）はい / いいえ |
 | `ctx.run_program(command, terminal=False)` | 外部プログラムを実行 — 後述 |

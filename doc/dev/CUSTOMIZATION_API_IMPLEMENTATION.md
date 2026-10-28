@@ -311,6 +311,19 @@ modal to build that on — every dialog is a layer pushed onto the panel with an
 been a nested event loop, which is a much larger commitment than a preview API
 should make.
 
+### `input(complete=...)` is the built-in dialogs' completer (#717)
+
+`complete="path"` / `"directory"` hands `show_input` a `FilepathCompleter`
+built the way Jump to Path builds one: the active pane's directory as the base,
+the panes' hidden-files toggle, `directories_only` for `"directory"`. Remote
+completion (#674) comes with it. The base is what makes `./` mean the current
+pane's directory — the ask from #528, which had imported
+`xefm.completion.FilepathCompleter` itself. The answer is not resolved: a
+config may want the typed text for something other than a path, and
+resolving is one join against `ctx.pane.path`. The value is a string rather
+than a `bool` so other kinds of completion can join it without a second
+keyword.
+
 ### `run_program` shares the picker's launcher
 
 `ctx.run_program()` is the `PROGRAMS` picker's launch path with the argv

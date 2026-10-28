@@ -888,18 +888,42 @@ class ActionContext:
     @preview
     def input(self, prompt: str, default: str = "", *,
               title: str = "", on_accept: Callable[[str], None] | None = None,
-              on_cancel: Callable[[], None] | None = None) -> None:
+              on_cancel: Callable[[], None] | None = None,
+              complete: str | None = None) -> None:
         """Ask for a line of text.
 
         XeFM never blocks on a modal, so this returns immediately and the answer
         arrives in ``on_accept``; ``on_cancel`` fires on Esc. Write the rest of
         the action inside the callback.
+
+        ``complete`` gives the field Tab completion of paths, the one Jump to
+        Path and Copy to Path use, remote paths included:
+
+        - ``"path"`` — files and folders.
+        - ``"directory"`` — folders only.
+
+        A relative path — ``./``, ``../``, or a bare name — completes against
+        the active pane's directory, and hidden entries follow the panes'
+        toggle. The answer is the text as typed; resolving a relative one
+        against ``ctx.pane.path`` is the action's to do. An unknown
+        ``complete`` is a ValueError, which the action boundary logs.
         """
         from xefm.input_dialog import show_input
+        completer = None
+        if complete is not None:
+            if complete not in ("path", "directory"):
+                raise ValueError(
+                    f"input(complete={complete!r}): expected 'path' or 'directory'")
+            from xefm.completion import FilepathCompleter
+            completer = FilepathCompleter(
+                base_directory=str(self._app.active_pane()["path"]),
+                directories_only=complete == "directory",
+                show_hidden=self._app.flm.show_hidden)
         show_input(self._app.panel, title=title or "XeFM", prompt=prompt,
                    text=default,
                    on_accept=_guard("input callback", on_accept, arity=1),
-                   on_cancel=_guard("input callback", on_cancel, arity=0))
+                   on_cancel=_guard("input callback", on_cancel, arity=0),
+                   completer=completer)
         self._app.panel.render()
 
     @preview

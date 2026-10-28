@@ -868,6 +868,36 @@ def test_a_config_that_uses_none_of_it_says_nothing(app_with):
     assert lines == []
 
 
+# --- ctx.input(complete=...) (#717) ---------------------------------------- #
+
+def _input_completer(app):
+    app.dispatch("ask")
+    return app.panel._layers[-1].widget._completion.completer
+
+
+@pytest.mark.parametrize("complete, expected", [
+    ("path", ["a.txt", "b.docx", "c.docx", "d.pdf", "sub" + os.sep]),
+    ("directory", ["sub" + os.sep]),
+])
+def test_input_completes_paths_against_the_active_pane(app_with, complete, expected):
+    app, _ = app_with(ACTIONS={"ask": lambda ctx: ctx.input("Where:", complete=complete)})
+    completer = _input_completer(app)
+    assert completer.get_candidates("", 0) == expected
+    assert completer.get_candidates("./", 2) == expected, "'.' is the pane's directory"
+
+
+def test_input_without_complete_has_no_completion(app_with):
+    app, _ = app_with(ACTIONS={"ask": lambda ctx: ctx.input("Name:")})
+    app.dispatch("ask")
+    assert app.panel._layers[-1].widget._completion is None
+
+
+def test_an_unknown_complete_is_one_log_line_not_a_crash(app_with):
+    app, _ = app_with(ACTIONS={"ask": lambda ctx: ctx.input("Where:", complete="url")})
+    assert app.dispatch("ask") is True
+    assert not app.panel.has_layers
+
+
 # --- ctx.choose and its two dialogs (#467) ---------------------------------- #
 
 def _top(app):
