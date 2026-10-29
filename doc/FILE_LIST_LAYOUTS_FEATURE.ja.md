@@ -40,14 +40,16 @@
 
 ### `ATTRIBUTES` — エントリについて XeFM が知ることのできる値
 
-値は関数がバックグラウンドで計算します。エントリごとに 1 回呼ぶ形と、フォルダー全体に一度に答えられる情報源のためにフォルダーごとに 1 回呼ぶ形があります。
+値は 1 つの関数 `read(directory, entries)` がバックグラウンドで計算します。`entries` は 1 つのフォルダーの行、`directory` はそのフォルダーで、関数はエントリごとに 1 つの値を同じ順で返します。XeFM はフォルダー全体を一度に渡すので、`git status` のようにフォルダー全体に一度に答えられる情報源は、ファイルごとではなく 1 回だけ呼ばれます。
 
 ```python
 import subprocess
 
-def line_count(entry):
-    with open(entry.path, 'rb') as f:
-        return sum(1 for _ in f)
+def line_count(directory, entries):
+    def count(entry):
+        with open(entry.path, 'rb') as f:
+            return sum(1 for _ in f)
+    return [count(e) for e in entries]
 
 def git_status(directory, entries):
     try:
@@ -73,9 +75,9 @@ def git_status(directory, entries):
 
 class Config:
     ATTRIBUTES = {
-        'lines': {'label': 'Lines', 'type': 'count', 'entry': line_count},
+        'lines': {'label': 'Lines', 'type': 'count', 'read': line_count},
         'git': {
-            'label': 'Git status', 'type': 'enum', 'directory': git_status,
+            'label': 'Git status', 'type': 'enum', 'read': git_status,
             'values': {
                 'M': {'label': 'Modified',  'color': 'yellow'},
                 'A': {'label': 'Added',     'color': 'green'},
@@ -87,16 +89,16 @@ class Config:
 
 | キー | 意味 |
 |---|---|
-| `entry` / `directory` | 関数です。`fn(entry)`、または `entries` と同じ順のリストを返す `fn(directory, entries)`。どちらか一方を書きます。 |
+| `read` | 関数 `read(directory, entries)`。`entries` と同じ順で、エントリごとに 1 つの値を返します。 |
 | `label` | ソートダイアログに表示する名前。 |
 | `type` | `text`、`count`、`size`（バイト数）、`time`（タイムスタンプ）、`enum`（`values` のどれか）、`tags`。値の書き方とソートのしかたが決まります。 |
 | `values` | `enum` の場合の、各値の意味と表示色。 |
 | `where` | 問い合わせるストレージ：`local`（既定）、`archive`、`ssh`、`s3`。ファイルごとの呼び出しは、ディスクなら軽く、S3 では 1 件ごとにリクエストになります。 |
 | `compute` | `auto`（既定）または `on_request`。 |
 
-属性を定義しただけでは、どこにも表示されません。表示するのはレイアウトです。画面上のレイアウトが属性を表示すると、その値は**フォルダーのすべての行**についてバックグラウンドで計算されます。そのため、定義はフォルダー 1 つ分にすぐ答えられるものにしてください。それができないもの（たとえば、すべてのファイルを丸ごと読むもの）は `'compute': 'on_request'` とします。その場合は、頼んだときだけ計算されます。**View → Compute Values**（`compute_values`）で、選択項目またはカーソル位置の項目について計算します。
+属性を定義しただけでは、どこにも表示されません。表示するのはレイアウトです。画面上のレイアウトが属性を表示すると、その値は**フォルダーのすべての行**についてバックグラウンドで計算されます。そのため、定義はフォルダー 1 つ分にすぐ答えられるものにしてください。それができないもの（たとえば、すべてのファイルを丸ごと読むもの）は `'compute': 'on_request'` とします。その場合は、頼んだときだけ計算されます。**View → Compute Values**（`compute_values`）で、選択項目またはカーソル位置の項目について計算します。このときは 1 回の呼び出しに 1 エントリずつ渡すので、値は 1 つずつ表示され、フォルダーを離れると止まります。
 
-値は届くまで空欄です。関数が失敗しても失われるのはその値だけで、そのことをログペインに 1 回だけ出します。
+値は届くまで空欄です。関数が失敗したり、長さの違うリストを返したりしても、失われるのはその呼び出しの値だけで、そのことをログペインに 1 回だけ出します。
 
 自分の関数（ソートキー、フィルター、アクション）からは、XeFM がすでに持っている値を `entry.attr('git')` で読めます。値を計算することも待つこともありません。値が届くまでは `None` です。
 

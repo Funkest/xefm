@@ -21,10 +21,12 @@ Three kinds, by how a value is had:
   asks, for the entries they asked about (``calculate_folder_sizes``,
   ``compute_attribute``). ``total_size`` is one: a recursive walk per folder.
 
-A provider computes in one of two shapes: ``entry`` — ``fn(entry) -> value``,
-once per row — or ``directory`` — ``fn(directory, entries) -> [value, ...]``,
-once per directory, for a source like ``git status`` that answers a whole
-directory in one call.
+A provider is one function, ``read(directory, entries) -> [value, ...]``:
+``entries`` are rows of one folder, ``directory`` is that folder, and the
+values come back in the order of ``entries``. How many rows one call gets is
+XeFM's choice — a whole folder for an automatic attribute, so a source like
+``git status`` answers it in one call; one at a time for an on-request one, so
+a slow computation shows its progress and stops when asked.
 
 Values live in an :class:`AttributeStore`, one per pane (tab). Sort and filter
 never wait on it: they see what is already there
@@ -61,10 +63,8 @@ class Attribute:
     name: str
     label: str
     type: str = "text"
-    #: ``fn(entry) -> value`` — one call per row.
-    entry: Optional[Callable] = None
-    #: ``fn(directory, entries) -> [value, ...]`` — one call per directory.
-    directory: Optional[Callable] = None
+    #: ``read(directory, entries) -> [value, ...]`` — see the module docstring.
+    read: Optional[Callable] = None
     #: For an ``enum``: ``{value: {"label": ..., "color": ...}}``. The label is
     #: the value's meaning; the color is only a default display hint.
     values: dict = field(default_factory=dict)
@@ -130,15 +130,18 @@ def _tags_apply(path) -> bool:
     return store is not None and store.cheap
 
 
-def _tags_entry(entry):
+def _tags_read(directory, entries):
     from xefm import tags
-    try:
-        found = tags.read(entry.path)
-    except (tags.TagError, OSError):
-        return []
-    for tag in found:
-        tags.SEEN.setdefault(tag.name.casefold(), tag)
-    return found
+    out = []
+    for entry in entries:
+        try:
+            found = tags.read(entry.path)
+        except (tags.TagError, OSError):
+            found = []
+        for tag in found:
+            tags.SEEN.setdefault(tag.name.casefold(), tag)
+        out.append(found)
+    return out
 
 
 BUILTIN: dict[str, Attribute] = {a.name: a for a in (
@@ -146,7 +149,7 @@ BUILTIN: dict[str, Attribute] = {a.name: a for a in (
     Attribute("ext", "Extension", "text", sync=_sync_ext),
     Attribute("size", "Size", "size", sync=_sync_size),
     Attribute("mtime", "Modified", "time", sync=_sync_mtime),
-    Attribute("tags", "Tags", "tags", entry=_tags_entry, applies=_tags_apply),
+    Attribute("tags", "Tags", "tags", read=_tags_read, applies=_tags_apply),
     # A file's own size, a folder's recursive total once it has been counted.
     # The file half is synchronous; the folder half is the on-request part,
     # computed by calculate_folder_sizes (see AttributeStore.request).
@@ -213,26 +216,20 @@ def build(name: str, spec) -> tuple[Optional[Attribute], Optional[str]]:
     if name in BUILTIN:
         return None, f"{where} is a built-in attribute and cannot be replaced"
     if not isinstance(spec, dict):
-        return None, f"{where} must be a dict with 'entry' or 'directory'"
-    entry, directory = spec.get("entry"), spec.get("directory")
-    if (entry is None) == (directory is None):
-        return None, f"{where} needs exactly one of 'entry' and 'directory'"
-    func = entry if entry is not None else directory
-    if not callable(func):
-        return None, f"{where}: '{'entry' if entry is not None else 'directory'}' is not callable"
-    arity = 1 if entry is not None else 2
-    problem = _arity_problem(func, arity)
+        return None, f"{where} must be a dict with 'read'"
+    read = spec.get("read")
+    if not callable(read):
+        return None, (f"{where} needs 'read', a function read(directory, entries) "
+                      f"returning one value per entry")
+    problem = _arity_problem(read, 2)
     if problem:
-        shape = "fn(entry)" if entry is not None else "fn(directory, entries)"
-        return None, f"{where}: {problem} — it is called as {shape}"
+        return None, f"{where}: {problem} — it is called as read(directory, entries)"
     kind = spec.get("type", "text")
     if kind not in TYPES:
         return None, f"{where}: type '{kind}' is not one of {', '.join(TYPES)}"
     compute = spec.get("compute", "auto")
     if compute not in COMPUTE:
         return None, f"{where}: compute '{compute}' is not one of {', '.join(COMPUTE)}"
-    if compute == "on_request" and directory is not None:
-        return None, f"{where}: an on_request attribute is computed per entry — use 'entry'"
     values = spec.get("values") or {}
     if not isinstance(values, dict) or not all(
             isinstance(v, dict) for v in values.values()):
@@ -243,7 +240,7 @@ def build(name: str, spec) -> tuple[Optional[Attribute], Optional[str]]:
     if not isinstance(places, (list, tuple)) or not all(isinstance(p, str) for p in places):
         return None, f"{where}: 'where' must be a list of storage kinds ('local', 'ssh', …)"
     label = spec.get("label") or name
-    return Attribute(name, str(label), kind, entry=entry, directory=directory,
+    return Attribute(name, str(label), kind, read=read,
                      values=dict(values), where=tuple(places), compute=compute,
                      source="user"), None
 
@@ -289,6 +286,11 @@ def lookup(key: str, name: str):
     return None
 
 
+def _parent(path):
+    """The folder a row is in — what ``read`` is handed as ``directory``."""
+    return getattr(path, "parent", None)
+
+
 def _stamp(record) -> tuple:
     return (record.get("size"), record.get("mtime"))
 
@@ -297,10 +299,12 @@ class AttributeStore:
     """The attribute values of one pane, computed off the UI thread.
 
     :meth:`sync` is called by the pane each time it draws: it is a no-op unless
-    the listing or the set of attributes in use changed, and otherwise queues
-    what is missing. Values survive a re-read of the same directory for entries
-    whose size and mtime did not change; a ``directory`` provider is asked
-    again on every re-read; another directory, or :meth:`clear`, starts over.
+    the listing or the set of attributes in use changed, and otherwise asks
+    ``read`` again for the whole folder — a Git status can change without the
+    file it is about changing — leaving the old values on screen until the new
+    ones replace them. An on-request value is kept across a re-read while its
+    entry's size and mtime are unchanged. Another directory, or :meth:`clear`,
+    starts over.
     """
 
     def __init__(self):
@@ -309,7 +313,6 @@ class AttributeStore:
         self._values: dict[str, dict[str, Any]] = {}
         #: ``{(name, str(path)): stamp}`` — the record a value was computed from.
         self._stamps: dict[tuple[str, str], tuple] = {}
-        self._pending: set[tuple[str, str]] = set()
         self._queue: "queue.Queue" = queue.Queue()
         self._thread: Optional[threading.Thread] = None
         self._generation = 0
@@ -394,7 +397,6 @@ class AttributeStore:
             else:
                 self._drop_stale(files, records, wanted)
             self._generation += 1
-            self._pending.clear()
             self._failed.clear()
             self._listing = id(files)
             self._wanted = wanted
@@ -404,33 +406,23 @@ class AttributeStore:
         jobs = []
         for name in sorted(wanted):
             attr = get(name)
-            targets = [p for p in files if attr.applies_to(p)]
-            if attr.directory is not None:
-                groups: dict[str, list] = {}
-                for p in targets:
-                    groups.setdefault(str(p.parent), []).append(p)
-                for parent, members in groups.items():
-                    jobs.append((generation, "directory", name, members))
-                continue
-            missing = []
-            with self._lock:
-                for p in targets:
-                    key = str(p)
-                    row = self._values.get(key)
-                    if (row is None or name not in row) and (name, key) not in self._pending:
-                        self._pending.add((name, key))
-                        missing.append(p)
-            for p in missing:
-                jobs.append((generation, "entry", name, [p]))
+            # One call per folder: a search-results pane holds rows of many.
+            groups: dict[str, tuple] = {}
+            for p in files:
+                if attr.applies_to(p):
+                    parent = _parent(p)
+                    groups.setdefault(str(parent), (parent, []))[1].append(p)
+            for parent, members in groups.values():
+                jobs.append((generation, name, parent, members))
         for job in jobs:
             self._queue.put(job)
         if jobs:
             self._ensure_worker()
 
     def _drop_stale(self, files, records, wanted) -> None:
-        """Keep the values whose entry did not change since they were computed;
-        a ``directory`` provider is re-run anyway, so its old values stay on
-        screen until the new ones replace them. Caller holds the lock."""
+        """Drop the values of rows that left the listing, and the on-request
+        values of entries that changed. An automatic value stays on screen
+        until the re-run replaces it. Caller holds the lock."""
         present = {str(p) for p in files}
         for key in list(self._values):
             if key not in present:
@@ -440,7 +432,7 @@ class AttributeStore:
                 del self._stamps[(name, key)]
                 continue
             attr = get(name)
-            if attr is not None and attr.directory is not None:
+            if attr is not None and attr.compute == "auto":
                 continue
             if _stamp(records.get(key, {})) != stamp:
                 del self._stamps[(name, key)]
@@ -454,7 +446,6 @@ class AttributeStore:
             self._cancel_requests()
             self._values.clear()
             self._stamps.clear()
-            self._pending.clear()
             self._listing = None
             self._generation += 1
 
@@ -477,7 +468,6 @@ class AttributeStore:
         with self._lock:
             if generation != self._generation:
                 return False
-            self._pending.discard((name, key))
             self._values.setdefault(key, {})[name] = value
             self._stamps[(name, key)] = _stamp(self._records.get(key, {}))
         return True
@@ -498,7 +488,7 @@ class AttributeStore:
         unannounced = 0
         while True:
             try:
-                generation, shape, name, paths = self._queue.get(timeout=5)
+                generation, name, parent, paths = self._queue.get(timeout=5)
             except queue.Empty:
                 return
             if generation != self._generation:
@@ -506,10 +496,10 @@ class AttributeStore:
             attr = get(name)
             if attr is None:
                 continue
-            if shape == "directory":
-                landed = self._run_directory(generation, attr, paths)
-            else:
-                landed = self._run_entry(generation, attr, paths[0])
+            values = self._read(attr, parent, paths)
+            landed = 0
+            for path, value in zip(paths, values):
+                landed += self._put(generation, attr.name, path, value)
             unannounced += landed
             if unannounced and on_ready is not None and (
                     self._queue.empty() or unannounced >= self._READY_EVERY):
@@ -520,28 +510,19 @@ class AttributeStore:
         from xefm.user_api import EntryInfo   # user_api imports this module
         return EntryInfo._from_attrs(path, self._records.get(str(path), {}))
 
-    def _run_entry(self, generation: int, attr: Attribute, path) -> bool:
-        try:
-            value = attr.entry(self._entry_info(path))
-        except Exception as exc:  # noqa: BLE001 — a provider's failure costs its value
-            self._report(attr, exc)
-            value = None
-        return self._put(generation, attr.name, path, value)
-
-    def _run_directory(self, generation: int, attr: Attribute, paths: list) -> bool:
-        directory = paths[0].parent
+    def _read(self, attr: Attribute, directory, paths: list) -> list:
+        """``attr.read`` over ``paths``, rows of ``directory``: one value per
+        path. A provider that raises, or answers with the wrong number of
+        values, costs this call's values — logged once."""
         entries = [self._entry_info(p) for p in paths]
         try:
-            values = list(attr.directory(directory, entries))
+            values = list(attr.read(directory, entries))
             if len(values) != len(entries):
                 raise ValueError(f"returned {len(values)} values for {len(entries)} entries")
-        except Exception as exc:  # noqa: BLE001
+            return values
+        except Exception as exc:  # noqa: BLE001 — a provider's failure costs its values
             self._report(attr, exc)
-            values = [None] * len(paths)
-        landed = False
-        for path, value in zip(paths, values):
-            landed = self._put(generation, attr.name, path, value) or landed
-        return landed
+            return [None] * len(paths)
 
     def _report(self, attr: Attribute, exc: Exception) -> None:
         if attr.name in self._failed:
@@ -600,11 +581,7 @@ class AttributeStore:
             scan._cancel = cancel
             scan.run_sync()
             return None if cancel.is_set() else scan.grand_totals()[0]
-        try:
-            return attr.entry(self._entry_info(path))
-        except Exception as exc:  # noqa: BLE001
-            self._report(attr, exc)
-            return None
+        return self._read(attr, _parent(path), [path])[0]
 
     def _cancel_requests(self) -> None:
         """Caller holds the lock."""

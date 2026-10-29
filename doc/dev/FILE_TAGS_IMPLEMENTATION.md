@@ -68,7 +68,7 @@ any layout can show; the default layout shows it as a marker after the name.
 `doc/dev/FILE_LIST_LAYOUTS_IMPLEMENTATION.md` has the mechanism. What is
 particular to tags:
 
-- The provider is per entry: `tags.read(path)`, adding what it finds to
+- Its `read` calls `tags.read(path)` for each entry, adding what it finds to
   `tags.SEEN` (tags seen on files this session).
 - `applies` asks `store_for(path)` and `store.cheap`, so S3, archives and
   user schemes are never asked; their rows show no marker.

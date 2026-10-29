@@ -69,15 +69,20 @@ with examples in the comments above them in the file itself.
 
 ### `ATTRIBUTES` — values XeFM can know about an entry
 
-A function computes the value, on a background thread — one call per entry,
-or one call per folder for a source that answers a whole folder at once:
+One function, `read(directory, entries)`, computes the values on a background
+thread. `entries` are rows of one folder and `directory` is that folder; it
+returns one value per entry, in the same order. XeFM hands it a whole folder at
+once, so a source that answers a folder in one go — `git status` — is asked
+once rather than once per file:
 
 ```python
 import subprocess
 
-def line_count(entry):
-    with open(entry.path, 'rb') as f:
-        return sum(1 for _ in f)
+def line_count(directory, entries):
+    def count(entry):
+        with open(entry.path, 'rb') as f:
+            return sum(1 for _ in f)
+    return [count(e) for e in entries]
 
 def git_status(directory, entries):
     try:
@@ -103,9 +108,9 @@ def git_status(directory, entries):
 
 class Config:
     ATTRIBUTES = {
-        'lines': {'label': 'Lines', 'type': 'count', 'entry': line_count},
+        'lines': {'label': 'Lines', 'type': 'count', 'read': line_count},
         'git': {
-            'label': 'Git status', 'type': 'enum', 'directory': git_status,
+            'label': 'Git status', 'type': 'enum', 'read': git_status,
             'values': {
                 'M': {'label': 'Modified',  'color': 'yellow'},
                 'A': {'label': 'Added',     'color': 'green'},
@@ -117,7 +122,7 @@ class Config:
 
 | Key | What it says |
 |---|---|
-| `entry` / `directory` | The function: `fn(entry)`, or `fn(directory, entries)` returning a list in the order of `entries`. One of the two. |
+| `read` | The function: `read(directory, entries)`, returning one value per entry in the order of `entries`. |
 | `label` | The name shown in the sort dialog. |
 | `type` | `text`, `count`, `size` (bytes), `time` (a timestamp), `enum` (one of `values`) or `tags`. It decides how the value is written and how it sorts. |
 | `values` | For an `enum`: each value's meaning, and a color to show it in. |
@@ -129,10 +134,13 @@ screen shows it, it is worked out for **every row of the folder**, in the
 background, so a definition should answer a folder's worth quickly. One that
 cannot — it reads every file whole, say — sets `'compute': 'on_request'`, and
 is then computed only when you ask: **View → Compute Values**
-(`compute_values`), for the selection or the item under the cursor.
+(`compute_values`), for the selection or the item under the cursor. It is
+then handed one entry per call, so the values appear one by one and leaving
+the folder stops them.
 
-A value is empty until it arrives. A function that fails costs only its value,
-and says so once in the log pane.
+A value is empty until it arrives. A function that fails, or returns a list of
+the wrong length, costs only that call's values, and says so once in the log
+pane.
 
 Your own functions — a sort key, a filter, an action — can read a value XeFM
 already has with `entry.attr('git')`. It never computes one and never waits:

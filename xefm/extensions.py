@@ -282,14 +282,14 @@ class Manifest:
 def _refs_in(value) -> list[tuple[str, str]]:
     """The code references inside one contribution value: the value itself
     when it is a reference string, its ``entry`` when it is a table, each item
-    when it is a list (an event's hooks). An attribute's ``directory`` and a
+    when it is a list (an event's hooks). An attribute's ``read`` and a
     layout's ``format``, in its columns and their markers, are references
     too."""
     if isinstance(value, str):
         return [("", value)] if ":" in value else []
     if isinstance(value, dict):
         out = []
-        for key in ("entry", "directory", "format"):
+        for key in ("entry", "read", "format"):
             ref = value.get(key)
             if isinstance(ref, str) and (key == "entry" or ":" in ref):
                 out.append((f".{key}", ref))
@@ -1016,15 +1016,15 @@ def _check_contribution(kind: str, key: str, value, action_names: set) -> Option
         if isinstance(value, str):
             return None if ":" in value else "must be a table or 'module:name'"
         if not isinstance(value, dict):
-            return "must be a table with entry or directory = 'module:function'"
+            return "must be a table with read = 'module:function'"
         from xefm.user_api import TABLE_KEYS
         unknown = sorted(set(value) - set(TABLE_KEYS["ATTRIBUTES"]))
         if unknown:
             return (f"unknown keys {', '.join(unknown)} — known: "
                     f"{', '.join(TABLE_KEYS['ATTRIBUTES'])}")
-        refs = [value[k] for k in ("entry", "directory") if k in value]
-        if len(refs) != 1 or not isinstance(refs[0], str) or ":" not in refs[0]:
-            return "needs exactly one of entry or directory = 'module:function'"
+        read = value.get("read")
+        if not isinstance(read, str) or ":" not in read:
+            return "needs read = 'module:function'"
         return None
     if kind == "event_hooks":
         from xefm.user_api import EVENTS
@@ -2119,10 +2119,9 @@ def _value_for(kind: str, value, manifest: Manifest, handle: ExtensionHandle,
                 for ref in items]
     if kind == "attributes" and isinstance(value, dict):
         spec = dict(value)
-        for k in ("entry", "directory"):
-            if k in spec:
-                spec[k] = _in_extension(handle, _import_ref(root, spec[k]),
-                                        missing=missing)
+        if "read" in spec:
+            spec["read"] = _in_extension(handle, _import_ref(root, spec["read"]),
+                                         missing=missing)
         return spec
     if kind == "layouts" and isinstance(value, dict):
         return _layout_refs(value, root, handle, missing)

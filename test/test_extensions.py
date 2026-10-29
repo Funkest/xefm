@@ -594,7 +594,7 @@ class Load(_Home):
             [contributes.attributes."{id}.kind"]
             label = "Kind"
             type = "enum"
-            directory = "{mod}.attrs:kinds"
+            read = "{mod}.attrs:kinds"
 
             [contributes.layouts."{id}"]
             label = "Kinds"
@@ -612,7 +612,7 @@ class Load(_Home):
         attrs = sys.modules[f"{mod}.attrs"]
         spec = config.ATTRIBUTES[f"{root.name}.kind"]
         self.assertEqual(spec["type"], "enum")
-        self.assertEqual(spec["directory"](None, [1, 2]), ["k", "k"])
+        self.assertEqual(spec["read"](None, [1, 2]), ["k", "k"])
         column = config.LAYOUTS[root.name]["columns"][1]
         self.assertIs(column["format"], attrs.mark)
 

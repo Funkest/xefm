@@ -63,22 +63,30 @@ quietly undo.
   sort is the fallback. Rows without a value go last in both directions. An
   automatic attribute's row in the sort dialog is greyed until every row has
   its value; an on-request one is always offered.
-- **Cache lifetime.** Across a re-read of the same directory a value is kept
-  when the entry's `(size, mtime)` is unchanged; a `directory` provider is run
-  again on every re-read (its old values stay on screen until replaced); a
-  different directory or `reread` starts afresh.
+- **One provider function, `read(directory, entries)`** (2026-10-29; it
+  replaced separate `entry` / `directory` keys). Named for what it does, not
+  for the unit it batches by. `entries` are always rows of one folder, and that
+  folder is passed explicitly rather than left as an implicit promise to be
+  read off `entries[0].path.parent`. XeFM decides the batch: a whole folder for
+  an automatic attribute, one entry per call for an on-request one (progress,
+  cancellation), and a single entry wherever one value is wanted.
+- **Cache lifetime.** A re-read of the same directory runs every automatic
+  attribute's `read` again for the whole folder, since a Git status changes
+  without the file changing; the old values stay on screen until replaced. An
+  on-request value is kept across a re-read while the entry's `(size, mtime)`
+  is unchanged. A different directory or `reread` starts afresh.
 - **Pane-level values** (a Git branch) are out of scope: an attribute is per
   entry. The status bar is a later issue.
-- **Git status is not core.** It is the first non-built-in user of the
-  `directory` shape, to be written in xefm-extensions.
+- **Git status is not core.** It is the first non-built-in user of a
+  folder-at-once `read`, to be written in xefm-extensions.
 - **Everything new is Preview** (`config.ATTRIBUTES`, `config.LAYOUTS`,
   `config.LAYOUT_RULES`, `manifest.contributes.attributes` / `layouts`,
   `EntryInfo.attr`, `Cell`).
 
 ## Attributes — `xefm/attributes.py`
 
-`Attribute` is frozen data: `name`, `label`, `type` (`TYPES`), one of `entry`
-/ `directory`, `values`, `where`, `compute`, plus two internal hooks for
+`Attribute` is frozen data: `name`, `label`, `type` (`TYPES`), `read`,
+`values`, `where`, `compute`, plus two internal hooks for
 built-ins: `sync(path, record)` and `applies(path)`.
 
 Built-ins (`BUILTIN`):
@@ -86,7 +94,7 @@ Built-ins (`BUILTIN`):
 | Name | Kind | Value |
 |---|---|---|
 | `name`, `ext`, `size`, `mtime` | sync | off the listing's record (`dir_scan` attrs); never cached |
-| `tags` | auto, per entry | `tags.read`, only where `store_for(path).cheap`; fills `tags.SEEN` |
+| `tags` | auto | `tags.read` per entry, only where `store_for(path).cheap`; fills `tags.SEEN` |
 | `total_size` | on request | a file's size (sync half); a folder's `UsageScan` total |
 
 `SORT_MODE_OF` maps the four sync names to the built-in sort modes, which is
@@ -101,9 +109,8 @@ live stores backs `lookup()` for `EntryInfo.attr`.
 - `sync(files, records, directory, wanted)` is called by `FilePane.draw` on
   every frame and returns at once unless `id(files)`, the wanted set or the
   directory changed. Otherwise it bumps the generation, drops stale values
-  (`_drop_stale`, see *Cache lifetime*), and queues one job per directory
-  group (`directory` providers; entries grouped by parent, so a search-results
-  pane works) and one per missing entry.
+  (`_drop_stale`, see *Cache lifetime*), and queues one `read` per attribute
+  per folder (rows grouped by parent, so a search-results pane works).
 - One daemon worker per store (`xefm-attrs`) drains the queue and exits after
   five idle seconds, as `TagCache` did. A job from an older generation is
   skipped; `_put` refuses a result from one.
@@ -111,8 +118,8 @@ live stores backs `lookup()` for `EntryInfo.attr`.
   the queue empties or every `_READY_EVERY` values, so a large folder fills in
   without a frame per row. The app turns it into `_attrs_dirty` and a pump
   wake.
-- A provider that raises costs its value (`None`) and is logged once per
-  attribute per generation.
+- A `read` that raises, or returns the wrong number of values, costs that
+  call's values (`None`) and is logged once per attribute per generation.
 - `request(name, paths, records, on_done)` runs an on-request computation on a
   thread of its own with a cancel `Event`; a new directory or `clear()` sets
   it. `total_size` runs `UsageScan.run_sync` with that event as its cancel
@@ -195,7 +202,7 @@ built-in key or a quick sort clears the overlay; **Reverse Sort** reverses it.
   on an attribute nothing defines, loading the layout anyway), then
   `LAYOUT_RULES` (dropping a rule whose layout is unknown).
 - `extensions`: `CONTRIBUTION_TABLES` gains `attributes` and `layouts`;
-  `layouts` is a data kind. An attribute's `entry`/`directory` and a layout's
+  `layouts` is a data kind. An attribute's `read` and a layout's
   `format` (in columns and markers) are references — `_refs_in` finds them for
   `xefm ext check`, `_value_for` / `_layout_refs` import them.
 - `TABLE_KEYS` has `ATTRIBUTES` and `LAYOUTS`; the API snapshot was

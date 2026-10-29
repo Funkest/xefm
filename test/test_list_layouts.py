@@ -105,26 +105,27 @@ def _wait(predicate, timeout=3.0):
 class AttributesTable(_Clean):
 
     def test_a_good_entry_registers(self):
-        loaded = _load(ATTRIBUTES={"lines": {"type": "count", "entry": lambda e: 1}})
+        loaded = _load(ATTRIBUTES={"lines": {"type": "count",
+                                             "read": lambda d, es: [1] * len(es)}})
         self.assertEqual(loaded.warnings, [])
         self.assertEqual(loaded.attributes, 1)
         self.assertEqual(attributes.get("lines").label, "lines")
 
     def test_problems_are_named(self):
         cases = {
-            "both": {"entry": lambda e: 1, "directory": lambda d, es: []},
-            "neither": {"type": "text"},
-            "badtype": {"type": "colour", "entry": lambda e: 1},
-            "arity": {"directory": lambda d: []},
-            "ondirectory": {"compute": "on_request", "directory": lambda d, es: []},
+            "noread": {"type": "text"},
+            "oldkey": {"entry": lambda e: 1},
+            "badtype": {"type": "colour", "read": lambda d, es: []},
+            "arity": {"read": lambda es: []},
+            "badwhen": {"compute": "later", "read": lambda d, es: []},
         }
         loaded = _load(ATTRIBUTES=cases)
         self.assertEqual(loaded.attributes, 0)
         self.assertEqual(len(loaded.warnings), len(cases))
-        self.assertIsNone(attributes.get("both"))
+        self.assertIsNone(attributes.get("noread"))
 
     def test_a_built_in_cannot_be_replaced(self):
-        loaded = _load(ATTRIBUTES={"size": {"entry": lambda e: 1}})
+        loaded = _load(ATTRIBUTES={"size": {"read": lambda d, es: []}})
         self.assertIn("built-in", loaded.warnings[0])
 
 
@@ -242,43 +243,71 @@ class Formats(unittest.TestCase):
 
 class Store(_Tree):
 
-    def test_an_entry_provider_fills_every_row_and_a_directory_one_is_called_once(self):
+    def test_an_automatic_attribute_is_read_once_for_the_whole_folder(self):
         calls = []
 
-        def per_dir(directory, entries):
-            calls.append(len(entries))
+        def upper(directory, entries):
+            calls.append((str(directory), len(entries)))
             return [e.name.upper() for e in entries]
 
-        _load(ATTRIBUTES={"up": {"directory": per_dir},
-                          "len": {"type": "count", "entry": lambda e: len(e.name)}})
+        _load(ATTRIBUTES={"up": {"read": upper}})
         pane = self.pane()
         store = attributes.store_of(pane)
         files, records = pane["files"], self.records(pane)
-        store.sync(files, records, pane["path"], {"up", "len"})
-        self.assertTrue(_wait(lambda: store.ready("up", files, records)
-                              and store.ready("len", files, records)))
-        self.assertEqual(calls, [len(files)])
+        store.sync(files, records, pane["path"], {"up"})
+        self.assertTrue(_wait(lambda: store.ready("up", files, records)))
+        self.assertEqual(calls, [(self.tmp, len(files))])
         a = next(p for p in files if p.name == "a.txt")
         self.assertEqual(store.get(a, records[str(a)], "up"), "A.TXT")
-        self.assertEqual(store.get(a, records[str(a)], "len"), 5)
 
-    def test_values_survive_a_re_read_unless_the_entry_changed(self):
-        seen = []
-        _load(ATTRIBUTES={"n": {"entry": lambda e: seen.append(e.name) or e.name}})
+    def test_a_re_read_asks_again_for_the_whole_folder(self):
+        """A Git status changes without the file it is about changing, so a
+        re-read cannot keep the values of the rows that look the same."""
+        calls = []
+
+        def names(directory, entries):
+            calls.append(len(entries))
+            return [e.name for e in entries]
+
+        _load(ATTRIBUTES={"n": {"read": names}})
         pane = self.pane()
         store = attributes.store_of(pane)
         store.sync(pane["files"], self.records(pane), pane["path"], {"n"})
-        self.assertTrue(_wait(lambda: store.ready("n", pane["files"], self.records(pane))))
-        first = len(seen)
-        with open(os.path.join(self.tmp, "a.txt"), "w") as f:
-            f.write("longer content")
+        self.assertTrue(_wait(lambda: len(calls) == 1))
         self.flm.apply_listing(pane, self.flm.compute_listing(Path(self.tmp)))
         store.sync(pane["files"], self.records(pane), pane["path"], {"n"})
-        self.assertTrue(_wait(lambda: store.ready("n", pane["files"], self.records(pane))))
-        self.assertEqual(seen[first:], ["a.txt"])
+        self.assertTrue(_wait(lambda: len(calls) == 2))
+        self.assertEqual(calls, [len(pane["files"])] * 2)
+
+    def test_a_provider_answering_the_wrong_count_costs_its_values(self):
+        _load(ATTRIBUTES={"bad": {"read": lambda d, es: ["x"]}})
+        pane = self.pane()
+        store = attributes.store_of(pane)
+        files, records = pane["files"], self.records(pane)
+        store.sync(files, records, pane["path"], {"bad"})
+        self.assertTrue(_wait(lambda: store.ready("bad", files, records)))
+        self.assertEqual({store.get(p, records[str(p)], "bad") for p in files}, {None})
+
+    def test_an_on_request_attribute_is_read_one_entry_at_a_time(self):
+        calls = []
+
+        def size_of(directory, entries):
+            calls.append([e.name for e in entries])
+            return [e.size for e in entries]
+
+        _load(ATTRIBUTES={"sz": {"type": "size", "compute": "on_request", "read": size_of}})
+        pane = self.pane()
+        store = attributes.store_of(pane)
+        records = self.records(pane)
+        targets = [p for p in pane["files"] if p.name in ("a.txt", "b.md")]
+        done = threading.Event()
+        store.request("sz", targets, records, on_done=lambda n, c: done.set())
+        self.assertTrue(done.wait(3))
+        self.assertEqual(calls, [["a.txt"], ["b.md"]])
+        self.assertEqual(store.get(targets[0], records[str(targets[0])], "sz"), 10)
 
     def test_another_directory_starts_afresh(self):
-        _load(ATTRIBUTES={"n": {"entry": lambda e: e.name}})
+        _load(ATTRIBUTES={"n": {"read": lambda d, es: [e.name for e in es]}})
         pane = self.pane()
         store = attributes.store_of(pane)
         store.sync(pane["files"], self.records(pane), pane["path"], {"n"})
@@ -301,7 +330,7 @@ class Store(_Tree):
         self.assertEqual(EntryInfo(sub, is_dir=True).attr("total_size"), 1000)
 
     def test_entry_attr_never_computes(self):
-        _load(ATTRIBUTES={"n": {"entry": lambda e: "computed"}})
+        _load(ATTRIBUTES={"n": {"read": lambda d, es: ["computed"] * len(es)}})
         self.assertIsNone(EntryInfo(Path(self.tmp) / "a.txt").attr("n"))
         self.assertEqual(EntryInfo(Path(self.tmp) / "a.txt").attr("ext"), ".txt")
 
@@ -311,7 +340,7 @@ class Store(_Tree):
 class Drawing(_Tree):
 
     def test_a_layout_of_its_own(self):
-        _load(ATTRIBUTES={"kind": {"type": "enum", "entry": lambda e: "F",
+        _load(ATTRIBUTES={"kind": {"type": "enum", "read": lambda d, es: ["F"] * len(es),
                                    "values": {"F": {"label": "File"}}}},
               LAYOUTS={"mine": {"columns": [
                   {"attr": "name", "markers": [{"attr": "kind", "side": "before",

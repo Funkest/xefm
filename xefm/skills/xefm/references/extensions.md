@@ -124,7 +124,7 @@ Rules the check enforces — each violation is an `error:` naming the field:
   `image_decoders`, `path_schemes`, `lexers`, `themes`, `menus`,
   `attributes`, `layouts`, `key_suggestions`.
 - An `attributes` entry is a table like its `ATTRIBUTES` entry, with
-  `entry` or `directory` a reference (`"pkg.git:status"`). A `layouts` entry
+  `read` a reference (`"pkg.git:status"`). A `layouts` entry
   is plain data like its `LAYOUTS` entry; a column's or marker's `format` is
   a built-in format's name or a reference. A package never contributes
   `LAYOUT_RULES`: which layout a folder uses is the user's choice.

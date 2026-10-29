@@ -748,16 +748,18 @@ class Config:
     # own already: 'name', 'ext', 'size', 'mtime', 'tags' and 'total_size' (a
     # folder's recursive size, counted by View > Calculate Folder Sizes).
     #
-    # A function computes the value, on a background thread. Either one call
-    # per entry:
+    # One function, read(directory, entries), computes the values on a
+    # background thread: `entries` are rows of one folder, `directory` is that
+    # folder, and it returns one value per entry, in the same order. XeFM
+    # hands it a whole folder at once, so a source that answers a folder in
+    # one go -- git, where a call per file would be hundreds of processes --
+    # is asked once:
     #
-    #     def line_count(entry):
-    #         with open(entry.path, 'rb') as f:
-    #             return sum(1 for _ in f)
-    #
-    # ...or one call per directory, returning a list of values in the order
-    # of `entries` -- for a source that answers a whole directory at once,
-    # where a call per file would be hundreds of processes:
+    #     def line_count(directory, entries):
+    #         def count(entry):
+    #             with open(entry.path, 'rb') as f:
+    #                 return sum(1 for _ in f)
+    #         return [count(e) for e in entries]
     #
     #     import subprocess                    # at the top of this file
     #
@@ -784,9 +786,9 @@ class Config:
     #         return [codes.get(e.path.name) for e in entries]
     #
     #     ATTRIBUTES = {
-    #         'lines': {'label': 'Lines', 'type': 'count', 'entry': line_count},
+    #         'lines': {'label': 'Lines', 'type': 'count', 'read': line_count},
     #         'git': {
-    #             'label': 'Git status', 'type': 'enum', 'directory': git_status,
+    #             'label': 'Git status', 'type': 'enum', 'read': git_status,
     #             'values': {                  # each value's meaning, and a color
     #                 'M': {'label': 'Modified',  'color': 'yellow'},
     #                 'A': {'label': 'Added',     'color': 'green'},
@@ -806,10 +808,12 @@ class Config:
     # time. One that cannot -- it reads every file whole, it walks a tree --
     # says 'compute': 'on_request' and is computed only for the entries you
     # ask about: View > Compute Values, for the selection or the entry under
-    # the cursor (total_size has its own View > Calculate Folder Sizes).
+    # the cursor, one entry per call (total_size has its own View > Calculate
+    # Folder Sizes).
     #
-    # A value is None until it arrives. A function that fails costs its value
-    # and says so once in the log pane. Your own functions can read a value
+    # A value is None until it arrives. A function that fails, or returns a
+    # list of the wrong length, costs that call's values and says so once in
+    # the log pane. Your own functions can read a value
     # XeFM already has with entry.attr('git') -- it never waits for one.
     ATTRIBUTES = {}
 

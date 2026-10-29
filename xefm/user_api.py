@@ -187,8 +187,7 @@ TABLE_KEYS: dict[str, tuple[str, ...]] = {
     "IMAGE_DECODERS": ("open", "label"),
     "PATH_SCHEMES": ("class", "override"),
     "MENU_ITEMS": ("menus", "label", "when"),
-    "ATTRIBUTES": ("label", "type", "entry", "directory", "values", "where",
-                   "compute"),
+    "ATTRIBUTES": ("label", "type", "read", "values", "where", "compute"),
     "LAYOUTS": _layouts.LAYOUT_KEYS,
 }
 

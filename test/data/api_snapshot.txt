@@ -5,7 +5,7 @@ stable	capability	capability.file_editing
 stable	capability	capability.streaming_read
 stable	capability	capability.write_operations
 stable	table	config.ACTIONS	context,description,func,override
-preview	table	config.ATTRIBUTES	compute,directory,entry,label,type,values,where
+preview	table	config.ATTRIBUTES	compute,label,read,type,values,where
 preview	table	config.EVENT_HOOKS
 preview	names	config.EVENT_HOOKS.events	directory_changed,file_open,quit,startup
 stable	table	config.FILTERS	label,match,pattern
