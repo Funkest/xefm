@@ -81,8 +81,11 @@ Each is a place a later change should not quietly undo.
 - **Two kinds of non-built-in attribute: `auto` and `on_request`.** Automatic
   ones are computed for every row of the listing in the background as soon as
   something on screen draws them. Anything too slow for that (a recursive
-  folder size) is computed only when asked (`calculate_folder_sizes`,
-  `compute_values`).
+  folder size) is computed only when asked, by one action, `calculate`
+  (2026-10-30; it replaced `calculate_folder_sizes` and `compute_values`, two
+  actions that differed only in a fallback). Its dialog always opens, names
+  the targets (selection, else the item under the cursor) and lists the
+  on-request values the pane shows by label, even when there is one.
 - **Sort and filter never wait for a value.** `EntryInfo.attr()` is cache-only
   everywhere.
 - **An attribute sort is an overlay for one directory**: it never replaces the
@@ -189,8 +192,8 @@ come from `_attribute_sort_rows` (`mode = "attr:<name>"`).
 ## App
 
 - `choose_layout` / View → Layout ▸; `choose_extras` / View → Show ▸ (one
-  submenu per extra, Auto / On / Off, then Calculate Folder Sizes and Compute
-  Values — moved there to keep View within 23 rows on an 80×24 terminal).
+  submenu per extra, Auto / On / Off); `calculate` / View → Calculate…. View
+  must stay within 23 rows on an 80×24 terminal (a test checks it).
 - `pane["layout"]` and `pane["extras"]` (`{name: 'on'|'off'}`) are saved with
   the pane and each tab; `_saved_extras` keeps a state for an extra the config
   no longer has. `sort_overlay` is not saved.

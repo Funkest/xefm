@@ -811,21 +811,25 @@ _DETAILS: dict[str, str] = {
         "Switches to the next color theme. View ▸ Theme lists them all by "
         "name."),
     "choose_layout": (
-        "Chooses how the active pane draws its rows — which columns it has "
-        "and what marks the names. **Automatic** lets `LAYOUT_RULES` in "
-        "`config.py` pick per folder; any other choice stays with the tab "
-        "until you change it. `LAYOUTS` in `config.py` defines more."),
-    "calculate_folder_sizes": (
-        "Counts everything inside the selected folders — or the folder under "
-        "the cursor, or every folder here when the cursor is on a file — and "
-        "shows each total in the size column. Counting walks the whole tree, "
-        "so it runs only when asked, and stops when you leave the folder. "
-        "The sort dialog can then order this folder by the totals."),
-    "compute_values": (
-        "Computes the values the active pane's layout shows that are worked "
-        "out only on request — an `ATTRIBUTES` entry in `config.py` with "
-        "`'compute': 'on_request'`, and folder totals — for the selection, or "
-        "the item under the cursor."),
+        "Chooses how the active pane presents its rows — which of the usual "
+        "columns it has and how they are written: short dates, names with "
+        "their extension, and so on. The choice stays with the tab. "
+        "`LAYOUTS` in `config.py` defines more; what a folder adds, such as "
+        "a Git status, is `choose_extras`."),
+    "choose_extras": (
+        "Turns an extra — a Git status, your tags, anything `LAYOUT_EXTRAS` in "
+        "`config.py` or an extension adds — on or off for the active pane's "
+        "tab. **Auto** shows it where it applies (a Git status in a working "
+        "tree); **On** and **Off** override that for this tab. Also View ▸ "
+        "Show."),
+    "calculate": (
+        "Works out a value the active pane shows that is calculated only on "
+        "request — a folder's total size, or an `ATTRIBUTES` entry in "
+        "`config.py` with `'compute': 'on_request'` — for the selected items, "
+        "or the item under the cursor. A dialog names the items and lists "
+        "what can be calculated for them, by name. It runs in the background "
+        "and stops when you leave the folder; the sort dialog can then order "
+        "this folder by the results."),
     "redraw": (
         "Repaints the whole screen — for when another program or a terminal "
         "multiplexer has written over it."),
@@ -1081,10 +1085,10 @@ _FILER_ACTIONS = [
     # Appearance
     _a("toggle_hidden", FILER, "Show or hide hidden files"),
     _a("toggle_color_scheme", FILER, "Cycle to the next color theme"),
-    _a("choose_layout", FILER, "Choose how the pane draws its rows", default_keys=()),
-    _a("calculate_folder_sizes", FILER, "Calculate the total size of folders",
+    _a("choose_layout", FILER, "Choose how the pane presents its rows", default_keys=()),
+    _a("choose_extras", FILER, "Turn an extra such as Git status on or off in this tab",
        default_keys=()),
-    _a("compute_values", FILER, "Compute the layout's on-request values",
+    _a("calculate", FILER, "Calculate a value such as a folder's total size",
        default_keys=()),
     _a("redraw", FILER, "Redraw the screen"),
     _a("reread", FILER, "Re-read both panes' directories", default_keys=()),

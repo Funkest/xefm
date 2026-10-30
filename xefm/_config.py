@@ -727,9 +727,9 @@ class Config:
     # --- ATTRIBUTES -------------------------------------------------------
     # Values XeFM can know about each entry beyond its name, size and date --
     # a Git status, a line count, an image's dimensions. Defining one shows it
-    # nowhere: LAYOUT_EXTRAS (or LAYOUTS) below puts it in a row. XeFM has a few of its
-    # own already: 'name', 'ext', 'size', 'mtime', 'tags' and 'total_size' (a
-    # folder's recursive size, counted by View > Calculate Folder Sizes).
+    # nowhere: LAYOUT_EXTRAS (or LAYOUTS) below puts it in a row. XeFM has a
+    # few of its own already: 'name', 'ext', 'size', 'mtime', 'tags' and
+    # 'total_size' (a folder's recursive size, counted by View > Calculate).
     #
     # One function, read(directory, entries), computes the values on a
     # background thread: `entries` are rows of one folder, `directory` is that
@@ -790,9 +790,8 @@ class Config:
     # screen shows them, so a definition should answer a folder's worth in no
     # time. One that cannot -- it reads every file whole, it walks a tree --
     # says 'compute': 'on_request' and is computed only for the entries you
-    # ask about: View > Compute Values, for the selection or the entry under
-    # the cursor, one entry per call (total_size has its own View > Calculate
-    # Folder Sizes).
+    # ask about: View > Calculate, for the selection or the entry under the
+    # cursor, one entry per call -- as total_size is.
     #
     # A value is None until it arrives. A function that fails, or returns a
     # list of the wrong length, costs that call's values and says so once in

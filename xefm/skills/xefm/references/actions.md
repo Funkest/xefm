@@ -124,8 +124,7 @@ the user picked in **Tools ▸ Advanced ▸ Keymap…**; ask which if `KEY_PRESE
 | `toggle_color_scheme` | Cycle to the next color theme | — | — |
 | `choose_layout` | Choose how the pane presents its rows | — | — |
 | `choose_extras` | Turn an extra such as Git status on or off in this tab | — | — |
-| `calculate_folder_sizes` | Calculate the total size of folders | — | — |
-| `compute_values` | Compute the layout's on-request values | — | — |
+| `calculate` | Calculate a value such as a folder's total size | — | — |
 | `redraw` | Redraw the screen | `F5` | — |
 | `reread` | Re-read both panes' directories | — | `F2`, `Ctrl-R` |
 | `menu` | Open the menu bar | `F10`, `ALT` | `F9`, `F10`, `ALT` |

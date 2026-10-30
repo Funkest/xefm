@@ -3912,8 +3912,7 @@ class XeFMApp:
                 "reread": (self.reread, False),
                 "choose_layout": (self.choose_layout, False),
                 "choose_extras": (self.choose_extras, False),
-                "calculate_folder_sizes": (self.calculate_folder_sizes, True),
-                "compute_values": (self.compute_values, True),
+                "calculate": (self.calculate, False),
                 "choose_keymap": (self.choose_keymap, False),
                 # --- cursor ---
                 "cursor_up": (self._act_cursor_up, True),
@@ -5002,7 +5001,9 @@ class XeFMApp:
             MenuItem("Show Hidden Files", on_select=lambda: self._menu("toggle_hidden"),
                      checked=lambda: self.flm.show_hidden, shortcut=sc("toggle_hidden")),
             MenuItem("Layout", submenu=self._layout_menu()),
-            MenuItem("Show", submenu=self._extras_menu(has_files, sc)),
+            MenuItem("Show", submenu=self._extras_menu()),
+            MenuItem("Calculate…", on_select=lambda: self._menu("calculate"),
+                     enabled=has_files, shortcut=sc("calculate")),
             MenuItem("Reverse Sort", on_select=self._toggle_reverse,
                      checked=lambda: self.active_pane()["sort_reverse"]),
             MenuItem("Sort By", submenu=sort_menu),
@@ -5728,9 +5729,9 @@ class XeFMApp:
                       f"{' (shown here)' if shown else ' (not shown here)'}")
         self.panel.render()
 
-    def _extras_menu(self, has_files, sc) -> Menu:
+    def _extras_menu(self) -> Menu:
         """View > Show ▸ — one submenu per extra with Auto / On / Off, for the
-        active pane's tab; then the values computed only when asked for."""
+        active pane's tab."""
         def item(extra):
             def is_state(state):
                 return lambda: layouts.extra_state(self.active_pane(), extra.name) == state
@@ -5740,15 +5741,7 @@ class XeFMApp:
                              self.active_pane(), extra.name, st)),
                          checked=is_state(state))
                 for state in layouts.EXTRA_STATES], title=extra.label))
-        return Menu(
-            *[item(e) for e in layouts.all_extras()],
-            SEPARATOR,
-            MenuItem("Calculate Folder Sizes",
-                     on_select=lambda: self._menu("calculate_folder_sizes"),
-                     enabled=has_files, shortcut=sc("calculate_folder_sizes")),
-            MenuItem("Compute Values", on_select=lambda: self._menu("compute_values"),
-                     enabled=has_files, shortcut=sc("compute_values")),
-            title="Show")
+        return Menu(*[item(e) for e in layouts.all_extras()], title="Show")
 
     def choose_extras(self) -> None:
         """Pick an extra, then Auto / On / Off for it in this tab — the same
@@ -5777,65 +5770,65 @@ class XeFMApp:
         show_choice_dialog(self.panel, "Show", rows, on_result=picked)
         self.panel.render()
 
-    def calculate_folder_sizes(self) -> None:
-        """Count the total size of the selected folders — the one under the
-        cursor when nothing is selected, every folder here when that is a file
-        — and show it in the size column. That is the ``total_size``
-        attribute, computed only on request because it walks the whole tree.
-        Leaving the directory stops it."""
+    def calculate(self) -> None:
+        """Calculate the values the active pane shows that are worked out only
+        when asked — a folder's total size, an ``ATTRIBUTES`` entry with
+        ``'compute': 'on_request'`` — for the selection, or the item under the
+        cursor. A dialog names the targets and lists those values by name,
+        even when there is one, so what is about to run is never a guess.
+        Leaving the folder stops it."""
         pane = self.active_pane()
-        records = {str(p): a for p, a in pane.get("_listing_entries") or ()}
-
-        def is_dir(p) -> bool:
-            return bool(records.get(str(p), {}).get("is_dir"))
-
-        selected = [f for f in pane["files"] if str(f) in pane["selected_files"]]
-        focused = self._focused_entry()
-        if selected:
-            dirs = [p for p in selected if is_dir(p)]
-        elif focused is not None and is_dir(focused):
-            dirs = [focused]
-        else:
-            dirs = [p for p in pane["files"] if is_dir(p)]
-        if not dirs:
-            self.log_info("No folder to calculate")
+        targets = self._selected_or_focused(pane)
+        names = self._calculable(pane)
+        if not names:
+            self.log_info("Nothing to calculate: this pane shows no value "
+                          "that is calculated on request")
             return
-        self.log_info(f"Calculating the size of {len(dirs)} folder(s)…")
+        if not targets:
+            self.log_info("Nothing to calculate: no item selected or under the cursor")
+            return
+        what = (f"{len(targets)} selected item(s)" if pane["selected_files"]
+                else f"'{name_key.compare_name(targets[0])}'")
+        rows = [(n, attributes.get(n).label) for n in names]
+
+        def chosen(name) -> None:
+            if name is not None:
+                self._calculate(pane, name, targets)
+            self.panel.render()
+
+        show_choice_dialog(self.panel, f"Calculate for {what}", rows, on_result=chosen)
+        self.panel.render()
+
+    @staticmethod
+    def _calculable(pane: dict) -> list:
+        """The on-request attributes ``pane`` shows, in the order it shows them."""
+        names = []
+        layout = layouts.effective(pane)
+        for col in layout.columns:
+            for n in [col.attr, *(m.attr for m in col.markers)]:
+                attr = attributes.get(n)
+                if attr is not None and attr.compute == "on_request" and n not in names:
+                    names.append(n)
+        return names
+
+    def _calculate(self, pane: dict, name: str, targets: list) -> None:
+        """Run one on-request attribute over ``targets`` in the background,
+        logging the start and the end."""
+        attr = attributes.get(name)
+        records = {str(p): a for p, a in pane.get("_listing_entries") or ()}
+        if name == "total_size":
+            # A file's total is its size, already shown: only folders count.
+            targets = [p for p in targets if records.get(str(p), {}).get("is_dir")]
+            if not targets:
+                self.log_info("Total size: no folder among the items")
+                return
+        self.log_info(f"Calculating {attr.label} for {len(targets)} item(s)…")
 
         def done(count: int, cancelled: bool) -> None:
-            if cancelled:
-                self._call_later(lambda: self.log_info("Folder sizes: stopped"))
-            else:
-                self._call_later(lambda: self.log_info(
-                    f"Folder sizes: {count} folder(s) calculated"))
+            self._call_later(lambda: self.log_info(
+                f"{attr.label}: {'stopped' if cancelled else f'{count} calculated'}"))
 
-        attributes.store_of(pane).request("total_size", dirs, records, on_done=done)
-
-    def compute_values(self) -> None:
-        """Compute the on-request attributes the active pane's layout shows —
-        an ``ATTRIBUTES`` entry with ``'compute': 'on_request'``, and folder
-        totals — for the selection, or the entry under the cursor."""
-        pane = self.active_pane()
-        records = {str(p): a for p, a in pane.get("_listing_entries") or ()}
-        targets = self._selected_or_focused(pane)
-        names = sorted(n for n in layouts.effective(pane).attributes()
-                       if (a := attributes.get(n)) is not None
-                       and a.compute == "on_request")
-        if not targets or not names:
-            self.log_info("Nothing to compute: the layout shows no value "
-                          "computed on request")
-            return
-        store = attributes.store_of(pane)
-        for name in names:
-            label = attributes.get(name).label
-
-            def done(count: int, cancelled: bool, label=label) -> None:
-                self._call_later(lambda: self.log_info(
-                    f"{label}: {'stopped' if cancelled else f'{count} computed'}"))
-
-            store.request(name, targets, records, on_done=done)
-        self.log_info(f"Computing {', '.join(attributes.get(n).label for n in names)} "
-                      f"for {len(targets)} item(s)…")
+        attributes.store_of(pane).request(name, targets, records, on_done=done)
 
     def reread(self) -> None:
         """Read both panes' directories again — Total Commander's F2. File

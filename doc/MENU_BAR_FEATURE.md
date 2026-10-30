@@ -169,7 +169,8 @@ the mouse for the first, take the whole buffer with the second. See
 | Reread | `reread` |
 | Show Hidden Files | `toggle_hidden` |
 | Layout ▸ | (submenu: every layout — also `choose_layout`) — see [File List Layouts](FILE_LIST_LAYOUTS_FEATURE.md) |
-| Show ▸ | (submenu: each extra — Tags, and those `LAYOUT_EXTRAS` or an extension add — with Auto / On / Off, also `choose_extras`; then Calculate Folder Sizes, `calculate_folder_sizes`, and Compute Values, `compute_values`, both unbound) |
+| Show ▸ | (submenu: each extra — Tags, and those `LAYOUT_EXTRAS` or an extension add — with Auto / On / Off, also `choose_extras`) |
+| Calculate… | `calculate` *(ships unbound)* — a folder's total size and other values worked out on request; see [File List Layouts](FILE_LIST_LAYOUTS_FEATURE.md) |
 | Reverse Sort | *(menu only)* |
 | Sort By ▸ | (submenu: Name / Extension / Size / Date — also the `quick_sort_*` actions) |
 | Theme ▸ | (submenu of installed themes) |

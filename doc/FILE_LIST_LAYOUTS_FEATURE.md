@@ -71,18 +71,22 @@ When two extras draw the same mark in the same color — a yellow `●` for a Gi
 change looks exactly like a yellow tag — XeFM says so in the log pane when the
 config loads.
 
-## Folder sizes
+## Calculating folder sizes and other values
 
-The size column shows `<DIR>` for a folder, because finding out how much a
-folder holds means counting everything below it. **View → Show ▸ Calculate
-Folder Sizes** (`calculate_folder_sizes`) counts it and shows the total in the
-size column:
+Some values take too long to work out for every row on their own, so XeFM
+calculates them only when you ask. The size column shows `<DIR>` for a
+folder, because finding out how much a folder holds means counting everything
+below it; an attribute of your own may be another such value (see `compute`
+below).
 
-- with items selected, the selected folders;
-- otherwise the folder under the cursor;
-- with the cursor on a file, every folder in the pane.
+**View → Calculate…** (`calculate`) works them out for the selected items, or
+the item under the cursor when nothing is selected. A dialog names those items
+and lists, by name, what can be calculated for them in this pane — **Total
+size** in the default layout — even when there is only one, so it is always
+clear what is about to run. To calculate every folder here, select them all
+first.
 
-Counting runs in the background, and each total appears as it is done.
+Calculating runs in the background, and each result appears as it is done.
 Leaving the folder stops it. The totals stay while you are in the folder; one
 whose folder changed meanwhile goes back to `<DIR>` until you calculate it
 again.
@@ -173,9 +177,9 @@ class Config:
 Defining an attribute shows it nowhere — an extra or a layout does that. Once
 something on screen shows it, it is worked out for **every row of the
 folder**, in the background, so a definition should answer a folder's worth
-quickly. One that cannot — it reads every file whole, say — sets `'compute':
-'on_request'`, and is then computed only when you ask: **View → Show ▸ Compute
-Values** (`compute_values`), for the selection or the item under the cursor.
+quickly. One that cannot — it reads every file whole, say — sets
+`'compute': 'on_request'`, and is then computed only when you ask, with **View →
+Calculate…** (`calculate`), for the selection or the item under the cursor.
 It is then handed one entry per call, so the values appear one by one and
 leaving the folder stops them.
 
