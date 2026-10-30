@@ -122,12 +122,16 @@ Rules the check enforces — each violation is an `error:` naming the field:
   assignment or import). The check reads the file; it does not import it.
 - Contribution kinds: `actions`, `event_hooks`, `sort_keys`, `filters`,
   `image_decoders`, `path_schemes`, `lexers`, `themes`, `menus`,
-  `attributes`, `layouts`, `key_suggestions`.
+  `attributes`, `layouts`, `extras`, `key_suggestions`.
 - An `attributes` entry is a table like its `ATTRIBUTES` entry, with
-  `read` a reference (`"pkg.git:status"`). A `layouts` entry
-  is plain data like its `LAYOUTS` entry; a column's or marker's `format` is
-  a built-in format's name or a reference. A package never contributes
-  `LAYOUT_RULES`: which layout a folder uses is the user's choice.
+  `read` a reference (`"pkg.git:status"`). `layouts` and `extras` entries
+  are plain data like their `LAYOUTS` / `EXTRAS` entries; a column's or
+  marker's `format`, and an extra's `when`, are a built-in name or a
+  reference. An extra brings its own default (`when`, placement): the user
+  switches it Auto / On / Off per tab, and `config.py` overrides it key by
+  key under the same name. Prefer markers on the name — `side = "before"`
+  for a state read at a glance — with glyphs that cannot be mistaken for
+  the tag dots (`●`).
 - A `menus` entry is keyed by one of the package's own actions: `menus` is a
   list of `"file"` (the File menu) and `"context"` (a row's context menu),
   `label` the text shown, and the optional `when` greys it out unless it
@@ -148,7 +152,8 @@ Rules the check enforces — each violation is an `error:` naming the field:
 
 What each table entry *does* is the same as the `config.py` table it feeds —
 `ACTIONS`, `EVENT_HOOKS`, `SORT_KEYS`, `FILTERS`, `IMAGE_DECODERS`,
-`PATH_SCHEMES`, `LEXERS`, `THEMES`, `MENU_ITEMS`, `ATTRIBUTES`, `LAYOUTS`.
+`PATH_SCHEMES`, `LEXERS`, `THEMES`, `MENU_ITEMS`, `ATTRIBUTES`, `LAYOUTS`,
+`EXTRAS`.
 Each is documented, with the shape of
 its values, in the comment above it in `references/config-template.md`; for a
 `sort_keys`, `filters`, `image_decoders` or `path_schemes` entry the

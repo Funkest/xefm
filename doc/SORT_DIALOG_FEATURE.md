@@ -54,16 +54,16 @@ updated live as you move:
 | Size, descending | `1 GB → 1 MB → 1 KB  (largest first)` |
 | Timestamp, ascending | `2024 → 2025 → 2026  (oldest first)` |
 
-## Sorting by a layout's columns
+## Sorting by what a pane shows
 
-After its own keys the dialog lists the columns of the pane's
-[layout](FILE_LIST_LAYOUTS_FEATURE.md) that are not one of them — **Total
-size** in the default layout, a Git status in a layout that shows one.
-Sorting by one orders this folder only, by the values the pane already has;
-rows without a value go last. Going to another folder brings back the pane's
-own sort. A column still being filled in is greyed out until every row has
-its value. See
-[Sorting by a column](FILE_LIST_LAYOUTS_FEATURE.md#sorting-by-a-column).
+After its own keys the dialog lists what the pane shows that is not one of
+them — **Total size** in the default
+[layout](FILE_LIST_LAYOUTS_FEATURE.md), a Git status when that extra is
+showing. Sorting by one orders this folder only, by the values the pane
+already has; rows without a value go last. Going to another folder brings back
+the pane's own sort. One still being filled in is greyed out until every row
+has its value. See
+[Sorting by what a pane shows](FILE_LIST_LAYOUTS_FEATURE.md#sorting-by-what-a-pane-shows).
 
 ## Related keys
 

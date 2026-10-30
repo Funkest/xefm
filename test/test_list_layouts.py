@@ -154,40 +154,106 @@ class LayoutsTable(_Clean):
         self.assertEqual(loaded.layouts, 1)
         self.assertIn("git", loaded.warnings[0])
 
-    def test_markers_take_side_and_max_width(self):
+    def test_markers_take_side_and_limit(self):
         _load(LAYOUTS={"m": {"columns": [{"attr": "name", "markers": [
-            "tags", {"attr": "size", "side": "before", "max_width": 2}]}]}})
+            "tags", {"attr": "size", "side": "before", "limit": 2}]}]}})
         (name,) = layouts.get("m").columns
-        self.assertEqual([(m.attr, m.side, m.max_width) for m in name.markers],
-                         [("tags", "after", 3), ("size", "before", 2)])
+        self.assertEqual([(m.attr, m.side, m.limit) for m in name.markers],
+                         [("tags", "after", None), ("size", "before", 2)])
         loaded = _load(LAYOUTS={"m": {"columns": [{"attr": "name", "markers": [
             {"attr": "tags", "side": "under"}]}]}})
         self.assertIn("side", loaded.warnings[0])
+        loaded = _load(LAYOUTS={"m": {"columns": [{"attr": "name", "markers": [
+            {"attr": "tags", "max_width": 1}]}]}})
+        self.assertIn("'limit'", loaded.warnings[0])
+
+    def test_default_layout_names_a_layout(self):
+        _load(LAYOUTS={"slim": {"columns": ["name"]}}, DEFAULT_LAYOUT="slim")
+        self.assertEqual(layouts.layout_of({}).name, "slim")
+        self.assertEqual(layouts.layout_of({"layout": "default"}).name, "default")
+        loaded = _load(DEFAULT_LAYOUT="nowhere")
+        self.assertIn("DEFAULT_LAYOUT", loaded.warnings[0])
+        self.assertEqual(layouts.layout_of({}).name, "default")
+
+    def test_layout_rules_are_gone_and_say_so(self):
+        loaded = _load(LAYOUT_RULES=[("*", "x")])
+        self.assertIn("LAYOUT_RULES is gone", loaded.warnings[0])
 
 
-class Rules(_Clean):
+def _kind(directory, entries):
+    return ["F" if not e.is_dir else None for e in entries]
 
-    def test_first_match_wins_and_a_broken_rule_is_skipped(self):
+
+KIND = {"kind": {"type": "enum", "read": _kind,
+                 "values": {"F": {"label": "File", "color": "green"}}}}
+
+
+class Extras(_Clean):
+
+    def test_tags_is_a_built_in_extra(self):
+        (tags,) = [e for e in layouts.all_extras() if e.name == "tags"]
+        self.assertEqual([(m.marker.attr, m.on, m.marker.limit) for m in tags.markers],
+                         [("tags", "name", 3)])
+
+    def test_config_overrides_an_existing_extra_key_by_key(self):
+        _load(EXTRAS={"tags": {"when": "never"}})
+        tags = layouts.get_extra("tags")
+        self.assertEqual(tags.when, "never")
+        self.assertEqual(tags.label, "Tags")            # the rest as it was
+        self.assertTrue(tags.markers)
+
+    def test_problems_are_named(self):
+        loaded = _load(ATTRIBUTES=KIND, EXTRAS={
+            "empty": {"label": "Nothing"},
+            "both": {"columns": [{"attr": "kind", "after": "name", "replace": "size"}]},
+            "badwhen": {"when": 3, "markers": ["kind"]},
+        })
+        self.assertEqual(loaded.extras, 0)
+        self.assertEqual(len(loaded.warnings), 3)
+
+    def test_when_decides_where_auto_shows_it(self):
         def boom(path):
             raise RuntimeError("no")
+        _load(ATTRIBUTES=KIND, EXTRAS={
+            "data": {"when": "/data/*", "markers": ["kind"]},
+            "broken": {"when": boom, "markers": ["kind"]},
+            "nowhere": {"when": "never", "markers": ["kind"]}})
+        self.assertIn("data", layouts.extras_for("/data/x"))
+        self.assertNotIn("data", layouts.extras_for("/elsewhere"))
+        self.assertNotIn("broken", layouts.extras_for("/data/x"))
+        self.assertNotIn("nowhere", layouts.extras_for("/data/x"))
 
-        _load(LAYOUTS={"a": {"columns": ["name"]}, "b": {"columns": ["name"]}},
-              LAYOUT_RULES=[(boom, "a"), ("/data/*", "a"),
-                            (lambda p: str(p).startswith("/data"), "b")])
-        self.assertEqual(layouts.resolve("/data/x"), "a")
-        self.assertIsNone(layouts.resolve("/elsewhere"))
+    def test_the_tab_s_state_beats_when(self):
+        _load(ATTRIBUTES=KIND, EXTRAS={"k": {"when": "never", "markers": ["kind"]}})
+        names = lambda pane: [e.name for e in layouts.active_extras(pane)]  # noqa: E731
+        self.assertNotIn("k", names({"_extras_auto": frozenset()}))
+        self.assertIn("k", names({"extras": {"k": "on"}}))
+        self.assertNotIn("k", names({"extras": {"k": "off"},
+                                     "_extras_auto": frozenset({"k"})}))
 
-    def test_a_rule_for_a_layout_nobody_defined_is_dropped(self):
-        loaded = _load(LAYOUT_RULES=[("*", "nowhere")])
-        self.assertIn("nowhere", loaded.warnings[0])
-        self.assertIsNone(layouts.resolve("/x"))
+    def test_compose_places_after_replace_end_and_markers(self):
+        _load(ATTRIBUTES=KIND, EXTRAS={
+            "a": {"columns": [{"attr": "kind", "after": "name"}],
+                  "markers": [{"attr": "kind", "on": "mtime", "side": "before"}]},
+            "b": {"columns": [{"attr": "kind", "replace": "mtime"}]},
+            "c": {"columns": [{"attr": "kind", "replace": "nothing"}],
+                  "markers": [{"attr": "kind", "on": "nothing"}]},
+        })
+        row = layouts.compose(layouts.BUILTIN_DEFAULT,
+                              [layouts.get_extra(n) for n in "abc"])
+        self.assertEqual([(c.attr, c.extra) for c in row.columns],
+                         [("name", None), ("kind", "a"), ("ext", None),
+                          ("total_size", None), ("kind", "b"), ("kind", "c")])
+        replaced = row.columns[4]
+        self.assertEqual(replaced.priority, 1)          # the date's
+        self.assertEqual([m.slot for m in row.columns[0].markers], ["c"])
 
-    def test_hand_beats_rule_beats_default(self):
-        _load(LAYOUTS={"a": {"columns": ["name"]}, "b": {"columns": ["name"]}})
-        self.assertEqual(layouts.effective({}).name, "default")
-        self.assertEqual(layouts.effective({"_layout_auto": "a"}).name, "a")
-        self.assertEqual(layouts.effective({"_layout_auto": "a", "layout": "b"}).name, "b")
-        self.assertEqual(layouts.effective({"layout": "gone"}).name, "default")
+    def test_a_shared_glyph_in_one_color_is_reported(self):
+        def mark(value, entry):
+            return Cell("●", color="yellow")
+        loaded = _load(ATTRIBUTES=KIND, EXTRAS={
+            "k": {"markers": [{"attr": "kind", "format": mark}]}})
+        self.assertTrue(any("both draw ●" in w for w in loaded.warnings), loaded.warnings)
 
 
 # --- formats -----------------------------------------------------------------------
@@ -339,44 +405,45 @@ class Store(_Tree):
 
 class Drawing(_Tree):
 
-    def test_a_layout_of_its_own(self):
-        _load(ATTRIBUTES={"kind": {"type": "enum", "read": lambda d, es: ["F"] * len(es),
-                                   "values": {"F": {"label": "File"}}}},
-              LAYOUTS={"mine": {"columns": [
-                  {"attr": "name", "markers": [{"attr": "kind", "side": "before",
-                                                "max_width": 1}]},
-                  {"attr": "kind", "format": "word"},
-                  {"attr": "size", "format": "bytes", "width": 6}]}})
-        pane = self.pane(layout="mine")
-        lines = self.render(pane)
+    def test_an_extra_marks_the_name_and_adds_a_column(self):
+        _load(ATTRIBUTES=KIND, EXTRAS={"k": {
+            "markers": [{"attr": "kind", "side": "before"}],
+            "columns": [{"attr": "kind", "format": "word", "after": "name"}]}})
+        pane = self.pane(extras={"k": "on"})
+        self.render(pane)
         store = attributes.store_of(pane)
         self.assertTrue(_wait(lambda: store.ready("kind", pane["files"], self.records(pane))))
         lines = self.render(pane)
-        row = next(line for line in lines if "a.txt" in line)
-        self.assertIn("F a.txt", row)          # the marker, before the name
-        self.assertIn("File", row)             # the enum's word
-        self.assertTrue(row.rstrip().endswith("10"))
-        self.assertNotIn(".txt ", row.replace("a.txt", ""))   # no ext column
+        row = next(line for line in lines if "a.txt" in line or " a " in line)
+        sub = next(line for line in lines if "sub" in line)
+        self.assertIn("F a", row)                     # the mark, in the gutter
+        self.assertIn("File", row)                    # the extra's own column
+        self.assertEqual(sub.index("sub"), row.index("a"))   # names start in one column
 
-    def test_a_one_cell_marker_survives_a_glyph_wider_than_one_cell(self):
-        """A proportional ● measures a little over a cell on a GUI; elided to
-        fit, it vanished and left only its space (hand check, 2026-10-28)."""
+    def test_a_sparse_extra_takes_no_room_where_nothing_has_it(self):
+        _load(ATTRIBUTES={"none": {"type": "enum", "read": lambda d, es: [None] * len(es)}},
+              EXTRAS={"n": {"markers": [{"attr": "none", "side": "before"}],
+                            "columns": [{"attr": "none", "after": "name"}]}})
+        plain = self.render(self.pane())
+        pane = self.pane(extras={"n": "on"})
+        self.render(pane)
+        store = attributes.store_of(pane)
+        self.assertTrue(_wait(lambda: store.ready("none", pane["files"], self.records(pane))))
+        self.assertEqual(self.render(pane), plain)
+
+    def test_markers_of_one_extra_share_a_slot_and_limit_counts_cells(self):
         view = FilePane({"files": []}, config=_Config())
-        marker = layouts.Marker("x", side="before", max_width=1)
-        resolved = layouts.resolve_format(lambda v, e: Cell("●", color="yellow"),
-                                          attributes.Attribute("x", "X"))
-        wide = lambda s: 1.15 * len(s)   # noqa: E731
-        (group,) = view._marker_groups([(marker, None, resolved)], "before",
-                                       lambda n: "M", lambda a: layouts.Row(),
-                                       lambda: None, wide)
-        self.assertEqual([c.text for c in group[0]], ["●"])
-        dots = layouts.Marker("tags", max_width=3)
-        three = layouts.resolve_format(lambda v, e: [Cell("●")] * 5,
-                                       attributes.Attribute("tags", "T"))
-        (group,) = view._marker_groups([(dots, None, three)], "after",
-                                       lambda n: 1, lambda a: layouts.Row(),
-                                       lambda: None, wide)
-        self.assertEqual(len(group[0]), 3)   # by count, as the tag dots were
+        wide = lambda s: 1.15 * len(s)   # noqa: E731 — a proportional font
+        one = layouts.resolve_format(lambda v, e: Cell("●", color="yellow"),
+                                     attributes.Attribute("x", "X"))
+        five = layouts.resolve_format(lambda v, e: [Cell("●")] * 5,
+                                      attributes.Attribute("tags", "T"))
+        markers = [(layouts.Marker("x", slot="e"), None, one),
+                   (layouts.Marker("tags", limit=3, slot="e"), None, five)]
+        groups = view._slot_groups(markers, "after", lambda n: 1,
+                                   lambda a: layouts.Row(), lambda: None, wide)
+        (cells, _w), = groups.values()
+        self.assertEqual([c.text for c in cells], ["●", " ", "●", "●", "●"])
 
     def test_a_column_with_a_priority_goes_first_on_a_narrow_pane(self):
         _load(LAYOUTS={"two": {"columns": ["name", {"attr": "mtime", "priority": 1},
@@ -438,17 +505,37 @@ class App(_Tree):
         pane = self.app.active_pane()
         pane["focused_index"] = [f.name for f in pane["files"]].index(name)
 
-    def test_the_layout_is_the_tab_s_and_rules_pick_it_on_automatic(self):
-        _load(LAYOUTS={"slim": {"columns": ["name", "size"]}},
-              LAYOUT_RULES=[(self.tmp, "slim")])
+    def test_extras_follow_when_and_the_tab_can_override(self):
+        _load(ATTRIBUTES=KIND, EXTRAS={"k": {"when": self.tmp, "markers": ["kind"]}})
         pane = self.app.active_pane()
         self.app._relist(pane)
         self.app._settle_listings()
-        self.assertEqual(layouts.effective(pane).name, "slim")
-        self.app._set_layout(pane, "default")
-        self.assertEqual(layouts.effective(pane).name, "default")
-        self.app._set_layout(pane, None)
-        self.assertEqual(layouts.effective(pane).name, "slim")
+        active = lambda: [e.name for e in layouts.active_extras(pane)]  # noqa: E731
+        self.assertIn("k", active())
+        self.app._set_extra(pane, "k", "off")
+        self.assertNotIn("k", active())
+        self.app._set_extra(pane, "k", "auto")
+        self.assertIn("k", active())
+        self.assertNotIn("k", pane["extras"])
+
+    def test_the_layout_is_the_tab_s(self):
+        _load(LAYOUTS={"slim": {"columns": ["name", "size"]}})
+        pane = self.app.active_pane()
+        self.app._set_layout(pane, "slim")
+        self.assertEqual(layouts.layout_of(pane).name, "slim")
+        self.assertEqual(layouts.layout_of(self.app.pm.new_pane(pane["path"], like=pane)).name,
+                         "slim")
+
+    def test_help_explains_the_marks_on_screen(self):
+        _load(ATTRIBUTES=KIND, EXTRAS={"k": {"label": "Kind", "markers": ["kind"]}})
+        pane = self.app.active_pane()
+        self.app._set_extra(pane, "k", "on")
+        text = self.app._help_markdown()
+        self.assertIn("## Markers in this pane", text)
+        self.assertIn("**Kind**", text)
+        self.assertIn("- `F` green — File", text)
+        self.app._set_extra(pane, "k", "off")
+        self.assertNotIn("**Kind**", self.app._help_markdown())
 
     def test_folder_sizes_then_a_sort_by_them_for_this_folder_only(self):
         with open(os.path.join(self.tmp, "big"), "wb") as f:

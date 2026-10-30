@@ -2150,6 +2150,7 @@ class XeFMApp:
                                 menu_items=loaded.menu_items,
                                 attributes=loaded.attributes,
                                 layouts=loaded.layouts,
+                                extras=loaded.extras,
                                 scheme_overrides=loaded.scheme_overrides)
         if notice:
             self.log_info(notice)
@@ -2632,6 +2633,7 @@ class XeFMApp:
                              else pane['sort_mode'])
         pane['sort_reverse'] = state.get('sort_reverse', pane['sort_reverse'])
         pane['layout'] = state.get('layout') if isinstance(state.get('layout'), str) else None
+        pane['extras'] = self._saved_extras(state.get('extras'))
         pane['filter_pattern'] = state.get('filter_pattern', pane['filter_pattern'])
 
     def _display_height(self) -> int:
@@ -2917,9 +2919,10 @@ class XeFMApp:
                 overlay=overlay,
             )
             if result.get("ok"):
-                # LAYOUT_RULES may touch the filesystem (is this a Git working
-                # tree?), so they are asked here rather than on the UI thread.
-                result["layout_auto"] = layouts.resolve(path)
+                # An extra's 'when' may touch the filesystem (is this a Git
+                # working tree?), so it is asked here rather than on the UI
+                # thread.
+                result["extras_auto"] = layouts.extras_for(path)
             # drop_if_unchanged tracks keep_visible here: a re-list nobody
             # asked for is the case worth dropping. The re-sort path posts False.
             self._result_queue.put((pane_name, gen, result, on_ready,
@@ -3025,9 +3028,9 @@ class XeFMApp:
             # blanked by an in-flight navigation must install the result even when
             # it compares equal (an empty directory would otherwise match the
             # blank pane and leave it stuck "loading" forever).
-            if "layout_auto" in result and \
-                    result["layout_auto"] != pane.get("_layout_auto"):
-                pane["_layout_auto"] = result["layout_auto"]
+            if "extras_auto" in result and \
+                    result["extras_auto"] != pane.get("_extras_auto"):
+                pane["_extras_auto"] = result["extras_auto"]
                 applied = True
             if (drop_if_unchanged and not pane.get("loading")
                     and self._listing_unchanged(pane, result)):
@@ -3908,6 +3911,7 @@ class XeFMApp:
                 "redraw": (lambda: None, True),
                 "reread": (self.reread, False),
                 "choose_layout": (self.choose_layout, False),
+                "choose_extras": (self.choose_extras, False),
                 "calculate_folder_sizes": (self.calculate_folder_sizes, True),
                 "compute_values": (self.compute_values, True),
                 "choose_keymap": (self.choose_keymap, False),
@@ -4714,6 +4718,7 @@ class XeFMApp:
             tabs = [{"path": str(t["path"]), "sort_mode": t["sort_mode"],
                      "sort_reverse": t["sort_reverse"],
                      "layout": t.get("layout"),
+                     "extras": dict(t.get("extras") or {}),
                      "filter_pattern": t.get("filter_pattern", "")}
                     for t in self.pm.tabs[side]]
             self.state_manager.set_state(
@@ -4751,6 +4756,7 @@ class XeFMApp:
             tab["sort_reverse"] = bool(entry.get("sort_reverse", tab["sort_reverse"]))
             layout = entry.get("layout")
             tab["layout"] = layout if isinstance(layout, str) else None
+            tab["extras"] = self._saved_extras(entry.get("extras"))
             tab["filter_pattern"] = entry.get("filter_pattern", "") or ""
             tabs.append(tab)
         self.pm.tabs[side] = tabs
@@ -4996,11 +5002,7 @@ class XeFMApp:
             MenuItem("Show Hidden Files", on_select=lambda: self._menu("toggle_hidden"),
                      checked=lambda: self.flm.show_hidden, shortcut=sc("toggle_hidden")),
             MenuItem("Layout", submenu=self._layout_menu()),
-            MenuItem("Calculate Folder Sizes",
-                     on_select=lambda: self._menu("calculate_folder_sizes"),
-                     enabled=has_files, shortcut=sc("calculate_folder_sizes")),
-            MenuItem("Compute Values", on_select=lambda: self._menu("compute_values"),
-                     enabled=has_files, shortcut=sc("compute_values")),
+            MenuItem("Show", submenu=self._extras_menu(has_files, sc)),
             MenuItem("Reverse Sort", on_select=self._toggle_reverse,
                      checked=lambda: self.active_pane()["sort_reverse"]),
             MenuItem("Sort By", submenu=sort_menu),
@@ -5670,44 +5672,110 @@ class XeFMApp:
         return True
 
     def choose_layout(self) -> None:
-        """View > Layout…: how the active pane draws its rows (#756). The
-        choice is the tab's, kept across sessions; "Automatic" hands it back to
-        ``LAYOUT_RULES``."""
+        """View > Layout…: how the active pane presents its rows (#756) — a
+        matter of taste and width, chosen per tab and kept across sessions.
+        What the folder adds (Git status, tags) is :meth:`choose_extras`."""
         pane = self.active_pane()
-        picked = layouts.get(pane.get("_layout_auto")) or layouts.get(layouts.DEFAULT)
-        rows = [("", f"Automatic ({picked.label})")]
-        rows += [(layout.name, layout.label) for layout in layouts.all_layouts()]
+        rows = [(layout.name, layout.label) for layout in layouts.all_layouts()]
 
         def chosen(value) -> None:
             if value is not None:
-                self._set_layout(pane, value or None)
+                self._set_layout(pane, value)
             self.panel.render()
 
         show_choice_dialog(self.panel, "Layout", rows,
-                           current=pane.get("layout") or "", on_result=chosen)
+                           current=layouts.layout_of(pane).name, on_result=chosen)
         self.panel.render()
 
-    def _set_layout(self, pane: dict, name: str | None) -> None:
-        """Fix ``pane``'s layout to ``name``, or None to follow the rules."""
+    def _set_layout(self, pane: dict, name: str) -> None:
         pane["layout"] = name
-        suffix = "" if name else " (automatic)"
-        self.log_info(f"Layout: {layouts.effective(pane).label}{suffix}")
+        self.log_info(f"Layout: {layouts.layout_of(pane).label}")
         self.panel.render()
 
     def _layout_menu(self) -> Menu:
         """View > Layout ▸ — the same choice as :meth:`choose_layout`, rebuilt
         on open so a config reload's layouts appear in it."""
         def is_current(name):
-            return lambda: self.active_pane().get("layout") == name
+            return lambda: layouts.layout_of(self.active_pane()).name == name
+        return Menu(*[
+            MenuItem(layout.label,
+                     on_select=(lambda n=layout.name: self._set_layout(self.active_pane(), n)),
+                     checked=is_current(layout.name))
+            for layout in layouts.all_layouts()], title="Layout")
+
+    @staticmethod
+    def _saved_extras(saved) -> dict:
+        """A tab's saved extra states, keeping only well-formed ones. A state
+        for an extra the config no longer has is kept: it applies again if the
+        extra comes back."""
+        if not isinstance(saved, dict):
+            return {}
+        return {k: v for k, v in saved.items()
+                if isinstance(k, str) and v in ("on", "off")}
+
+    def _set_extra(self, pane: dict, name: str, state: str) -> None:
+        """Auto / On / Off for one extra in ``pane``'s tab, as sort and filter
+        are the tab's."""
+        extras = dict(pane.get("extras") or {})
+        if state == "auto":
+            extras.pop(name, None)
+        else:
+            extras[name] = state
+        pane["extras"] = extras
+        extra = layouts.get_extra(name)
+        shown = extra in layouts.active_extras(pane)
+        self.log_info(f"{extra.label if extra else name}: {state.capitalize()}"
+                      f"{' (shown here)' if shown else ' (not shown here)'}")
+        self.panel.render()
+
+    def _extras_menu(self, has_files, sc) -> Menu:
+        """View > Show ▸ — one submenu per extra with Auto / On / Off, for the
+        active pane's tab; then the values computed only when asked for."""
+        def item(extra):
+            def is_state(state):
+                return lambda: layouts.extra_state(self.active_pane(), extra.name) == state
+            return MenuItem(extra.label, submenu=Menu(*[
+                MenuItem(state.capitalize(),
+                         on_select=(lambda st=state: self._set_extra(
+                             self.active_pane(), extra.name, st)),
+                         checked=is_state(state))
+                for state in layouts.EXTRA_STATES], title=extra.label))
         return Menu(
-            MenuItem("Automatic", on_select=lambda: self._set_layout(self.active_pane(), None),
-                     checked=is_current(None)),
+            *[item(e) for e in layouts.all_extras()],
             SEPARATOR,
-            *[MenuItem(layout.label,
-                       on_select=(lambda n=layout.name: self._set_layout(self.active_pane(), n)),
-                       checked=is_current(layout.name))
-              for layout in layouts.all_layouts()],
-            title="Layout")
+            MenuItem("Calculate Folder Sizes",
+                     on_select=lambda: self._menu("calculate_folder_sizes"),
+                     enabled=has_files, shortcut=sc("calculate_folder_sizes")),
+            MenuItem("Compute Values", on_select=lambda: self._menu("compute_values"),
+                     enabled=has_files, shortcut=sc("compute_values")),
+            title="Show")
+
+    def choose_extras(self) -> None:
+        """Pick an extra, then Auto / On / Off for it in this tab — the same
+        choice as View > Show ▸, from the keyboard."""
+        pane = self.active_pane()
+        active = layouts.active_extras(pane)
+
+        def label(extra) -> str:
+            state = layouts.extra_state(pane, extra.name).capitalize()
+            return f"{extra.label} — {state}{', shown here' if extra in active else ''}"
+
+        rows = [(e.name, label(e)) for e in layouts.all_extras()]
+
+        def picked(name) -> None:
+            if name is None:
+                self.panel.render()
+                return
+            states = [(st, st.capitalize()) for st in layouts.EXTRA_STATES]
+            show_choice_dialog(
+                self.panel, layouts.get_extra(name).label, states,
+                current=layouts.extra_state(pane, name),
+                on_result=lambda st: (self._set_extra(pane, name, st)
+                                      if st else self.panel.render()))
+            self.panel.render()
+
+        show_choice_dialog(self.panel, "Show", rows, on_result=picked)
+        self.panel.render()
 
     def calculate_folder_sizes(self) -> None:
         """Count the total size of the selected folders — the one under the
@@ -6199,17 +6267,21 @@ class XeFMApp:
     _ATTR_SORT = "attr:"
 
     def _attribute_sort_rows(self, pane: dict) -> list:
-        """The sort dialog's rows for the pane's layout: one per column whose
-        attribute is not already a sort key, offered once every row has its
-        value (an on-request one at once — rows not computed go last)."""
-        layout = layouts.effective(pane)
+        """The sort dialog's rows for what the pane shows: one per column of
+        its layout, and per attribute of its active extras, that is not already
+        a sort key — offered once every row has its value (an on-request one
+        at once — rows not computed go last)."""
+        layout = layouts.layout_of(pane)
         store = attributes.store_of(pane)
         entries = pane.get("_listing_entries") or ()
         records = {str(p): a for p, a in entries}
         files = pane.get("files") or []
+        names = [c.attr for c in layout.columns]
+        for extra in layouts.active_extras(pane):
+            names += [c.column.attr for c in extra.columns]
+            names += [m.marker.attr for m in extra.markers]
         rows, seen = [], set()
-        for col in layout.columns:
-            name = col.attr
+        for name in names:
             attr = attributes.get(name)
             if attr is None or name in seen or name in attributes.SORT_MODE_OF:
                 continue
@@ -11552,6 +11624,7 @@ class XeFMApp:
         without a panel to push it onto."""
         from xefm.const import VERSION
         lines = ["# XeFM", f"Version {VERSION}", ""]
+        lines += self._help_markers_section()
         for title, entries in self._HELP_SECTIONS + self._user_help_sections():
             rows = self._help_entries(entries)
             if not rows:
@@ -11574,6 +11647,45 @@ class XeFMApp:
             lines.append("")
         lines.append(self._archive_help_section())
         return "\n".join(lines)
+
+    def _help_markers_section(self) -> list[str]:
+        """The legend (#789): what the marks and extra columns in the active
+        pane mean, first in Help because they are what is on screen. Only the
+        extras active in this tab; nothing at all when there are none.
+
+        Each mark is the extra's own format run on each value it declares, so
+        the legend shows what the pane draws. Help is Markdown, which has no
+        color, so a mark's color is named beside it."""
+        from xefm.user_api import EntryInfo   # imported here: user_api imports us
+        sample = lambda: EntryInfo(Path("."))   # noqa: E731
+        if getattr(self, "pm", None) is None:
+            return []                       # built without panes (tests)
+        out = []
+        for extra in layouts.active_extras(self.active_pane()):
+            rows = layouts.glyphs(extra, sample)
+            columns = [attributes.get(c.column.attr) for c in extra.columns]
+            columns = [a.label for a in columns if a is not None]
+            if not rows and not columns:
+                continue
+            place = ", ".join(
+                f"{m.marker.side} the {'name' if m.on == 'name' else m.on}"
+                for m in extra.markers)
+            out.append(f"**{extra.label}**" + (f" — marks {place}" if place else ""))
+            out.append("")
+            # A list, not a table: kept short, so the key list's links are
+            # still on the first screen, where Tab and Shift-Tab start.
+            for cells, meaning in rows:
+                mark = "".join(c.text for c in cells)
+                colors = {c.color for c in cells if c.color is not None}
+                color = f" {', '.join(sorted(map(str, colors)))}" if colors else ""
+                out.append(f"- `{mark}`{color} — {meaning}")
+            if rows:
+                out.append("")
+            if columns:
+                out += [f"Column: {', '.join(columns)}", ""]
+        if not out:
+            return []
+        return ["## Markers in this pane", ""] + out
 
     def _archive_help_section(self) -> str:
         """The archive formats *this run* supports, as a closing help section.

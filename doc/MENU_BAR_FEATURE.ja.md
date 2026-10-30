@@ -140,8 +140,7 @@ XeFM には **File**、**Edit**、**Go**、**Select**、**View**、**Tools**、*
 | Reread | `reread` |
 | Show Hidden Files | `toggle_hidden` |
 | Layout ▸ | （サブメニュー：Automatic とすべてのレイアウト。`choose_layout` でも可）— [ファイルリストのレイアウト](FILE_LIST_LAYOUTS_FEATURE.ja.md)を参照 |
-| Calculate Folder Sizes | `calculate_folder_sizes` *（既定でキー未割り当て）* |
-| Compute Values | `compute_values` *（既定でキー未割り当て）* |
+| Show ▸ | （サブメニュー：追加の情報ごとの Auto / On / Off。Tags と、`EXTRAS` や拡張パッケージが加えるもの。`choose_extras` でも可。その下に Calculate Folder Sizes（`calculate_folder_sizes`）と Compute Values（`compute_values`）。どちらも既定でキー未割り当て） |
 | Reverse Sort | *（メニューのみ）* |
 | Sort By ▸ | （サブメニュー：Name / Extension / Size / Date。`quick_sort_*` アクションでも可） |
 | Theme ▸ | （インストール済みテーマのサブメニュー） |

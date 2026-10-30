@@ -369,13 +369,13 @@ class Config:
     # does not read yet, PATH_SCHEMES lets you add a browsable folder that
     # is not a folder, LEXERS lets you color a language the text viewer
     # does not know, MENU_ITEMS puts an action in a menu, and ATTRIBUTES,
-    # LAYOUTS and LAYOUT_RULES change what the file list's rows show.
+    # LAYOUTS and EXTRAS change what the file list's rows show.
     #
     # STABLE AND PREVIEW: this is API version 1 (xefm.user_api.API_VERSION).
     # ACTIONS, SORT_KEYS, FILTERS and PATH_SCHEMES, and the panes and entries
     # your functions are handed, are stable: a change that would break them
     # comes with a new API_VERSION and a line in the release notes. EVENT_HOOKS,
-    # MENU_ITEMS, IMAGE_DECODERS, LEXERS, ATTRIBUTES, LAYOUTS, LAYOUT_RULES and
+    # MENU_ITEMS, IMAGE_DECODERS, LEXERS, ATTRIBUTES, LAYOUTS, EXTRAS and
     # a few ctx methods (run_task, show_markdown, the prompts) are Preview and
     # may change in any release; XeFM logs one line when a config uses them.
     # doc/CUSTOMIZATION_FEATURE.md has the full list.
@@ -744,7 +744,7 @@ class Config:
     # --- ATTRIBUTES -------------------------------------------------------
     # Values XeFM can know about each entry beyond its name, size and date --
     # a Git status, a line count, an image's dimensions. Defining one shows it
-    # nowhere: LAYOUTS below decides where it appears. XeFM has a few of its
+    # nowhere: EXTRAS (or LAYOUTS) below puts it in a row. XeFM has a few of its
     # own already: 'name', 'ext', 'size', 'mtime', 'tags' and 'total_size' (a
     # folder's recursive size, counted by View > Calculate Folder Sizes).
     #
@@ -818,12 +818,13 @@ class Config:
     ATTRIBUTES = {}
 
     # --- LAYOUTS ----------------------------------------------------------
-    # How a file list row is drawn: which columns, in what order, how each
-    # value is written, and what marks a column's text. View > Layout picks
-    # one per tab. The built-in 'default' is what you see now:
+    # How a file list row is presented: which of the usual columns, in what
+    # order, and how each value is written -- a matter of taste and of how
+    # wide your panes are. View > Layout picks one per tab; DEFAULT_LAYOUT
+    # below is the one a new tab starts with. The built-in 'default' is what
+    # you see now:
     #
-    #     'columns': ['name' (with 'tags' as a marker), 'ext', 'total_size',
-    #                 {'attr': 'mtime', 'priority': 1}]
+    #     'columns': ['name', 'ext', 'total_size', {'attr': 'mtime', 'priority': 1}]
     #
     # A column is an attribute's name, or a dict:
     #
@@ -831,8 +832,7 @@ class Config:
     #      'format': 'relative',      # how (below), or a function of yours
     #      'width': 10,               # cells; the format's own by default
     #      'align': 'right',          # 'left' or 'right'
-    #      'priority': 1,             # dropped first when the pane is narrow
-    #      'markers': [...]}          # marks beside the text, below
+    #      'priority': 1}             # dropped first when the pane is narrow
     #
     # Every layout has a 'name' column, and it takes the width the others
     # leave. A column with a 'priority' is dropped when the name would get
@@ -850,65 +850,81 @@ class Config:
     # 'purple', 'orange', 'gray') or an (r, g, b). value is None while it is
     # being computed. Give it a 'width'.
     #
+    #     LAYOUTS = {
+    #         'short': {'label': 'Short time', 'columns': [
+    #             'name', 'ext', 'total_size',
+    #             {'attr': 'mtime', 'format': 'recent', 'priority': 1}]},
+    #         'names': {'label': 'Names only', 'columns': ['name']},
+    #     }
+    #
+    # Replacing 'default' itself needs 'override': True.
+    LAYOUTS = {}
+    DEFAULT_LAYOUT = 'default'
+
+    # --- EXTRAS -----------------------------------------------------------
+    # What a folder adds to its rows because of what it holds -- a Git status
+    # in a working tree, your tags where the system keeps them. Each extra
+    # says where it applies ('when'), and puts its attributes in the row as
+    # markers beside a column's text and/or as columns of their own. Several
+    # can show at once, on top of whichever layout the tab has. View > Show
+    # turns each one Auto (follow 'when', where every tab starts), On or Off
+    # for the tab. XeFM has one of its own, 'tags': the colored dots after a
+    # name.
+    #
     #     from xefm.user_api import Cell       # at the top of this file
     #
-    #     GIT_MARK = {'M': Cell('●', color='yellow'),
-    #                 'A': Cell('+', color='green'),
+    #     GIT_MARK = {'M': Cell('M', color='yellow'),
+    #                 'A': Cell('A', color='green'),
     #                 '?': Cell('?', color='muted')}
     #
     #     def git_mark(value, entry):
     #         return GIT_MARK.get(value, '')
     #
-    # A marker is drawn beside the text of the column it is in -- after it by
-    # default, or with 'side': 'before' -- as the tag dots are drawn after the
-    # name. It is an attribute's name or {'attr', 'format', 'side',
-    # 'max_width'}; 'max_width' (3 cells by default) is all it may take. A
-    # marker with nothing to show takes no room at all.
-    #
-    #     LAYOUTS = {
-    #         'git': {
-    #             'label': 'Git',
-    #             'columns': [
-    #                 {'attr': 'name', 'markers': [
-    #                     'tags',
-    #                     {'attr': 'git', 'format': git_mark, 'side': 'before',
-    #                      'max_width': 1},
-    #                 ]},
-    #                 'ext',
-    #                 'size',
-    #                 {'attr': 'mtime', 'format': 'relative', 'priority': 1},
-    #             ],
-    #         },
-    #         'compact': {'label': 'Name and size', 'columns': ['name', 'size']},
-    #     }
-    #
-    # Replacing 'default' itself needs 'override': True. A column whose
-    # attribute nothing defines is left out, with a line in the log pane.
-    #
-    # The sort dialog lists the computed columns of the pane's layout (Git
-    # status above) after its own keys. Sorting by one orders this folder
-    # only, by the values already there; going to another folder goes back to
-    # the pane's own sort.
-    LAYOUTS = {}
-
-    # --- LAYOUT_RULES -----------------------------------------------------
-    # Which layout a folder gets when its tab is on Automatic (View > Layout
-    # > Automatic, where every tab starts). A list of (condition, layout)
-    # pairs, the first that matches wins; nothing matching means 'default'.
-    # A condition is a path pattern or a function of the folder's path, which
-    # runs on a background thread and may look at the disk:
-    #
     #     def in_git_tree(path):
     #         return any((p / '.git').exists() for p in (path, *path.parents))
     #
-    #     LAYOUT_RULES = [
-    #         ('s3://*', 'compact'),
-    #         (in_git_tree, 'git'),
-    #     ]
+    #     EXTRAS = {
+    #         'git': {
+    #             'label': 'Git status',
+    #             'when': in_git_tree,
+    #             'markers': [{'attr': 'git', 'format': git_mark,
+    #                          'on': 'name', 'side': 'before'}],
+    #             'columns': [{'attr': 'git', 'format': 'word',
+    #                          'replace': 'mtime'}],
+    #         },
+    #     }
     #
-    # Only this file has rules: an extension may bring a layout, but whether
-    # a folder uses it is yours to say.
-    LAYOUT_RULES = []
+    # 'when' is 'always' (the default), 'never', a path pattern ('s3://*'),
+    # or a function of the folder's path, run on a background thread so it
+    # may look at the disk.
+    #
+    # A marker is {'attr', 'format', 'on', 'side', 'limit'}: 'on' is the
+    # column whose text it marks ('name' by default, and when the tab's layout
+    # has no such column), 'side' is 'before' or 'after' (the default),
+    # 'limit' the most pieces of the format's result shown (the tag dots:
+    # three). On the name, 'before' marks sit in a strip in front of every
+    # name, each extra in its own place, so a mark's position tells you which
+    # extra it is; 'after' marks follow the name. Nothing takes room in a
+    # folder where no file has one.
+    #
+    # A column is as in LAYOUTS, plus where it goes: 'after' a column, in
+    # place of one ('replace' -- to save room; it keeps that column's
+    # priority), or at the end (also when the named column is not in the
+    # layout). It is as wide as its widest value, and left out of a folder
+    # where no file has one.
+    #
+    # An extension can bring extras, already saying where they apply. To
+    # change one -- or the built-in 'tags' -- name it here with only the keys
+    # you change; the rest stays as it was:
+    #
+    #     EXTRAS = {'tags': {'when': 'never'}}            # no tag dots
+    #     EXTRAS = {'git': {'when': 'always'}}            # an extension's, changed
+    #
+    # The sort dialog lists what the pane shows beyond its own keys (Git
+    # status above). Sorting by one orders this folder only, by the values
+    # already there; going to another folder goes back to the pane's own
+    # sort. F1 lists what the marks in the active pane mean.
+    EXTRAS = {}
 
 
     # Favorites (J) - the places and files you jump to by name.

@@ -189,6 +189,7 @@ TABLE_KEYS: dict[str, tuple[str, ...]] = {
     "MENU_ITEMS": ("menus", "label", "when"),
     "ATTRIBUTES": ("label", "type", "read", "values", "where", "compute"),
     "LAYOUTS": _layouts.LAYOUT_KEYS,
+    "EXTRAS": _layouts.EXTRA_KEYS,
 }
 
 #: The menus ``MENU_ITEMS`` can put an action in: the menu bar's File menu, and
@@ -1366,6 +1367,7 @@ class LoadResult(NamedTuple):
     scheme_overrides: int = 0
     attributes: int = 0
     layouts: int = 0
+    extras: int = 0
 
 
 def load_user_entries(config, registry=None) -> LoadResult:
@@ -1578,28 +1580,51 @@ def _process_user_entries(config, registry, apply: bool) -> LoadResult:
         layout_names.add(name)
         layout_count += 1
 
-    rules = []
-    table = getattr(config, "LAYOUT_RULES", None)
-    if table is not None and not isinstance(table, (list, tuple)):
-        warnings.append("LAYOUT_RULES must be a list of (pattern or function, "
-                        "layout name) pairs")
-        table = ()
-    for i, spec in enumerate(table or ()):
-        rule, problem = _layouts.build_rule(i, spec)
+    if getattr(config, "LAYOUT_RULES", None):
+        warnings.append("LAYOUT_RULES is gone: an entry of EXTRAS says where it "
+                        "applies with 'when', and a tab's layout is chosen with "
+                        "View > Layout (DEFAULT_LAYOUT for new tabs)")
+
+    default = getattr(config, "DEFAULT_LAYOUT", None) or _layouts.DEFAULT
+    if default not in layout_names:
+        warnings.append(f"DEFAULT_LAYOUT names '{default}', which LAYOUTS does not "
+                        f"define; 'default' is used")
+        default = _layouts.DEFAULT
+    if apply:
+        _layouts.set_default(default)
+
+    # A name an extension or the built-ins already define is overridden key by
+    # key: config.py names only what it changes.
+    extra_count = 0
+    built = [e for e in (_layouts.build_extra(n, spec, source="builtin")[0]
+                         for n, spec in _layouts.BUILTIN_EXTRA_SPECS.items()) if e]
+    built = {e.name: e for e in built}
+    for name, spec in _items(getattr(config, "EXTRAS", None), "EXTRAS", warnings):
+        base = _layouts.BUILTIN_EXTRA_SPECS.get(name)
+        if base is not None and isinstance(spec, dict):
+            spec = {**base, **spec}
+        extra, problem = _layouts.build_extra(name, spec)
         if problem:
             warnings.append(problem)
             continue
-        if rule[1] not in layout_names:
-            warnings.append(f"LAYOUT_RULES[{i}] names the layout '{rule[1]}', "
-                            f"which LAYOUTS does not define; the rule is skipped")
-            continue
-        rules.append(rule)
+        unknown = sorted(n for n in extra.attributes() if n not in attr_names)
+        if unknown:
+            warnings.append(
+                f"EXTRAS['{name}'] names attribute(s) nothing defines: "
+                f"{', '.join(unknown)} — those are left out")
+        if apply:
+            _layouts.register_extra(extra)
+        built[name] = extra
+        extra_count += 1
     if apply:
-        _layouts.set_rules(rules)
+        # The sample entry a user format is handed, when the check renders
+        # each value — never a real file.
+        warnings.extend(_layouts.collisions(
+            list(built.values()), lambda: EntryInfo(Path("."))))
 
     return LoadResult(warnings, count, hook_count, sort_count, filter_count,
                       decoder_count, scheme_count, lexer_count, menu_count,
-                      scheme_overrides, attr_count, layout_count)
+                      scheme_overrides, attr_count, layout_count, extra_count)
 
 
 def _items(value, label: str, warnings: list[str]):
@@ -1890,7 +1915,7 @@ def _build_path_scheme(name, spec) -> tuple[type | None, str | None]:
 def preview_notice(*, hooks: int = 0, image_decoders: int = 0,
                    lexers: int = 0, menu_items: int = 0,
                    scheme_overrides: int = 0, attributes: int = 0,
-                   layouts: int = 0) -> str | None:
+                   layouts: int = 0, extras: int = 0) -> str | None:
     """The one line a config gets in the log pane when it uses a Preview
     table, or ``None`` when it uses none. ``ACTIONS``, ``SORT_KEYS``,
     ``FILTERS`` and ``PATH_SCHEMES`` (short of replacing a built-in scheme)
@@ -1903,6 +1928,7 @@ def preview_notice(*, hooks: int = 0, image_decoders: int = 0,
         (menu_items, "menu item(s)"),
         (attributes, "attribute(s)"),
         (layouts, "layout(s)"),
+        (extras, "extra(s)"),
         (scheme_overrides, "built-in scheme override(s)")) if count]
     if not parts:
         return None

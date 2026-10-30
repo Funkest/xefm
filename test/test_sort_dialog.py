@@ -156,7 +156,9 @@ class SortDialogApp(unittest.TestCase):
         dlg = self._open()
         self.assertEqual(dlg._index, 0)
         dlg.handle_event(_key("up"))                    # wraps to the bottom
-        self.assertEqual(dlg._index, len(dlg._keys) - 1)
+        last = max(i for i, (m, _l, _h) in enumerate(dlg._keys)
+                   if m not in dlg._disabled)           # past rows still computing
+        self.assertEqual(dlg._index, last)
         dlg.handle_event(_key("down"))
         self.assertEqual(dlg._index, 0)
         dlg.handle_event(_key("down"))

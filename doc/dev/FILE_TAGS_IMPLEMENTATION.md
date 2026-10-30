@@ -64,7 +64,7 @@ never fails the copy.
 ## The file list
 
 Tags are the built-in `tags` attribute (`xefm/attributes.py`, #633), which
-any layout can show; the default layout shows it as a marker after the name.
+any layout can show, and the dots after a name are the built-in `tags` extra (`layouts.BUILTIN_EXTRA_SPECS`).
 `doc/dev/FILE_LIST_LAYOUTS_IMPLEMENTATION.md` has the mechanism. What is
 particular to tags:
 
@@ -76,8 +76,8 @@ particular to tags:
   the layout on screen shows tags — not only the rows drawn, as the old
   `TagCache` did. Reading one xattr per file is cheap enough for that.
 - The `dots` format draws one `●` per tag, colored by its Finder color name
-  (`tags.RGB`) or in the muted column ink, cut to the marker's `max_width`
-  (three by default — the old `_MAX_TAG_DOTS`).
+  (`tags.RGB`) or in the muted column ink, cut to the marker's `limit`
+  (three, the old `_MAX_TAG_DOTS`).
 
 ## B and J
 

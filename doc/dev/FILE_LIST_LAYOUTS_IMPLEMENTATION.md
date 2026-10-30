@@ -1,95 +1,110 @@
 # File List Layouts — Implementation
 
-Issues #633 (attributes: obtaining per-entry values) and #756 (layouts:
-presenting them), designed together in conversation on 2026-10-28. User-facing
-page: `doc/FILE_LIST_LAYOUTS_FEATURE.md`.
+Issues #633 (attributes: obtaining per-entry values), #756 (presenting them)
+and #789 (explaining them), designed in conversation on 2026-10-28 to
+2026-10-30 — the decisions are recorded on #756. User-facing page:
+`doc/FILE_LIST_LAYOUTS_FEATURE.md`.
 
-## The split
+## The parts
 
-Two layers, kept apart so one value can be shown in several places and ways,
-and so that showing something is the user's choice, never the provider's:
-
-| Layer | Module | Config table | Owns |
+| Part | Module | Config | Owns |
 |---|---|---|---|
 | Attributes | `xefm/attributes.py` | `ATTRIBUTES` | what a value is, how and when it is computed, caching, invalidation |
-| Layouts | `xefm/layouts.py` | `LAYOUTS`, `LAYOUT_RULES` | which columns and markers a row has, formats, the per-folder choice |
+| Layouts | `xefm/layouts.py` | `LAYOUTS`, `DEFAULT_LAYOUT` | presentation: which usual columns, their order and formats — taste and width |
+| Extras | `xefm/layouts.py` | `EXTRAS` | content: what a folder adds (tags, Git status) as markers and columns, with a default `when` |
 
-`file_pane.py` draws a row from the effective layout; `file_list_manager.py`
-sorts by an attribute; `app.py` holds the per-tab choice, the actions and the
-menus.
+A pane draws `layouts.compose(layout_of(pane), active_extras(pane))`.
+`file_pane.py` draws it; `file_list_manager.py` sorts by an attribute;
+`app.py` holds the per-tab choices, the actions, the menus and the legend.
 
 ## Decisions, and why
 
-These were settled before any code. Each is a place a later change should not
-quietly undo.
+Each is a place a later change should not quietly undo.
 
-- **Names.** `LAYOUTS` / `LAYOUT_RULES`, not `VIEWS` (reads as the viewers) nor
-  `FILE_LIST_LAYOUTS` (a file manager's tables need no `FILE_`; compare
-  `FILTERS`, `FAVORITES`). `LIST_` was rejected too: "list" is one of the
-  layouts Explorer offers, and thumbnails would not be a list.
+- **Presentation and content are separate and combine.** A first version had
+  one `LAYOUTS` choice per tab, picked by first-match `LAYOUT_RULES`. That
+  mixed what is chosen by taste and screen width (short dates, joined names)
+  with what depends on the folder and the task (Git status), so every
+  combination needed its own layout, and Git and another extra could not show
+  together. `LAYOUT_RULES` is gone; a config still using it gets a warning.
+- **Names.** `LAYOUTS` (not `VIEWS`, which reads as the viewers; no `FILE_`
+  prefix, which a file manager's tables do not need — compare `FILTERS`) and
+  `EXTRAS`.
 - **`kind`** is in every layout from the start (`'details'` only today), so
-  tree and thumbnail layouts (#638) are an addition, not a reshaping. Attributes
-  and formats do not depend on the kind; only `columns`/`markers` do.
-- **No `FORMATTERS` table.** A format is a built-in name or a plain function in
-  the column spec; width and refresh go on the column. A named table bought
-  nothing a Python variable does not. Built-in names stay, because a layout
-  contributed as TOML data cannot hold a function. A table can be added later
-  without breaking anything.
-- **Markers belong to a column**, each with its own `side` (default `after`),
-  because what a marker decorates depends on its purpose — tags mark the name,
-  an "estimated" flag would mark the size.
-- **Enum `values`** carry the value's *label* (its meaning — the sort dialog
-  and later File Details use it) and a *color* that is only a default display
-  hint; a layout's format overrides the look entirely.
-- **Rules are separate from layouts and only `config.py` writes them.** A layout
-  with an `auto` predicate would let an extension change how folders look just
-  by being installed, and the order between several packages' predicates is
-  undefined. Extensions contribute `attributes` and `layouts`, never rules.
-- **Two kinds of non-built-in attribute: `auto` and `on_request`.**
-  Automatic ones are computed for **every row** of the listing in the
-  background as soon as the layout on screen draws them — no visible-row
-  scheduling. Anything too slow for that (a recursive folder size) is not an
-  automatic attribute; it is computed only when the user asks
-  (`calculate_folder_sizes`, `compute_values`), for the entries asked about.
-  Visible-row scheduling, prefetch margins and cancellation on scroll were
-  designed and then dropped as the cost of trying to show expensive values
-  automatically.
-- **Sort and filter never wait for a value.** They read what the store already
-  has. `EntryInfo.attr()` is cache-only everywhere — UI thread or worker — so
-  one rule covers actions, sort keys and filters.
-- **An attribute sort is an overlay for one directory.** It never replaces the
-  tab's `sort_mode`; it holds across re-reads of that directory (file
-  monitoring re-reads often) and is dropped on leaving it, so the persistent
-  sort is the fallback. Rows without a value go last in both directions. An
-  automatic attribute's row in the sort dialog is greyed until every row has
-  its value; an on-request one is always offered.
-- **One provider function, `read(directory, entries)`** (2026-10-29; it
-  replaced separate `entry` / `directory` keys). Named for what it does, not
-  for the unit it batches by. `entries` are always rows of one folder, and that
-  folder is passed explicitly rather than left as an implicit promise to be
-  read off `entries[0].path.parent`. XeFM decides the batch: a whole folder for
-  an automatic attribute, one entry per call for an on-request one (progress,
-  cancellation), and a single entry wherever one value is wanted.
-- **Cache lifetime.** A re-read of the same directory runs every automatic
-  attribute's `read` again for the whole folder, since a Git status changes
-  without the file changing; the old values stay on screen until replaced. An
-  on-request value is kept across a re-read while the entry's `(size, mtime)`
-  is unchanged. A different directory or `reread` starts afresh.
-- **Pane-level values** (a Git branch) are out of scope: an attribute is per
-  entry. The status bar is a later issue.
-- **Git status is not core.** It is the first non-built-in user of a
-  folder-at-once `read`, to be written in xefm-extensions.
-- **Everything new is Preview** (`config.ATTRIBUTES`, `config.LAYOUTS`,
-  `config.LAYOUT_RULES`, `manifest.contributes.attributes` / `layouts`,
-  `EntryInfo.attr`, `Cell`).
+  tree and thumbnail layouts (#638) are an addition.
+- **No `FORMATTERS` table.** A format is a built-in name or a plain function on
+  the column or marker. Built-in names stay because TOML cannot hold a
+  function.
+- **An extension may propose how its extra is shown; the user decides.** An
+  extra carries `when` and its placement; installing the package is enough to
+  see it where it applies. The user overrides per tab (Auto / On / Off, like
+  sort and filter, persisted with the tab and copied to a new one) and in
+  `config.py` key by key under the same name (`{'git': {'when': 'never'}}`),
+  as theme overrides work.
+- **Tags are a built-in extra**, so built-in and extension decorations take
+  one path and `LAYOUTS` holds presentation alone.
+- **Placement.** A marker is `on` a column (`name` by default, and when the
+  named column is absent), `before` or `after` its text. A column goes `after`
+  a column, `replace`s one (to save room; it inherits the priority unless it
+  gives its own; the replaced built-in still sorts), or goes at the end —
+  also when the named column is absent or already replaced.
+- **Tight rows when extras are sparse — the deciding case.** Nothing is
+  reserved for what a value *might* need. Per listing, measured with the real
+  font: a marker slot is as wide as its widest use on any row, and absent when
+  unused; an extra's column is as wide as its widest value, and absent when it
+  has none. The accepted cost: the columns shift once when an automatic
+  attribute's values land on entering a folder (one shift, since `read`
+  answers a folder at once; none on a re-read).
+- **Position identifies an extra where position is fixed.** On a value column
+  and in the name's `before` gutter, each extra used in the listing has its own
+  slot, in definition order, on every row — names start in one column. After
+  the name, marks follow the name and are told apart by glyph and color only.
+  Extensions are advised to put a sparse state `before` the name.
+- **`max_width` is gone**: it counted cells, i.e. assumed a monospaced font (a
+  proportional `●` measured just over one cell and was elided away). Widths are
+  measured; what remains is `limit`, a count of a format's cells (the tag dots:
+  three).
+- **Collisions are reported**, not prevented: at load, each extra's markers
+  are rendered for every declared `enum` value (tag dots for every tag color)
+  and a glyph two extras draw in the same color gets a config warning.
+- **The legend is a Help section**, not a command (#789): Help is where a user
+  goes when something on screen is unclear. **Markers in this pane** comes
+  first when the active tab shows any, lists only its active extras, and is a
+  short list, not a table — Help's Tab/Shift-Tab start from the links on the
+  first screen, and a long legend pushed them off it. Help is Markdown, so a
+  mark's color is named in words.
+- **One provider function, `read(directory, entries)`.** Named for what it
+  does, not the unit it batches by; the folder is an explicit argument rather
+  than an implicit promise about `entries`. XeFM picks the batch: a whole
+  folder for an automatic attribute, one entry per call for an on-request one.
+- **Two kinds of non-built-in attribute: `auto` and `on_request`.** Automatic
+  ones are computed for every row of the listing in the background as soon as
+  something on screen draws them. Anything too slow for that (a recursive
+  folder size) is computed only when asked (`calculate_folder_sizes`,
+  `compute_values`).
+- **Sort and filter never wait for a value.** `EntryInfo.attr()` is cache-only
+  everywhere.
+- **An attribute sort is an overlay for one directory**: it never replaces the
+  tab's `sort_mode`, holds across re-reads, and is dropped on leaving. Rows
+  without a value go last both ways. An automatic attribute's row is greyed
+  until every row has its value. The rows offered are the layout's columns and
+  every attribute of the tab's active extras.
+- **Cache lifetime.** A re-read runs every automatic attribute's `read` again
+  for the whole folder, since a Git status changes without the file changing;
+  old values stay on screen until replaced. An on-request value is kept while
+  its entry's `(size, mtime)` is unchanged. Another directory or `reread`
+  starts afresh.
+- **Out of scope for now:** pane-level values (a Git branch), describing the
+  cursor row's marks in the status bar, column headers.
+- **Everything new is Preview** (`config.ATTRIBUTES`, `LAYOUTS`,
+  `DEFAULT_LAYOUT`, `EXTRAS`, the three manifest kinds, `EntryInfo.attr`,
+  `Cell`).
 
 ## Attributes — `xefm/attributes.py`
 
 `Attribute` is frozen data: `name`, `label`, `type` (`TYPES`), `read`,
-`values`, `where`, `compute`, plus two internal hooks for
-built-ins: `sync(path, record)` and `applies(path)`.
-
-Built-ins (`BUILTIN`):
+`values`, `where`, `compute`, plus two internal hooks for built-ins:
+`sync(path, record)` and `applies(path)`.
 
 | Name | Kind | Value |
 |---|---|---|
@@ -97,136 +112,114 @@ Built-ins (`BUILTIN`):
 | `tags` | auto | `tags.read` per entry, only where `store_for(path).cheap`; fills `tags.SEEN` |
 | `total_size` | on request | a file's size (sync half); a folder's `UsageScan` total |
 
-`SORT_MODE_OF` maps the four sync names to the built-in sort modes, which is
-why the sort dialog does not list them twice.
+`SORT_MODE_OF` maps the four sync names to the built-in sort modes.
 
 ### `AttributeStore`
 
 One per pane dict (tab), created lazily by `store_of(pane)` and kept in
-`pane["_attr_store"]`, so a hidden tab keeps what it computed. A `WeakSet` of
-live stores backs `lookup()` for `EntryInfo.attr`.
+`pane["_attr_store"]`. A `WeakSet` of live stores backs `lookup()` for
+`EntryInfo.attr`.
 
-- `sync(files, records, directory, wanted)` is called by `FilePane.draw` on
-  every frame and returns at once unless `id(files)`, the wanted set or the
-  directory changed. Otherwise it bumps the generation, drops stale values
-  (`_drop_stale`, see *Cache lifetime*), and queues one `read` per attribute
-  per folder (rows grouped by parent, so a search-results pane works).
-- One daemon worker per store (`xefm-attrs`) drains the queue and exits after
-  five idle seconds, as `TagCache` did. A job from an older generation is
-  skipped; `_put` refuses a result from one.
-- `on_ready` (module global, set to `XeFMApp._on_attrs_ready`) is called when
-  the queue empties or every `_READY_EVERY` values, so a large folder fills in
-  without a frame per row. The app turns it into `_attrs_dirty` and a pump
-  wake.
+- `sync(files, records, directory, wanted)` runs on every draw and returns at
+  once unless the listing, the wanted set or the directory changed. Otherwise
+  it bumps the generation, drops stale values (`_drop_stale`), and queues one
+  `read` per attribute per folder (rows grouped by parent, so a search-results
+  pane works).
+- One daemon worker per store (`xefm-attrs`), exiting after five idle seconds.
+  A job of an older generation is skipped; `_put` refuses its results.
+- `version` is bumped whenever a value comes or goes; the pane re-measures on
+  it.
+- `on_ready` (set to `XeFMApp._on_attrs_ready`) is called when the queue
+  empties or every `_READY_EVERY` values.
 - A `read` that raises, or returns the wrong number of values, costs that
-  call's values (`None`) and is logged once per attribute per generation.
-- `request(name, paths, records, on_done)` runs an on-request computation on a
-  thread of its own with a cancel `Event`; a new directory or `clear()` sets
-  it. `total_size` runs `UsageScan.run_sync` with that event as its cancel
-  flag.
-- `ready()` (every applicable row has a value), `snapshot()` (values for a
-  sort, taken on the UI thread), `forget()` (after XeFM wrote tags), `clear()`.
+  call's values (`None`), logged once per attribute per generation.
+- `request(name, paths, records, on_done)` runs an on-request computation one
+  entry per call on its own thread with a cancel `Event`, set by a new
+  directory or `clear()`. `total_size` runs `UsageScan.run_sync` with it.
 
-## Layouts — `xefm/layouts.py`
+## Layouts and extras — `xefm/layouts.py`
 
 `Layout(name, label, kind, columns)`; `Column(attr, format, width, align,
-priority, refresh, markers)`; `Marker(attr, format, side, max_width)`.
-`BUILTIN_DEFAULT` reproduces the old fixed row: `name` (marker `tags`), `ext`,
-`total_size`, `mtime` with priority 1.
+priority, refresh, markers, extra)`; `Marker(attr, format, side, limit, slot)`.
+`Extra(name, label, when, markers, columns)` with `ExtraMarker(marker, on)`
+and `ExtraColumn(column, after, replace)`. `BUILTIN_DEFAULT` reproduces the old
+fixed row (`name`, `ext`, `total_size`, `mtime` priority 1);
+`BUILTIN_EXTRA_SPECS` holds `tags` as the spec `EXTRAS` takes, so a config
+entry of the same name merges over it.
 
-`FORMATS` maps each type to its named formats; the first is the default, except
-`time`, whose default follows `DATE_FORMAT`. `resolve_format` turns a column's
-or marker's `format` into a `Resolved` (function, built-in or not, width,
-align, mono, refresh). `render` calls it — a built-in one with a `Row`
-(`is_dir`, `ok`, `attr`), a user one with an `EntryInfo` — and normalizes the
-result to a list of `Cell`; a user format that raises draws nothing, logged
-once.
-
-`effective(pane)`: `pane["layout"]` (chosen by hand), else
-`pane["_layout_auto"]` (the rules' answer), else `default`. An unknown name
-falls through, so a saved choice whose layout was removed from the config
-does not break the pane and comes back if the layout does.
-
-`resolve(path)` runs the rules on the listing worker (`XeFMApp._list_pane`),
-and the answer rides the result as `layout_auto`; `_process_result_queue`
-installs it, even when the listing itself is dropped as unchanged.
+- `FORMATS`, `resolve_format`, `render`: as before — a built-in format gets a
+  `Row`, a user one an `EntryInfo`, and the result is normalized to `Cell`s.
+- `extras_for(path)` evaluates every extra's `when` on the listing worker
+  (`XeFMApp._list_pane`); the result rides the listing as `extras_auto` and
+  `_process_result_queue` installs it as `pane["_extras_auto"]`, even when the
+  listing itself is dropped as unchanged.
+- `active_extras(pane)`: definition order; On, or Auto and in `_extras_auto`.
+- `compose(layout, extras)` places columns (replace / after / end) and attaches
+  markers (`on`, else the name), each tagged with its extra as `slot` / `extra`.
+  Results are cached per `(layout, extra names)`.
+- `glyphs(extra)` renders each declared value through the marker's format —
+  the legend, and with `by_color` the collision check (`collisions`).
 
 ## Drawing — `FilePane`
 
-`draw` gets the effective layout, the records (`_records`, rebuilt once per
-`_listing_entries` identity), syncs the store, and `_plan`s the columns:
+- `_measure` walks the listing once per `(files, store.version, layout)`: for
+  each column, each side, each slot, the widest group any row draws; for each
+  extra's column, its widest value. The name's `after` markers are skipped.
+- `_plan` places columns: a value column's width is its format's (or its
+  measured width, for an extra's column without `width`), plus the used
+  `before` and `after` slots. The name's used `before` slots are a gutter.
+  An extra's column with no value is left out. Then the priority rule drops
+  columns while the name is under `MIN_NAME_W`.
+- `_draw_row` draws the name with its gutter (`_draw_slots`: each slot at its
+  place, blank where this row has none), the name elided by that row's `after`
+  markers, then each value column (`_draw_value`: value aligned inside, slots
+  either side). `_slot_groups` gathers a row's markers by slot, applying
+  `limit`. Cell colors go through `_cell_fg`, as the tag dots always did.
+- A row with no listing record draws the built-in columns from `file_info`.
 
-- `name` is flexible; `ext` measures the widest split extension as before;
-  every other column is its format's width plus the room reserved for its
-  markers (`max_width + COL_GAP` each), so a marker never moves the values.
-- While the name would be under `MIN_NAME_W`, the column with the lowest
-  priority (rightmost on a tie) is dropped — the old date rule, generalized.
-
-`_draw_row` keeps the whole row pipeline (fills, cursor, hidden and cut fades,
-inactive dimming) and then draws each placed column. On the name column the
-markers sit against the name and the name is elided by their actual width on
-that row; `_draw_value` aligns a value column's cells inside the column and
-draws its markers either side. Cell colors go through `_cell_fg`: a role or
-Finder color name, washed by the inactive-pane dim and floored at `LC_LARGE`,
-exactly as the tag dots were; `ink=False` as for every column.
-
-A row with no listing record (a pane built by hand in a test, a row the
-listing never saw) draws the built-in columns from `file_info`'s
-`size_str`/`date_str`.
-
-The default layout's output was compared character by character against the
-fixed-column code at widths 80, 40, 30 and 20 with both `DATE_FORMAT`s, and is
-identical.
-
-`refresh_interval` is the smallest `refresh` of a drawn column (the `relative`
-time format asks for 60 s); `XeFMApp._layout_refresh_tick` repaints on it.
+The default layout's text output was compared character by character with the
+fixed-column code at widths 80/40/30/20 and both `DATE_FORMAT`s.
 
 ## Sorting
 
 `XeFMApp._sort_overlay(pane)` returns `(name, values, reverse)` while
-`pane["sort_overlay"]["path"]` is the pane's path, else clears it. Every
-listing path (`_list_pane`, `_resort`, `_list_virtual`) passes it to
-`FileListManager`, whose `_sort_by_overlay` re-orders the already sorted list:
-directories first, rows with a value by `attributes.sort_key`, then the rest
-in the pane's own order. Values that will not compare lose the overlay, not the
-listing.
+`pane["sort_overlay"]["path"]` is the pane's path, else clears it; every listing
+path passes it to `FileListManager._sort_by_overlay`. The dialog's extra rows
+come from `_attribute_sort_rows` (`mode = "attr:<name>"`).
 
-The sort dialog's extra rows come from `_attribute_sort_rows`: one per column
-whose attribute is not a sort mode, with `mode = "attr:<name>"`. Choosing a
-built-in key or a quick sort clears the overlay; **Reverse Sort** reverses it.
-`get_sort_description` adds "(this folder)".
+## App
+
+- `choose_layout` / View → Layout ▸; `choose_extras` / View → Show ▸ (one
+  submenu per extra, Auto / On / Off, then Calculate Folder Sizes and Compute
+  Values — moved there to keep View within 23 rows on an 80×24 terminal).
+- `pane["layout"]` and `pane["extras"]` (`{name: 'on'|'off'}`) are saved with
+  the pane and each tab; `_saved_extras` keeps a state for an extra the config
+  no longer has. `sort_overlay` is not saved.
+- `_help_markers_section` builds the legend.
 
 ## Config, extensions, API
 
-- `user_api._process_user_entries` loads `ATTRIBUTES`, then `LAYOUTS` (warning
-  on an attribute nothing defines, loading the layout anyway), then
-  `LAYOUT_RULES` (dropping a rule whose layout is unknown).
-- `extensions`: `CONTRIBUTION_TABLES` gains `attributes` and `layouts`;
-  `layouts` is a data kind. An attribute's `read` and a layout's
-  `format` (in columns and markers) are references — `_refs_in` finds them for
-  `xefm ext check`, `_value_for` / `_layout_refs` import them.
-- `TABLE_KEYS` has `ATTRIBUTES` and `LAYOUTS`; the API snapshot was
-  regenerated.
-
-## State
-
-`pane["layout"]` is saved with the pane state and with each tab
-(`_save_tabs` / `_restore_tabs`). `pane["sort_overlay"]` is not saved: it is
-about one visit to one directory.
+- `user_api._process_user_entries` loads `ATTRIBUTES`, `LAYOUTS`,
+  `DEFAULT_LAYOUT` (warning and `default` when unknown), then `EXTRAS` (merged
+  over a built-in of the same name; a warning for attributes nothing defines),
+  then reports collisions.
+- `extensions`: kinds `attributes`, `layouts`, `extras`; `layouts` and `extras`
+  are data. `read`, `when` and every `format` are references when they hold a
+  colon — `_refs_in` finds them, `_value_for` / `_layout_refs` import them. An
+  `EXTRAS` entry also in `config.py` is merged with config's keys winning,
+  instead of config.py replacing it whole.
 
 ## Tests
 
-`test/test_list_layouts.py` (tables, rules, formats, the store, drawing, the
-attribute sort, `EntryInfo.attr`); `test/test_extensions.py`
-(`test_attribute_and_layout_contributions`); `test/test_tags.py` (`tags` as an
-attribute). The existing pane tests (`test_file_pane_*`,
-`test_date_column_width`) run unchanged against the default layout.
+`test/test_list_layouts.py` (tables, extras, compose, formats, the store,
+drawing — the gutter, sparse extras taking no room, slots and `limit` — the
+attribute sort, the app's per-tab state and the Help legend);
+`test/test_extensions.py` (contributions, and an extra overridden key by
+key); `test/test_tags.py`.
 
 ## Not done yet
 
-- Hand checks: GUI and TUI on macOS, Windows; a real Git working tree through
-  an extension.
+- Hand checks: GUI and TUI on macOS and Windows; a real Git working tree.
 - The Git status extension in xefm-extensions.
+- File Details showing attribute values (#789 B).
 - Tree and thumbnail kinds (#638).
-- Column headers (agreed: not in the first release).
-- Pane-level values (branch) in the status bar.

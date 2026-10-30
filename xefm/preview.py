@@ -70,13 +70,13 @@ PREVIEW_APIS: set[str] = {
     # stable; replacing a built-in scheme is not.
     *(f"config.{table}" for table in (
         "EVENT_HOOKS", "IMAGE_DECODERS", "LEXERS", "MENU_ITEMS",
-        "ATTRIBUTES", "LAYOUTS", "LAYOUT_RULES")),
+        "ATTRIBUTES", "LAYOUTS", "EXTRAS", "DEFAULT_LAYOUT")),
     "config.PATH_SCHEMES.override",
     # xefm-extension.toml. actions, sort_keys, filters, path_schemes and
     # key_suggestions are stable.
     *(f"manifest.contributes.{kind}" for kind in (
         "event_hooks", "image_decoders", "lexers", "themes", "menus",
-        "attributes", "layouts")),
+        "attributes", "layouts", "extras")),
     "manifest.extension.updates",
     "manifest.settings",
     "manifest.requires",

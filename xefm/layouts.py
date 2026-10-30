@@ -1,11 +1,18 @@
-"""File list layouts — which attributes a row shows, and how (#756).
+"""File list layouts and extras — which attributes a row shows, and how (#756).
 
-The display side of :mod:`xefm.attributes`. A **layout** is registered under a
-name and says, for one *kind* of list (``details`` today; ``tree`` and
-``thumbnails`` are for later), which **columns** a row has and which
-**markers** decorate each column's text. A column is an attribute, a format,
-a width, an alignment and a priority; a marker is an attribute and a format
-drawn beside a column's text.
+The display side of :mod:`xefm.attributes`, in two parts that combine:
+
+- A **layout** (``LAYOUTS``) is presentation: for one *kind* of list
+  (``details`` today; ``tree`` and ``thumbnails`` later), which **columns** a
+  row has, their formats, widths and order. It is a matter of taste and screen
+  width, chosen per tab by hand (``DEFAULT_LAYOUT`` for a new one).
+- An **extra** (``EXTRAS``) is content: an attribute shown because of what the
+  folder holds — Git status, tags — as **markers** beside a column's text
+  and/or **columns** placed after or in place of a layout's. Each has a
+  ``when`` deciding where it applies by default, which an extension may
+  propose and the user overrides; each tab holds Auto / On / Off per extra.
+
+The row a pane draws is :func:`compose` of its layout and its active extras.
 
 A **format** turns a value into what is drawn: a built-in one named by a
 string (``'relative'``), or a function ``fn(value, entry)`` returning a ``str``,
@@ -13,16 +20,13 @@ a :class:`Cell` or a list of cells. Formats only choose text, a color role and
 bold/italic; selection, the cursor and the resting pane's dimming are applied
 by the pane on top, so nothing a format returns can make a row unreadable.
 
-Which layout a pane uses is chosen by hand (``choose_layout``) or by
-``LAYOUT_RULES`` — a list only ``config.py`` writes, so that installing an
-extension never changes how a folder looks.
 """
 
 from __future__ import annotations
 
 import fnmatch
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Callable, Optional, Union
 
@@ -39,12 +43,15 @@ SIDES = ("after", "before")
 ALIGNS = ("left", "right")
 #: The name of the layout every pane falls back to.
 DEFAULT = "default"
-#: A marker's widest default extent, in cells (the old tag dots: three).
-MARKER_MAX_WIDTH = 3
-#: The keys a column / marker dict accepts.
+#: The keys a column / marker dict accepts; an extra's take one more each.
 COLUMN_KEYS = ("attr", "format", "width", "align", "priority", "refresh", "markers")
-MARKER_KEYS = ("attr", "format", "side", "max_width")
+MARKER_KEYS = ("attr", "format", "side", "limit")
+EXTRA_COLUMN_KEYS = COLUMN_KEYS[:-1] + ("after", "replace")
+EXTRA_MARKER_KEYS = MARKER_KEYS + ("on",)
 LAYOUT_KEYS = ("label", "kind", "columns", "override")
+EXTRA_KEYS = ("label", "when", "markers", "columns")
+#: The per-tab states of an extra; a tab with no entry for one is on auto.
+EXTRA_STATES = ("auto", "on", "off")
 
 
 @dataclass(frozen=True)
@@ -201,7 +208,7 @@ FORMATS: dict[str, dict[str, Format]] = {
              "relative": Format(_fmt_relative, 10, "right", True, refresh=60.0),
              "recent": Format(_fmt_recent, 5, "right", True, refresh=60.0)},
     "enum": {"letter": Format(_fmt_letter, 1), "word": Format(_fmt_word, 10)},
-    "tags": {"dots": Format(_fmt_dots, MARKER_MAX_WIDTH),
+    "tags": {"dots": Format(_fmt_dots, 3),
              "names": Format(_fmt_names, 16)},
 }
 
@@ -296,7 +303,11 @@ class Marker:
     attr: str
     format: Union[str, Callable, None] = None
     side: str = "after"
-    max_width: int = MARKER_MAX_WIDTH
+    #: The most cells of the format's result drawn (None: all of them). A count,
+    #: not a width, so it means the same in a proportional font.
+    limit: Optional[int] = None
+    #: The extra it came from: markers of one extra share a slot.
+    slot: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -310,6 +321,9 @@ class Column:
     priority: Optional[int] = None
     refresh: Optional[float] = None
     markers: tuple = ()
+    #: The extra that placed it: as wide as its widest value in the listing,
+    #: and left out when it has none.
+    extra: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -329,23 +343,86 @@ class Layout:
         return out
 
 
+@dataclass(frozen=True)
+class ExtraMarker:
+    marker: Marker
+    on: str = "name"
+
+
+@dataclass(frozen=True)
+class ExtraColumn:
+    column: Column
+    after: Optional[str] = None
+    replace: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class Extra:
+    name: str
+    label: str
+    #: Where it applies on Auto: ``'always'``, ``'never'``, a path pattern, or
+    #: a function of the folder's path (run on the listing worker).
+    when: Union[str, Callable] = "always"
+    markers: tuple = ()
+    columns: tuple = ()
+    source: str = "builtin"
+
+    def attributes(self) -> set[str]:
+        return ({m.marker.attr for m in self.markers}
+                | {c.column.attr for c in self.columns})
+
+
 BUILTIN_DEFAULT = Layout(DEFAULT, "Default", "details", (
-    Column("name", markers=(Marker("tags"),)),
+    Column("name"),
     Column("ext"),
     Column("total_size"),
     Column("mtime", priority=1),
 ))
 
+
+def _tags_when(path) -> bool:
+    from xefm import tags
+    store = tags.store_for(path)
+    return store is not None and store.cheap
+
+
+#: Built-in extras as the specs ``EXTRAS`` takes, so a config entry of the
+#: same name overrides them key by key, as it does an extension's.
+BUILTIN_EXTRA_SPECS: dict[str, dict] = {
+    "tags": {"label": "Tags", "when": _tags_when,
+             "markers": [{"attr": "tags", "on": "name", "side": "after", "limit": 3}]},
+}
+
 _user: dict[str, Layout] = {}
+_extras: dict[str, Extra] = {}
+_default_name = DEFAULT
+_composed: dict = {}
 
 
 def register(layout: Layout) -> None:
     _user[layout.name] = layout
+    _composed.clear()
+
+
+def register_extra(extra: Extra) -> None:
+    _extras[extra.name] = extra
+    _composed.clear()
+
+
+def set_default(name: str) -> None:
+    global _default_name
+    _default_name = name
+    _composed.clear()
 
 
 def clear() -> None:
     _user.clear()
-    _rules.clear()
+    _extras.clear()
+    _composed.clear()
+    set_default(DEFAULT)
+    for name, spec in BUILTIN_EXTRA_SPECS.items():
+        extra, _problem = build_extra(name, spec, source="builtin")
+        _extras[name] = extra
 
 
 def get(name: Optional[str]) -> Optional[Layout]:
@@ -363,6 +440,15 @@ def all_layouts() -> list[Layout]:
     return out
 
 
+def get_extra(name: str) -> Optional[Extra]:
+    return _extras.get(name)
+
+
+def all_extras() -> list[Extra]:
+    """Every extra, in definition order — the order they are placed in."""
+    return list(_extras.values())
+
+
 # --- building from config -----------------------------------------------------------
 
 def _build_format(where: str, attr, fmt) -> Optional[str]:
@@ -376,43 +462,49 @@ def _build_format(where: str, attr, fmt) -> Optional[str]:
     return None
 
 
-def _build_marker(where: str, spec) -> tuple[Optional[Marker], Optional[str]]:
+def _check_keys(where: str, spec: dict, keys) -> Optional[str]:
+    unknown = sorted(set(spec) - set(keys))
+    if not unknown:
+        return None
+    hint = " ('max_width' is now 'limit', a count of cells)" if "max_width" in unknown else ""
+    return f"{where}: unknown keys {', '.join(unknown)} — known: {', '.join(keys)}{hint}"
+
+
+def _build_marker(where: str, spec, keys=MARKER_KEYS, slot=None) -> tuple[Optional[Marker], Optional[str]]:
     if isinstance(spec, str):
         spec = {"attr": spec}
     if not isinstance(spec, dict):
         return None, f"{where} must be an attribute name or a dict"
-    unknown = sorted(set(spec) - set(MARKER_KEYS))
-    if unknown:
-        return None, f"{where}: unknown keys {', '.join(unknown)} — known: {', '.join(MARKER_KEYS)}"
+    problem = _check_keys(where, spec, keys)
+    if problem:
+        return None, problem
     name = spec.get("attr")
-    attr = attributes.get(name) if isinstance(name, str) else None
-    problem = _build_format(where, attr, spec.get("format"))
+    if not isinstance(name, str):
+        return None, f"{where} needs 'attr'"
+    problem = _build_format(where, attributes.get(name), spec.get("format"))
     if problem:
         return None, problem
     side = spec.get("side", "after")
     if side not in SIDES:
         return None, f"{where}: side '{side}' is not one of {', '.join(SIDES)}"
-    max_width = spec.get("max_width", MARKER_MAX_WIDTH)
-    if not isinstance(max_width, int) or max_width < 1:
-        return None, f"{where}: 'max_width' must be a positive whole number of cells"
-    if not isinstance(name, str):
-        return None, f"{where} needs 'attr'"
-    return Marker(name, spec.get("format"), side, max_width), None
+    limit = spec.get("limit")
+    if limit is not None and (not isinstance(limit, int) or limit < 1):
+        return None, f"{where}: 'limit' must be a positive whole number"
+    return Marker(name, spec.get("format"), side, limit, slot), None
 
 
-def _build_column(where: str, spec) -> tuple[Optional[Column], Optional[str]]:
+def _build_column(where: str, spec, keys=COLUMN_KEYS, extra=None) -> tuple[Optional[Column], Optional[str]]:
     if isinstance(spec, str):
         spec = {"attr": spec}
     if not isinstance(spec, dict):
         return None, f"{where} must be an attribute name or a dict"
-    unknown = sorted(set(spec) - set(COLUMN_KEYS))
-    if unknown:
-        return None, f"{where}: unknown keys {', '.join(unknown)} — known: {', '.join(COLUMN_KEYS)}"
+    problem = _check_keys(where, spec, keys)
+    if problem:
+        return None, problem
     name = spec.get("attr")
     if not isinstance(name, str):
         return None, f"{where} needs 'attr'"
-    attr = attributes.get(name)
-    problem = _build_format(where, attr, spec.get("format"))
+    problem = _build_format(where, attributes.get(name), spec.get("format"))
     if problem:
         return None, problem
     width = spec.get("width")
@@ -434,7 +526,7 @@ def _build_column(where: str, spec) -> tuple[Optional[Column], Optional[str]]:
             return None, problem
         markers.append(marker)
     return Column(name, spec.get("format"), width, align, priority, refresh,
-                  tuple(markers)), None
+                  tuple(markers), extra), None
 
 
 def build(name: str, spec) -> tuple[Optional[Layout], Optional[str]]:
@@ -444,9 +536,9 @@ def build(name: str, spec) -> tuple[Optional[Layout], Optional[str]]:
         return None, f"{where}: the name must be a non-empty string"
     if not isinstance(spec, dict):
         return None, f"{where} must be a dict with 'columns'"
-    unknown = sorted(set(spec) - set(LAYOUT_KEYS))
-    if unknown:
-        return None, f"{where}: unknown keys {', '.join(unknown)} — known: {', '.join(LAYOUT_KEYS)}"
+    problem = _check_keys(where, spec, LAYOUT_KEYS)
+    if problem:
+        return None, problem
     if name == DEFAULT and not spec.get("override"):
         return None, (f"{where} would replace the built-in layout and was ignored — "
                       f"add 'override': True if that is intended")
@@ -468,56 +560,208 @@ def build(name: str, spec) -> tuple[Optional[Layout], Optional[str]]:
     return Layout(name, str(label), kind, tuple(columns), source="user"), None
 
 
-def unknown_attributes(layout: Layout) -> list[str]:
-    """Attributes a layout names that nothing registered (checked after every
-    table has loaded, since an attribute may come from an extension)."""
+def build_extra(name: str, spec, source: str = "user") -> tuple[Optional[Extra], Optional[str]]:
+    """Validate one ``EXTRAS`` entry — already merged over the built-in or the
+    extension's entry of the same name — as an :class:`Extra`, or a problem."""
+    where = f"EXTRAS['{name}']"
+    if not isinstance(name, str) or not name:
+        return None, f"{where}: the name must be a non-empty string"
+    if not isinstance(spec, dict):
+        return None, f"{where} must be a dict with 'markers' and/or 'columns'"
+    problem = _check_keys(where, spec, EXTRA_KEYS)
+    if problem:
+        return None, problem
+    when = spec.get("when", "always")
+    if not (isinstance(when, str) or callable(when)):
+        return None, (f"{where}: 'when' must be 'always', 'never', a path pattern "
+                      f"or a function of the folder's path")
+    markers = []
+    for i, m in enumerate(spec.get("markers") or ()):
+        at = f"{where}['markers'][{i}]"
+        marker, problem = _build_marker(at, m, EXTRA_MARKER_KEYS, slot=name)
+        if problem:
+            return None, problem
+        on = m.get("on", "name") if isinstance(m, dict) else "name"
+        if not isinstance(on, str):
+            return None, f"{at}: 'on' must be the attribute of a column"
+        markers.append(ExtraMarker(marker, on))
+    columns = []
+    for i, c in enumerate(spec.get("columns") or ()):
+        at = f"{where}['columns'][{i}]"
+        column, problem = _build_column(at, c, EXTRA_COLUMN_KEYS, extra=name)
+        if problem:
+            return None, problem
+        after = c.get("after") if isinstance(c, dict) else None
+        replace = c.get("replace") if isinstance(c, dict) else None
+        if after is not None and replace is not None:
+            return None, f"{at}: give 'after' or 'replace', not both"
+        columns.append(ExtraColumn(column, after, replace))
+    if not markers and not columns:
+        return None, f"{where} shows nothing — give it 'markers' or 'columns'"
+    label = spec.get("label") or name
+    return Extra(name, str(label), when, tuple(markers), tuple(columns), source), None
+
+
+def unknown_attributes(layout) -> list[str]:
+    """Attributes a layout or an extra names that nothing registered (checked
+    after every table has loaded, since an attribute may come from an
+    extension)."""
     return sorted(n for n in layout.attributes() if not attributes.is_known(n))
 
 
-# --- rules -----------------------------------------------------------------------------
+# --- where extras apply ---------------------------------------------------------------
 
-#: ``[(predicate, layout name)]`` from ``LAYOUT_RULES``.
-_rules: list[tuple[Union[str, Callable], str]] = []
-
-
-def build_rule(i: int, spec) -> tuple[Optional[tuple], Optional[str]]:
-    where = f"LAYOUT_RULES[{i}]"
-    if not isinstance(spec, (list, tuple)) or len(spec) != 2:
-        return None, f"{where} must be a pair: (pattern or function, layout name)"
-    test, name = spec
-    if not isinstance(name, str):
-        return None, f"{where}: the layout name must be a string"
-    if not (isinstance(test, str) or callable(test)):
-        return None, f"{where}: the condition must be a path pattern or a function of the path"
-    return (test, name), None
-
-
-def set_rules(rules: list) -> None:
-    _rules[:] = rules
+def applies(extra: Extra, path) -> bool:
+    """Whether ``extra``'s ``when`` holds for the folder ``path``. Called on
+    the listing worker, so a ``when`` may touch the filesystem; one that raises
+    does not apply, logged."""
+    when = extra.when
+    try:
+        if when == "always":
+            return True
+        if when == "never":
+            return False
+        if isinstance(when, str):
+            return fnmatch.fnmatch(str(path), when)
+        return bool(when(path))
+    except Exception as exc:  # noqa: BLE001 — a broken condition shows nothing
+        logger.error(f"EXTRAS['{extra.name}'] 'when' failed: {exc}")
+        return False
 
 
-def resolve(path) -> Optional[str]:
-    """The layout ``LAYOUT_RULES`` picks for ``path``, or None. Called on the
-    listing worker, so a rule may touch the filesystem."""
-    for test, name in list(_rules):
-        try:
-            if isinstance(test, str):
-                hit = fnmatch.fnmatch(str(path), test)
+def extras_for(path) -> frozenset:
+    """The extras whose ``when`` holds for ``path`` — what Auto shows."""
+    return frozenset(e.name for e in all_extras() if applies(e, path))
+
+
+def extra_state(pane: dict, name: str) -> str:
+    return (pane.get("extras") or {}).get(name, "auto")
+
+
+def active_extras(pane: dict) -> list[Extra]:
+    """The extras ``pane`` draws, in definition order: On, or Auto and
+    applying to its folder."""
+    auto = pane.get("_extras_auto") or frozenset()
+    out = []
+    for extra in all_extras():
+        state = extra_state(pane, extra.name)
+        if state == "on" or (state == "auto" and extra.name in auto):
+            out.append(extra)
+    return out
+
+
+# --- composing a row -----------------------------------------------------------------
+
+def compose(layout: Layout, extras: list) -> Layout:
+    """``layout`` with ``extras`` placed in it, in order.
+
+    A column with ``replace`` takes the named column's place (and its priority,
+    unless it gives its own); one with ``after`` goes after it; either goes at
+    the end when the named column is absent or already replaced. A marker goes on the named column, or on the
+    name when that column is absent."""
+    key = (layout, tuple(e.name for e in extras))
+    found = _composed.get(key)
+    if found is not None:
+        return found
+    cols = [list((c, list(c.markers))) for c in layout.columns]
+
+    def index_of(attr):
+        return next((i for i, (c, _m) in enumerate(cols) if c.attr == attr), None)
+
+    replaced = set()
+    for extra in extras:
+        for ec in extra.columns:
+            col = ec.column
+            target = ec.replace or ec.after
+            i = index_of(target) if target else None
+            if ec.replace and i is not None and i not in replaced and cols[i][0].extra is None:
+                if col.priority is None and cols[i][0].priority is not None:
+                    col = replace(col, priority=cols[i][0].priority)
+                cols[i] = [col, cols[i][1]]
+                replaced.add(i)
+            elif ec.after and i is not None:
+                j = i + 1
+                while j < len(cols) and cols[j][0].extra is not None:
+                    j += 1
+                cols.insert(j, [col, []])
+                replaced = {k + (k >= j) for k in replaced}
             else:
-                hit = bool(test(path))
-        except Exception as exc:  # noqa: BLE001 — a broken rule is skipped
-            logger.error(f"Layout rule for '{name}' failed: {exc}")
-            continue
-        if hit:
-            return name
-    return None
+                cols.append([col, []])
+        for em in extra.markers:
+            i = index_of(em.on)
+            if i is None:
+                i = index_of("name")
+            cols[i][1].append(em.marker)
+    out = Layout(layout.name, layout.label, layout.kind,
+                 tuple(replace(c, markers=tuple(m)) for c, m in cols), layout.source)
+    _composed[key] = out
+    return out
+
+
+def layout_of(pane: dict) -> Layout:
+    """The tab's own layout: chosen by hand, else ``DEFAULT_LAYOUT``."""
+    return get(pane.get("layout")) or get(_default_name) or get(DEFAULT)
 
 
 def effective(pane: dict) -> Layout:
-    """The layout ``pane`` draws with: the one chosen by hand, else the one the
-    rules picked for its directory, else ``default``."""
-    for name in (pane.get("layout"), pane.get("_layout_auto")):
-        layout = get(name)
-        if layout is not None:
-            return layout
-    return get(DEFAULT)
+    """What ``pane`` draws: its layout with its active extras placed in it."""
+    return compose(layout_of(pane), active_extras(pane))
+
+
+# --- reading the extras back -------------------------------------------------------------
+
+#: Colors a tag dot can take — for the collision check.
+_TAG_COLORS = (None, "gray", "green", "purple", "blue", "yellow", "red", "orange")
+
+
+def glyphs(extra: Extra, entry_factory=lambda: None, *,
+           by_color: bool = False) -> list[tuple[list, str]]:
+    """``[(cells, meaning)]`` for each value ``extra``'s markers can draw —
+    what the Help dialog's legend lists and the collision check compares. An
+    ``enum`` attribute's values are run through the marker's own format. Tag
+    dots are one row, or one per color with ``by_color`` (the check)."""
+    out = []
+    for em in extra.markers:
+        marker = em.marker
+        attr = attributes.get(marker.attr)
+        if attr is None:
+            continue
+        resolved = resolve_format(marker.format, attr)
+        if attr.type == "enum":
+            for value, spec in attr.values.items():
+                cells = render(resolved, value, Row(attr=attr), entry_factory)
+                if marker.limit:
+                    cells = cells[:marker.limit]
+                if cells:
+                    out.append((cells, str(spec.get("label", value))))
+        elif attr.type == "tags" and resolved.builtin and marker.format in (None, "dots"):
+            if not by_color:
+                out.append(([Cell(TAG_DOT)], "a tag, in the tag's color"))
+                continue
+            for color in _TAG_COLORS:
+                out.append(([Cell(TAG_DOT, color=color)],
+                             f"a tag{'' if color is None else ' colored ' + color}"))
+    return out
+
+
+def collisions(extras: list, entry_factory=lambda: None) -> list[str]:
+    """One line per glyph two extras both draw in the same color."""
+    seen: dict = {}
+    lines = []
+    for extra in extras:
+        for cells, meaning in glyphs(extra, entry_factory, by_color=True):
+            if len(cells) != 1:
+                continue
+            key = (cells[0].text, cells[0].color)
+            other = seen.get(key)
+            if other is not None and other[0] != extra.name:
+                color = f" in {key[1]}" if key[1] else ""
+                lines.append(f"EXTRAS '{other[0]}' ({other[1]}) and '{extra.name}' "
+                             f"({meaning}) both draw {key[0]}{color} — tell them "
+                             f"apart with another glyph or color")
+            else:
+                seen.setdefault(key, (extra.name, meaning))
+    return lines
+
+
+clear()

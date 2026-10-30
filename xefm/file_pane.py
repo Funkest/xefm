@@ -25,6 +25,7 @@ quality there:
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Callable
 
 try:
@@ -261,17 +262,22 @@ _TAG_RGB = tags_mod.RGB
 
 class _Placed:
     """One column of a layout as placed for this draw (``FilePane._plan``)."""
-    __slots__ = ("col", "kind", "w", "resolved", "attr", "markers", "before",
-                 "after", "x")
+    __slots__ = ("col", "kind", "w", "resolved", "attr", "markers", "before_slots",
+                 "after_slots", "before", "after", "x")
 
-    def __init__(self, col, kind, w, resolved, attr, markers, before, after):
+    def __init__(self, col, kind, w, resolved, attr, markers, before_slots,
+                 after_slots, before, after):
         self.col = col
         self.kind = kind          # "name" | "ext" | "value"
         self.w = w
         self.resolved = resolved
         self.attr = attr
         self.markers = markers    # [(Marker, Attribute, Resolved)]
-        self.before = before      # room reserved for markers, value columns
+        #: ``[(slot, width)]`` this listing uses on each side, in order; and
+        #: the room they take with their spaces.
+        self.before_slots = before_slots
+        self.after_slots = after_slots
+        self.before = before
         self.after = after
         self.x = 0.0
 
@@ -371,6 +377,8 @@ class FilePane(Widget):
         self._ext_cache: tuple[int, float] = (0, 0.0)
         #: ``(id(listing entries), {str(path): record})`` — see ``_records``.
         self._records_cache: tuple = (None, {})
+        #: ``(key, measurements)`` — see ``_measure``.
+        self._measure_cache: tuple = (None, None)
         #: The shortest repaint interval a drawn column asked for (a relative
         #: time goes stale), or None; the app repaints on it.
         self.refresh_interval: float | None = None
@@ -685,7 +693,8 @@ class FilePane(Widget):
         records = self._records()
         store = attributes.store_of(self.pane)
         store.sync(files, records, self.pane.get("path"), layout.attributes())
-        plan = self._plan(layout, content_left, content_right, measure)
+        measured = self._measure(layout, files, records, store, measure, measure_mono)
+        plan = self._plan(layout, content_left, content_right, measure, measured)
         self.refresh_interval = min(
             (r.refresh for p in plan for r in [p.resolved, *(m[2] for m in p.markers)]
              if r is not None and r.refresh), default=None)
@@ -748,42 +757,136 @@ class FilePane(Widget):
             self._records_cache = (id(entries), {str(p): a for p, a in entries})
         return self._records_cache[1]
 
-    def _plan(self, layout, content_left, content_right, measure) -> list:
-        """Place ``layout``'s columns across ``[content_left, content_right)``.
+    def _measure(self, layout, files, records, store, measure, measure_mono) -> dict:
+        """What the current listing actually shows, measured: per marker slot
+        ``(column index, side, slot)`` the widest that slot is on any row, and
+        per extra's column its widest value. Recomputed only when the listing,
+        its values (``store.version``) or the layout change.
 
-        Every column but the name has a fixed width — its format's, or the one
-        the layout gave it, plus the room its markers may take, reserved so a
-        marker on one row never moves the column's values on the others. The
-        name takes what is left. While that is under ``MIN_NAME_W``, the column
-        with the lowest priority goes (the rightmost of a tie); a column with no
-        priority stays. That is the rule the date column has always followed,
-        stated for every column."""
-        placed = []
-        for col in layout.columns:
+        This is what keeps a row tight when extras are sparse: a slot no row
+        uses takes no room, and an extra's column with no value is left out
+        (#756). The name's ``after`` markers are not measured — they follow the
+        name on each row and reserve nothing."""
+        key = (id(files), store.version, layout, id(records), measure(" "))
+        if self._measure_cache[0] == key:
+            return self._measure_cache[1]
+        slots: dict = {}
+        values: dict = {}
+        cols = []
+        for ci, col in enumerate(layout.columns):
             attr = attributes.get(col.attr)
             if attr is None:
                 continue
-            markers = []
-            for m in col.markers:
-                m_attr = attributes.get(m.attr)
-                if m_attr is not None:
-                    markers.append((m, m_attr, layouts.resolve_format(
-                        m.format, m_attr, self.config)))
+            markers = self._resolved_markers(col)
+            fixed = [(m, a, r) for m, a, r in markers
+                     if not (col.attr == "name" and m.side == "after")]
+            resolved = (layouts.resolve_format(col.format, attr, self.config,
+                                               width=col.width, align=col.align)
+                        if col.extra is not None else None)
+            if fixed or resolved is not None:
+                cols.append((ci, col, attr, fixed, resolved))
+        if cols:
+            for path in files:
+                record = records.get(str(path)) or {"is_dir": False, "ok": True}
+                value_of, row_for, entry_factory = self._row_access(path, record, store)
+                for ci, col, attr, fixed, resolved in cols:
+                    for side in layouts.SIDES:
+                        for slot, (_cells, w) in self._slot_groups(
+                                fixed, side, value_of, row_for, entry_factory,
+                                measure).items():
+                            k = (ci, side, slot)
+                            slots[k] = max(slots.get(k, 0.0), w)
+                    if resolved is not None:
+                        cells = layouts.render(resolved, value_of(col.attr),
+                                               row_for(attr), entry_factory)
+                        text_measure = measure_mono if resolved.mono else measure
+                        w = sum(text_measure(c.text) for c in cells)
+                        if w > 0:
+                            values[ci] = max(values.get(ci, 0.0), w)
+        result = {"slots": slots, "values": values}
+        self._measure_cache = (key, result)
+        return result
+
+    def _resolved_markers(self, col) -> list:
+        out = []
+        for m in col.markers:
+            m_attr = attributes.get(m.attr)
+            if m_attr is not None:
+                out.append((m, m_attr, layouts.resolve_format(m.format, m_attr, self.config)))
+        return out
+
+    def _row_access(self, entry, record, store):
+        """The three things a row's formats need: a value by attribute name, a
+        built-in format's view of the row, and the row as an ``EntryInfo`` for
+        a format of the user's own (built only if one asks)."""
+        is_dir = bool(record.get("is_dir"))
+
+        def value_of(attr_name):
+            return store.get(entry, record, attr_name)
+
+        def row_for(attr):
+            return layouts.Row(is_dir=is_dir, ok=bool(record.get("ok", True)), attr=attr)
+
+        def entry_factory():
+            from xefm.user_api import EntryInfo   # user_api imports the pane's modules
+            return EntryInfo._from_attrs(entry, record)
+
+        return value_of, row_for, entry_factory
+
+    def _plan(self, layout, content_left, content_right, measure, measured) -> list:
+        """Place ``layout``'s columns across ``[content_left, content_right)``.
+
+        Every column but the name has a fixed width — its format's, the one
+        the layout gave it, or for an extra's column its widest value in this
+        listing — plus the marker slots this listing uses, reserved on every
+        row so a marker never moves the column's values. The name's ``before``
+        slots are a gutter in front of every name. The name takes what is
+        left. While that is under ``MIN_NAME_W``, the column with the lowest
+        priority goes (the rightmost of a tie); a column with no priority
+        stays. That is the rule the date column has always followed, stated
+        for every column."""
+        space = measure(" ")
+        slots, values = measured["slots"], measured["values"]
+        placed = []
+        for ci, col in enumerate(layout.columns):
+            attr = attributes.get(col.attr)
+            if attr is None:
+                continue
+            markers = self._resolved_markers(col)
+
+            def used(side, ci=ci, markers=markers):
+                order = []
+                for m, _a, _r in markers:
+                    key = m.slot or m.attr
+                    w = slots.get((ci, side, key), 0.0)
+                    if m.side == side and w > 0 and key not in [k for k, _w in order]:
+                        order.append((key, w))
+                return order
+
+            before, after = used("before"), used("after")
+            before_w = sum(w + space for _k, w in before)
             if col.attr == "name":
-                placed.append(_Placed(col, "name", 0.0, None, attr, markers, 0.0, 0.0))
+                placed.append(_Placed(col, "name", 0.0, None, attr, markers,
+                                      before, [], before_w, 0.0))
                 continue
             if col.attr == "ext":
                 w = self._ext_width(measure)
                 if w > 0:
-                    placed.append(_Placed(col, "ext", w, None, attr, markers, 0.0, 0.0))
+                    placed.append(_Placed(col, "ext", w, None, attr, markers,
+                                          [], [], 0.0, 0.0))
                 continue
             resolved = layouts.resolve_format(col.format, attr, self.config,
                                               width=col.width, align=col.align,
                                               refresh=col.refresh)
-            before = sum(m.max_width + COL_GAP for m, _a, _r in markers if m.side == "before")
-            after = sum(m.max_width + COL_GAP for m, _a, _r in markers if m.side == "after")
-            placed.append(_Placed(col, "value", resolved.width + before + after,
-                                  resolved, attr, markers, before, after))
+            if col.extra is not None:
+                if ci not in values:
+                    continue        # nothing to show in this listing
+                if col.width is None:
+                    resolved = replace(resolved, width=values[ci])
+            after_w = sum(space + w for _k, w in after)
+            placed.append(_Placed(col, "value", resolved.width + before_w + after_w,
+                                  resolved, attr, markers, before, after,
+                                  before_w, after_w))
 
         avail = content_right - content_left
 
@@ -825,40 +928,34 @@ class FilePane(Widget):
             return default_fg
         return ctx.ink(_dim_ink(rgb, base, dim), on=eff_bg, target=LC_LARGE)
 
-    def _marker_groups(self, markers, side, value_of, row_for, entry_factory,
-                       measure) -> list:
-        """The non-empty markers on ``side`` as ``[(cells, width)]``, each cut to
-        its ``max_width``. A marker with nothing to say takes no room at all.
+    def _slot_groups(self, markers, side, value_of, row_for, entry_factory,
+                     measure) -> dict:
+        """This row's markers on ``side``, by slot: ``{slot: (cells, width)}``.
+        A slot is one extra (or one marker a layout placed itself); several
+        markers of one extra share it, a space apart. A marker with nothing to
+        say adds nothing, and a slot with nothing is absent.
 
-        ``max_width`` counts cells, and a glyph is counted as the whole cells it
-        rounds to: a proportional ``●`` measures a little over one cell on a GUI,
-        and must still fit a marker one cell wide (the old tag dots were capped
-        by count, three, not by width). A single glyph is never cut — eliding
-        it leaves nothing, which is how a one-cell marker vanished."""
-        groups = []
+        ``limit`` caps how many cells of a format's result are drawn — a
+        count, not a width, so it means the same in a proportional font (the
+        tag dots: three)."""
+        space = measure(" ")
+        groups: dict = {}
         for marker, attr, resolved in markers:
             if marker.side != side:
                 continue
             cells = layouts.render(resolved, value_of(marker.attr),
                                    row_for(attr), entry_factory)
-            kept, width, units = [], 0.0, 0
-            for cell in cells:
-                w = measure(cell.text)
-                u = max(1, round(w))
-                if units + u > marker.max_width:
-                    if not kept:
-                        if len(cell.text) > 1:
-                            text = elide(cell.text, marker.max_width, where="end",
-                                         measure=measure)
-                            cell = layouts.Cell(text, cell.color, cell.bold, cell.italic)
-                        kept.append(cell)
-                        width += measure(cell.text)
-                    break
-                kept.append(cell)
-                width += w
-                units += u
-            if kept:
-                groups.append((kept, width))
+            if marker.limit:
+                cells = cells[:marker.limit]
+            if not cells:
+                continue
+            width = sum(measure(c.text) for c in cells)
+            key = marker.slot or marker.attr
+            if key in groups:
+                prev, prev_w = groups[key]
+                groups[key] = (prev + [layouts.Cell(" ")] + cells, prev_w + space + width)
+            else:
+                groups[key] = (cells, width)
         return groups
 
     def _draw_cells(self, ctx, x, y, cells, style, cell_fg, measure) -> float:
@@ -906,16 +1003,7 @@ class FilePane(Widget):
             fallback = {"size": info.get("size_str", ""),
                         "total_size": info.get("size_str", ""),
                         "mtime": info.get("date_str", "")}
-
-        def value_of(attr_name):
-            return store.get(entry, record, attr_name)
-
-        def row_for(attr):
-            return layouts.Row(is_dir=is_dir, ok=bool(record.get("ok", True)), attr=attr)
-
-        def entry_factory():
-            from xefm.user_api import EntryInfo   # user_api imports the pane's modules
-            return EntryInfo._from_attrs(entry, record)
+        value_of, row_for, entry_factory = self._row_access(entry, record, store)
 
         # Row background carries "selected": the pane background tinted toward the
         # accent (never the accent itself), firmer on the active pane, painted
@@ -1051,26 +1139,25 @@ class FilePane(Widget):
         marker_style = Style(bg=text_bg, attr=row_attr, underline_color=under)
         for p in plan:
             if p.kind == "name":
-                # Markers sit against the name, and the name gives up the room
-                # they need rather than pushing them out of view. A marker with
-                # nothing to say on this row takes none.
-                after = self._marker_groups(p.markers, "after", value_of, row_for,
-                                            entry_factory, measure)
-                before = self._marker_groups(p.markers, "before", value_of, row_for,
-                                             entry_factory, measure)
-                taken = sum(w + space for _c, w in after + before)
-                name_text = elide(name, max(0.0, p.w - taken), where=name_elide,
-                                  measure=measure)
-                x = p.x
-                for cells, _w in before:
-                    x = self._draw_cells(ctx, x, y, cells, marker_style, marker_fg,
-                                         measure) + space
+                # In front of the name, a gutter of the slots this listing uses,
+                # each in its place on every row, so names start in one column
+                # and a mark's position says which extra it is. After the name,
+                # markers follow it, and the name gives up the room they take
+                # on this row — none when the row has none.
+                x = self._draw_slots(ctx, p.x, y, p.before_slots, self._slot_groups(
+                    p.markers, "before", value_of, row_for, entry_factory, measure),
+                    marker_style, marker_fg, measure)
+                after = self._slot_groups(p.markers, "after", value_of, row_for,
+                                          entry_factory, measure)
+                taken = sum(w + space for _c, w in after.values())
+                name_text = elide(name, max(0.0, p.w - p.before - taken),
+                                  where=name_elide, measure=measure)
                 ctx.draw_text(x, y, name_text,
                               Style(fg=name_fg, bg=text_bg, attr=name_attr,
                                     underline_color=under),
                               ink=name_ink)
                 x += measure(name_text)
-                for cells, _w in after:
+                for cells, _w in after.values():
                     x = self._draw_cells(ctx, x + space, y, cells, marker_style,
                                          marker_fg, measure)
                 continue
@@ -1122,17 +1209,26 @@ class FilePane(Widget):
         x = inner_left + (inner_w - width if resolved.align == "right" else 0.0)
         value_style = Style(bg=style.bg, attr=style.attr,
                             underline_color=style.underline_color, font=font)
-        end = self._draw_cells(ctx, x, y, cells, value_style, marker_fg, text_measure)
+        self._draw_cells(ctx, x, y, cells, value_style, marker_fg, text_measure)
         space = measure(" ")
-        for cells_m, _w in self._marker_groups(p.markers, "after", value_of, row_for,
-                                              entry_factory, measure):
-            end = self._draw_cells(ctx, end + space, y, cells_m, style, marker_fg, measure)
-        before = self._marker_groups(p.markers, "before", value_of, row_for,
-                                     entry_factory, measure)
-        start = x
-        for cells_m, w in reversed(before):
-            start -= w + space
-            self._draw_cells(ctx, start, y, cells_m, style, marker_fg, measure)
+        self._draw_slots(ctx, p.x, y, p.before_slots, self._slot_groups(
+            p.markers, "before", value_of, row_for, entry_factory, measure),
+            style, marker_fg, measure)
+        self._draw_slots(ctx, inner_left + inner_w + space, y, p.after_slots,
+                         self._slot_groups(p.markers, "after", value_of, row_for,
+                                           entry_factory, measure),
+                         style, marker_fg, measure)
+
+    def _draw_slots(self, ctx, x, y, slots, groups, style, marker_fg, measure) -> float:
+        """Draw this row's marker groups at their slots' fixed places from
+        ``x``, leaving an unused slot blank; returns where the slots end."""
+        space = measure(" ")
+        for key, w in slots:
+            group = groups.get(key)
+            if group is not None:
+                self._draw_cells(ctx, x, y, group[0], style, marker_fg, measure)
+            x += w + space
+        return x
 
     def _draw_cursor(self, ctx, y, band_left, band_right, grid, ruled=False) -> None:
         """Draw the cursor-position cue for the current row — the theme's ``cursor``

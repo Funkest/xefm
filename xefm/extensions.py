@@ -172,10 +172,11 @@ CONTRIBUTION_TABLES = {
     "menus": "MENU_ITEMS",
     "attributes": "ATTRIBUTES",
     "layouts": "LAYOUTS",
+    "extras": "EXTRAS",
 }
 #: Kinds whose entries may be plain data rather than a code reference — the
 #: tier that runs no code at all.
-_DATA_KINDS = {"themes", "filters", "lexers", "menus", "layouts"}
+_DATA_KINDS = {"themes", "filters", "lexers", "menus", "layouts", "extras"}
 
 _KNOWN_SECTIONS = {"extension", "contributes", "requires", "settings"}
 _KNOWN_EXTENSION_KEYS = {"id", "version", "api_version", "min_xefm", "name",
@@ -289,7 +290,7 @@ def _refs_in(value) -> list[tuple[str, str]]:
         return [("", value)] if ":" in value else []
     if isinstance(value, dict):
         out = []
-        for key in ("entry", "read", "format"):
+        for key in ("entry", "read", "format", "when"):
             ref = value.get(key)
             if isinstance(ref, str) and (key == "entry" or ":" in ref):
                 out.append((f".{key}", ref))
@@ -2123,8 +2124,12 @@ def _value_for(kind: str, value, manifest: Manifest, handle: ExtensionHandle,
             spec["read"] = _in_extension(handle, _import_ref(root, spec["read"]),
                                          missing=missing)
         return spec
-    if kind == "layouts" and isinstance(value, dict):
-        return _layout_refs(value, root, handle, missing)
+    if kind in ("layouts", "extras") and isinstance(value, dict):
+        spec = _layout_refs(value, root, handle, missing)
+        if isinstance(spec.get("when"), str) and ":" in spec["when"]:
+            spec["when"] = _in_extension(handle, _import_ref(root, spec["when"]),
+                                         missing=missing)
+        return spec
     if isinstance(value, dict) and "entry" in value:
         return _import_ref(root, value["entry"])
     if isinstance(value, str) and ":" in value and kind != "lexers":
@@ -2154,7 +2159,10 @@ def _layout_refs(spec: dict, root, handle, missing: list) -> dict:
             col = dict(col)
             col["markers"] = [fmt(m) for m in col["markers"]]
         columns.append(col)
-    spec["columns"] = columns
+    if "columns" in spec:
+        spec["columns"] = columns
+    if "markers" in spec:
+        spec["markers"] = [fmt(m) for m in spec["markers"] or ()]
     return spec
 
 
@@ -2245,6 +2253,13 @@ def _apply(config, manifest: Manifest, layout: Layout, report: LoadReport) -> No
     for attr, entries in staged.items():
         current = dict(getattr(config, attr, None) or {})
         for key, value in entries.items():
+            if attr == "EXTRAS" and isinstance(current.get(key), dict) \
+                    and isinstance(value, dict) and (attr, key) not in report.owners:
+                # config.py overrides an extension's extra key by key: it names
+                # only what it changes (#756).
+                current[key] = {**value, **current[key]}
+                report.owners[(attr, key)] = manifest.id
+                continue
             if key in current:
                 owner = report.owners.get((attr, key))
                 if owner is None:

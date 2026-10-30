@@ -17,7 +17,7 @@ English \| [日本語](CUSTOMIZATION_FEATURE.ja.md)
 > `is_desktop_mode` for `PROGRAMS`.
 >
 > Preview: `EVENT_HOOKS`, `MENU_ITEMS`, `IMAGE_DECODERS`, `LEXERS`,
-> `ATTRIBUTES`, `LAYOUTS`, `LAYOUT_RULES`, `entry.attr`, `Cell`, the
+> `ATTRIBUTES`, `LAYOUTS`, `DEFAULT_LAYOUT`, `EXTRAS`, `entry.attr`, `Cell`, the
 > prompts (`ctx.input` / `choose` / `confirm`), `ctx.run_task`,
 > `ctx.show_markdown`, `ctx.copy_text`, `ctx.actions` and `pane.open_list`. A config that
 > uses a Preview table gets one line in the log pane saying so, and the first
@@ -793,12 +793,14 @@ arithmetic, strings and quick filesystem questions.
 
 ---
 
-## What the file list shows: `ATTRIBUTES`, `LAYOUTS` and `LAYOUT_RULES` (Preview)
+## What the file list shows: `ATTRIBUTES`, `LAYOUTS` and `EXTRAS` (Preview)
 
 `ATTRIBUTES` adds values XeFM can know about each entry — a Git status, a line
-count — computed by your functions in the background. `LAYOUTS` decides which
-columns a row has, how each value is written and what marks the names, and
-`LAYOUT_RULES` which layout a folder gets. They have a page of their own:
+count — computed by your functions in the background. `LAYOUTS` decides how
+rows are presented: which of the usual columns, in what order, written how.
+`EXTRAS` adds what a folder holds on top of that — marks beside a column's
+text, or columns of their own — each showing where it applies and switched per
+tab. They have a page of their own:
 [File List Layouts](FILE_LIST_LAYOUTS_FEATURE.md).
 
 Any of your functions can read a value XeFM already has with

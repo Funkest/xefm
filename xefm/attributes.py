@@ -316,6 +316,9 @@ class AttributeStore:
         self._queue: "queue.Queue" = queue.Queue()
         self._thread: Optional[threading.Thread] = None
         self._generation = 0
+        #: Bumped whenever a value comes or goes, so the pane knows when the
+        #: widths it measured from the values are stale.
+        self.version = 0
         self._listing = None          # id() of the files list last synced
         self._wanted: frozenset = frozenset()
         self._directory: Optional[str] = None
@@ -397,6 +400,7 @@ class AttributeStore:
             else:
                 self._drop_stale(files, records, wanted)
             self._generation += 1
+            self.version += 1
             self._failed.clear()
             self._listing = id(files)
             self._wanted = wanted
@@ -448,6 +452,7 @@ class AttributeStore:
             self._stamps.clear()
             self._listing = None
             self._generation += 1
+            self.version += 1
 
     def forget(self, paths: Iterable, name: Optional[str] = None) -> None:
         """Drop the values of ``paths`` (all attributes, or ``name``) — after
@@ -462,6 +467,7 @@ class AttributeStore:
                     row.pop(n, None)
                     self._stamps.pop((n, key), None)
             self._listing = None
+            self.version += 1
 
     def _put(self, generation: int, name: str, path, value) -> bool:
         key = str(path)
@@ -470,6 +476,7 @@ class AttributeStore:
                 return False
             self._values.setdefault(key, {})[name] = value
             self._stamps[(name, key)] = _stamp(self._records.get(key, {}))
+            self.version += 1
         return True
 
     # --- the worker -----------------------------------------------------------

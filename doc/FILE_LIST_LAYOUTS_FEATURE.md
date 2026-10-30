@@ -2,40 +2,81 @@
 
 English \| [日本語](FILE_LIST_LAYOUTS_FEATURE.ja.md)
 
-A **layout** decides what each row of the file list shows: which columns, in
-what order, how each value is written, and what small marks sit beside the
-text. XeFM ships one layout, **Default** — name, extension, size and date, with
-your tags as colored dots after the name — and you can define more in
-`config.py`: one built around Git status for working trees, a narrow one with
-only names and sizes, one that shows dates as "3 days ago".
+What a row of the file list shows comes from two things that combine:
 
-The values a layout shows are **attributes**. Name, extension, size, date,
-tags and a folder's total size are built in; `config.py` and extension
-packages can add their own, such as a Git status or a line count.
+- A **layout** is how rows are presented: which of the usual columns — name,
+  extension, size, date — in what order, and how each is written. That is a
+  matter of taste and of how wide your panes are, so you choose it per tab and
+  it stays the same from folder to folder. XeFM ships one, **Default**, and
+  `config.py` can add more: dates as `13:24`, names with their extension,
+  just names and sizes.
+- An **extra** is what a folder adds because of what it holds: your tags,
+  where the system keeps them; a Git status inside a working tree; whatever an
+  extension brings. Each extra knows where it applies, puts its marks beside a
+  column's text or adds a column, and several can show at once on top of
+  whichever layout the tab has. XeFM has one built in, **Tags** — the colored
+  dots after a name.
 
-> **Preview.** `ATTRIBUTES`, `LAYOUTS` and `LAYOUT_RULES` may still change in
-> any release. XeFM logs one line when your config uses them. See
-> [Customization](CUSTOMIZATION_FEATURE.md).
+The values a layout or an extra shows are **attributes**: name, extension,
+size, date, tags and a folder's total size are built in, and `config.py` and
+extension packages can add their own.
+
+> **Preview.** `ATTRIBUTES`, `LAYOUTS`, `DEFAULT_LAYOUT` and `EXTRAS` may
+> still change in any release. XeFM logs one line when your config uses them.
+> See [Customization](CUSTOMIZATION_FEATURE.md).
 
 ## Choosing a layout
 
 **View → Layout ▸** lists every layout. The choice belongs to the active
 pane's current tab: each tab keeps its own, a new tab starts with the one it
-was opened from, and XeFM remembers them across sessions. The
-`choose_layout` action opens the same choice as a dialog, and is in the
-command palette.
+was opened from, and XeFM remembers them across sessions. A tab that never
+chose starts with `DEFAULT_LAYOUT`. The `choose_layout` action opens the same
+choice as a dialog, and is in the command palette.
 
-**Automatic**, where every tab starts, lets `LAYOUT_RULES` in `config.py` pick
-a layout for each folder you open (see below). Choosing a layout by hand fixes
-the tab on it until you choose **Automatic** again. With no rules, Automatic
-means **Default**.
+## Turning extras on and off
+
+**View → Show ▸** has an entry for every extra, each with three states for the
+active pane's tab:
+
+- **Auto** — where every tab starts: shown in the folders it applies to (a Git
+  status inside a working tree, tags where the system keeps them).
+- **On** — shown everywhere in this tab.
+- **Off** — not shown in this tab.
+
+Like sort and filter, the state is the tab's: kept across sessions, and copied
+by a new tab opened from it. The `choose_extras` action does the same from the
+keyboard.
+
+Installing an extension that brings an extra is enough to see it where it
+applies; nothing has to be written in `config.py`.
+
+### Where the marks go, and what they mean
+
+- **In front of the name**, marks sit in a narrow strip, each extra in its own
+  place on every row, so names still start in one column and a mark's position
+  tells you which extra it is.
+- **After the name**, marks follow the name, as the tag dots do. Tell them
+  apart by their look.
+- **On another column**, such as the date, the room for the marks is kept on
+  every row, so the values stay lined up.
+- **Nothing takes room where nothing has it.** In a folder where no file has a
+  Git status, the strip, the marks' room and the Git column all disappear, and
+  the row is as tight as without the extra.
+
+**F1** (Help) opens with a **Markers in this pane** section when the active
+pane shows any: every mark the active extras can draw, its color, and what it
+means.
+
+When two extras draw the same mark in the same color — a yellow `●` for a Git
+change looks exactly like a yellow tag — XeFM says so in the log pane when the
+config loads.
 
 ## Folder sizes
 
 The size column shows `<DIR>` for a folder, because finding out how much a
-folder holds means counting everything below it. **View → Calculate Folder
-Sizes** (`calculate_folder_sizes`) counts it and shows the total in the size
-column:
+folder holds means counting everything below it. **View → Show ▸ Calculate
+Folder Sizes** (`calculate_folder_sizes`) counts it and shows the total in the
+size column:
 
 - with items selected, the selected folders;
 - otherwise the folder under the cursor;
@@ -46,26 +87,26 @@ Leaving the folder stops it. The totals stay while you are in the folder; one
 whose folder changed meanwhile goes back to `<DIR>` until you calculate it
 again.
 
-## Sorting by a column
+## Sorting by what a pane shows
 
-The sort dialog (`sort`) lists, after its own keys, the columns of the pane's
-layout that are not already one of them — **Total size** in the default
-layout, a Git status in a layout that shows one. Sorting by such a column:
+The sort dialog (`sort`) lists, after its own keys, what the pane shows that
+is not already one of them — **Total size** in the default layout, a Git status
+when that extra is showing. Sorting by such a row:
 
 - orders **this folder only**. Go to another folder and the pane is sorted the
   way it was before; come back and choose it again.
 - uses the values the pane already has. A row without one — a folder whose size
   was not calculated — goes last, whichever way the sort runs.
-- is greyed out while values are still arriving, for a column that is filled
-  in automatically. It becomes available once every row has its value.
+- is greyed out while values are still arriving, for one that is filled in
+  automatically. It becomes available once every row has its value.
 
 **View → Reverse Sort** reverses it, as it does any other sort. The status bar
 shows it with "(this folder)".
 
 ## Defining your own
 
-Open **Tools → Edit Configuration…**. The three tables below are documented
-with examples in the comments above them in the file itself.
+Open **Tools → Edit Configuration…**. The tables below are documented with
+examples in the comments above them in the file itself.
 
 ### `ATTRIBUTES` — values XeFM can know about an entry
 
@@ -125,18 +166,18 @@ class Config:
 | `read` | The function: `read(directory, entries)`, returning one value per entry in the order of `entries`. |
 | `label` | The name shown in the sort dialog. |
 | `type` | `text`, `count`, `size` (bytes), `time` (a timestamp), `enum` (one of `values`) or `tags`. It decides how the value is written and how it sorts. |
-| `values` | For an `enum`: each value's meaning, and a color to show it in. |
+| `values` | For an `enum`: each value's meaning, and a color to show it in. The meaning is what Help lists. |
 | `where` | The storage it is asked about: `local` (the default), `archive`, `ssh`, `s3`. A call per file is cheap on a disk and a request each on S3. |
 | `compute` | `auto` (the default) or `on_request`. |
 
-Defining an attribute shows it nowhere — a layout does that. Once a layout on
-screen shows it, it is worked out for **every row of the folder**, in the
-background, so a definition should answer a folder's worth quickly. One that
-cannot — it reads every file whole, say — sets `'compute': 'on_request'`, and
-is then computed only when you ask: **View → Compute Values**
-(`compute_values`), for the selection or the item under the cursor. It is
-then handed one entry per call, so the values appear one by one and leaving
-the folder stops them.
+Defining an attribute shows it nowhere — an extra or a layout does that. Once
+something on screen shows it, it is worked out for **every row of the
+folder**, in the background, so a definition should answer a folder's worth
+quickly. One that cannot — it reads every file whole, say — sets `'compute':
+'on_request'`, and is then computed only when you ask: **View → Show ▸ Compute
+Values** (`compute_values`), for the selection or the item under the cursor.
+It is then handed one entry per call, so the values appear one by one and
+leaving the folder stops them.
 
 A value is empty until it arrives. A function that fails, or returns a list of
 the wrong length, costs only that call's values, and says so once in the log
@@ -146,35 +187,17 @@ Your own functions — a sort key, a filter, an action — can read a value XeFM
 already has with `entry.attr('git')`. It never computes one and never waits:
 until the value is there, it is `None`.
 
-### `LAYOUTS` — how a row is drawn
+### `LAYOUTS` and `DEFAULT_LAYOUT` — how rows are presented
 
 ```python
-from xefm.user_api import Cell
-
-GIT_MARK = {'M': Cell('●', color='yellow'),
-            'A': Cell('+', color='green'),
-            '?': Cell('?', color='muted')}
-
-def git_mark(value, entry):
-    return GIT_MARK.get(value, '')
-
 class Config:
     LAYOUTS = {
-        'git': {
-            'label': 'Git',
-            'columns': [
-                {'attr': 'name', 'markers': [
-                    'tags',
-                    {'attr': 'git', 'format': git_mark, 'side': 'before',
-                     'max_width': 1},
-                ]},
-                'ext',
-                'size',
-                {'attr': 'mtime', 'format': 'relative', 'priority': 1},
-            ],
-        },
-        'compact': {'label': 'Name and size', 'columns': ['name', 'size']},
+        'short': {'label': 'Short time', 'columns': [
+            'name', 'ext', 'total_size',
+            {'attr': 'mtime', 'format': 'recent', 'priority': 1}]},
+        'names': {'label': 'Names only', 'columns': ['name']},
     }
+    DEFAULT_LAYOUT = 'short'
 ```
 
 A column is an attribute's name, or a dict:
@@ -186,12 +209,13 @@ A column is an attribute's name, or a dict:
 | `width` | In cells. Each format has its own. |
 | `align` | `left` or `right`. Numbers and dates are right-aligned. |
 | `priority` | When the pane is too narrow, columns with a priority are dropped, lowest first. A column without one stays. |
-| `markers` | Small marks drawn beside this column's text (below). |
 
 Every layout has a `name` column, and it takes the width the others leave.
 Leave out `ext` and the extension stays part of the name. The built-in
 `name`, `ext`, `size`, `mtime`, `tags` and `total_size` (a file's size, or a
-folder's once it is calculated) can be used in any layout.
+folder's once it is calculated) can be used in any layout. Naming a layout
+`'default'` replaces the built-in one, which needs `'override': True` so that a
+typo cannot.
 
 **Formats.**
 
@@ -212,45 +236,77 @@ worked out. A `Cell`'s `color` is `'muted'`, `'accent'`, `'accent2'`,
 The selection, the cursor and the resting pane's dimming still apply on top,
 so a color never makes a row unreadable.
 
-**Markers** are marks beside the text of the column they are in, the way the
-tag dots sit after the name: an attribute's name, or a dict with `attr`,
-`format`, `side` (`'after'`, the default, or `'before'`) and `max_width` (3
-cells unless you say). A marker with nothing to show on a row takes no room
-there. On the name column the name gives up the room its markers take; on any
-other column the room is kept free on every row, so the values stay lined up.
-
-**Replacing the default.** Naming a layout `'default'` replaces the built-in
-one, which needs `'override': True` so that a typo cannot.
-
-### `LAYOUT_RULES` — which layout a folder gets
-
-A list of `(condition, layout)` pairs, read top to bottom; the first that
-matches decides, for every tab on **Automatic**. A condition is a path
-pattern, or a function of the folder's path — which runs on a background
-thread, so it may look at the disk:
+### `EXTRAS` — what a folder adds
 
 ```python
+from xefm.user_api import Cell
+
+GIT_MARK = {'M': Cell('M', color='yellow'),
+            'A': Cell('A', color='green'),
+            '?': Cell('?', color='muted')}
+
+def git_mark(value, entry):
+    return GIT_MARK.get(value, '')
+
 def in_git_tree(path):
     return any((p / '.git').exists() for p in (path, *path.parents))
 
 class Config:
-    LAYOUT_RULES = [
-        ('s3://*', 'compact'),
-        (in_git_tree, 'git'),
-    ]
+    EXTRAS = {
+        'git': {
+            'label': 'Git status',
+            'when': in_git_tree,
+            'markers': [{'attr': 'git', 'format': git_mark,
+                         'on': 'name', 'side': 'before'}],
+            'columns': [{'attr': 'git', 'format': 'word', 'replace': 'mtime'}],
+        },
+    }
+```
+
+| Key | What it says |
+|---|---|
+| `label` | Its name under **View → Show** and in Help. |
+| `when` | Where **Auto** shows it: `'always'` (the default), `'never'`, a path pattern (`'s3://*'`), or a function of the folder's path — run in the background, so it may look at the disk. |
+| `markers` | Marks beside a column's text (below). |
+| `columns` | Columns it adds (below). |
+
+**A marker** is an attribute's name or a dict with `attr`, `format`, `on` —
+the column whose text it marks, `'name'` by default and whenever the tab's
+layout has no such column — `side` (`'before'` or `'after'`, the default) and
+`limit`, the most pieces of the format's result shown (the tag dots: three).
+For a state you want to read at a glance, `'before'` on the name puts it in the
+strip where each extra keeps its place; use a mark that cannot be mistaken for
+the tag dots.
+
+**A column** takes the keys of a layout's column, plus where it goes: `after` a
+column, in place of one with `replace` — to save room; it takes that column's
+place and, unless it says otherwise, its priority — or at the end, also when
+the named column is not in the layout. It is as wide as its widest value in
+the folder, and left out of a folder where no file has a value.
+
+**Changing an extra you did not write.** Name it in `EXTRAS` with only the
+keys you change; the rest stays as the built-in or the extension defined it:
+
+```python
+class Config:
+    EXTRAS = {
+        'tags': {'when': 'never'},       # no tag dots unless turned On
+        'git': {'when': 'always'},       # an extension's extra, everywhere
+    }
 ```
 
 ### From an extension package
 
-An extension package can bring attributes and layouts
-(`[contributes.attributes]`, `[contributes.layouts]`; see
-[Extension Packages](EXTENSIONS_FEATURE.md)). It cannot bring rules: whether a folder
-uses a layout is yours to say, so installing an extension never changes how
-your folders look.
+An extension package can bring attributes, layouts and extras
+(`[contributes.attributes]`, `[contributes.layouts]`, `[contributes.extras]`;
+see [Extension Packages](EXTENSIONS_FEATURE.md)). Its extras come with their
+own `when`, so they show where they apply as soon as the package is installed;
+**View → Show** and `EXTRAS` in `config.py` decide from there.
 
 ## Related
 
 - [Sort Dialog](SORT_DIALOG_FEATURE.md)
 - [File Tags](FILE_TAGS_FEATURE.md)
+- [Help Dialog](HELP_DIALOG_FEATURE.md)
 - [Customization](CUSTOMIZATION_FEATURE.md)
 - [Menu Bar](MENU_BAR_FEATURE.md)

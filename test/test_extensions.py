@@ -616,6 +616,33 @@ class Load(_Home):
         column = config.LAYOUTS[root.name]["columns"][1]
         self.assertIs(column["format"], attrs.mark)
 
+    def test_an_extra_is_overridden_by_config_key_by_key(self):
+        """config.py names only what it changes on an extension's extra (#756)."""
+        root, mod = self.installed_package(manifest='''
+            [extension]
+            id = "{id}"
+            version = "0.1.0"
+            api_version = 1
+
+            [contributes.extras."{id}"]
+            label = "Kinds"
+            when = "{mod}.attrs:here"
+            markers = [{{ attr = "name", format = "{mod}.attrs:mark", side = "before" }}]
+        ''', code={"attrs.py": '''
+            def here(path):
+                return True
+
+            def mark(value, entry):
+                return "k"
+        '''})
+        self.assertEqual(ext.errors(ext.check_package(root)[1]), [])
+        config = _config(EXTRAS={root.name: {"when": "never"}})
+        ext.load(config, self.layout)
+        spec = config.EXTRAS[root.name]
+        self.assertEqual(spec["when"], "never")                       # config's
+        self.assertEqual(spec["label"], "Kinds")                      # the rest kept
+        self.assertIs(spec["markers"][0]["format"], sys.modules[f"{mod}.attrs"].mark)
+
     def test_data_contributions(self):
         self.installed_package(manifest='''
             [extension]
