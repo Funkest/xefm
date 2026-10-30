@@ -18,7 +18,7 @@ Three kinds, by how a value is had:
   automatic only if a directory's worth of it comes back before anyone would
   call it a wait.
 - **On request** (``compute = 'on_request'``) — computed only when the user
-  asks, for the entries they asked about (the ``calculate`` action). ``total_size`` is one: a recursive walk per folder.
+  asks, for the entries they asked about (the ``resolve_attribute`` action). ``total_size`` is one: a recursive walk per folder.
 
 A provider is one function, ``read(directory, entries) -> [value, ...]``:
 ``entries`` are rows of one folder, ``directory`` is that folder, and the
@@ -151,7 +151,7 @@ BUILTIN: dict[str, Attribute] = {a.name: a for a in (
     Attribute("tags", "Tags", "tags", read=_tags_read, applies=_tags_apply),
     # A file's own size, a folder's recursive total once it has been counted.
     # The file half is synchronous; the folder half is the on-request part,
-    # computed by the calculate action (see AttributeStore.request).
+    # computed by the resolve_attribute action (see AttributeStore.request).
     Attribute("total_size", "Total size", "size", compute="on_request",
               where=(LOCAL, "ssh", "s3", "archive")),
 )}

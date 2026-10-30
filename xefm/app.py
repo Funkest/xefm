@@ -3912,7 +3912,7 @@ class XeFMApp:
                 "reread": (self.reread, False),
                 "choose_layout": (self.choose_layout, False),
                 "choose_extras": (self.choose_extras, False),
-                "calculate": (self.calculate, False),
+                "resolve_attribute": (self.resolve_attribute, False),
                 "choose_keymap": (self.choose_keymap, False),
                 # --- cursor ---
                 "cursor_up": (self._act_cursor_up, True),
@@ -5002,8 +5002,8 @@ class XeFMApp:
                      checked=lambda: self.flm.show_hidden, shortcut=sc("toggle_hidden")),
             MenuItem("Layout", submenu=self._layout_menu()),
             MenuItem("Show", submenu=self._extras_menu()),
-            MenuItem("Calculate…", on_select=lambda: self._menu("calculate"),
-                     enabled=has_files, shortcut=sc("calculate")),
+            MenuItem("Resolve Attribute…", on_select=lambda: self._menu("resolve_attribute"),
+                     enabled=has_files, shortcut=sc("resolve_attribute")),
             MenuItem("Reverse Sort", on_select=self._toggle_reverse,
                      checked=lambda: self.active_pane()["sort_reverse"]),
             MenuItem("Sort By", submenu=sort_menu),
@@ -5770,8 +5770,8 @@ class XeFMApp:
         show_choice_dialog(self.panel, "Show", rows, on_result=picked)
         self.panel.render()
 
-    def calculate(self) -> None:
-        """Calculate the values the active pane shows that are worked out only
+    def resolve_attribute(self) -> None:
+        """Resolve an attribute the active pane shows that is worked out only
         when asked — a folder's total size, an ``ATTRIBUTES`` entry with
         ``'compute': 'on_request'`` — for the selection, or the item under the
         cursor. A dialog names the targets and lists those values by name,
@@ -5779,13 +5779,13 @@ class XeFMApp:
         Leaving the folder stops it."""
         pane = self.active_pane()
         targets = self._selected_or_focused(pane)
-        names = self._calculable(pane)
+        names = self._resolvable(pane)
         if not names:
-            self.log_info("Nothing to calculate: this pane shows no value "
-                          "that is calculated on request")
+            self.log_info("Nothing to resolve: this pane shows no attribute "
+                          "that is worked out on request")
             return
         if not targets:
-            self.log_info("Nothing to calculate: no item selected or under the cursor")
+            self.log_info("Nothing to resolve: no item selected or under the cursor")
             return
         what = (f"{len(targets)} selected item(s)" if pane["selected_files"]
                 else f"'{name_key.compare_name(targets[0])}'")
@@ -5793,14 +5793,15 @@ class XeFMApp:
 
         def chosen(name) -> None:
             if name is not None:
-                self._calculate(pane, name, targets)
+                self._resolve(pane, name, targets)
             self.panel.render()
 
-        show_choice_dialog(self.panel, f"Calculate for {what}", rows, on_result=chosen)
+        show_choice_dialog(self.panel, f"Resolve Attribute — {what}", rows,
+                           on_result=chosen)
         self.panel.render()
 
     @staticmethod
-    def _calculable(pane: dict) -> list:
+    def _resolvable(pane: dict) -> list:
         """The on-request attributes ``pane`` shows, in the order it shows them."""
         names = []
         layout = layouts.effective(pane)
@@ -5811,7 +5812,7 @@ class XeFMApp:
                     names.append(n)
         return names
 
-    def _calculate(self, pane: dict, name: str, targets: list) -> None:
+    def _resolve(self, pane: dict, name: str, targets: list) -> None:
         """Run one on-request attribute over ``targets`` in the background,
         logging the start and the end."""
         attr = attributes.get(name)
@@ -5822,11 +5823,11 @@ class XeFMApp:
             if not targets:
                 self.log_info("Total size: no folder among the items")
                 return
-        self.log_info(f"Calculating {attr.label} for {len(targets)} item(s)…")
+        self.log_info(f"Resolving {attr.label} for {len(targets)} item(s)…")
 
         def done(count: int, cancelled: bool) -> None:
             self._call_later(lambda: self.log_info(
-                f"{attr.label}: {'stopped' if cancelled else f'{count} calculated'}"))
+                f"{attr.label}: {'stopped' if cancelled else f'{count} resolved'}"))
 
         attributes.store_of(pane).request(name, targets, records, on_done=done)
 

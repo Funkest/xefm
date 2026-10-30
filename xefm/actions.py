@@ -822,12 +822,13 @@ _DETAILS: dict[str, str] = {
         "tab. **Auto** shows it where it applies (a Git status in a working "
         "tree); **On** and **Off** override that for this tab. Also View ▸ "
         "Show."),
-    "calculate": (
-        "Works out a value the active pane shows that is calculated only on "
-        "request — a folder's total size, or an `ATTRIBUTES` entry in "
-        "`config.py` with `'compute': 'on_request'` — for the selected items, "
-        "or the item under the cursor. A dialog names the items and lists "
-        "what can be calculated for them, by name. It runs in the background "
+    "resolve_attribute": (
+        "Works out an attribute the active pane shows that is obtained only "
+        "on request, because it costs time — a folder's total size, or an "
+        "`ATTRIBUTES` entry in `config.py` with `'compute': 'on_request'` — "
+        "for the selected items, or the item under the cursor. A dialog names "
+        "the items and lists the attributes that can be resolved for them, by "
+        "name. It runs in the background "
         "and stops when you leave the folder; the sort dialog can then order "
         "this folder by the results."),
     "redraw": (
@@ -1088,7 +1089,8 @@ _FILER_ACTIONS = [
     _a("choose_layout", FILER, "Choose how the pane presents its rows", default_keys=()),
     _a("choose_extras", FILER, "Turn an extra such as Git status on or off in this tab",
        default_keys=()),
-    _a("calculate", FILER, "Calculate a value such as a folder's total size",
+    _a("resolve_attribute", FILER,
+       "Work out an attribute that takes time, such as a folder's total size",
        default_keys=()),
     _a("redraw", FILER, "Redraw the screen"),
     _a("reread", FILER, "Re-read both panes' directories", default_keys=()),

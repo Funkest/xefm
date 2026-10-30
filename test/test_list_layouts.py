@@ -573,11 +573,11 @@ class App(_Tree):
         self.app._settle_listings()
         pane["selected_files"] = {str(p) for p in pane["files"]
                                   if p.name in ("sub", "empty", "a.txt")}
-        self.app.dispatch("calculate")            # names the targets, lists the values
+        self.app.dispatch("resolve_attribute")    # names the targets, lists the values
         dialog = self.app.panel._layers[-1].widget
         self.assertIn("3 selected item(s)", dialog.title)
         self.assertEqual([v for v, _l in dialog._rows], ["total_size"])
-        self.app._calculate(pane, "total_size", self.app._selected_or_focused(pane))
+        self.app._resolve(pane, "total_size", self.app._selected_or_focused(pane))
         pane["selected_files"] = set()
         store = attributes.store_of(pane)
         records = self.records(pane)

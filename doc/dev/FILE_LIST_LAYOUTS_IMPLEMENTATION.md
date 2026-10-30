@@ -81,9 +81,10 @@ Each is a place a later change should not quietly undo.
 - **Two kinds of non-built-in attribute: `auto` and `on_request`.** Automatic
   ones are computed for every row of the listing in the background as soon as
   something on screen draws them. Anything too slow for that (a recursive
-  folder size) is computed only when asked, by one action, `calculate`
+  folder size) is computed only when asked, by one action, `resolve_attribute`
   (2026-10-30; it replaced `calculate_folder_sizes` and `compute_values`, two
-  actions that differed only in a fallback). Its dialog always opens, names
+  actions that differed only in a fallback, and is named for obtaining an
+  attribute at a cost, not for any one way of doing it). Its dialog always opens, names
   the targets (selection, else the item under the cursor) and lists the
   on-request values the pane shows by label, even when there is one.
 - **Sort and filter never wait for a value.** `EntryInfo.attr()` is cache-only
@@ -192,7 +193,7 @@ come from `_attribute_sort_rows` (`mode = "attr:<name>"`).
 ## App
 
 - `choose_layout` / View → Layout ▸; `choose_extras` / View → Show ▸ (one
-  submenu per extra, Auto / On / Off); `calculate` / View → Calculate…. View
+  submenu per extra, Auto / On / Off); `resolve_attribute` / View → Resolve Attribute…. View
   must stay within 23 rows on an 80×24 terminal (a test checks it).
 - `pane["layout"]` and `pane["extras"]` (`{name: 'on'|'off'}`) are saved with
   the pane and each tab; `_saved_extras` keeps a state for an extra the config
