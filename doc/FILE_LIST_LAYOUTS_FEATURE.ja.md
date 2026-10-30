@@ -9,7 +9,7 @@
 
 レイアウトや追加の情報が表示する値を**属性**と呼びます。名前、拡張子、サイズ、日付、タグ、フォルダーの合計サイズは組み込みで、`config.py` や拡張パッケージで独自のものを足せます。
 
-> **プレビュー。** `ATTRIBUTES`、`LAYOUTS`、`DEFAULT_LAYOUT`、`EXTRAS` は、どのリリースでもまだ変わる可能性があります。設定でこれらを使うと、XeFM はそのことをログに 1 行出します。[カスタマイズ](CUSTOMIZATION_FEATURE.ja.md)を参照してください。
+> **プレビュー。** `ATTRIBUTES`、`LAYOUTS`、`DEFAULT_LAYOUT`、`LAYOUT_EXTRAS` は、どのリリースでもまだ変わる可能性があります。設定でこれらを使うと、XeFM はそのことをログに 1 行出します。[カスタマイズ](CUSTOMIZATION_FEATURE.ja.md)を参照してください。
 
 ## レイアウトを選ぶ
 
@@ -164,7 +164,7 @@ class Config:
 
 自分の関数は `(value, entry)` を受け取り、文字列を返します。色を付けるときは `Cell` を、複数ならそのリストを返します。値の計算中は `value` が `None` です。`Cell` の `color` には `'muted'`、`'accent'`、`'accent2'`、`'text'`、色の名前（`'red'`、`'green'`、`'yellow'`、`'blue'`、`'purple'`、`'orange'`、`'gray'`）、`(r, g, b)` のどれかを指定します。`bold` や `italic` も指定できます。選択、カーソル、非アクティブなペインの減光はこの上にかかるので、色の指定で行が読めなくなることはありません。
 
-### `EXTRAS` — フォルダーが加える情報
+### `LAYOUT_EXTRAS` — フォルダーが加える情報
 
 ```python
 from xefm.user_api import Cell
@@ -180,7 +180,7 @@ def in_git_tree(path):
     return any((p / '.git').exists() for p in (path, *path.parents))
 
 class Config:
-    EXTRAS = {
+    LAYOUT_EXTRAS = {
         'git': {
             'label': 'Git status',
             'when': in_git_tree,
@@ -202,11 +202,11 @@ class Config:
 
 **列**は、レイアウトの列と同じキーに加えて、置く場所を指定します。`after` で指定した列の後ろに、`replace` で指定した列の代わりに置きます。`replace` は場所を節約するためのもので、その列の位置と、指定しなければその列の優先度を引き継ぎます。どちらも指定しないとき、または指定した列がレイアウトにないときは末尾に置きます。列の幅はフォルダー内でいちばん長い値に合わせ、値を持つファイルが 1 つもないフォルダーでは列ごと出しません。
 
-**自分で書いていない追加の情報を変える。** `EXTRAS` に同じ名前で、変えたいキーだけを書きます。残りは組み込みや拡張パッケージの定義のままです。
+**自分で書いていない追加の情報を変える。** `LAYOUT_EXTRAS` に同じ名前で、変えたいキーだけを書きます。残りは組み込みや拡張パッケージの定義のままです。
 
 ```python
 class Config:
-    EXTRAS = {
+    LAYOUT_EXTRAS = {
         'tags': {'when': 'never'},       # no tag dots unless turned On
         'git': {'when': 'always'},       # an extension's extra, everywhere
     }
@@ -214,7 +214,7 @@ class Config:
 
 ### 拡張パッケージから
 
-拡張パッケージは属性、レイアウト、追加の情報を提供できます（`[contributes.attributes]`、`[contributes.layouts]`、`[contributes.extras]`。[拡張パッケージ](EXTENSIONS_FEATURE.ja.md)を参照）。追加の情報は自分の `when` を持っているので、パッケージをインストールした時点で当てはまる場所に表示されます。そこから先は **View → Show** と `config.py` の `EXTRAS` で決めます。
+拡張パッケージは属性、レイアウト、追加の情報を提供できます（`[contributes.attributes]`、`[contributes.layouts]`、`[contributes.layout_extras]`。[拡張パッケージ](EXTENSIONS_FEATURE.ja.md)を参照）。追加の情報は自分の `when` を持っているので、パッケージをインストールした時点で当てはまる場所に表示されます。そこから先は **View → Show** と `config.py` の `LAYOUT_EXTRAS` で決めます。
 
 ## 関連項目
 

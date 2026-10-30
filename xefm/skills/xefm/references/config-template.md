@@ -369,13 +369,13 @@ class Config:
     # does not read yet, PATH_SCHEMES lets you add a browsable folder that
     # is not a folder, LEXERS lets you color a language the text viewer
     # does not know, MENU_ITEMS puts an action in a menu, and ATTRIBUTES,
-    # LAYOUTS and EXTRAS change what the file list's rows show.
+    # LAYOUTS and LAYOUT_EXTRAS change what the file list's rows show.
     #
     # STABLE AND PREVIEW: this is API version 1 (xefm.user_api.API_VERSION).
     # ACTIONS, SORT_KEYS, FILTERS and PATH_SCHEMES, and the panes and entries
     # your functions are handed, are stable: a change that would break them
     # comes with a new API_VERSION and a line in the release notes. EVENT_HOOKS,
-    # MENU_ITEMS, IMAGE_DECODERS, LEXERS, ATTRIBUTES, LAYOUTS, EXTRAS and
+    # MENU_ITEMS, IMAGE_DECODERS, LEXERS, ATTRIBUTES, LAYOUTS, LAYOUT_EXTRAS and
     # a few ctx methods (run_task, show_markdown, the prompts) are Preview and
     # may change in any release; XeFM logs one line when a config uses them.
     # doc/CUSTOMIZATION_FEATURE.md has the full list.
@@ -744,7 +744,7 @@ class Config:
     # --- ATTRIBUTES -------------------------------------------------------
     # Values XeFM can know about each entry beyond its name, size and date --
     # a Git status, a line count, an image's dimensions. Defining one shows it
-    # nowhere: EXTRAS (or LAYOUTS) below puts it in a row. XeFM has a few of its
+    # nowhere: LAYOUT_EXTRAS (or LAYOUTS) below puts it in a row. XeFM has a few of its
     # own already: 'name', 'ext', 'size', 'mtime', 'tags' and 'total_size' (a
     # folder's recursive size, counted by View > Calculate Folder Sizes).
     #
@@ -861,7 +861,7 @@ class Config:
     LAYOUTS = {}
     DEFAULT_LAYOUT = 'default'
 
-    # --- EXTRAS -----------------------------------------------------------
+    # --- LAYOUT_EXTRAS -----------------------------------------------------------
     # What a folder adds to its rows because of what it holds -- a Git status
     # in a working tree, your tags where the system keeps them. Each extra
     # says where it applies ('when'), and puts its attributes in the row as
@@ -883,7 +883,7 @@ class Config:
     #     def in_git_tree(path):
     #         return any((p / '.git').exists() for p in (path, *path.parents))
     #
-    #     EXTRAS = {
+    #     LAYOUT_EXTRAS = {
     #         'git': {
     #             'label': 'Git status',
     #             'when': in_git_tree,
@@ -917,14 +917,14 @@ class Config:
     # change one -- or the built-in 'tags' -- name it here with only the keys
     # you change; the rest stays as it was:
     #
-    #     EXTRAS = {'tags': {'when': 'never'}}            # no tag dots
-    #     EXTRAS = {'git': {'when': 'always'}}            # an extension's, changed
+    #     LAYOUT_EXTRAS = {'tags': {'when': 'never'}}            # no tag dots
+    #     LAYOUT_EXTRAS = {'git': {'when': 'always'}}            # an extension's, changed
     #
     # The sort dialog lists what the pane shows beyond its own keys (Git
     # status above). Sorting by one orders this folder only, by the values
     # already there; going to another folder goes back to the pane's own
     # sort. F1 lists what the marks in the active pane mean.
-    EXTRAS = {}
+    LAYOUT_EXTRAS = {}
 
 
     # Favorites (J) - the places and files you jump to by name.

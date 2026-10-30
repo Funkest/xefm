@@ -153,7 +153,7 @@ term across the docs. Add a row when a new recurring term comes up.
 | extension package | 拡張パッケージ | |
 | extension | 拡張機能 | |
 | external program | 外部プログラム | |
-| extra (file list) | 追加の情報 | `EXTRAS`; what a folder adds to its rows |
+| extra (file list) | 追加の情報 | `LAYOUT_EXTRAS`; what a folder adds to its rows |
 | favorite (directory) | お気に入り | |
 | feature guide | 機能ガイド | |
 | file association | ファイルの関連付け | |

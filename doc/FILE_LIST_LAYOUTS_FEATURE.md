@@ -21,7 +21,7 @@ The values a layout or an extra shows are **attributes**: name, extension,
 size, date, tags and a folder's total size are built in, and `config.py` and
 extension packages can add their own.
 
-> **Preview.** `ATTRIBUTES`, `LAYOUTS`, `DEFAULT_LAYOUT` and `EXTRAS` may
+> **Preview.** `ATTRIBUTES`, `LAYOUTS`, `DEFAULT_LAYOUT` and `LAYOUT_EXTRAS` may
 > still change in any release. XeFM logs one line when your config uses them.
 > See [Customization](CUSTOMIZATION_FEATURE.md).
 
@@ -236,7 +236,7 @@ worked out. A `Cell`'s `color` is `'muted'`, `'accent'`, `'accent2'`,
 The selection, the cursor and the resting pane's dimming still apply on top,
 so a color never makes a row unreadable.
 
-### `EXTRAS` — what a folder adds
+### `LAYOUT_EXTRAS` — what a folder adds
 
 ```python
 from xefm.user_api import Cell
@@ -252,7 +252,7 @@ def in_git_tree(path):
     return any((p / '.git').exists() for p in (path, *path.parents))
 
 class Config:
-    EXTRAS = {
+    LAYOUT_EXTRAS = {
         'git': {
             'label': 'Git status',
             'when': in_git_tree,
@@ -284,12 +284,12 @@ place and, unless it says otherwise, its priority — or at the end, also when
 the named column is not in the layout. It is as wide as its widest value in
 the folder, and left out of a folder where no file has a value.
 
-**Changing an extra you did not write.** Name it in `EXTRAS` with only the
+**Changing an extra you did not write.** Name it in `LAYOUT_EXTRAS` with only the
 keys you change; the rest stays as the built-in or the extension defined it:
 
 ```python
 class Config:
-    EXTRAS = {
+    LAYOUT_EXTRAS = {
         'tags': {'when': 'never'},       # no tag dots unless turned On
         'git': {'when': 'always'},       # an extension's extra, everywhere
     }
@@ -298,10 +298,10 @@ class Config:
 ### From an extension package
 
 An extension package can bring attributes, layouts and extras
-(`[contributes.attributes]`, `[contributes.layouts]`, `[contributes.extras]`;
+(`[contributes.attributes]`, `[contributes.layouts]`, `[contributes.layout_extras]`;
 see [Extension Packages](EXTENSIONS_FEATURE.md)). Its extras come with their
 own `when`, so they show where they apply as soon as the package is installed;
-**View → Show** and `EXTRAS` in `config.py` decide from there.
+**View → Show** and `LAYOUT_EXTRAS` in `config.py` decide from there.
 
 ## Related
 

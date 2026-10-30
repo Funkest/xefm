@@ -198,6 +198,14 @@ def sync_value(name: str, path, record):
     return None
 
 
+def has_value(value) -> bool:
+    """Whether ``value`` is something to sort by: not None, and not an empty
+    list or string — a file with no tags has ``[]``, and it must go where a
+    file with no Git status (``None``) goes: last, whichever way the sort
+    runs."""
+    return value is not None and value != [] and value != "" and value != ()
+
+
 def sort_key(kind: str, value):
     """How a value of ``kind`` compares in an attribute sort. Tags compare by
     their names; everything else as itself."""

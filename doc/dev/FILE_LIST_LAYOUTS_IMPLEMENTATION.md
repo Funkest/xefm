@@ -11,7 +11,7 @@ and #789 (explaining them), designed in conversation on 2026-10-28 to
 |---|---|---|---|
 | Attributes | `xefm/attributes.py` | `ATTRIBUTES` | what a value is, how and when it is computed, caching, invalidation |
 | Layouts | `xefm/layouts.py` | `LAYOUTS`, `DEFAULT_LAYOUT` | presentation: which usual columns, their order and formats — taste and width |
-| Extras | `xefm/layouts.py` | `EXTRAS` | content: what a folder adds (tags, Git status) as markers and columns, with a default `when` |
+| Extras | `xefm/layouts.py` | `LAYOUT_EXTRAS` | content: what a folder adds (tags, Git status) as markers and columns, with a default `when` |
 
 A pane draws `layouts.compose(layout_of(pane), active_extras(pane))`.
 `file_pane.py` draws it; `file_list_manager.py` sorts by an attribute;
@@ -29,7 +29,7 @@ Each is a place a later change should not quietly undo.
   together. `LAYOUT_RULES` is gone; a config still using it gets a warning.
 - **Names.** `LAYOUTS` (not `VIEWS`, which reads as the viewers; no `FILE_`
   prefix, which a file manager's tables do not need — compare `FILTERS`) and
-  `EXTRAS`.
+  `LAYOUT_EXTRAS`.
 - **`kind`** is in every layout from the start (`'details'` only today), so
   tree and thumbnail layouts (#638) are an addition.
 - **No `FORMATTERS` table.** A format is a built-in name or a plain function on
@@ -97,7 +97,7 @@ Each is a place a later change should not quietly undo.
 - **Out of scope for now:** pane-level values (a Git branch), describing the
   cursor row's marks in the status bar, column headers.
 - **Everything new is Preview** (`config.ATTRIBUTES`, `LAYOUTS`,
-  `DEFAULT_LAYOUT`, `EXTRAS`, the three manifest kinds, `EntryInfo.attr`,
+  `DEFAULT_LAYOUT`, `LAYOUT_EXTRAS`, the three manifest kinds, `EntryInfo.attr`,
   `Cell`).
 
 ## Attributes — `xefm/attributes.py`
@@ -144,7 +144,7 @@ priority, refresh, markers, extra)`; `Marker(attr, format, side, limit, slot)`.
 `Extra(name, label, when, markers, columns)` with `ExtraMarker(marker, on)`
 and `ExtraColumn(column, after, replace)`. `BUILTIN_DEFAULT` reproduces the old
 fixed row (`name`, `ext`, `total_size`, `mtime` priority 1);
-`BUILTIN_EXTRA_SPECS` holds `tags` as the spec `EXTRAS` takes, so a config
+`BUILTIN_EXTRA_SPECS` holds `tags` as the spec `LAYOUT_EXTRAS` takes, so a config
 entry of the same name merges over it.
 
 - `FORMATS`, `resolve_format`, `render`: as before — a built-in format gets a
@@ -200,13 +200,13 @@ come from `_attribute_sort_rows` (`mode = "attr:<name>"`).
 ## Config, extensions, API
 
 - `user_api._process_user_entries` loads `ATTRIBUTES`, `LAYOUTS`,
-  `DEFAULT_LAYOUT` (warning and `default` when unknown), then `EXTRAS` (merged
+  `DEFAULT_LAYOUT` (warning and `default` when unknown), then `LAYOUT_EXTRAS` (merged
   over a built-in of the same name; a warning for attributes nothing defines),
   then reports collisions.
-- `extensions`: kinds `attributes`, `layouts`, `extras`; `layouts` and `extras`
+- `extensions`: kinds `attributes`, `layouts`, `layout_extras`; `layouts` and `layout_extras`
   are data. `read`, `when` and every `format` are references when they hold a
   colon — `_refs_in` finds them, `_value_for` / `_layout_refs` import them. An
-  `EXTRAS` entry also in `config.py` is merged with config's keys winning,
+  `LAYOUT_EXTRAS` entry also in `config.py` is merged with config's keys winning,
   instead of config.py replacing it whole.
 
 ## Tests

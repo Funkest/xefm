@@ -196,14 +196,14 @@ class Extras(_Clean):
                          [("tags", "name", 3)])
 
     def test_config_overrides_an_existing_extra_key_by_key(self):
-        _load(EXTRAS={"tags": {"when": "never"}})
+        _load(LAYOUT_EXTRAS={"tags": {"when": "never"}})
         tags = layouts.get_extra("tags")
         self.assertEqual(tags.when, "never")
         self.assertEqual(tags.label, "Tags")            # the rest as it was
         self.assertTrue(tags.markers)
 
     def test_problems_are_named(self):
-        loaded = _load(ATTRIBUTES=KIND, EXTRAS={
+        loaded = _load(ATTRIBUTES=KIND, LAYOUT_EXTRAS={
             "empty": {"label": "Nothing"},
             "both": {"columns": [{"attr": "kind", "after": "name", "replace": "size"}]},
             "badwhen": {"when": 3, "markers": ["kind"]},
@@ -214,7 +214,7 @@ class Extras(_Clean):
     def test_when_decides_where_auto_shows_it(self):
         def boom(path):
             raise RuntimeError("no")
-        _load(ATTRIBUTES=KIND, EXTRAS={
+        _load(ATTRIBUTES=KIND, LAYOUT_EXTRAS={
             "data": {"when": "/data/*", "markers": ["kind"]},
             "broken": {"when": boom, "markers": ["kind"]},
             "nowhere": {"when": "never", "markers": ["kind"]}})
@@ -224,7 +224,7 @@ class Extras(_Clean):
         self.assertNotIn("nowhere", layouts.extras_for("/data/x"))
 
     def test_the_tab_s_state_beats_when(self):
-        _load(ATTRIBUTES=KIND, EXTRAS={"k": {"when": "never", "markers": ["kind"]}})
+        _load(ATTRIBUTES=KIND, LAYOUT_EXTRAS={"k": {"when": "never", "markers": ["kind"]}})
         names = lambda pane: [e.name for e in layouts.active_extras(pane)]  # noqa: E731
         self.assertNotIn("k", names({"_extras_auto": frozenset()}))
         self.assertIn("k", names({"extras": {"k": "on"}}))
@@ -232,7 +232,7 @@ class Extras(_Clean):
                                      "_extras_auto": frozenset({"k"})}))
 
     def test_compose_places_after_replace_end_and_markers(self):
-        _load(ATTRIBUTES=KIND, EXTRAS={
+        _load(ATTRIBUTES=KIND, LAYOUT_EXTRAS={
             "a": {"columns": [{"attr": "kind", "after": "name"}],
                   "markers": [{"attr": "kind", "on": "mtime", "side": "before"}]},
             "b": {"columns": [{"attr": "kind", "replace": "mtime"}]},
@@ -251,7 +251,7 @@ class Extras(_Clean):
     def test_a_shared_glyph_in_one_color_is_reported(self):
         def mark(value, entry):
             return Cell("●", color="yellow")
-        loaded = _load(ATTRIBUTES=KIND, EXTRAS={
+        loaded = _load(ATTRIBUTES=KIND, LAYOUT_EXTRAS={
             "k": {"markers": [{"attr": "kind", "format": mark}]}})
         self.assertTrue(any("both draw ●" in w for w in loaded.warnings), loaded.warnings)
 
@@ -406,7 +406,7 @@ class Store(_Tree):
 class Drawing(_Tree):
 
     def test_an_extra_marks_the_name_and_adds_a_column(self):
-        _load(ATTRIBUTES=KIND, EXTRAS={"k": {
+        _load(ATTRIBUTES=KIND, LAYOUT_EXTRAS={"k": {
             "markers": [{"attr": "kind", "side": "before"}],
             "columns": [{"attr": "kind", "format": "word", "after": "name"}]}})
         pane = self.pane(extras={"k": "on"})
@@ -422,7 +422,7 @@ class Drawing(_Tree):
 
     def test_a_sparse_extra_takes_no_room_where_nothing_has_it(self):
         _load(ATTRIBUTES={"none": {"type": "enum", "read": lambda d, es: [None] * len(es)}},
-              EXTRAS={"n": {"markers": [{"attr": "none", "side": "before"}],
+              LAYOUT_EXTRAS={"n": {"markers": [{"attr": "none", "side": "before"}],
                             "columns": [{"attr": "none", "after": "name"}]}})
         plain = self.render(self.pane())
         pane = self.pane(extras={"n": "on"})
@@ -471,6 +471,16 @@ class AttributeSort(_Tree):
                 entries, overlay=("x", values, reverse))
             self.assertEqual([p.name for p in result["files"]], expect)
 
+    def test_an_empty_value_goes_last_like_none(self):
+        """No tags is [], no Git status is None; both go last, so a tag sort
+        and a Git sort put the marked files first alike (hand check)."""
+        pane = self.pane()
+        entries = pane["_listing_entries"]
+        by_name = {p.name: str(p) for p, _a in entries}
+        values = {by_name["a.txt"]: [], by_name["b.md"]: ["Work"], by_name["c.py"]: []}
+        result = self.flm.recompute_from_snapshot(entries, overlay=("tags", values, False))
+        self.assertEqual([p.name for p in result["files"]][1], "b.md")
+
 
 # --- the app -----------------------------------------------------------------------
 
@@ -506,7 +516,7 @@ class App(_Tree):
         pane["focused_index"] = [f.name for f in pane["files"]].index(name)
 
     def test_extras_follow_when_and_the_tab_can_override(self):
-        _load(ATTRIBUTES=KIND, EXTRAS={"k": {"when": self.tmp, "markers": ["kind"]}})
+        _load(ATTRIBUTES=KIND, LAYOUT_EXTRAS={"k": {"when": self.tmp, "markers": ["kind"]}})
         pane = self.app.active_pane()
         self.app._relist(pane)
         self.app._settle_listings()
@@ -527,7 +537,7 @@ class App(_Tree):
                          "slim")
 
     def test_help_explains_the_marks_on_screen(self):
-        _load(ATTRIBUTES=KIND, EXTRAS={"k": {"label": "Kind", "markers": ["kind"]}})
+        _load(ATTRIBUTES=KIND, LAYOUT_EXTRAS={"k": {"label": "Kind", "markers": ["kind"]}})
         pane = self.app.active_pane()
         self.app._set_extra(pane, "k", "on")
         text = self.app._help_markdown()

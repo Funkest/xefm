@@ -172,11 +172,11 @@ CONTRIBUTION_TABLES = {
     "menus": "MENU_ITEMS",
     "attributes": "ATTRIBUTES",
     "layouts": "LAYOUTS",
-    "extras": "EXTRAS",
+    "layout_extras": "LAYOUT_EXTRAS",
 }
 #: Kinds whose entries may be plain data rather than a code reference — the
 #: tier that runs no code at all.
-_DATA_KINDS = {"themes", "filters", "lexers", "menus", "layouts", "extras"}
+_DATA_KINDS = {"themes", "filters", "lexers", "menus", "layouts", "layout_extras"}
 
 _KNOWN_SECTIONS = {"extension", "contributes", "requires", "settings"}
 _KNOWN_EXTENSION_KEYS = {"id", "version", "api_version", "min_xefm", "name",
@@ -2124,7 +2124,7 @@ def _value_for(kind: str, value, manifest: Manifest, handle: ExtensionHandle,
             spec["read"] = _in_extension(handle, _import_ref(root, spec["read"]),
                                          missing=missing)
         return spec
-    if kind in ("layouts", "extras") and isinstance(value, dict):
+    if kind in ("layouts", "layout_extras") and isinstance(value, dict):
         spec = _layout_refs(value, root, handle, missing)
         if isinstance(spec.get("when"), str) and ":" in spec["when"]:
             spec["when"] = _in_extension(handle, _import_ref(root, spec["when"]),
@@ -2253,7 +2253,7 @@ def _apply(config, manifest: Manifest, layout: Layout, report: LoadReport) -> No
     for attr, entries in staged.items():
         current = dict(getattr(config, attr, None) or {})
         for key, value in entries.items():
-            if attr == "EXTRAS" and isinstance(current.get(key), dict) \
+            if attr == "LAYOUT_EXTRAS" and isinstance(current.get(key), dict) \
                     and isinstance(value, dict) and (attr, key) not in report.owners:
                 # config.py overrides an extension's extra key by key: it names
                 # only what it changes (#756).

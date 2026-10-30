@@ -343,8 +343,8 @@ class FileListManager:
         kind = attr.type if attr is not None else "text"
 
         def group(members):
-            known = [e for e in members if values.get(str(e)) is not None]
-            rest = [e for e in members if values.get(str(e)) is None]
+            known = [e for e in members if attributes.has_value(values.get(str(e)))]
+            rest = [e for e in members if not attributes.has_value(values.get(str(e)))]
             known.sort(key=lambda e: attributes.sort_key(kind, values[str(e)]),
                        reverse=reverse)
             return known + rest

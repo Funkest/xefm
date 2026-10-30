@@ -189,7 +189,7 @@ TABLE_KEYS: dict[str, tuple[str, ...]] = {
     "MENU_ITEMS": ("menus", "label", "when"),
     "ATTRIBUTES": ("label", "type", "read", "values", "where", "compute"),
     "LAYOUTS": _layouts.LAYOUT_KEYS,
-    "EXTRAS": _layouts.EXTRA_KEYS,
+    "LAYOUT_EXTRAS": _layouts.EXTRA_KEYS,
 }
 
 #: The menus ``MENU_ITEMS`` can put an action in: the menu bar's File menu, and
@@ -1581,7 +1581,7 @@ def _process_user_entries(config, registry, apply: bool) -> LoadResult:
         layout_count += 1
 
     if getattr(config, "LAYOUT_RULES", None):
-        warnings.append("LAYOUT_RULES is gone: an entry of EXTRAS says where it "
+        warnings.append("LAYOUT_RULES is gone: an entry of LAYOUT_EXTRAS says where it "
                         "applies with 'when', and a tab's layout is chosen with "
                         "View > Layout (DEFAULT_LAYOUT for new tabs)")
 
@@ -1599,7 +1599,7 @@ def _process_user_entries(config, registry, apply: bool) -> LoadResult:
     built = [e for e in (_layouts.build_extra(n, spec, source="builtin")[0]
                          for n, spec in _layouts.BUILTIN_EXTRA_SPECS.items()) if e]
     built = {e.name: e for e in built}
-    for name, spec in _items(getattr(config, "EXTRAS", None), "EXTRAS", warnings):
+    for name, spec in _items(getattr(config, "LAYOUT_EXTRAS", None), "LAYOUT_EXTRAS", warnings):
         base = _layouts.BUILTIN_EXTRA_SPECS.get(name)
         if base is not None and isinstance(spec, dict):
             spec = {**base, **spec}
@@ -1610,7 +1610,7 @@ def _process_user_entries(config, registry, apply: bool) -> LoadResult:
         unknown = sorted(n for n in extra.attributes() if n not in attr_names)
         if unknown:
             warnings.append(
-                f"EXTRAS['{name}'] names attribute(s) nothing defines: "
+                f"LAYOUT_EXTRAS['{name}'] names attribute(s) nothing defines: "
                 f"{', '.join(unknown)} — those are left out")
         if apply:
             _layouts.register_extra(extra)

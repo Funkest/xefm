@@ -6,7 +6,7 @@ The display side of :mod:`xefm.attributes`, in two parts that combine:
   (``details`` today; ``tree`` and ``thumbnails`` later), which **columns** a
   row has, their formats, widths and order. It is a matter of taste and screen
   width, chosen per tab by hand (``DEFAULT_LAYOUT`` for a new one).
-- An **extra** (``EXTRAS``) is content: an attribute shown because of what the
+- An **extra** (``LAYOUT_EXTRAS``) is content: an attribute shown because of what the
   folder holds — Git status, tags — as **markers** beside a column's text
   and/or **columns** placed after or in place of a layout's. Each has a
   ``when`` deciding where it applies by default, which an extension may
@@ -386,7 +386,7 @@ def _tags_when(path) -> bool:
     return store is not None and store.cheap
 
 
-#: Built-in extras as the specs ``EXTRAS`` takes, so a config entry of the
+#: Built-in extras as the specs ``LAYOUT_EXTRAS`` takes, so a config entry of the
 #: same name overrides them key by key, as it does an extension's.
 BUILTIN_EXTRA_SPECS: dict[str, dict] = {
     "tags": {"label": "Tags", "when": _tags_when,
@@ -561,9 +561,9 @@ def build(name: str, spec) -> tuple[Optional[Layout], Optional[str]]:
 
 
 def build_extra(name: str, spec, source: str = "user") -> tuple[Optional[Extra], Optional[str]]:
-    """Validate one ``EXTRAS`` entry — already merged over the built-in or the
+    """Validate one ``LAYOUT_EXTRAS`` entry — already merged over the built-in or the
     extension's entry of the same name — as an :class:`Extra`, or a problem."""
-    where = f"EXTRAS['{name}']"
+    where = f"LAYOUT_EXTRAS['{name}']"
     if not isinstance(name, str) or not name:
         return None, f"{where}: the name must be a non-empty string"
     if not isinstance(spec, dict):
@@ -625,7 +625,7 @@ def applies(extra: Extra, path) -> bool:
             return fnmatch.fnmatch(str(path), when)
         return bool(when(path))
     except Exception as exc:  # noqa: BLE001 — a broken condition shows nothing
-        logger.error(f"EXTRAS['{extra.name}'] 'when' failed: {exc}")
+        logger.error(f"LAYOUT_EXTRAS['{extra.name}'] 'when' failed: {exc}")
         return False
 
 
@@ -756,7 +756,7 @@ def collisions(extras: list, entry_factory=lambda: None) -> list[str]:
             other = seen.get(key)
             if other is not None and other[0] != extra.name:
                 color = f" in {key[1]}" if key[1] else ""
-                lines.append(f"EXTRAS '{other[0]}' ({other[1]}) and '{extra.name}' "
+                lines.append(f"LAYOUT_EXTRAS '{other[0]}' ({other[1]}) and '{extra.name}' "
                              f"({meaning}) both draw {key[0]}{color} — tell them "
                              f"apart with another glyph or color")
             else:

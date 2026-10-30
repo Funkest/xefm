@@ -6,7 +6,7 @@
 >
 > 安定版：`ACTIONS`、`SORT_KEYS`、`FILTERS`、`PATH_SCHEMES`（組み込みのスキームの置き換えを除く）、関数に渡されるペインとエントリ、`ctx.pane` / `other` / `left` / `right`、`ctx.invoke`、`ctx.run_program`、`ctx.message`、`ctx.action_names`、そして `PROGRAMS` 用の `xefm_tool`、`xefm_python`、`is_desktop_mode`。
 >
-> プレビュー：`EVENT_HOOKS`、`MENU_ITEMS`、`IMAGE_DECODERS`、`LEXERS`、`ATTRIBUTES`、`LAYOUTS`、`DEFAULT_LAYOUT`、`EXTRAS`、`entry.attr`、`Cell`、プロンプト（`ctx.input` / `choose` / `confirm`）、`ctx.run_task`、`ctx.show_markdown`、`ctx.copy_text`、`ctx.actions`、`pane.open_list`。プレビューのテーブルを使う設定では、そのことを伝える 1 行がログペインに表示されます。また、プレビューの関数を初めて呼び出すと、その名前を示す 1 行がログに出ます。
+> プレビュー：`EVENT_HOOKS`、`MENU_ITEMS`、`IMAGE_DECODERS`、`LEXERS`、`ATTRIBUTES`、`LAYOUTS`、`DEFAULT_LAYOUT`、`LAYOUT_EXTRAS`、`entry.attr`、`Cell`、プロンプト（`ctx.input` / `choose` / `confirm`）、`ctx.run_task`、`ctx.show_markdown`、`ctx.copy_text`、`ctx.actions`、`pane.open_list`。プレビューのテーブルを使う設定では、そのことを伝える 1 行がログペインに表示されます。また、プレビューの関数を初めて呼び出すと、その名前を示す 1 行がログに出ます。
 
 `~/.xefm/config.py` は XeFM が起動時に実行する本物の Python なので、以前からロジックを書くことができました。`if sys.platform == 'win32':` のブロック、計算で求めたパス、リスト内包表記などです。この機能はその一歩先を行きます。設定の中で**関数**を定義し、キーに割り当て、何かが起きたときに実行できます。
 
@@ -558,9 +558,9 @@ FILTERS = {
 
 ---
 
-## ファイルリストに表示するもの：`ATTRIBUTES`、`LAYOUTS`、`EXTRAS`（Preview）
+## ファイルリストに表示するもの：`ATTRIBUTES`、`LAYOUTS`、`LAYOUT_EXTRAS`（Preview）
 
-`ATTRIBUTES` は、XeFM が各エントリについて知ることのできる値（Git の状態、行数など）を追加します。値は自分の関数がバックグラウンドで計算します。`LAYOUTS` は行の見せ方を決めます。いつもの列のうちどれを、どの順に、どう書くかです。`EXTRAS` は、その上にフォルダーの中身に応じた情報を加えます。列の文字の横に付ける印や、独自の列で、当てはまる場所で表示され、タブごとに切り替えられます。詳しくは専用のページ [ファイルリストのレイアウト](FILE_LIST_LAYOUTS_FEATURE.ja.md) を参照してください。
+`ATTRIBUTES` は、XeFM が各エントリについて知ることのできる値（Git の状態、行数など）を追加します。値は自分の関数がバックグラウンドで計算します。`LAYOUTS` は行の見せ方を決めます。いつもの列のうちどれを、どの順に、どう書くかです。`LAYOUT_EXTRAS` は、その上にフォルダーの中身に応じた情報を加えます。列の文字の横に付ける印や、独自の列で、当てはまる場所で表示され、タブごとに切り替えられます。詳しくは専用のページ [ファイルリストのレイアウト](FILE_LIST_LAYOUTS_FEATURE.ja.md) を参照してください。
 
 自分の関数からは、XeFM がすでに持っている値を `entry.attr('git')` で読めます。値を計算することも待つこともなく、値が届くまでは `None` を返すので、アクションの中でもソートキーの中でも同じように軽く使えます。
 

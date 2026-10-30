@@ -624,7 +624,7 @@ class Load(_Home):
             version = "0.1.0"
             api_version = 1
 
-            [contributes.extras."{id}"]
+            [contributes.layout_extras."{id}"]
             label = "Kinds"
             when = "{mod}.attrs:here"
             markers = [{{ attr = "name", format = "{mod}.attrs:mark", side = "before" }}]
@@ -636,9 +636,9 @@ class Load(_Home):
                 return "k"
         '''})
         self.assertEqual(ext.errors(ext.check_package(root)[1]), [])
-        config = _config(EXTRAS={root.name: {"when": "never"}})
+        config = _config(LAYOUT_EXTRAS={root.name: {"when": "never"}})
         ext.load(config, self.layout)
-        spec = config.EXTRAS[root.name]
+        spec = config.LAYOUT_EXTRAS[root.name]
         self.assertEqual(spec["when"], "never")                       # config's
         self.assertEqual(spec["label"], "Kinds")                      # the rest kept
         self.assertIs(spec["markers"][0]["format"], sys.modules[f"{mod}.attrs"].mark)

@@ -8,10 +8,10 @@ stable	table	config.ACTIONS	context,description,func,override
 preview	table	config.ATTRIBUTES	compute,label,read,type,values,where
 preview	table	config.EVENT_HOOKS
 preview	names	config.EVENT_HOOKS.events	directory_changed,file_open,quit,startup
-preview	table	config.EXTRAS	columns,label,markers,when
 stable	table	config.FILTERS	label,match,pattern
 preview	table	config.IMAGE_DECODERS	label,open
 preview	table	config.LAYOUTS	columns,kind,label,override
+preview	table	config.LAYOUT_EXTRAS	columns,label,markers,when
 preview	table	config.LEXERS
 preview	table	config.MENU_ITEMS	label,menus,when
 stable	table	config.PATH_SCHEMES	class,override
@@ -21,10 +21,10 @@ stable	sections	manifest	contributes,extension,requires,settings
 stable	section	manifest.contributes.actions	entry,description
 preview	section	manifest.contributes.attributes
 preview	section	manifest.contributes.event_hooks
-preview	section	manifest.contributes.extras
 stable	section	manifest.contributes.filters
 preview	section	manifest.contributes.image_decoders
 stable	section	manifest.contributes.key_suggestions
+preview	section	manifest.contributes.layout_extras
 preview	section	manifest.contributes.layouts
 preview	section	manifest.contributes.lexers
 preview	section	manifest.contributes.menus
