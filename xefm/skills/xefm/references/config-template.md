@@ -902,15 +902,15 @@ class Config:
     # column whose text it marks ('name' by default, and when the tab's layout
     # has no such column), 'side' is 'before' or 'after' (the default),
     # 'limit' the most pieces of the format's result shown (the tag dots:
-    # three). On the name, 'before' marks sit in a strip in front of every
-    # name, each extra in its own place, so a mark's position tells you which
-    # extra it is; 'after' marks follow the name. Nothing takes room in a
-    # folder where no file has one.
+    # three). A mark sits against the text it marks on the rows that have
+    # one, and that text gives way; rows without one keep no room for it, so
+    # a name with a mark in front starts a little later than its neighbours.
     #
-    # A column is as in LAYOUTS, plus where it goes: 'after' a column, in
-    # place of one ('replace' -- to save room; it keeps that column's
-    # priority), or at the end (also when the named column is not in the
-    # layout). It is as wide as its widest value, and left out of a folder
+    # A column is as in LAYOUTS, plus where it goes: 'before' or 'after' a
+    # column, in place of one ('replace' -- to save room; it keeps that
+    # column's priority), or at the end (also when the named column is not
+    # in the layout). A column before the name keeps a value in one place on
+    # every row. It is as wide as its widest value, and left out of a folder
     # where no file has one.
     #
     # An extension can bring extras, already saying where they apply. To

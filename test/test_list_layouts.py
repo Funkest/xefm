@@ -244,6 +244,9 @@ class Extras(_Clean):
         self.assertEqual([(c.attr, c.extra) for c in row.columns],
                          [("name", None), ("kind", "a"), ("ext", None),
                           ("total_size", None), ("kind", "b"), ("kind", "c")])
+        before = layouts.compose(layouts.BUILTIN_DEFAULT, [layouts.build_extra(
+            "d", {"columns": [{"attr": "kind", "before": "name"}]})[0]])
+        self.assertEqual([c.attr for c in before.columns][:2], ["kind", "name"])
         replaced = row.columns[4]
         self.assertEqual(replaced.priority, 1)          # the date's
         self.assertEqual([m.slot for m in row.columns[0].markers], ["c"])
@@ -416,9 +419,23 @@ class Drawing(_Tree):
         lines = self.render(pane)
         row = next(line for line in lines if "a.txt" in line or " a " in line)
         sub = next(line for line in lines if "sub" in line)
-        self.assertIn("F a", row)                     # the mark, in the gutter
+        self.assertIn("F a", row)                     # the mark, against the name
         self.assertIn("File", row)                    # the extra's own column
-        self.assertEqual(sub.index("sub"), row.index("a"))   # names start in one column
+        # nothing is reserved: a name without a mark starts where the mark would
+        self.assertEqual(sub.index("sub"), row.index("F"))
+
+    def test_a_marker_on_a_value_column_sits_against_its_value(self):
+        _load(ATTRIBUTES=KIND, LAYOUT_EXTRAS={"k": {
+            "markers": [{"attr": "kind", "on": "total_size", "side": "after"}]}})
+        pane = self.pane(extras={"k": "on"})
+        self.render(pane)
+        store = attributes.store_of(pane)
+        self.assertTrue(_wait(lambda: store.ready("kind", pane["files"], self.records(pane))))
+        lines = self.render(pane)
+        row = next(line for line in lines if " a " in line)
+        sub = next(line for line in lines if "sub" in line)
+        self.assertIn("10B F", row)                   # the value gives way, right-aligned
+        self.assertEqual(row.index("F") + 1, sub.index("<DIR>") + len("<DIR>"))
 
     def test_a_sparse_extra_takes_no_room_where_nothing_has_it(self):
         _load(ATTRIBUTES={"none": {"type": "enum", "read": lambda d, es: [None] * len(es)}},

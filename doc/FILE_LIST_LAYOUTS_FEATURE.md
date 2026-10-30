@@ -52,16 +52,16 @@ applies; nothing has to be written in `config.py`.
 
 ### Where the marks go, and what they mean
 
-- **In front of the name**, marks sit in a narrow strip, each extra in its own
-  place on every row, so names still start in one column and a mark's position
-  tells you which extra it is.
-- **After the name**, marks follow the name, as the tag dots do. Tell them
-  apart by their look.
-- **On another column**, such as the date, the room for the marks is kept on
-  every row, so the values stay lined up.
+- **Marks sit against the text they mark**, before or after it, on the rows
+  that have one, and that text gives way on that row. No room is kept for a
+  mark on the rows without one, so a name with a mark in front starts a little
+  later than the names around it. Tell marks apart by their look.
+- **A column of its own** is the other way to show a value, when you want it
+  in one place on every row — before the name, for instance. An extra's column
+  is as wide as its widest value in the folder.
 - **Nothing takes room where nothing has it.** In a folder where no file has a
-  Git status, the strip, the marks' room and the Git column all disappear, and
-  the row is as tight as without the extra.
+  Git status, there are no Git marks and no Git column, and the row is as
+  tight as without the extra.
 
 **F1** (Help) opens with a **Markers in this pane** section when the active
 pane shows any: every mark the active extras can draw, its color, and what it
@@ -274,14 +274,15 @@ class Config:
 the column whose text it marks, `'name'` by default and whenever the tab's
 layout has no such column — `side` (`'before'` or `'after'`, the default) and
 `limit`, the most pieces of the format's result shown (the tag dots: three).
-For a state you want to read at a glance, `'before'` on the name puts it in the
-strip where each extra keeps its place; use a mark that cannot be mistaken for
+A mark takes no room on rows without one; use one that cannot be mistaken for
 the tag dots.
 
-**A column** takes the keys of a layout's column, plus where it goes: `after` a
-column, in place of one with `replace` — to save room; it takes that column's
-place and, unless it says otherwise, its priority — or at the end, also when
-the named column is not in the layout. It is as wide as its widest value in
+**A column** takes the keys of a layout's column, plus where it goes: `before`
+or `after` a column, in place of one with `replace` — to save room; it takes
+that column's place and, unless it says otherwise, its priority — or at the
+end, also when the named column is not in the layout. A column `before` the
+name keeps a value in one place on every row, where a mark before the name
+moves with it. It is as wide as its widest value in
 the folder, and left out of a folder where no file has a value.
 
 **Changing an extra you did not write.** Name it in `LAYOUT_EXTRAS` with only the

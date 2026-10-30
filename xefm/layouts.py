@@ -46,7 +46,7 @@ DEFAULT = "default"
 #: The keys a column / marker dict accepts; an extra's take one more each.
 COLUMN_KEYS = ("attr", "format", "width", "align", "priority", "refresh", "markers")
 MARKER_KEYS = ("attr", "format", "side", "limit")
-EXTRA_COLUMN_KEYS = COLUMN_KEYS[:-1] + ("after", "replace")
+EXTRA_COLUMN_KEYS = COLUMN_KEYS[:-1] + ("before", "after", "replace")
 EXTRA_MARKER_KEYS = MARKER_KEYS + ("on",)
 LAYOUT_KEYS = ("label", "kind", "columns", "override")
 EXTRA_KEYS = ("label", "when", "markers", "columns")
@@ -306,7 +306,7 @@ class Marker:
     #: The most cells of the format's result drawn (None: all of them). A count,
     #: not a width, so it means the same in a proportional font.
     limit: Optional[int] = None
-    #: The extra it came from: markers of one extra share a slot.
+    #: The extra it came from: a row draws one extra's markers together.
     slot: Optional[str] = None
 
 
@@ -354,6 +354,7 @@ class ExtraColumn:
     column: Column
     after: Optional[str] = None
     replace: Optional[str] = None
+    before: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -591,11 +592,12 @@ def build_extra(name: str, spec, source: str = "user") -> tuple[Optional[Extra],
         column, problem = _build_column(at, c, EXTRA_COLUMN_KEYS, extra=name)
         if problem:
             return None, problem
-        after = c.get("after") if isinstance(c, dict) else None
-        replace = c.get("replace") if isinstance(c, dict) else None
-        if after is not None and replace is not None:
-            return None, f"{at}: give 'after' or 'replace', not both"
-        columns.append(ExtraColumn(column, after, replace))
+        where = {k: c.get(k) for k in ("before", "after", "replace")
+                 if isinstance(c, dict) and c.get(k) is not None}
+        if len(where) > 1:
+            return None, f"{at}: give one of 'before', 'after' and 'replace'"
+        columns.append(ExtraColumn(column, where.get("after"), where.get("replace"),
+                                   where.get("before")))
     if not markers and not columns:
         return None, f"{where} shows nothing — give it 'markers' or 'columns'"
     label = spec.get("label") or name
@@ -656,8 +658,9 @@ def compose(layout: Layout, extras: list) -> Layout:
     """``layout`` with ``extras`` placed in it, in order.
 
     A column with ``replace`` takes the named column's place (and its priority,
-    unless it gives its own); one with ``after`` goes after it; either goes at
-    the end when the named column is absent or already replaced. A marker goes on the named column, or on the
+    unless it gives its own); one with ``before`` or ``after`` goes beside it;
+    any goes at the end when the named column is absent or already replaced.
+    Columns placed beside the same one keep their definition order. A marker goes on the named column, or on the
     name when that column is absent."""
     key = (layout, tuple(e.name for e in extras))
     found = _composed.get(key)
@@ -672,13 +675,16 @@ def compose(layout: Layout, extras: list) -> Layout:
     for extra in extras:
         for ec in extra.columns:
             col = ec.column
-            target = ec.replace or ec.after
+            target = ec.replace or ec.after or ec.before
             i = index_of(target) if target else None
             if ec.replace and i is not None and i not in replaced and cols[i][0].extra is None:
                 if col.priority is None and cols[i][0].priority is not None:
                     col = replace(col, priority=cols[i][0].priority)
                 cols[i] = [col, cols[i][1]]
                 replaced.add(i)
+            elif ec.before and i is not None:
+                cols.insert(i, [col, []])
+                replaced = {k + (k >= i) for k in replaced}
             elif ec.after and i is not None:
                 j = i + 1
                 while j < len(cols) and cols[j][0].extra is not None:

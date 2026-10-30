@@ -44,22 +44,23 @@ Each is a place a later change should not quietly undo.
 - **Tags are a built-in extra**, so built-in and extension decorations take
   one path and `LAYOUTS` holds presentation alone.
 - **Placement.** A marker is `on` a column (`name` by default, and when the
-  named column is absent), `before` or `after` its text. A column goes `after`
-  a column, `replace`s one (to save room; it inherits the priority unless it
+  named column is absent), `before` or `after` its text. A column goes `before`
+  or `after` a column, `replace`s one (to save room; it inherits the priority unless it
   gives its own; the replaced built-in still sorts), or goes at the end —
   also when the named column is absent or already replaced.
 - **Tight rows when extras are sparse — the deciding case.** Nothing is
-  reserved for what a value *might* need. Per listing, measured with the real
-  font: a marker slot is as wide as its widest use on any row, and absent when
-  unused; an extra's column is as wide as its widest value, and absent when it
-  has none. The accepted cost: the columns shift once when an automatic
+  reserved for what a value *might* need. Markers reserve nothing at all (since
+  2026-10-30): on each row a mark sits against the text it marks and that text
+  gives way, so a name with a mark in front starts later than its neighbours —
+  accepted. An extra's column is as wide as its widest value in the listing,
+  measured with the real font, and absent when it has none. The accepted cost: the columns shift once when an automatic
   attribute's values land on entering a folder (one shift, since `read`
   answers a folder at once; none on a re-read).
-- **Position identifies an extra where position is fixed.** On a value column
-  and in the name's `before` gutter, each extra used in the listing has its own
-  slot, in definition order, on every row — names start in one column. After
-  the name, marks follow the name and are told apart by glyph and color only.
-  Extensions are advised to put a sparse state `before` the name.
+- **Where position must say something, use a column.** An earlier version gave
+  each extra a fixed slot in a gutter before the name; it was dropped in favour
+  of marks that take no room. A value wanted in one place on every row is an
+  extra's column, which may now go `before` the name. Marks are told apart by
+  glyph and color, which is what the collision check guards.
 - **`max_width` is gone**: it counted cells, i.e. assumed a monospaced font (a
   proportional `●` measured just over one cell and was elided away). Widths are
   measured; what remains is `limit`, a count of a format's cells (the tag dots:
@@ -162,19 +163,17 @@ entry of the same name merges over it.
 
 ## Drawing — `FilePane`
 
-- `_measure` walks the listing once per `(files, store.version, layout)`: for
-  each column, each side, each slot, the widest group any row draws; for each
-  extra's column, its widest value. The name's `after` markers are skipped.
-- `_plan` places columns: a value column's width is its format's (or its
-  measured width, for an extra's column without `width`), plus the used
-  `before` and `after` slots. The name's used `before` slots are a gutter.
-  An extra's column with no value is left out. Then the priority rule drops
-  columns while the name is under `MIN_NAME_W`.
-- `_draw_row` draws the name with its gutter (`_draw_slots`: each slot at its
-  place, blank where this row has none), the name elided by that row's `after`
-  markers, then each value column (`_draw_value`: value aligned inside, slots
-  either side). `_slot_groups` gathers a row's markers by slot, applying
-  `limit`. Cell colors go through `_cell_fg`, as the tag dots always did.
+- `_measure` walks the listing once per `(files, store.version, layout)` for
+  each extra's column's widest value.
+- `_plan` places columns: a value column's width is its format's, or its
+  measured width for an extra's column without `width`. An extra's column with
+  no value is left out. Then the priority rule drops columns while the name is
+  under `MIN_NAME_W`.
+- `_draw_row` draws the name with this row's `before` and `after` marks
+  against it, the name elided by their width; `_draw_value` draws a value
+  column's marks and value as one run aligned in the column, the value elided
+  by the marks. `_slot_groups` gathers a row's markers by extra (joined with a
+  space), applying `limit`. Cell colors go through `_cell_fg`, as the tag dots always did.
 - A row with no listing record draws the built-in columns from `file_info`.
 
 The default layout's text output was compared character by character with the
@@ -212,7 +211,7 @@ come from `_attribute_sort_rows` (`mode = "attr:<name>"`).
 ## Tests
 
 `test/test_list_layouts.py` (tables, extras, compose, formats, the store,
-drawing — the gutter, sparse extras taking no room, slots and `limit` — the
+drawing — marks against the text, sparse extras taking no room, `limit` — the
 attribute sort, the app's per-tab state and the Help legend);
 `test/test_extensions.py` (contributions, and an extra overridden key by
 key); `test/test_tags.py`.
