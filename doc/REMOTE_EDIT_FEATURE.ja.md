@@ -2,11 +2,11 @@
 
 [English](REMOTE_EDIT_FEATURE.md) \| 日本語
 
-SSH や S3 のペインにあるファイルを編集する（**File → Edit File**、`edit_file`）と、ローカルのファイルと同じようにエディターで開きます。保存するたびに、XeFM が変更をファイルの元の場所へアップロードします。
+SSH や S3 のペインにあるファイルを編集する（**File → Open With ▸ Text Editor**、`edit_file`）と、ローカルのファイルと同じようにエディターで開きます。保存するたびに、XeFM が変更をファイルの元の場所へアップロードします。
 
 ## 仕組み
 
-1. リモートのファイルにカーソルを置き（または複数を選択し）、**File → Edit File**（`edit_file`）を選びます。キーはキーマッププリセットによって異なります。[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照してください。
+1. リモートのファイルにカーソルを置き（または複数を選択し）、**File → Open With ▸ Text Editor**（`edit_file`）を選びます。キーはキーマッププリセットによって異なります。[キーマッププリセット](KEYMAP_PRESETS_FEATURE.ja.md#すべてのキーの一覧)を参照してください。
 2. XeFM がファイルをダウンロードし、そのコピーをエディター（`TEXT_EDITOR`、または `FILE_ASSOCIATIONS` の `edit` プログラム）で開きます。
 3. 好きなだけ編集して保存します。保存するたびにアップロードされ、ログにもそう記録されます：`Uploaded ssh://host/srv/app/config.yaml`。
 

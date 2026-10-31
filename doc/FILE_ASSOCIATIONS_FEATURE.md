@@ -361,7 +361,7 @@ one such rule, for packages like `.jar`, `.apk` and `.whl` (see
 4. Otherwise falls back to the OS default app (`open` / `xdg-open` / `start`)
 
 #### view_file - View File
-When you run `view_file` (**File → View File**) on a file, XeFM uses the **view** action from file associations.
+When you run `view_file` (**File → Open With ▸ Viewer**) on a file, XeFM uses the **view** action from file associations.
 
 **Behavior**:
 1. Checks file associations for 'view' action
@@ -373,7 +373,7 @@ Remote and in-archive files always use the built-in viewer — an external
 program has no path on disk it could open.
 
 #### edit_file - Edit File
-When you run `edit_file` (**File → Edit File**), XeFM edits the selected files — or the focused file when
+When you run `edit_file` (**File → Open With ▸ Text Editor**), XeFM edits the selected files — or the focused file when
 nothing is selected — using the **edit** action from file associations.
 
 **Behavior** (per file):

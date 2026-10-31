@@ -424,7 +424,9 @@ class Config:
 `when` greys the item out unless it applies: `'entry'` needs an entry under the
 cursor, `'selection'` at least one selected entry; the default is `'always'`.
 Your items gather in a group of their own near the foot of each menu, in the
-order written, and show the action's key when it has one. A built-in action can
+order written, and show the action's key when it has one. Up to three are
+listed there; more go under a **Custom ▸** submenu, so the menu still fits a
+terminal. A built-in action can
 be named too. An entry with a mistake is skipped with a line in the log pane.
 
 ### Running an external program from a key

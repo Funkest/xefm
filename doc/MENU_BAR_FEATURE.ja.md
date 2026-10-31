@@ -51,15 +51,15 @@ XeFM には **File**、**Edit**、**Go**、**Select**、**View**、**Tools**、*
 | 項目 | アクション |
 |------|--------|
 | Open | `open_item` |
-| View File | `view_file` |
-| Edit File | `edit_file` |
+| Open With ▸ Viewer | `view_file` |
+| Open With ▸ Text Editor | `edit_file` |
+| Open With ▸ Default App | `open_with_os` |
 | Details… | `file_details` |
-| Open with Default App | `open_with_os` |
 | Reveal in File Manager | `reveal_in_os` |
 | New Folder… | `create_directory` *（何も選択していないとき）* |
 | New File… | `create_file` |
-| Rename… | `rename` |
-| Rename in Editor… | `rename_in_editor` |
+| Rename ▸ Rename… | `rename` |
+| Rename ▸ Rename in Editor… | `rename_in_editor` |
 | Duplicate | `duplicate_files` |
 | Copy to Other Pane | `copy_files` |
 | Move to Other Pane | `move_files` *（ファイルを選択しているとき）* |
@@ -67,8 +67,9 @@ XeFM には **File**、**Edit**、**Go**、**Select**、**View**、**Tools**、*
 | Move to… | `move_files_to` |
 | Move to Trash… / Move to Recycle Bin… | `delete_files` — [ゴミ箱](TRASH_FEATURE.ja.md)を参照 |
 | Delete Permanently… | `delete_permanently` |
-| Create Archive… | `create_archive` |
-| Extract Archive… | `extract_archive` |
+| Archive ▸ Create… | `create_archive` |
+| Archive ▸ Extract… | `extract_archive` |
+| *（`'file'` を指定した自分の `MENU_ITEMS`）* | 3 つまではここに並び、それより多いと **Custom ▸** の下にまとまる |
 | Quit | `quit` |
 
 ### Edit メニュー

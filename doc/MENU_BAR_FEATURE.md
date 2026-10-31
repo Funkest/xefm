@@ -78,15 +78,15 @@ see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 | Item | Action |
 |------|--------|
 | Open | `open_item` |
-| View File | `view_file` |
-| Edit File | `edit_file` |
+| Open With ▸ Viewer | `view_file` |
+| Open With ▸ Text Editor | `edit_file` |
+| Open With ▸ Default App | `open_with_os` |
 | Details… | `file_details` |
-| Open with Default App | `open_with_os` |
 | Reveal in File Manager | `reveal_in_os` |
 | New Folder… | `create_directory` *(when nothing is selected)* |
 | New File… | `create_file` |
-| Rename… | `rename` |
-| Rename in Editor… | `rename_in_editor` |
+| Rename ▸ Rename… | `rename` |
+| Rename ▸ Rename in Editor… | `rename_in_editor` |
 | Duplicate | `duplicate_files` |
 | Copy to Other Pane | `copy_files` |
 | Move to Other Pane | `move_files` *(when files are selected)* |
@@ -94,8 +94,9 @@ see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 | Move to… | `move_files_to` |
 | Move to Trash… / Move to Recycle Bin… | `delete_files` — see [Trash](TRASH_FEATURE.md) |
 | Delete Permanently… | `delete_permanently` |
-| Create Archive… | `create_archive` |
-| Extract Archive… | `extract_archive` |
+| Archive ▸ Create… | `create_archive` |
+| Archive ▸ Extract… | `extract_archive` |
+| *(your `MENU_ITEMS` with `'file'`)* | up to three listed here; more go under **Custom ▸** |
 | Quit | `quit` |
 
 ### Edit Menu

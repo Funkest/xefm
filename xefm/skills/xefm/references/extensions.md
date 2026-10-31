@@ -137,7 +137,8 @@ Rules the check enforces — each violation is an `error:` naming the field:
   `label` the text shown, and the optional `when` greys it out unless it
   applies — `"entry"` (an entry under the cursor), `"selection"` (something
   selected) or `"always"` (the default). XeFM places the item, in a group of
-  extension items near the foot of the menu; there is no position to give.
+  extension items near the foot of the menu (under **Custom ▸** once there
+  are more than three); there is no position to give.
 - Action names must not be a built-in action's name. Prefix them with a
   short name for your extension — any lowercase word, usually the id or its
   first part (`hello.greet` for `hello-xefm`); an unprefixed name is a

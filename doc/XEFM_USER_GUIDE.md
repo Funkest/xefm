@@ -560,7 +560,7 @@ s3://my-bucket/path/to/files/
 
 # View S3 text file
 # 1. Navigate to s3://bucket/file.txt
-# 2. Run view_file (File → View File); editing needs a local copy
+# 2. Run view_file (File → Open With ▸ Viewer); editing needs a local copy
 ```
 
 ---
@@ -936,7 +936,7 @@ See the [Configuration](#customization) section and [Key Bindings Feature](KEY_B
 #### Development Workflow
 1. Set up favorites for project directories
 2. Use external programs for git operations
-3. Edit files with `edit_file` (**File → Edit File**)
+3. Edit files with `edit_file` (**File → Open With ▸ Text Editor**)
 4. Use content search to find code
 
 #### S3 Data Management

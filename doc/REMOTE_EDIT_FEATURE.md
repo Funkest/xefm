@@ -2,14 +2,14 @@
 
 English \| [日本語](REMOTE_EDIT_FEATURE.ja.md)
 
-Edit a file on an SSH or S3 pane (**File → Edit File**, `edit_file`) and it
+Edit a file on an SSH or S3 pane (**File → Open With ▸ Text Editor**, `edit_file`) and it
 opens in your editor like a local file. Each time you save, XeFM uploads your changes to where the file
 came from.
 
 ## How it works
 
 1. Put the cursor on a remote file (or select several) and choose
-   **File → Edit File** (`edit_file`; its key depends on your keymap preset —
+   **File → Open With ▸ Text Editor** (`edit_file`; its key depends on your keymap preset —
    see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side)).
 2. XeFM downloads the file and opens the copy in your editor (`TEXT_EDITOR`, or
    the `edit` program in `FILE_ASSOCIATIONS`).

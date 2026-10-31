@@ -185,7 +185,7 @@ XeFM includes several optimizations for SFTP operations:
 View remote text files with full syntax highlighting:
 
 1. Navigate to a text file on SFTP
-2. Press `Enter`, or use **File → View File** (`view_file`), to open the viewer
+2. Press `Enter`, or use **File → Open With ▸ Viewer** (`view_file`), to open the viewer
 3. Use arrow keys to scroll
 4. Search within the file (`isearch`)
 5. Press `Esc` to close the viewer

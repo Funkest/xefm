@@ -3,14 +3,14 @@
 English \| [日本語](TEXT_EDITOR_FEATURE.ja.md)
 
 XeFM can hand files straight to your text editor. Put the cursor on a file —
-or select several — and choose **File → Edit File** (`edit_file`): XeFM steps aside while the
+or select several — and choose **File → Open With ▸ Text Editor** (`edit_file`): XeFM steps aside while the
 editor runs and comes back automatically when you save and quit. Any editor
 that takes filename arguments works.
 
 ## Usage
 
 1. Move the cursor to the file you want to edit, or select multiple files.
-2. Choose **File → Edit File** (`edit_file`). With a selection, every selected file is passed to the editor in
+2. Choose **File → Open With ▸ Text Editor** (`edit_file`). With a selection, every selected file is passed to the editor in
    one launch (`vim a.txt b.txt`), so you get one session over all of them.
 3. Edit, save, and exit the editor — XeFM redraws where you left off.
 
@@ -77,4 +77,4 @@ and restores the file view.
 - [Rename in the Editor](RENAME_IN_EDITOR_FEATURE.md) — rename many files by editing their names
 - [File Associations](FILE_ASSOCIATIONS_FEATURE.md) — per-file-type editors and viewers
 - [Diff Viewer](DIFF_VIEWER_FEATURE.md) — `TEXT_DIFF` sets the external merge / diff tool
-- [Text Viewer](TEXT_VIEWER_FEATURE.md) — read-only viewing with **File → View File** (`view_file`)
+- [Text Viewer](TEXT_VIEWER_FEATURE.md) — read-only viewing with **File → Open With ▸ Viewer** (`view_file`)

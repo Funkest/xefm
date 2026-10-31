@@ -31,5 +31,5 @@
 
 ## 関連項目
 
-- [テキストビューアー](TEXT_VIEWER_FEATURE.ja.md)と[画像ビューアー](IMAGE_VIEWER_FEATURE.ja.md)：フル機能のビューアー（**File → View File**）
+- [テキストビューアー](TEXT_VIEWER_FEATURE.ja.md)と[画像ビューアー](IMAGE_VIEWER_FEATURE.ja.md)：フル機能のビューアー（**File → Open With ▸ Viewer**）
 - [ファイルの詳細](FILE_DETAILS_FEATURE.ja.md)：ディスク上のサイズなど（**File → Details…**）

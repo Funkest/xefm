@@ -4786,22 +4786,31 @@ class XeFMApp:
         file_menu = Menu(
             MenuItem("Open", on_select=lambda: self._menu("open_item"),
                      enabled=has_files, shortcut=sc("open_item")),
-            MenuItem("View File", on_select=self.view_file,
-                     enabled=has_files, shortcut=sc("view_file")),
-            MenuItem("Edit File", on_select=self.edit_file,
-                     enabled=has_files, shortcut=sc("edit_file")),
+            # Which program opens it — XeFM's viewer, the text editor, the
+            # system's choice — one level down: Open itself (Enter) is the one
+            # reached for most, and File has to fit 23 rows with room for
+            # MENU_ITEMS.
+            MenuItem("Open With", submenu=Menu(
+                MenuItem("Viewer", on_select=self.view_file,
+                         enabled=has_files, shortcut=sc("view_file")),
+                MenuItem("Text Editor", on_select=self.edit_file,
+                         enabled=has_files, shortcut=sc("edit_file")),
+                MenuItem("Default App", on_select=self.open_with_os,
+                         enabled=has_files, shortcut=sc("open_with_os")),
+                title="Open With")),
             MenuItem("Details…", on_select=self.file_details, enabled=has_files,
                      shortcut=sc("file_details")),
-            MenuItem("Open with Default App", on_select=self.open_with_os,
-                     enabled=has_files, shortcut=sc("open_with_os")),
             MenuItem("Reveal in File Manager", on_select=self.reveal_in_os,
                      enabled=has_files, shortcut=sc("reveal_in_os")),
             SEPARATOR,
             MenuItem("New Folder…", on_select=self.create_directory, shortcut=sc("create_directory")),
             MenuItem("New File…", on_select=self.create_file, shortcut=sc("create_file")),
-            MenuItem("Rename…", on_select=self.rename, enabled=has_files, shortcut=sc("rename")),
-            MenuItem("Rename in Editor…", on_select=self.rename_in_editor,
-                     enabled=has_files, shortcut=sc("rename_in_editor")),
+            MenuItem("Rename", submenu=Menu(
+                MenuItem("Rename…", on_select=self.rename, enabled=has_files,
+                         shortcut=sc("rename")),
+                MenuItem("Rename in Editor…", on_select=self.rename_in_editor,
+                         enabled=has_files, shortcut=sc("rename_in_editor")),
+                title="Rename")),
             MenuItem("Duplicate", on_select=self.duplicate_files,
                      enabled=has_files, shortcut=sc("duplicate_files")),
             MenuItem("Copy to Other Pane", on_select=self.copy_files,
@@ -4816,11 +4825,12 @@ class XeFMApp:
                      enabled=has_files, shortcut=sc("delete_files")),
             MenuItem("Delete Permanently…", on_select=self.delete_permanently,
                      enabled=has_files, shortcut=sc("delete_permanently")),
-            SEPARATOR,
-            MenuItem("Create Archive…", on_select=self.create_archive,
-                     enabled=has_files, shortcut=sc("create_archive")),
-            MenuItem("Extract Archive…", on_select=self.extract_archive,
-                     enabled=has_files, shortcut=sc("extract_archive")),
+            MenuItem("Archive", submenu=Menu(
+                MenuItem("Create…", on_select=self.create_archive,
+                         enabled=has_files, shortcut=sc("create_archive")),
+                MenuItem("Extract…", on_select=self.extract_archive,
+                         enabled=has_files, shortcut=sc("extract_archive")),
+                title="Archive")),
             *self._user_menu_items("file"),
             SEPARATOR,
             MenuItem("Quit", on_select=self.confirm_quit, shortcut=sc("quit")),
@@ -5052,7 +5062,8 @@ class XeFMApp:
     def _user_menu_items(self, menu: str) -> list:
         """The config's and the extensions' ``MENU_ITEMS`` for ``menu``
         (#632), as a group of their own behind a separator — nothing when
-        there are none. Each runs its action as a key bound to it would, and
+        there are none, and a Custom submenu when there are more than
+        ``_USER_MENU_INLINE``. Each runs its action as a key bound to it would, and
         shows the key when one is."""
         items = []
         for entry in user_menu_items(menu):
@@ -5060,7 +5071,14 @@ class XeFMApp:
                 entry.label, on_select=lambda name=entry.action: self._menu(name),
                 enabled=self._menu_condition(entry.when),
                 shortcut=self._menu_shortcut(entry.action)))
+        if len(items) > self._USER_MENU_INLINE:
+            # More than a few would push the menu past what a terminal shows
+            # (File is near its 23 rows), so they gather one level down.
+            items = [MenuItem("Custom", submenu=Menu(*items, title="Custom"))]
         return [SEPARATOR, *items] if items else []
+
+    #: How many MENU_ITEMS a menu lists inline before they go under Custom ▸.
+    _USER_MENU_INLINE = 3
 
     def _menu_condition(self, when: str):
         """A ``MENU_ITEMS`` ``when`` as the predicate a MenuItem re-evaluates

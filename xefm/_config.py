@@ -721,7 +721,8 @@ class Config:
     # 'when' greys the item out unless it applies: 'entry' needs an entry under
     # the cursor, 'selection' needs at least one selected; the default is
     # 'always'. Your items gather in a group of their own near the foot of
-    # each menu, in the order written here.
+    # each menu, in the order written here -- up to three; more go under a
+    # Custom submenu, so the menu still fits a terminal.
     MENU_ITEMS = {}
 
     # --- ATTRIBUTES -------------------------------------------------------

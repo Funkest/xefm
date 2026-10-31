@@ -441,7 +441,7 @@ s3://my-bucket/path/to/files/
 
 # View S3 text file
 # 1. Navigate to s3://bucket/file.txt
-# 2. Run view_file (File → View File); editing needs a local copy
+# 2. Run view_file (File → Open With ▸ Viewer); editing needs a local copy
 ```
 
 ---
@@ -786,7 +786,7 @@ KEY_BINDINGS = {
 #### 開発の作業
 1. プロジェクトのディレクトリをお気に入りに登録します
 2. git の操作には外部プログラムを使います
-3. `edit_file`（**File → Edit File**）でファイルを編集します
+3. `edit_file`（**File → Open With ▸ Text Editor**）でファイルを編集します
 4. 内容検索でコードを探します
 
 #### S3 のデータ管理
