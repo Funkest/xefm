@@ -666,6 +666,14 @@ class Distribution(_Tmp):
             return unittest.mock.patch(
                 "subprocess.run",
                 return_value=subprocess.CompletedProcess([], 0, stdout, ""))
+        # A checkout of its own: the tree under test need not be one (a copy
+        # staged in a VM has no .git - doc/dev/VM_TESTING_SYSTEM.md).
+        (self.tmp / "checkout" / ".git").mkdir(parents=True)
+        skill_dir = self.tmp / "checkout" / "xefm" / "skills" / "xefm"
+        self.assertEqual(skill_dir.parents[2], self.tmp / "checkout")
+        patcher = unittest.mock.patch.object(ext, "SKILL_DIR", skill_dir)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         with git(f"v{xefm.__version__}\n"):
             self.assertEqual(ext.skill_version(), xefm.__version__)
         with git(""):

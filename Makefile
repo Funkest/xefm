@@ -1,6 +1,6 @@
 # XeFM Makefile
 
-.PHONY: api-snapshot api-compat check-docs fix-docs skill-zip skill-references release-skill qa help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-toolchainwindows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config keymap-reset venv clean-venv check-venv install-puikit
+.PHONY: api-snapshot api-compat check-docs fix-docs skill-zip skill-references release-skill qa help banner run run-gui run-web run-linux run-linux-musl run-linux-tui run-linux-shell linux-image linux-musl-image test test-quick test-linux test-linux-musl test-vm run-vm clean clean-python install uninstall dev-install lint format demo build publish-testpypi tag release-github release-whl release-macos-dmg release-windows-zip release-status icons icons-check macos-app clean-macos macos-refresh-icon macos-dmg install-macos-dmg uninstall-macos-dmg windows-toolchainwindows-app clean-windows clean-windows-cache windows-zip install-windows-zip uninstall-windows-zip windows-msix install-windows-msix uninstall-windows-msix install-config keymap-reset venv clean-venv check-venv install-puikit
 
 # Python interpreter selection
 # All Python is run through the project virtual environment (.venv). There is no
@@ -129,6 +129,8 @@ help:
 	@echo "  test-linux     - Run all tests on Linux in Docker (glibc/Debian)"
 	@echo "  test-linux-musl- Check libarchive is found on musl (Alpine), and that"
 	@echo "                   its absence degrades cleanly"
+	@echo "  test-vm        - Run all tests in a VM (GUEST=alias, ARGS= for pytest)"
+	@echo "  run-vm         - Start a VM with XeFM launchers on its desktop (GUEST=alias)"
 	@echo "  clean          - Remove every rebuildable artifact (keeps .venv + the"
 	@echo "                   Windows download cache; it names both when it finishes)"
 	@echo "  clean-python   - Just the source tree: build/, dist/, egg-info, pyc, pytest"
@@ -411,6 +413,18 @@ linux-image:
 test-linux: linux-image
 	@echo "Running the test suite on Linux..."
 	@$(DOCKER_RUN) $(LINUX_IMAGE)
+
+# The same working tree in a VM, from the shared test images (quality-loop's
+# guests, ~/.config/quality-loop/guests.toml): `make test-vm GUEST=keyhac-qa-win`
+# runs the suite there - ARGS for pytest - and `make run-vm GUEST=...` leaves
+# the VM up with XeFM launchers on its desktop. See doc/dev/VM_TESTING_SYSTEM.md.
+test-vm:
+	@test -n "$(GUEST)" || { echo "GUEST= names the VM (an alias in ~/.config/quality-loop/guests.toml)"; exit 1; }
+	@$(PYTHON) tools/vm.py test $(GUEST) $(ARGS)
+
+run-vm:
+	@test -n "$(GUEST)" || { echo "GUEST= names the VM (an alias in ~/.config/quality-loop/guests.toml)"; exit 1; }
+	@$(PYTHON) tools/vm.py run $(GUEST)
 
 linux-musl-image:
 	@echo "Building the musl test image..."
