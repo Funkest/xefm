@@ -415,7 +415,7 @@ test-linux: linux-image
 	@$(DOCKER_RUN) $(LINUX_IMAGE)
 
 # The same working tree in a VM, from the shared test images (quality-loop's
-# guests, ~/.config/quality-loop/guests.toml): `make test-vm GUEST=keyhac-qa-win`
+# guests, ~/.config/quality-loop/guests.toml): `make test-vm GUEST=qa-win`
 # runs the suite there - ARGS for pytest - and `make run-vm GUEST=...` leaves
 # the VM up with XeFM launchers on its desktop. See doc/dev/VM_TESTING_SYSTEM.md.
 test-vm:

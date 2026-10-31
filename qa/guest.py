@@ -1,7 +1,7 @@
 """XeFM in a VM: what is staged there, and what it runs with (xefm#750).
 
-    make test-vm GUEST=keyhac-qa-win            # the test suite in the VM
-    make run-vm GUEST=keyhac-qa-mac             # the VM up for a hand check
+    make test-vm GUEST=qa-win            # the test suite in the VM
+    make run-vm GUEST=qa-mac             # the VM up for a hand check
 
 The VM layer - the guest over SSH, the shared folder, Tart and VMware
 machines, the per-run venv, the desktop session - is quality-loop's

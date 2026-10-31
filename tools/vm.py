@@ -4,7 +4,7 @@
     python3 tools/vm.py run <guest>                      # make run-vm GUEST=...
 
 <guest> is an SSH host alias with a table in ~/.config/quality-loop/guests.toml
-(the images are Keyhac's too: keyhac-qa-win, keyhac-qa-mac). Each run starts
+(qa-win, qa-mac; the images are shared with Keyhac). Each run starts
 the VM from its clean state - a VMware snapshot reverted, or a Tart clone -
 stages what is under test and installs the third-party packages (qa/guest.py),
 and puts the VM away afterwards. Nothing is left in the image.

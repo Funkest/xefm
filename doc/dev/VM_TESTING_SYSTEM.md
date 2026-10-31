@@ -5,9 +5,9 @@ own machine taking part: this working tree runs in a VM that starts from a
 clean image every time and is put away afterwards.
 
 ```bash
-make test-vm GUEST=keyhac-qa-win                     # the whole suite in the Windows VM
-make test-vm GUEST=keyhac-qa-mac ARGS="test/test_x.py -k name"
-make run-vm  GUEST=keyhac-qa-win                     # the VM up, XeFM launchers on its desktop
+make test-vm GUEST=qa-win                           # the whole suite in the Windows VM
+make test-vm GUEST=qa-mac ARGS="test/test_x.py -k name"
+make run-vm  GUEST=qa-win                           # the VM up, XeFM launchers on its desktop
 ```
 
 `GUEST` is an SSH host alias whose table in `~/.config/quality-loop/guests.toml`
