@@ -4888,6 +4888,10 @@ class XeFMApp:
             # where Finder and the browsers open and close theirs: File is the
             # longest menu, and three more rows took it past the 23 rows an
             # 80x24 terminal has under the bar, so its pulldown covered the bar.
+            # Switching panes heads the group: it moves between the two
+            # panes as the tab items move within one.
+            MenuItem("Switch Pane", on_select=lambda: self._menu("switch_pane"),
+                     shortcut=sc("switch_pane")),
             MenuItem("New Tab", on_select=lambda: self._menu("new_tab"),
                      shortcut=sc("new_tab")),
             MenuItem("Open in New Tab", on_select=lambda: self._menu("open_in_new_tab"),
@@ -4919,6 +4923,10 @@ class XeFMApp:
             MenuItem("Command Palette…", on_select=self.show_command_palette,
                      shortcut=sc("command_palette")),
             SEPARATOR,
+            # The jobs list beside the longest job that lands in it.
+            MenuItem("Background Jobs…", on_select=self.show_jobs,
+                     enabled=lambda: bool(self.tasks.background_tasks()),
+                     shortcut=sc("jobs")),
             MenuItem("Find Similar Files…", on_select=self.find_similar,
                      shortcut=sc("find_similar")),
             MenuItem("External Programs…", on_select=self.show_programs, shortcut=sc("programs")),
@@ -5004,15 +5012,10 @@ class XeFMApp:
             MenuItem("Show", submenu=self._extras_menu()),
             MenuItem("Resolve Attribute…", on_select=lambda: self._menu("resolve_attribute"),
                      enabled=has_files, shortcut=sc("resolve_attribute")),
-            MenuItem("Reverse Sort", on_select=self._toggle_reverse,
-                     checked=lambda: self.active_pane()["sort_reverse"]),
             MenuItem("Sort By", submenu=sort_menu),
             SEPARATOR,
-            MenuItem("Theme", submenu=self._theme_menu()),
-            MenuItem("Next Theme", on_select=lambda: self._menu("toggle_color_scheme"),
-                     shortcut=sc("toggle_color_scheme")),
+            MenuItem("Theme", submenu=self._theme_menu(sc)),
             SEPARATOR,
-            MenuItem("Switch Pane", on_select=lambda: self._menu("switch_pane"), shortcut=sc("switch_pane")),
             MenuItem("Quick View", on_select=lambda: self._menu("quick_view"),
                      checked=lambda: self._quick_view is not None,
                      shortcut=sc("quick_view")),
@@ -5022,10 +5025,6 @@ class XeFMApp:
                      checked=lambda: (self.active_pane().get("virtual") or {})
                      .get("kind") == "flat",
                      shortcut=sc("flat_view")),
-            SEPARATOR,
-            MenuItem("Background Jobs…", on_select=self.show_jobs,
-                     enabled=lambda: bool(self.tasks.background_tasks()),
-                     shortcut=sc("jobs")),
             title="View",
         )
         help_menu = Menu(
@@ -6225,7 +6224,10 @@ class XeFMApp:
             MenuItem(label, on_select=(lambda m=mode: self._set_sort(m)),
                      checked=(lambda m=mode: self.active_pane()["sort_mode"] == m))
             for mode, label, _hotkey in sort_keys.rows()
-        ], title="Sort By")
+        ], SEPARATOR,
+            MenuItem("Reverse Sort", on_select=self._toggle_reverse,
+                     checked=lambda: self.active_pane()["sort_reverse"]),
+            title="Sort By")
 
     def show_sort_menu(self) -> None:
         """Open the sort dialog over the active pane (the 's' key): Up/Down pick
@@ -6301,15 +6303,19 @@ class XeFMApp:
         its own base-unit min-size clamp; this keeps the keyboard path safe too)."""
         splitter.fraction = max(0.1, min(0.9, splitter.fraction + delta))
 
-    def _theme_menu(self) -> Menu:
-        """The theme picker, shared by the View menu's 'Theme' submenu. Lists every
-        theme — built-in and user-registered (``config.THEMES``) — with a live
-        ``checked`` predicate marking the active one (mirrors ``_sort_menu``)."""
-        return Menu(*[
-            MenuItem(name, on_select=(lambda i=i: self._select_theme(i)),
-                     checked=(lambda i=i: self._theme_index == i))
-            for i, (name, _theme) in enumerate(self.themes)
-        ], title="Theme")
+    def _theme_menu(self, sc=lambda _name: None) -> Menu:
+        """The View menu's 'Theme' submenu: Next Theme first, then every theme
+        — built-in and user-registered (``config.THEMES``) — with a live
+        ``checked`` predicate marking the active one (mirrors ``_sort_menu``).
+        ``sc`` gives an action's shortcut label."""
+        return Menu(
+            MenuItem("Next Theme", on_select=lambda: self._menu("toggle_color_scheme"),
+                     shortcut=sc("toggle_color_scheme")),
+            SEPARATOR,
+            *[MenuItem(name, on_select=(lambda i=i: self._select_theme(i)),
+                       checked=(lambda i=i: self._theme_index == i))
+              for i, (name, _theme) in enumerate(self.themes)],
+            title="Theme")
 
     def _apply_theme(self, index: int) -> None:
         """Switch the active palette. One assignment recolors every widget: the

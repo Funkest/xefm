@@ -536,7 +536,7 @@ KEY_BINDINGS = {
 **詳しいドキュメント**：[キーバインド](KEY_BINDINGS_FEATURE.ja.md)
 
 ### テーマ
-XeFM には複数の内蔵テーマ（Dark+、Light+、Monokai、Dracula、Nord、Solarized、Gruvbox Dark、Solarized Light）が付属していて、最後に使ったテーマを覚えています。実行中は **View → Next Theme** で順に切り替えるか、**View → Theme** から選びます。独自のテーマは設定の `THEMES` 辞書で定義します。
+XeFM には複数の内蔵テーマ（Dark+、Light+、Monokai、Dracula、Nord、Solarized、Gruvbox Dark、Solarized Light）が付属していて、最後に使ったテーマを覚えています。実行中は **View → Theme ▸ Next Theme** で順に切り替えるか、**View → Theme** から選びます。独自のテーマは設定の `THEMES` 辞書で定義します。
 
 **詳しいドキュメント**：[配色](COLOR_SCHEMES_FEATURE.ja.md)
 

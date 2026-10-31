@@ -101,7 +101,7 @@ class Config:
     # Custom themes (optional)
     # -----------------------------------------------------------------------
     # Register your own named themes here. Each one is added to the theme picker
-    # (View > Theme) and View > Next Theme alongside the built-ins — Dark+, Monokai,
+    # (View > Theme) and View > Theme > Next Theme alongside the built-ins — Dark+, Monokai,
     # Dracula, Nord, Solarized, Gruvbox Dark, Light+, Solarized Light — so you can
     # switch between them at run time. XeFM starts on Dark+ and remembers whichever
     # theme you last switched to across restarts.
@@ -207,7 +207,7 @@ class Config:
     THEMES = {
         # Phosphor: a monochrome phosphor-green CRT terminal — every color is a
         # shade of green on a near-black screen. A ready-made example of a full
-        # custom theme; select it from View > Theme or View > Next Theme. On the GUI
+        # custom theme; select it from View > Theme or View > Theme > Next Theme. On the GUI
         # backend the 'post_effect' below adds a real CRT glow over the green.
         'Phosphor': {
             'post_effect': 'crt',            # CRT glow/bloom/scanlines (GUI backend)

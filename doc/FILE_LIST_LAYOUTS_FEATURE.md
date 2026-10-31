@@ -104,7 +104,7 @@ when that extra is showing. Sorting by such a row:
 - is greyed out while values are still arriving, for one that is filled in
   automatically. It becomes available once every row has its value.
 
-**View → Reverse Sort** reverses it, as it does any other sort. The status bar
+**View → Sort By ▸ Reverse Sort** reverses it, as it does any other sort. The status bar
 shows it with "(this folder)".
 
 ## Defining your own

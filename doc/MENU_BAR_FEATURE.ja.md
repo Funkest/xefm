@@ -103,6 +103,7 @@ XeFM には **File**、**Edit**、**Go**、**Select**、**View**、**Tools**、*
 | History… | `history` |
 | Back | `go_back` |
 | Forward | `go_forward` |
+| Switch Pane | `switch_pane` |
 | New Tab | `new_tab` — [フォルダータブ](FOLDER_TABS_FEATURE.ja.md)を参照 |
 | Open in New Tab | `open_in_new_tab` |
 | Close Tab | `close_tab` |
@@ -139,23 +140,20 @@ XeFM には **File**、**Edit**、**Go**、**Select**、**View**、**Tools**、*
 | Search Tags… | `find_by_tag` *（既定でキー未割り当て）* — [ファイルのタグ](FILE_TAGS_FEATURE.ja.md)を参照 |
 | Reread | `reread` |
 | Show Hidden Files | `toggle_hidden` |
-| Layout ▸ | （サブメニュー：Automatic とすべてのレイアウト。`choose_layout` でも可）— [ファイルリストのレイアウト](FILE_LIST_LAYOUTS_FEATURE.ja.md)を参照 |
+| Layout ▸ | （サブメニュー：すべてのレイアウト。`choose_layout` でも可）— [ファイルリストのレイアウト](FILE_LIST_LAYOUTS_FEATURE.ja.md)を参照 |
 | Show ▸ | （サブメニュー：追加の情報ごとの Auto / On / Off。Tags と、`LAYOUT_EXTRAS` や拡張パッケージが加えるもの。`choose_extras` でも可） |
 | Resolve Attribute… | `resolve_attribute` *（既定でキー未割り当て）* — フォルダーの合計サイズなど、頼まれたときだけ求める属性。[ファイルリストのレイアウト](FILE_LIST_LAYOUTS_FEATURE.ja.md)を参照 |
-| Reverse Sort | *（メニューのみ）* |
-| Sort By ▸ | （サブメニュー：Name / Extension / Size / Date。`quick_sort_*` アクションでも可） |
-| Theme ▸ | （インストール済みテーマのサブメニュー） |
-| Next Theme | `toggle_color_scheme` *（既定でキー未割り当て）* |
-| Switch Pane | `switch_pane` |
+| Sort By ▸ | （サブメニュー：Name / Extension / Size / Date。`quick_sort_*` アクションでも可。その下に Reverse Sort（メニューのみ）） |
+| Theme ▸ | （サブメニュー：Next Theme（`toggle_color_scheme`、*既定でキー未割り当て*）、その下にインストール済みのテーマ） |
 | Quick View | `quick_view` — [クイックビュー](QUICK_VIEW_FEATURE.ja.md)を参照 |
 | Flat View | `flat_view` — [フラット表示](FLAT_VIEW_FEATURE.ja.md)を参照 |
-| Background Jobs… | `jobs` — [バックグラウンドジョブ](BACKGROUND_JOBS_FEATURE.ja.md)を参照 |
 
 ### Tools メニュー
 
 | 項目 | アクション |
 |------|--------|
 | Command Palette… | `command_palette` |
+| Background Jobs… | `jobs` — [バックグラウンドジョブ](BACKGROUND_JOBS_FEATURE.ja.md)を参照 |
 | Find Similar Files… | `find_similar` *（既定でキー未割り当て）* — [類似ファイルの検索](FIND_SIMILAR_FILES_FEATURE.ja.md)を参照 |
 | External Programs… | `programs` |
 | Subshell Here | `subshell` *（デスクトップモードではターミナルウィンドウで）* |
@@ -202,7 +200,7 @@ Advanced には、一度だけ、あるいはときどき設定するものが�
 ファイルを選択し（**Select → Toggle Selection**）、**File → Copy to Other Pane**（`copy_files`）を選びます。
 
 ### テーマを変える
-**View → Theme ▸** を開いて 1 つ選ぶか、**View → Next Theme** を選んで次のテーマに切り替えます。
+**View → Theme ▸** を開いて 1 つ選ぶか、**View → Theme ▸ Next Theme** を選んで次のテーマに切り替えます。
 
 ## トラブルシューティング
 

@@ -111,7 +111,7 @@ TIPS: tuple[tuple[str, str], ...] = (
 
     ("Pick a look",
      "The **View ▸ Theme** menu picks a color theme directly, and "
-     "**View ▸ Next Theme** cycles through them. Your choice is remembered "
+     "**View ▸ Theme ▸ Next Theme** cycles through them. Your choice is remembered "
      "across sessions."),
 
     ("The built-in viewer",

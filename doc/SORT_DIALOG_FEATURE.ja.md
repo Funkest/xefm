@@ -48,4 +48,4 @@
 
 ## 関連するキー
 
-ダイアログを開かずに使うクイックソートのアクションも引き続き使えます。`quick_sort_name`、`quick_sort_ext`、`quick_sort_size`、`quick_sort_date` で、同じものをもう一度実行すると順序が逆になります。メニューバーの **View → Sort By** サブメニューにも同じ 4 つのソートキーがあり、**View → Reverse Sort** で順序を切り替えられます。
+ダイアログを開かずに使うクイックソートのアクションも引き続き使えます。`quick_sort_name`、`quick_sort_ext`、`quick_sort_size`、`quick_sort_date` で、同じものをもう一度実行すると順序が逆になります。メニューバーの **View → Sort By** サブメニューにも同じ 4 つのソートキーがあり、**View → Sort By ▸ Reverse Sort** で順序を切り替えられます。

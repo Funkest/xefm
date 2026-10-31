@@ -82,7 +82,7 @@ WIDE_CHARS = '○□★●'   # a string, or a list of single characters
 
 ### テーマ／色
 
-XeFM には内蔵テーマ（Dark+、Monokai、Dracula、Nord、Solarized、Gruvbox Dark、Light+、Solarized Light）が付属しています。実行中に **View → Theme** または **View → Next Theme** で切り替えられます。XeFM は Dark+ で起動し、最後に使ったテーマを再起動後も覚えています。`COLOR_SCHEME` のような文字列の設定項目はありません。代わりに、名前を付けた独自のテーマを登録します。
+XeFM には内蔵テーマ（Dark+、Monokai、Dracula、Nord、Solarized、Gruvbox Dark、Light+、Solarized Light）が付属しています。実行中に **View → Theme** または **View → Theme ▸ Next Theme** で切り替えられます。XeFM は Dark+ で起動し、最後に使ったテーマを再起動後も覚えています。`COLOR_SCHEME` のような文字列の設定項目はありません。代わりに、名前を付けた独自のテーマを登録します。
 
 ```python
 THEMES = {

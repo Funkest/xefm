@@ -667,7 +667,7 @@ KEY_BINDINGS = {
 ### Themes
 XeFM ships with several built-in themes (Dark+, Light+, Monokai, Dracula, Nord,
 Solarized, Gruvbox Dark, Solarized Light) and remembers the last one you used.
-Cycle themes at runtime with **View → Next Theme**, or pick one from **View → Theme**.
+Cycle themes at runtime with **View → Theme ▸ Next Theme**, or pick one from **View → Theme**.
 Define your own with the `THEMES` dict in config.
 
 **See detailed documentation**: [Color Schemes Feature](COLOR_SCHEMES_FEATURE.md)

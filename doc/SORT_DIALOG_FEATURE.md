@@ -71,4 +71,4 @@ The quick-sort actions still work without opening the dialog:
 `quick_sort_name`, `quick_sort_ext`, `quick_sort_size` and `quick_sort_date`;
 running the same one again reverses the order. The menu bar's
 **View → Sort By** submenu offers the same four sort keys, and
-**View → Reverse Sort** toggles the order.
+**View → Sort By ▸ Reverse Sort** toggles the order.

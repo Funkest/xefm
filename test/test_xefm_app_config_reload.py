@@ -228,7 +228,7 @@ class ReloadConfig(ConfigReloadBase):
         names = [n for n, _t in self.app.themes]
         self.assertIn('Reloaded', names)
         self.assertEqual(self.app.themes[self.app._theme_index][0], active)
-        self.assertIn('Reloaded', [i.label for i in self.app._theme_menu().items])
+        self.assertIn('Reloaded', [getattr(i, 'label', None) for i in self.app._theme_menu().items])
 
 
 class ReloadRefreshesKeyLabels(ConfigReloadBase):
