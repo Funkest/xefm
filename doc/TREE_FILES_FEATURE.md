@@ -29,7 +29,7 @@ for anyone writing such a program.
   file.
 - Each entry shows the size and date **recorded in the file**, so a group of
   files on a slow server lists instantly.
-- Viewing an entry (**File → View File**), comparing two
+- Viewing an entry (**File → Open With ▸ Viewer**), comparing two
   (**Select → Compare Selected Files…**) and copying to the other pane work,
   all reading the real file.
 - `Enter` on an entry that stands for a folder goes to that folder.
@@ -48,9 +48,9 @@ because the tree is a record of what was found. To work on the real files:
 - `sync_current_to_other` from the other pane goes to the real location of the entry highlighted
   in the tree.
 - Whatever leaves XeFM gets the **real file**: opening an entry in its
-  application (**File → Open with Default App**), revealing it in Finder or
+  application (**File → Open With ▸ Default App**), revealing it in Finder or
   Explorer (**File → Reveal in File Manager**), editing it
-  (**File → Edit File**), and copying its path.
+  (**File → Open With ▸ Text Editor**), and copying its path.
 
 The two `sync_…` actions have no menu item; run them from the command palette
 (**Tools → Command Palette…**) or on their key. Keys depend on your keymap

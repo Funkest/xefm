@@ -20,7 +20,7 @@ their applications as before.
 
 ## Opening one
 
-`Enter` or **File → View File** (`view_file`) on the file opens it in the viewer. A large or remote
+`Enter` or **File → Open With ▸ Viewer** (`view_file`) on the file opens it in the viewer. A large or remote
 document first shows a progress dialog while it is read. `Esc` stops the
 reading.
 
@@ -38,7 +38,7 @@ kind and its size, for example "PowerPoint · 12 slides".
 
 The viewer shows the text, not the page. Layout, fonts, pictures and charts
 are not drawn. To see what a document looks like, open it in its application
-with **File → Open with Default App** (`open_with_os`).
+with **File → Open With ▸ Default App** (`open_with_os`).
 
 - **A scanned PDF** has no text, only a picture of each page. The viewer says
   so instead of showing an empty page. XeFM does no OCR.

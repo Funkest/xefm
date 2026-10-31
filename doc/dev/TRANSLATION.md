@@ -128,10 +128,12 @@ term across the docs. Add a row when a new recurring term comes up.
 | active pane / this pane | アクティブなペイン | |
 | AI coding agent | AI コーディングエージェント | |
 | archive | アーカイブ | |
+| attribute (file list) | 属性 | `ATTRIBUTES`; a value known about an entry |
 | background job | バックグラウンドジョブ | |
 | bucket (S3) | バケット | |
 | built-in (viewer, handler) | 内蔵 | |
 | clipboard | クリップボード | |
+| column (file list) | 列 | |
 | command palette | コマンドパレット | |
 | configuration, config | 設定 | `config.py` stays as is |
 | conflict (file operations) | 競合 | key or name clashes: 衝突 |
@@ -151,6 +153,7 @@ term across the docs. Add a row when a new recurring term comes up.
 | extension package | 拡張パッケージ | |
 | extension | 拡張機能 | |
 | external program | 外部プログラム | |
+| extra (file list) | 追加の情報 | `LAYOUT_EXTRAS`; what a folder adds to its rows |
 | favorite (directory) | お気に入り | |
 | feature guide | 機能ガイド | |
 | file association | ファイルの関連付け | |
@@ -159,6 +162,7 @@ term across the docs. Add a row when a new recurring term comes up.
 | file monitoring | ファイル監視 | |
 | filename search | ファイル名検索 | |
 | filter | フィルター | |
+| format (of a column) | 書式 | |
 | Find Similar Files | 類似ファイルの検索 | |
 | flat view | フラット表示 | |
 | folder tab | フォルダータブ | |
@@ -166,8 +170,10 @@ term across the docs. Add a row when a new recurring term comes up.
 | hidden files | 隠しファイル | |
 | incremental search | インクリメンタルサーチ | |
 | key binding | キーバインド | |
+| layout (file list) | レイアウト | `LAYOUTS` |
 | keymap preset | キーマッププリセット | |
 | log pane | ログペイン | |
+| marker (file list) | マーカー | a mark beside a column's text |
 | menu bar | メニューバー | |
 | mount / unmount / eject | マウント / アンマウント / 取り出し | |
 | other pane / opposite pane | 反対側のペイン | |

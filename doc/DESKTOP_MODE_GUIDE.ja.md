@@ -329,7 +329,7 @@ xefm --backend tui          # the same thing, stated explicitly
 
 **解決方法**：
 1. 設定で配色を調整します
-2. **View → Next Theme** でテーマを順に切り替えるか、**View → Theme** から選びます
+2. **View → Theme ▸ Next Theme** でテーマを順に切り替えるか、**View → Theme** から選びます
 3. デスクトップモードの色はより正確になるはずで、悪くなることはありません
 
 ### テキストの描画の問題

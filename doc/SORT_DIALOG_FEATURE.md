@@ -54,10 +54,21 @@ updated live as you move:
 | Size, descending | `1 GB → 1 MB → 1 KB  (largest first)` |
 | Timestamp, ascending | `2024 → 2025 → 2026  (oldest first)` |
 
+## Sorting by what a pane shows
+
+After its own keys the dialog lists what the pane shows that is not one of
+them — **Total size** in the default
+[layout](FILE_LIST_LAYOUTS_FEATURE.md), a Git status when that extra is
+showing. Sorting by one orders this folder only, by the values the pane
+already has; rows without a value go last. Going to another folder brings back
+the pane's own sort. One still being filled in is greyed out until every row
+has its value. See
+[Sorting by what a pane shows](FILE_LIST_LAYOUTS_FEATURE.md#sorting-by-what-a-pane-shows).
+
 ## Related keys
 
 The quick-sort actions still work without opening the dialog:
 `quick_sort_name`, `quick_sort_ext`, `quick_sort_size` and `quick_sort_date`;
 running the same one again reverses the order. The menu bar's
 **View → Sort By** submenu offers the same four sort keys, and
-**View → Reverse Sort** toggles the order.
+**View → Sort By ▸ Reverse Sort** toggles the order.

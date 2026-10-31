@@ -170,10 +170,13 @@ CONTRIBUTION_TABLES = {
     "lexers": "LEXERS",
     "themes": "THEMES",
     "menus": "MENU_ITEMS",
+    "attributes": "ATTRIBUTES",
+    "layouts": "LAYOUTS",
+    "layout_extras": "LAYOUT_EXTRAS",
 }
 #: Kinds whose entries may be plain data rather than a code reference — the
 #: tier that runs no code at all.
-_DATA_KINDS = {"themes", "filters", "lexers", "menus"}
+_DATA_KINDS = {"themes", "filters", "lexers", "menus", "layouts", "layout_extras"}
 
 _KNOWN_SECTIONS = {"extension", "contributes", "requires", "settings"}
 _KNOWN_EXTENSION_KEYS = {"id", "version", "api_version", "min_xefm", "name",
@@ -280,12 +283,23 @@ class Manifest:
 def _refs_in(value) -> list[tuple[str, str]]:
     """The code references inside one contribution value: the value itself
     when it is a reference string, its ``entry`` when it is a table, each item
-    when it is a list (an event's hooks)."""
+    when it is a list (an event's hooks). An attribute's ``read`` and a
+    layout's ``format``, in its columns and their markers, are references
+    too."""
     if isinstance(value, str):
         return [("", value)] if ":" in value else []
     if isinstance(value, dict):
-        entry = value.get("entry")
-        return [(".entry", entry)] if isinstance(entry, str) else []
+        out = []
+        for key in ("entry", "read", "format", "when"):
+            ref = value.get(key)
+            if isinstance(ref, str) and (key == "entry" or ":" in ref):
+                out.append((f".{key}", ref))
+        for key in ("columns", "markers"):
+            items = value.get(key)
+            if isinstance(items, list):
+                out += [(f".{key}" + sub, ref) for sub, ref in _refs_in(items)
+                        if sub]
+        return out
     if isinstance(value, list):
         out = []
         for i, item in enumerate(value):
@@ -997,6 +1011,22 @@ def _check_contribution(kind: str, key: str, value, action_names: set) -> Option
         return "must be 'module:function' or { entry = ..., description = ... }"
     if kind == "menus":
         return _check_menu(key, value, action_names)
+    if kind == "attributes":
+        # Its own table — 'entry' here is the provider, beside the rest of the
+        # attribute, not the "this table is a reference" shorthand.
+        if isinstance(value, str):
+            return None if ":" in value else "must be a table or 'module:name'"
+        if not isinstance(value, dict):
+            return "must be a table with read = 'module:function'"
+        from xefm.user_api import TABLE_KEYS
+        unknown = sorted(set(value) - set(TABLE_KEYS["ATTRIBUTES"]))
+        if unknown:
+            return (f"unknown keys {', '.join(unknown)} — known: "
+                    f"{', '.join(TABLE_KEYS['ATTRIBUTES'])}")
+        read = value.get("read")
+        if not isinstance(read, str) or ":" not in read:
+            return "needs read = 'module:function'"
+        return None
     if kind == "event_hooks":
         from xefm.user_api import EVENTS
         if key not in EVENTS:
@@ -2088,6 +2118,18 @@ def _value_for(kind: str, value, manifest: Manifest, handle: ExtensionHandle,
         items = value if isinstance(value, list) else [value]
         return [_in_extension(handle, _import_ref(root, ref), missing=missing)
                 for ref in items]
+    if kind == "attributes" and isinstance(value, dict):
+        spec = dict(value)
+        if "read" in spec:
+            spec["read"] = _in_extension(handle, _import_ref(root, spec["read"]),
+                                         missing=missing)
+        return spec
+    if kind in ("layouts", "layout_extras") and isinstance(value, dict):
+        spec = _layout_refs(value, root, handle, missing)
+        if isinstance(spec.get("when"), str) and ":" in spec["when"]:
+            spec["when"] = _in_extension(handle, _import_ref(root, spec["when"]),
+                                         missing=missing)
+        return spec
     if isinstance(value, dict) and "entry" in value:
         return _import_ref(root, value["entry"])
     if isinstance(value, str) and ":" in value and kind != "lexers":
@@ -2095,6 +2137,33 @@ def _value_for(kind: str, value, manifest: Manifest, handle: ExtensionHandle,
     if kind == "lexers" and isinstance(value, str) and _REF_RE.match(value):
         return _import_ref(root, value)
     return value
+
+
+def _layout_refs(spec: dict, root, handle, missing: list) -> dict:
+    """A ``[contributes.layouts]`` table with each ``format = 'module:function'``
+    in its columns and markers imported — a built-in format is a plain name
+    and has no colon."""
+    def fmt(item):
+        if isinstance(item, dict) and isinstance(item.get("format"), str) \
+                and ":" in item["format"]:
+            item = dict(item)
+            item["format"] = _in_extension(handle, _import_ref(root, item["format"]),
+                                           missing=missing)
+        return item
+
+    spec = dict(spec)
+    columns = []
+    for col in spec.get("columns") or ():
+        col = fmt(col)
+        if isinstance(col, dict) and col.get("markers"):
+            col = dict(col)
+            col["markers"] = [fmt(m) for m in col["markers"]]
+        columns.append(col)
+    if "columns" in spec:
+        spec["columns"] = columns
+    if "markers" in spec:
+        spec["markers"] = [fmt(m) for m in spec["markers"] or ()]
+    return spec
 
 
 def load(config, layout: Layout | None = None, *,
@@ -2184,6 +2253,13 @@ def _apply(config, manifest: Manifest, layout: Layout, report: LoadReport) -> No
     for attr, entries in staged.items():
         current = dict(getattr(config, attr, None) or {})
         for key, value in entries.items():
+            if attr == "LAYOUT_EXTRAS" and isinstance(current.get(key), dict) \
+                    and isinstance(value, dict) and (attr, key) not in report.owners:
+                # config.py overrides an extension's extra key by key: it names
+                # only what it changes (#756).
+                current[key] = {**value, **current[key]}
+                report.owners[(attr, key)] = manifest.id
+                continue
             if key in current:
                 owner = report.owners.get((attr, key))
                 if owner is None:

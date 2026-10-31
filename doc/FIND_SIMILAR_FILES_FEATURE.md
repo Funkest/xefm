@@ -39,7 +39,7 @@ and says when it is done:
 
 ## Looking at the results
 
-Click that, or open **View → Background Jobs…**, and choose the scan. Its
+Click that, or open **Tools → Background Jobs…**, and choose the scan. Its
 results open in a **new tab** of the pane, a [tree file](TREE_FILES_FEATURE.md)
 with one folder per group. The folder you were in stays in its own tab, and
 closing the results tab (`Ctrl-W`) takes you back to it. In each group, the file the others were compared with comes

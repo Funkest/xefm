@@ -37,7 +37,13 @@ it does, followed by the action's name (`Move cursor up · cursor_up`). That
 name is what you write in `KEY_BINDINGS` to rebind the key, so you can find it
 here. That is also why the list below
 names what each section covers instead of quoting keys — the dialog itself is
-the place to read which key does what on *your* setup. The sections, in order:
+the place to read which key does what on *your* setup.
+
+When the active pane shows marks from an extra — the tag dots, a Git status —
+the help opens with **Markers in this pane**: each mark, its color, and what it
+means, for the extras active in this tab only (see
+[File List Layouts](FILE_LIST_LAYOUTS_FEATURE.md)). The key sections follow,
+in order:
 
 - **Navigation** — moving the cursor, opening an item, going to the parent or
   the root, switching panes, and the jump dialogs (favorites, history, drives, a

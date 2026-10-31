@@ -441,7 +441,7 @@ s3://my-bucket/path/to/files/
 
 # View S3 text file
 # 1. Navigate to s3://bucket/file.txt
-# 2. Run view_file (File → View File); editing needs a local copy
+# 2. Run view_file (File → Open With ▸ Viewer); editing needs a local copy
 ```
 
 ---
@@ -536,7 +536,7 @@ KEY_BINDINGS = {
 **詳しいドキュメント**：[キーバインド](KEY_BINDINGS_FEATURE.ja.md)
 
 ### テーマ
-XeFM には複数の内蔵テーマ（Dark+、Light+、Monokai、Dracula、Nord、Solarized、Gruvbox Dark、Solarized Light）が付属していて、最後に使ったテーマを覚えています。実行中は **View → Next Theme** で順に切り替えるか、**View → Theme** から選びます。独自のテーマは設定の `THEMES` 辞書で定義します。
+XeFM には複数の内蔵テーマ（Dark+、Light+、Monokai、Dracula、Nord、Solarized、Gruvbox Dark、Solarized Light）が付属していて、最後に使ったテーマを覚えています。実行中は **View → Theme ▸ Next Theme** で順に切り替えるか、**View → Theme** から選びます。独自のテーマは設定の `THEMES` 辞書で定義します。
 
 **詳しいドキュメント**：[配色](COLOR_SCHEMES_FEATURE.ja.md)
 
@@ -665,6 +665,7 @@ AWS の認証情報とバケットの権限を確認してください
 - [エディターでの名前の変更](RENAME_IN_EDITOR_FEATURE.ja.md) - テキストエディターで名前を編集して、多数のファイルの名前を変更
 - [パターンで選択](SELECT_BY_PATTERN_FEATURE.ja.md) - パターンにマッチするすべてのファイルを選択／解除
 - [ファイルのタグ](FILE_TAGS_FEATURE.ja.md) - システムが管理するタグの読み書きと、タグによる検索
+- [ファイルリストのレイアウト](FILE_LIST_LAYOUTS_FEATURE.ja.md) - 行に表示する列の選択と定義、フォルダーのサイズ、Git の状態などの独自の値
 - [アーカイブ](ARCHIVE_FEATURE.ja.md) - アーカイブの作成、展開、ブラウズ（パスワード付きも含む）
 - [ファイルの詳細](FILE_DETAILS_FEATURE.ja.md) - ファイルの詳しい情報の表示
 - [OS のインデックス検索](OS_INDEX_SEARCH_FEATURE.ja.md) - Spotlight と Windows Search の結果を一覧として表示
@@ -785,7 +786,7 @@ KEY_BINDINGS = {
 #### 開発の作業
 1. プロジェクトのディレクトリをお気に入りに登録します
 2. git の操作には外部プログラムを使います
-3. `edit_file`（**File → Edit File**）でファイルを編集します
+3. `edit_file`（**File → Open With ▸ Text Editor**）でファイルを編集します
 4. 内容検索でコードを探します
 
 #### S3 のデータ管理

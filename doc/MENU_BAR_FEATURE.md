@@ -78,15 +78,15 @@ see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 | Item | Action |
 |------|--------|
 | Open | `open_item` |
-| View File | `view_file` |
-| Edit File | `edit_file` |
+| Open With ▸ Viewer | `view_file` |
+| Open With ▸ Text Editor | `edit_file` |
+| Open With ▸ Default App | `open_with_os` |
 | Details… | `file_details` |
-| Open with Default App | `open_with_os` |
 | Reveal in File Manager | `reveal_in_os` |
 | New Folder… | `create_directory` *(when nothing is selected)* |
 | New File… | `create_file` |
-| Rename… | `rename` |
-| Rename in Editor… | `rename_in_editor` |
+| Rename ▸ Rename… | `rename` |
+| Rename ▸ Rename in Editor… | `rename_in_editor` |
 | Duplicate | `duplicate_files` |
 | Copy to Other Pane | `copy_files` |
 | Move to Other Pane | `move_files` *(when files are selected)* |
@@ -94,8 +94,9 @@ see [Keymap Presets](KEYMAP_PRESETS_FEATURE.md#every-key-side-by-side).
 | Move to… | `move_files_to` |
 | Move to Trash… / Move to Recycle Bin… | `delete_files` — see [Trash](TRASH_FEATURE.md) |
 | Delete Permanently… | `delete_permanently` |
-| Create Archive… | `create_archive` |
-| Extract Archive… | `extract_archive` |
+| Archive ▸ Create… | `create_archive` |
+| Archive ▸ Extract… | `extract_archive` |
+| *(your `MENU_ITEMS` with `'file'`)* | up to three listed here; more go under **Custom ▸** |
 | Quit | `quit` |
 
 ### Edit Menu
@@ -132,6 +133,7 @@ the mouse for the first, take the whole buffer with the second. See
 | History… | `history` |
 | Back | `go_back` |
 | Forward | `go_forward` |
+| Switch Pane | `switch_pane` |
 | New Tab | `new_tab` — see [Folder Tabs](FOLDER_TABS_FEATURE.md) |
 | Open in New Tab | `open_in_new_tab` |
 | Close Tab | `close_tab` |
@@ -168,20 +170,20 @@ the mouse for the first, take the whole buffer with the second. See
 | Search Tags… | `find_by_tag` *(ships unbound)* — see [File Tags](FILE_TAGS_FEATURE.md) |
 | Reread | `reread` |
 | Show Hidden Files | `toggle_hidden` |
-| Reverse Sort | *(menu only)* |
-| Sort By ▸ | (submenu: Name / Extension / Size / Date — also the `quick_sort_*` actions) |
-| Theme ▸ | (submenu of installed themes) |
-| Next Theme | `toggle_color_scheme` *(ships unbound)* |
-| Switch Pane | `switch_pane` |
+| Layout ▸ | (submenu: every layout — also `choose_layout`) — see [File List Layouts](FILE_LIST_LAYOUTS_FEATURE.md) |
+| Show ▸ | (submenu: each extra — Tags, and those `LAYOUT_EXTRAS` or an extension add — with Auto / On / Off, also `choose_extras`) |
+| Resolve Attribute… | `resolve_attribute` *(ships unbound)* — a folder's total size and other attributes worked out on request; see [File List Layouts](FILE_LIST_LAYOUTS_FEATURE.md) |
+| Sort By ▸ | (submenu: Name / Extension / Size / Date — also the `quick_sort_*` actions — then Reverse Sort, menu only) |
+| Theme ▸ | (submenu: Next Theme, `toggle_color_scheme` *(ships unbound)*, then the installed themes) |
 | Quick View | `quick_view` — see [Quick View](QUICK_VIEW_FEATURE.md) |
 | Flat View | `flat_view` — see [Flat View](FLAT_VIEW_FEATURE.md) |
-| Background Jobs… | `jobs` — see [Background Jobs](BACKGROUND_JOBS_FEATURE.md) |
 
 ### Tools Menu
 
 | Item | Action |
 |------|--------|
 | Command Palette… | `command_palette` |
+| Background Jobs… | `jobs` — see [Background Jobs](BACKGROUND_JOBS_FEATURE.md) |
 | Find Similar Files… | `find_similar` *(ships unbound)* — see [Find Similar Files](FIND_SIMILAR_FILES_FEATURE.md) |
 | External Programs… | `programs` |
 | Subshell Here | `subshell` *(desktop mode: in a terminal window)* |
@@ -243,7 +245,7 @@ Select files (**Select → Toggle Selection**), then choose **File → Copy to O
 Pane** (`copy_files`).
 
 ### Change the theme
-Open **View → Theme ▸** and pick one, or choose **View → Next Theme** to cycle
+Open **View → Theme ▸** and pick one, or choose **View → Theme ▸ Next Theme** to cycle
 to the next theme.
 
 ## Troubleshooting

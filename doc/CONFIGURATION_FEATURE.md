@@ -114,7 +114,7 @@ needs PuiKit 1.12 or later; an older PuiKit logs a warning and ignores it.
 
 XeFM ships with built-in themes (Dark+, Monokai, Dracula, Nord, Solarized, Gruvbox
 Dark, Light+, Solarized Light). Switch at runtime via **View → Theme** or
-**View → Next Theme**; XeFM starts on Dark+ and remembers the last theme across restarts. There is no
+**View → Theme ▸ Next Theme**; XeFM starts on Dark+ and remembers the last theme across restarts. There is no
 `COLOR_SCHEME` string setting — instead you register your own named themes:
 
 ```python

@@ -10,7 +10,7 @@ in full before anything is renamed.
 ## Usage
 
 1. Select the files to rename (or put the cursor on one) and choose
-   **File → Rename in Editor…** (`rename_in_editor`).
+   **File → Rename ▸ Rename in Editor…** (`rename_in_editor`).
 2. Your editor (`TEXT_EDITOR`) opens a file listing the names, one per line.
 3. Change the names in place, save, and close the editor.
 4. XeFM lists every change (`old  →  new`). Choose **Rename** to apply them,
@@ -41,7 +41,7 @@ the file, then choose Apply.** Choose **Apply** once you've saved, or
 
 ## Compared with batch rename
 
-**File → Rename…** (`rename`) on a selection opens [Batch Rename](BATCH_RENAME_FEATURE.md), which renames
+**File → Rename ▸ Rename…** (`rename`) on a selection opens [Batch Rename](BATCH_RENAME_FEATURE.md), which renames
 with a regular expression and a replacement pattern. Use batch rename when one
 pattern describes the whole change. Use rename in the editor when the names
 need individual edits, or when a pattern is hard to write. Both are available.

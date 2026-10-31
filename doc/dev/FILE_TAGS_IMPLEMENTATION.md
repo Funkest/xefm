@@ -63,21 +63,21 @@ never fails the copy.
 
 ## The file list
 
-`TagCache`, one per `FilePane` (`view.tag_cache`):
+Tags are the built-in `tags` attribute (`xefm/attributes.py`, #633), which
+any layout can show, and the dots after a name are the built-in `tags` extra (`layouts.BUILTIN_EXTRA_SPECS`).
+`doc/dev/FILE_LIST_LAYOUTS_IMPLEMENTATION.md` has the mechanism. What is
+particular to tags:
 
-- `get(files, entry)` answers from a dict, or queues the entry for a daemon
-  worker and returns `None`.
-- The cache resets when the pane's `files` list identity changes, the same key
-  as `_ext_cache`.
-- Stores that aren't `cheap` answer `[]` immediately and are never queued.
-- When the queue drains, the worker calls `on_ready`. That is
-  `XeFMApp._on_tags_ready`, which sets `_tags_dirty` and calls `_wake_pump`;
-  `_pump_monitoring` reports the flag as a change, so the frame repaints.
-  Poll-loop backends drain on their animation tick in the same way.
-
-`FilePane._draw_row` draws up to `_MAX_TAG_DOTS` `●` after the name, colored
-from `tags.RGB` (or the muted column ink) and dimmed with the rest of an
-inactive pane. The name's elide width shrinks by the width of the dots.
+- Its `read` calls `tags.read(path)` for each entry, adding what it finds to
+  `tags.SEEN` (tags seen on files this session).
+- `applies` asks `store_for(path)` and `store.cheap`, so S3, archives and
+  user schemes are never asked; their rows show no marker.
+- It is automatic, so every row of a listing is read in the background once
+  the layout on screen shows tags — not only the rows drawn, as the old
+  `TagCache` did. Reading one xattr per file is cheap enough for that.
+- The `dots` format draws one `●` per tag, colored by its Finder color name
+  (`tags.RGB`) or in the muted column ink, cut to the marker's `limit`
+  (three, the old `_MAX_TAG_DOTS`).
 
 ## B and J
 
@@ -94,10 +94,11 @@ inactive pane. The name's elide width shrinks by the width of the dots.
   in a task before deciding.
 - **Writes** go through `_write_tags`: read, `compute(current)`, then
   `write_many`. This runs inline for a cheap store and as a `Task` otherwise.
-  Afterwards it calls `tag_cache.forget(targets)` and logs.
+  Afterwards it calls `AttributeStore.forget(targets, "tags")` on every
+  tab's store and logs.
 - **Known tags**: `state.db` key `tags.known`, a list of `[name, color]`, most
   recent first, capped at `_KNOWN_TAGS_MAX`. They are merged with
-  `TagCache.seen` (tags seen on files this session).
+  `tags.SEEN` (tags seen on files this session).
 - **Search Tags** (`find_by_tag` action → `show_tag_search`, View → Search
   Tags…, no default key): a filter list of the known tags, with
   `on_accept_text` for a name not listed. It used to be `_TagJump` rows under
@@ -129,7 +130,7 @@ inactive pane. The name's elide width shrinks by the width of the dots.
   `FinderTags`; the Linux branch is parsed from canned output;
 - S3 with a stub client;
 - `carry`;
-- `TagCache`;
+- the `tags` attribute (read off the UI thread; costly stores skipped);
 - app tests: B edit then toggle, B on a selection, Search Tags listing
   the tag (and J not), and `find_by_tag` through the walk.
 

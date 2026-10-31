@@ -43,6 +43,14 @@ class PaneManager:
             'sort_reverse': (like['sort_reverse'] if like is not None
                              else self.config.DEFAULT_SORT_REVERSE),
             'filter_pattern': "",  # Filename filter pattern for this pane
+            # The layout chosen by hand (xefm.layouts), or None to let
+            # LAYOUT_RULES choose; a new tab keeps the one it was opened from.
+            'layout': like.get('layout') if like is not None else None,
+            # Auto / On / Off per extra (xefm.layouts): only On and Off are
+            # stored, like sort and filter the tab's own; a new tab copies.
+            'extras': dict(like.get('extras') or {}) if like is not None else {},
+            # An attribute sort over this one directory (XeFMApp._sort_overlay).
+            'sort_overlay': None,
             'virtual': None,  # When set, a search-results feed (see _feed_search_results)
         }
 

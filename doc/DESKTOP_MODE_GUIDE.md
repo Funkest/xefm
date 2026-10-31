@@ -423,7 +423,7 @@ Press `F1` at any time for the keys your config is using.
 
 **Solutions**:
 1. Adjust color scheme in configuration
-2. Cycle through themes with **View → Next Theme**, or pick one from **View → Theme**
+2. Cycle through themes with **View → Theme ▸ Next Theme**, or pick one from **View → Theme**
 3. Colors should be more accurate in desktop mode, not worse
 
 ### Text Rendering Issues

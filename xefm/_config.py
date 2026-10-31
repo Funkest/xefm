@@ -84,7 +84,7 @@ class Config:
     # Custom themes (optional)
     # -----------------------------------------------------------------------
     # Register your own named themes here. Each one is added to the theme picker
-    # (View > Theme) and View > Next Theme alongside the built-ins — Dark+, Monokai,
+    # (View > Theme) and View > Theme > Next Theme alongside the built-ins — Dark+, Monokai,
     # Dracula, Nord, Solarized, Gruvbox Dark, Light+, Solarized Light — so you can
     # switch between them at run time. XeFM starts on Dark+ and remembers whichever
     # theme you last switched to across restarts.
@@ -190,7 +190,7 @@ class Config:
     THEMES = {
         # Phosphor: a monochrome phosphor-green CRT terminal — every color is a
         # shade of green on a near-black screen. A ready-made example of a full
-        # custom theme; select it from View > Theme or View > Next Theme. On the GUI
+        # custom theme; select it from View > Theme or View > Theme > Next Theme. On the GUI
         # backend the 'post_effect' below adds a real CRT glow over the green.
         'Phosphor': {
             'post_effect': 'crt',            # CRT glow/bloom/scanlines (GUI backend)
@@ -351,16 +351,17 @@ class Config:
     # it shows, IMAGE_DECODERS lets you add picture formats the image viewer
     # does not read yet, PATH_SCHEMES lets you add a browsable folder that
     # is not a folder, LEXERS lets you color a language the text viewer
-    # does not know, and MENU_ITEMS puts an action in a menu.
+    # does not know, MENU_ITEMS puts an action in a menu, and ATTRIBUTES,
+    # LAYOUTS and LAYOUT_EXTRAS change what the file list's rows show.
     #
     # STABLE AND PREVIEW: this is API version 1 (xefm.user_api.API_VERSION).
     # ACTIONS, SORT_KEYS, FILTERS and PATH_SCHEMES, and the panes and entries
     # your functions are handed, are stable: a change that would break them
     # comes with a new API_VERSION and a line in the release notes. EVENT_HOOKS,
-    # MENU_ITEMS, IMAGE_DECODERS, LEXERS and a few ctx methods (run_task,
-    # show_markdown, the prompts) are Preview and may change in any release;
-    # XeFM logs one line when a config uses them. doc/CUSTOMIZATION_FEATURE.md
-    # has the full list.
+    # MENU_ITEMS, IMAGE_DECODERS, LEXERS, ATTRIBUTES, LAYOUTS, LAYOUT_EXTRAS and
+    # a few ctx methods (run_task, show_markdown, the prompts) are Preview and
+    # may change in any release; XeFM logs one line when a config uses them.
+    # doc/CUSTOMIZATION_FEATURE.md has the full list.
     #
     # Both reload with the rest of the config ('reload_config'), so iterating on
     # an action is edit-then-reload -- no restart.
@@ -720,8 +721,193 @@ class Config:
     # 'when' greys the item out unless it applies: 'entry' needs an entry under
     # the cursor, 'selection' needs at least one selected; the default is
     # 'always'. Your items gather in a group of their own near the foot of
-    # each menu, in the order written here.
+    # each menu, in the order written here -- up to three; more go under a
+    # Custom submenu, so the menu still fits a terminal.
     MENU_ITEMS = {}
+
+    # --- ATTRIBUTES -------------------------------------------------------
+    # Values XeFM can know about each entry beyond its name, size and date --
+    # a Git status, a line count, an image's dimensions. Defining one shows it
+    # nowhere: LAYOUT_EXTRAS (or LAYOUTS) below puts it in a row. XeFM has a
+    # few of its own already: 'name', 'ext', 'size', 'mtime', 'tags' and
+    # 'total_size' (a folder's recursive size, counted by View > Resolve Attribute).
+    #
+    # One function, read(directory, entries), computes the values on a
+    # background thread: `entries` are rows of one folder, `directory` is that
+    # folder, and it returns one value per entry, in the same order. XeFM
+    # hands it a whole folder at once, so a source that answers a folder in
+    # one go -- git, where a call per file would be hundreds of processes --
+    # is asked once:
+    #
+    #     def line_count(directory, entries):
+    #         def count(entry):
+    #             with open(entry.path, 'rb') as f:
+    #                 return sum(1 for _ in f)
+    #         return [count(e) for e in entries]
+    #
+    #     import subprocess                    # at the top of this file
+    #
+    #     def git_status(directory, entries):
+    #         try:
+    #             def git(*args):
+    #                 return subprocess.run(['git', *args], cwd=str(directory), check=True,
+    #                                       capture_output=True, text=True).stdout
+    #             prefix = git('rev-parse', '--show-prefix').strip()
+    #             items = git('status', '--porcelain', '-z', '--', '.').split('\0')
+    #         except (OSError, subprocess.CalledProcessError):
+    #             return [None] * len(entries)        # not a Git working tree
+    #         codes, skip = {}, False
+    #         for item in items:
+    #             if skip or len(item) < 4:
+    #                 skip = False
+    #                 continue
+    #             code, path = item[:2], item[3:]
+    #             skip = code[0] in 'RC'              # a rename's old path follows
+    #             if path.startswith(prefix):
+    #                 # the entry here the change is in: a file, or the folder holding it
+    #                 name = path[len(prefix):].split('/')[0]
+    #                 codes.setdefault(name, code.strip()[:1])
+    #         return [codes.get(e.path.name) for e in entries]
+    #
+    #     ATTRIBUTES = {
+    #         'lines': {'label': 'Lines', 'type': 'count', 'read': line_count},
+    #         'git': {
+    #             'label': 'Git status', 'type': 'enum', 'read': git_status,
+    #             'values': {                  # each value's meaning, and a color
+    #                 'M': {'label': 'Modified',  'color': 'yellow'},
+    #                 'A': {'label': 'Added',     'color': 'green'},
+    #                 '?': {'label': 'Untracked', 'color': 'muted'},
+    #             },
+    #         },
+    #     }
+    #
+    # 'type' is how the value is shown and compared: 'text', 'count', 'size'
+    # (bytes), 'time' (a timestamp), 'enum' (one of 'values'), or 'tags'.
+    # 'where' lists the storage it is asked about -- 'local' (the default),
+    # 'archive', 'ssh', 's3' -- since a call per file is cheap on a disk and
+    # a request each on S3.
+    #
+    # Values are worked out for every row of a folder as soon as a layout on
+    # screen shows them, so a definition should answer a folder's worth in no
+    # time. One that cannot -- it reads every file whole, it walks a tree --
+    # says 'compute': 'on_request' and is computed only for the entries you
+    # ask about: View > Resolve Attribute, for the selection or the entry
+    # under the cursor, one entry per call -- as total_size is.
+    #
+    # A value is None until it arrives. A function that fails, or returns a
+    # list of the wrong length, costs that call's values and says so once in
+    # the log pane. Your own functions can read a value
+    # XeFM already has with entry.attr('git') -- it never waits for one.
+    ATTRIBUTES = {}
+
+    # --- LAYOUTS ----------------------------------------------------------
+    # How a file list row is presented: which of the usual columns, in what
+    # order, and how each value is written -- a matter of taste and of how
+    # wide your panes are. View > Layout picks one per tab; DEFAULT_LAYOUT
+    # below is the one a new tab starts with. The built-in 'default' is what
+    # you see now:
+    #
+    #     'columns': ['name', 'ext', 'total_size', {'attr': 'mtime', 'priority': 1}]
+    #
+    # A column is an attribute's name, or a dict:
+    #
+    #     {'attr': 'mtime',            # what to show
+    #      'format': 'relative',      # how (below), or a function of yours
+    #      'width': 10,               # cells; the format's own by default
+    #      'align': 'right',          # 'left' or 'right'
+    #      'priority': 1}             # dropped first when the pane is narrow
+    #
+    # Every layout has a 'name' column, and it takes the width the others
+    # leave. A column with a 'priority' is dropped when the name would get
+    # narrower than 12 cells, lowest first; one without stays. Leave out
+    # 'ext' and the extension stays in the name.
+    #
+    # Formats by type: 'size' -- 'compact' (12.3K, the default) or 'bytes';
+    # 'time' -- 'short', 'full' (DATE_FORMAT picks between the two by
+    # default), 'iso', 'relative' ("5 min ago") or 'recent' (13:24 today,
+    # 10/21 this year, 2024 before that); 'enum' -- 'letter' or
+    # 'word' (its label from 'values'); 'tags' -- 'dots' or 'names'; 'count'
+    # -- 'number'; 'text' -- 'text'. A function of yours takes (value, entry)
+    # and returns text, or a Cell to give it a color: color is 'muted',
+    # 'accent', 'accent2', 'text', a name ('red', 'green', 'yellow', 'blue',
+    # 'purple', 'orange', 'gray') or an (r, g, b). value is None while it is
+    # being computed. Give it a 'width'.
+    #
+    #     LAYOUTS = {
+    #         'short': {'label': 'Short time', 'columns': [
+    #             'name', 'ext', 'total_size',
+    #             {'attr': 'mtime', 'format': 'recent', 'priority': 1}]},
+    #         'names': {'label': 'Names only', 'columns': ['name']},
+    #     }
+    #
+    # Replacing 'default' itself needs 'override': True.
+    LAYOUTS = {}
+    DEFAULT_LAYOUT = 'default'
+
+    # --- LAYOUT_EXTRAS -----------------------------------------------------------
+    # What a folder adds to its rows because of what it holds -- a Git status
+    # in a working tree, your tags where the system keeps them. Each extra
+    # says where it applies ('when'), and puts its attributes in the row as
+    # markers beside a column's text and/or as columns of their own. Several
+    # can show at once, on top of whichever layout the tab has. View > Show
+    # turns each one Auto (follow 'when', where every tab starts), On or Off
+    # for the tab. XeFM has one of its own, 'tags': the colored dots after a
+    # name.
+    #
+    #     from xefm.user_api import Cell       # at the top of this file
+    #
+    #     GIT_MARK = {'M': Cell('M', color='yellow'),
+    #                 'A': Cell('A', color='green'),
+    #                 '?': Cell('?', color='muted')}
+    #
+    #     def git_mark(value, entry):
+    #         return GIT_MARK.get(value, '')
+    #
+    #     def in_git_tree(path):
+    #         return any((p / '.git').exists() for p in (path, *path.parents))
+    #
+    #     LAYOUT_EXTRAS = {
+    #         'git': {
+    #             'label': 'Git status',
+    #             'when': in_git_tree,
+    #             'markers': [{'attr': 'git', 'format': git_mark,
+    #                          'on': 'name', 'side': 'before'}],
+    #             'columns': [{'attr': 'git', 'format': 'word',
+    #                          'replace': 'mtime'}],
+    #         },
+    #     }
+    #
+    # 'when' is 'always' (the default), 'never', a path pattern ('s3://*'),
+    # or a function of the folder's path, run on a background thread so it
+    # may look at the disk.
+    #
+    # A marker is {'attr', 'format', 'on', 'side', 'limit'}: 'on' is the
+    # column whose text it marks ('name' by default, and when the tab's layout
+    # has no such column), 'side' is 'before' or 'after' (the default),
+    # 'limit' the most pieces of the format's result shown (the tag dots:
+    # three). A mark sits against the text it marks on the rows that have
+    # one, and that text gives way; rows without one keep no room for it, so
+    # a name with a mark in front starts a little later than its neighbours.
+    #
+    # A column is as in LAYOUTS, plus where it goes: 'before' or 'after' a
+    # column, in place of one ('replace' -- to save room; it keeps that
+    # column's priority), or at the end (also when the named column is not
+    # in the layout). A column before the name keeps a value in one place on
+    # every row. It is as wide as its widest value, and left out of a folder
+    # where no file has one.
+    #
+    # An extension can bring extras, already saying where they apply. To
+    # change one -- or the built-in 'tags' -- name it here with only the keys
+    # you change; the rest stays as it was:
+    #
+    #     LAYOUT_EXTRAS = {'tags': {'when': 'never'}}            # no tag dots
+    #     LAYOUT_EXTRAS = {'git': {'when': 'always'}}            # an extension's, changed
+    #
+    # The sort dialog lists what the pane shows beyond its own keys (Git
+    # status above). Sorting by one orders this folder only, by the values
+    # already there; going to another folder goes back to the pane's own
+    # sort. F1 lists what the marks in the active pane mean.
+    LAYOUT_EXTRAS = {}
 
 
     # Favorites (J) - the places and files you jump to by name.

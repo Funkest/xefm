@@ -810,6 +810,27 @@ _DETAILS: dict[str, str] = {
     "toggle_color_scheme": (
         "Switches to the next color theme. View ▸ Theme lists them all by "
         "name."),
+    "choose_layout": (
+        "Chooses how the active pane presents its rows — which of the usual "
+        "columns it has and how they are written: short dates, names with "
+        "their extension, and so on. The choice stays with the tab. "
+        "`LAYOUTS` in `config.py` defines more; what a folder adds, such as "
+        "a Git status, is `choose_extras`."),
+    "choose_extras": (
+        "Turns an extra — a Git status, your tags, anything `LAYOUT_EXTRAS` in "
+        "`config.py` or an extension adds — on or off for the active pane's "
+        "tab. **Auto** shows it where it applies (a Git status in a working "
+        "tree); **On** and **Off** override that for this tab. Also View ▸ "
+        "Show."),
+    "resolve_attribute": (
+        "Works out an attribute the active pane shows that is obtained only "
+        "on request, because it costs time — a folder's total size, or an "
+        "`ATTRIBUTES` entry in `config.py` with `'compute': 'on_request'` — "
+        "for the selected items, or the item under the cursor. A dialog names "
+        "the items and lists the attributes that can be resolved for them, by "
+        "name. It runs in the background "
+        "and stops when you leave the folder; the sort dialog can then order "
+        "this folder by the results."),
     "redraw": (
         "Repaints the whole screen — for when another program or a terminal "
         "multiplexer has written over it."),
@@ -1065,6 +1086,12 @@ _FILER_ACTIONS = [
     # Appearance
     _a("toggle_hidden", FILER, "Show or hide hidden files"),
     _a("toggle_color_scheme", FILER, "Cycle to the next color theme"),
+    _a("choose_layout", FILER, "Choose how the pane presents its rows", default_keys=()),
+    _a("choose_extras", FILER, "Turn an extra such as Git status on or off in this tab",
+       default_keys=()),
+    _a("resolve_attribute", FILER,
+       "Work out an attribute that takes time, such as a folder's total size",
+       default_keys=()),
     _a("redraw", FILER, "Redraw the screen"),
     _a("reread", FILER, "Re-read both panes' directories", default_keys=()),
     _a("menu", FILER, "Open the menu bar"),

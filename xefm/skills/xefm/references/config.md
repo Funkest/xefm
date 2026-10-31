@@ -250,7 +250,7 @@ the built-in viewer: XeFM only sniffs a file when no rule names the action.
 
 `THEMES` *defines* themes; it does not choose one, and there is no setting
 that does. The theme in use is picked in XeFM — **View ▸ Theme** lists them
-all, **View ▸ Next Theme** cycles (the `toggle_color_scheme` action, which
+all, **View ▸ Theme ▸ Next Theme** cycles (the `toggle_color_scheme` action, which
 has no key by default) — takes effect at once, and is remembered in XeFM's
 own state, not in this file. So "switch to the Dracula theme" is something the
 user does in XeFM: tell them how, and do not edit the file. To add or tweak a

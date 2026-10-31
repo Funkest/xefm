@@ -13,6 +13,11 @@ A compact, keyboard-first modal (no Tab, no buttons):
 - **Enter** applies, **Esc** cancels. A click on a key row applies it (like the
   menu it replaces); a click on an order segment just switches the order.
 
+The pane's layout may add rows below the sort keys, one per column whose
+values are computed (#633): sorting by one of those orders *this folder only*,
+by the values the pane already has. A row whose values are still coming in is
+greyed out until every one has landed.
+
 Below the Ascending/Descending segments sits an **explanation line** — e.g.
 ``1 KB → 1 MB → 1 GB  (smallest first)`` — because Ascending/Descending is
 hard to grasp in the abstract, especially for size and timestamp. It follows
@@ -56,6 +61,7 @@ class SortDialog(Widget):
     _HINT = "↑/↓ key · ←/→ order · Enter apply · Esc cancel"
 
     def __init__(self, *, mode: str = "name", reverse: bool = False,
+                 extra: list | None = None,
                  on_result: Callable[[Optional[tuple[str, bool]]], None] | None = None):
         self.title = "Sort By"
         self.on_result = on_result
@@ -67,6 +73,15 @@ class SortDialog(Widget):
         # registered, and a reload mid-dialog must not renumber them underneath
         # the selection (:mod:`xefm.sort_keys`).
         self._keys = sort_keys.rows()
+        #: Modes of rows that cannot be chosen yet, and what each says instead.
+        self._disabled: dict[str, str] = {}
+        #: The explanation line of an attribute row, by mode.
+        self._explain: dict[str, str] = {}
+        for mode_, label, enabled, note in extra or ():
+            self._keys.append((mode_, label, None))
+            self._explain[mode_] = note
+            if not enabled:
+                self._disabled[mode_] = note
         self._index = next((i for i, (m, _l, _h) in enumerate(self._keys)
                             if m == seed), 0)
         self._reverse = bool(reverse)
@@ -113,7 +128,7 @@ class SortDialog(Widget):
         order_w = (1.0 + sum(measure(o) for o in _ORDERS)
                    + _OPT_GAP + 0.7)  # trailing pill pad
         explain_w = 1.0 + max(
-            measure(sort_keys.explanation(mode, rev))
+            measure(self._explanation_of(mode, rev))
             for mode, _l, _h in self._keys for rev in (False, True))
         return max(row_w, order_w, explain_w, measure(SortDialog._HINT))
 
@@ -147,7 +162,19 @@ class SortDialog(Widget):
             self.on_result(result)
 
     def _accept(self) -> None:
+        if self._keys[self._index][0] in self._disabled:
+            return
         self._finish((self._keys[self._index][0], self._reverse))
+
+    def _step(self, delta: int) -> None:
+        """Move the selection, past the rows that cannot be chosen yet."""
+        n = len(self._keys)
+        i = self._index
+        for _ in range(n):
+            i = (i + delta) % n
+            if self._keys[i][0] not in self._disabled:
+                self._index = i
+                return
 
     # --- drawing -------------------------------------------------------------
 
@@ -186,7 +213,9 @@ class SortDialog(Widget):
                                Style(bg=theme.selection_active_bg),
                                radius=None, hints={"fill": True})
             row_bg = theme.selection_active_bg if selected else surface_bg
-            ctx.draw_text(3.0, y + row_vy, label, Style(fg=theme.text, bg=row_bg))
+            enabled = _mode not in self._disabled
+            ctx.draw_text(3.0, y + row_vy, label,
+                          Style(fg=theme.text if enabled else theme.muted_text, bg=row_bg))
             self._row_hits.append((i, y, y + pitch))
             y += pitch
 
@@ -219,7 +248,13 @@ class SortDialog(Widget):
 
     def explanation(self) -> str:
         """The explanation line for the selected key and order."""
-        return sort_keys.explanation(self._keys[self._index][0], self._reverse)
+        return self._explanation_of(self._keys[self._index][0], self._reverse)
+
+    def _explanation_of(self, mode: str, reverse: bool) -> str:
+        if mode in self._explain:
+            text = self._explain[mode]
+            return f"({text}, reversed)" if reverse and mode not in self._disabled else f"({text})"
+        return sort_keys.explanation(mode, reverse)
 
     # --- events --------------------------------------------------------------
 
@@ -241,9 +276,9 @@ class SortDialog(Widget):
             self._accept()
             return
         if key == "up":
-            self._index = (self._index - 1) % len(self._keys)
+            self._step(-1)
         elif key == "down":
-            self._index = (self._index + 1) % len(self._keys)
+            self._step(+1)
         elif key == "left":
             self._reverse = False
         elif key == "right":
@@ -265,6 +300,8 @@ class SortDialog(Widget):
             return
         for i, y0, y1 in self._row_hits:
             if 2.0 <= event.x < w - 2.0 and y0 <= event.y < y1:
+                if self._keys[i][0] in self._disabled:
+                    return
                 self._index = i
                 self._accept()  # a row click chooses and closes, like the menu
                 return
@@ -280,13 +317,14 @@ class SortDialog(Widget):
 
 
 def show_sort_dialog(panel: Any, *, mode: str = "name", reverse: bool = False,
-                     region=None,
+                     region=None, extra: list | None = None,
                      on_result: Callable[[Optional[tuple[str, bool]]], None] | None = None,
                      z: int = 70) -> SortDialog:
     """Push a modal :class:`SortDialog` over ``panel``, seeded with the pane's
     current ``(mode, reverse)``, and return it. The chosen ``(sort_mode,
     sort_reverse)`` pair is reported through ``on_result`` (``None`` on cancel).
-    ``region`` anchors it over a pane like the other pickers."""
-    dialog = SortDialog(mode=mode, reverse=reverse, on_result=on_result)
+    ``region`` anchors it over a pane like the other pickers. ``extra`` adds
+    ``(mode, label, enabled, explanation)`` rows below the sort keys."""
+    dialog = SortDialog(mode=mode, reverse=reverse, extra=extra, on_result=on_result)
     dialog.show(panel, region=region, z=z)
     return dialog

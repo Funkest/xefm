@@ -53,14 +53,14 @@ class StubFLM:
         self.refreshed = []
 
     def compute_listing(self, path, *, filter_pattern=None, sort_mode="name",
-                        sort_reverse=False):
+                        sort_reverse=False, overlay=None):
         self.compute_calls += 1
         self.last_filter = filter_pattern
         return self._result
 
     def compute_virtual_listing(self, paths, *, filter_pattern=None,
                                 sort_mode="name", sort_reverse=False,
-                                rel_root=None, derive_root=False):
+                                rel_root=None, derive_root=False, overlay=None):
         """A virtual pane's listing: every path survives, none is read."""
         self.virtual_calls.append(list(paths))
         return {"ok": True, "files": list(paths),

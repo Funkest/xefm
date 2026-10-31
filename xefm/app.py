@@ -85,6 +85,8 @@ from xefm.connect_dialog import open_connect_server, run_connecting
 from xefm.input_dialog import show_input
 from xefm.choice_dialog import show_choice_dialog
 from xefm import favorites
+from xefm import attributes
+from xefm import layouts
 from xefm import tags
 from xefm import trash
 from xefm import netmount
@@ -1961,11 +1963,11 @@ class XeFMApp:
             on_drop_query=lambda i, paths, op: self._drop_effect("right", i, paths, op),
             on_nav=lambda step: self._on_nav_button("right", step),
         )
-        # Tag markers (#585): each pane reads the tags of the rows it draws on a
-        # worker, which flags a repaint through the pump when they land.
-        self._tags_dirty = False
-        for view in (self.left_view, self.right_view):
-            view.tag_cache = tags.TagCache(on_ready=self._on_tags_ready)
+        # Attribute values (#633) — tags, a layout's extra columns — are
+        # computed on workers, which flag a repaint through the pump when they
+        # land.
+        self._attrs_dirty = False
+        attributes.on_ready = self._on_attrs_ready
         # Same chrome inset as the bars: the log's surface fills its slot, its
         # text breathes in from the frame (BAR_PAD_PX on GUI, flush on the grid).
         self.log = LogView(max_lines=2000, auto_scroll=True, wrap=True, padding_px=BAR_PAD_PX)
@@ -2146,6 +2148,9 @@ class XeFMApp:
                                 image_decoders=loaded.image_decoders,
                                 lexers=loaded.lexers,
                                 menu_items=loaded.menu_items,
+                                attributes=loaded.attributes,
+                                layouts=loaded.layouts,
+                                extras=loaded.extras,
                                 scheme_overrides=loaded.scheme_overrides)
         if notice:
             self.log_info(notice)
@@ -2627,6 +2632,8 @@ class XeFMApp:
         pane['sort_mode'] = (saved_mode if sort_keys.is_known(saved_mode)
                              else pane['sort_mode'])
         pane['sort_reverse'] = state.get('sort_reverse', pane['sort_reverse'])
+        pane['layout'] = state.get('layout') if isinstance(state.get('layout'), str) else None
+        pane['extras'] = self._saved_extras(state.get('extras'))
         pane['filter_pattern'] = state.get('filter_pattern', pane['filter_pattern'])
 
     def _display_height(self) -> int:
@@ -2738,7 +2745,7 @@ class XeFMApp:
         captured = self._drain_captured_output()
         scans = self._pump_scans()
         trees = self._pump_xft()
-        tagged, self._tags_dirty = getattr(self, "_tags_dirty", False), False
+        tagged, self._attrs_dirty = getattr(self, "_attrs_dirty", False), False
         synced = self._pump_python_packages()
         updates = self._pump_extension_updates()
         fetched = self._pump_extension_fetch()
@@ -2770,9 +2777,9 @@ class XeFMApp:
                 getLogger("Main").error(f"Deferred call failed: {exc}")
         return ran
 
-    def _on_tags_ready(self) -> None:
-        """Worker thread: tags for drawn rows landed; ask for a repaint."""
-        self._tags_dirty = True
+    def _on_attrs_ready(self) -> None:
+        """Worker thread: attribute values landed; ask for a repaint."""
+        self._attrs_dirty = True
         self._wake_pump()
 
     #: Log-pane styles for captured streams. stdout leaves its color unset so it
@@ -2903,12 +2910,19 @@ class XeFMApp:
         filter_pattern = pane["filter_pattern"]
         sort_mode = pane["sort_mode"]
         sort_reverse = pane["sort_reverse"]
+        overlay = self._sort_overlay(pane)
 
         def worker() -> None:
             result = self.flm.compute_listing(
                 path, filter_pattern=filter_pattern,
                 sort_mode=sort_mode, sort_reverse=sort_reverse,
+                overlay=overlay,
             )
+            if result.get("ok"):
+                # An extra's 'when' may touch the filesystem (is this a Git
+                # working tree?), so it is asked here rather than on the UI
+                # thread.
+                result["extras_auto"] = layouts.extras_for(path)
             # drop_if_unchanged tracks keep_visible here: a re-list nobody
             # asked for is the case worth dropping. The re-sort path posts False.
             self._result_queue.put((pane_name, gen, result, on_ready,
@@ -3014,6 +3028,10 @@ class XeFMApp:
             # blanked by an in-flight navigation must install the result even when
             # it compares equal (an empty directory would otherwise match the
             # blank pane and leave it stuck "loading" forever).
+            if "extras_auto" in result and \
+                    result["extras_auto"] != pane.get("_extras_auto"):
+                pane["_extras_auto"] = result["extras_auto"]
+                applied = True
             if (drop_if_unchanged and not pane.get("loading")
                     and self._listing_unchanged(pane, result)):
                 # Nothing to redraw, but the entries are a fresher snapshot than
@@ -3622,6 +3640,7 @@ class XeFMApp:
         sort_reverse = pane["sort_reverse"]
         rel_root = virtual.get("root")
         derive_root = entering and rel_root is None
+        overlay = None if entering else self._sort_overlay(pane)
 
         def prepare(p: dict, result: dict) -> bool:
             if entering:
@@ -3654,7 +3673,7 @@ class XeFMApp:
             result = self.flm.compute_virtual_listing(
                 listed, filter_pattern=filter_pattern, sort_mode=sort_mode,
                 sort_reverse=sort_reverse, rel_root=rel_root,
-                derive_root=derive_root, **read)
+                derive_root=derive_root, overlay=overlay, **read)
             result["total"] = len(listed)
             result.update(extra)
             self._result_queue.put((pane_name, gen, result, on_ready,
@@ -3717,6 +3736,7 @@ class XeFMApp:
         sort_reverse = pane["sort_reverse"]
         virtual = pane.get("virtual")
         rel_root = virtual.get("root") if virtual else None
+        overlay = self._sort_overlay(pane)
 
         anchor = self._cursor_anchor(pane) if keep_cursor else None
 
@@ -3729,12 +3749,33 @@ class XeFMApp:
         def worker() -> None:
             result = self.flm.recompute_from_snapshot(
                 entries, filter_pattern=filter_pattern, sort_mode=sort_mode,
-                sort_reverse=sort_reverse, rel_root=rel_root)
+                sort_reverse=sort_reverse, rel_root=rel_root, overlay=overlay)
             self._result_queue.put((pane_name, gen, result, landed, True, False))
             self._wake_pump()
 
         threading.Thread(target=worker, name=f"xefm-sort-{pane_name}",
                          daemon=True).start()
+
+    def _sort_overlay(self, pane: dict):
+        """``(name, values, reverse)`` for the attribute sort put over
+        ``pane``'s own, or None.
+
+        An attribute sort holds for the directory it was chosen in, across
+        re-reads of it, and is dropped the moment the pane is somewhere else —
+        the pane's own sort mode, which it never replaced, applies again. The
+        values are what the pane already has (``AttributeStore.snapshot``): a
+        sort never waits for one, and a row without one goes last."""
+        spec = pane.get("sort_overlay")
+        if not spec:
+            return None
+        if spec["path"] != str(pane["path"]) or not attributes.is_known(spec["attr"]):
+            pane["sort_overlay"] = None
+            return None
+        entries = pane.get("_listing_entries") or ()
+        records = {str(p): a for p, a in entries}
+        values = attributes.store_of(pane).snapshot(
+            spec["attr"], [p for p, _a in entries], records)
+        return (spec["attr"], values, spec["reverse"])
 
     def _refresh(self, pane: dict, *, on_ready=None) -> None:
         """Re-list ``pane`` after a directory change: reset the cursor, record
@@ -3869,6 +3910,9 @@ class XeFMApp:
                 "menu": (self.menu_bar.open_menu, None),
                 "redraw": (lambda: None, True),
                 "reread": (self.reread, False),
+                "choose_layout": (self.choose_layout, False),
+                "choose_extras": (self.choose_extras, False),
+                "resolve_attribute": (self.resolve_attribute, False),
                 "choose_keymap": (self.choose_keymap, False),
                 # --- cursor ---
                 "cursor_up": (self._act_cursor_up, True),
@@ -4672,6 +4716,8 @@ class XeFMApp:
         for side in ("left", "right"):
             tabs = [{"path": str(t["path"]), "sort_mode": t["sort_mode"],
                      "sort_reverse": t["sort_reverse"],
+                     "layout": t.get("layout"),
+                     "extras": dict(t.get("extras") or {}),
                      "filter_pattern": t.get("filter_pattern", "")}
                     for t in self.pm.tabs[side]]
             self.state_manager.set_state(
@@ -4707,6 +4753,9 @@ class XeFMApp:
             if sort_keys.is_known(mode):
                 tab["sort_mode"] = mode
             tab["sort_reverse"] = bool(entry.get("sort_reverse", tab["sort_reverse"]))
+            layout = entry.get("layout")
+            tab["layout"] = layout if isinstance(layout, str) else None
+            tab["extras"] = self._saved_extras(entry.get("extras"))
             tab["filter_pattern"] = entry.get("filter_pattern", "") or ""
             tabs.append(tab)
         self.pm.tabs[side] = tabs
@@ -4737,22 +4786,31 @@ class XeFMApp:
         file_menu = Menu(
             MenuItem("Open", on_select=lambda: self._menu("open_item"),
                      enabled=has_files, shortcut=sc("open_item")),
-            MenuItem("View File", on_select=self.view_file,
-                     enabled=has_files, shortcut=sc("view_file")),
-            MenuItem("Edit File", on_select=self.edit_file,
-                     enabled=has_files, shortcut=sc("edit_file")),
+            # Which program opens it — XeFM's viewer, the text editor, the
+            # system's choice — one level down: Open itself (Enter) is the one
+            # reached for most, and File has to fit 23 rows with room for
+            # MENU_ITEMS.
+            MenuItem("Open With", submenu=Menu(
+                MenuItem("Viewer", on_select=self.view_file,
+                         enabled=has_files, shortcut=sc("view_file")),
+                MenuItem("Text Editor", on_select=self.edit_file,
+                         enabled=has_files, shortcut=sc("edit_file")),
+                MenuItem("Default App", on_select=self.open_with_os,
+                         enabled=has_files, shortcut=sc("open_with_os")),
+                title="Open With")),
             MenuItem("Details…", on_select=self.file_details, enabled=has_files,
                      shortcut=sc("file_details")),
-            MenuItem("Open with Default App", on_select=self.open_with_os,
-                     enabled=has_files, shortcut=sc("open_with_os")),
             MenuItem("Reveal in File Manager", on_select=self.reveal_in_os,
                      enabled=has_files, shortcut=sc("reveal_in_os")),
             SEPARATOR,
             MenuItem("New Folder…", on_select=self.create_directory, shortcut=sc("create_directory")),
             MenuItem("New File…", on_select=self.create_file, shortcut=sc("create_file")),
-            MenuItem("Rename…", on_select=self.rename, enabled=has_files, shortcut=sc("rename")),
-            MenuItem("Rename in Editor…", on_select=self.rename_in_editor,
-                     enabled=has_files, shortcut=sc("rename_in_editor")),
+            MenuItem("Rename", submenu=Menu(
+                MenuItem("Rename…", on_select=self.rename, enabled=has_files,
+                         shortcut=sc("rename")),
+                MenuItem("Rename in Editor…", on_select=self.rename_in_editor,
+                         enabled=has_files, shortcut=sc("rename_in_editor")),
+                title="Rename")),
             MenuItem("Duplicate", on_select=self.duplicate_files,
                      enabled=has_files, shortcut=sc("duplicate_files")),
             MenuItem("Copy to Other Pane", on_select=self.copy_files,
@@ -4767,11 +4825,12 @@ class XeFMApp:
                      enabled=has_files, shortcut=sc("delete_files")),
             MenuItem("Delete Permanently…", on_select=self.delete_permanently,
                      enabled=has_files, shortcut=sc("delete_permanently")),
-            SEPARATOR,
-            MenuItem("Create Archive…", on_select=self.create_archive,
-                     enabled=has_files, shortcut=sc("create_archive")),
-            MenuItem("Extract Archive…", on_select=self.extract_archive,
-                     enabled=has_files, shortcut=sc("extract_archive")),
+            MenuItem("Archive", submenu=Menu(
+                MenuItem("Create…", on_select=self.create_archive,
+                         enabled=has_files, shortcut=sc("create_archive")),
+                MenuItem("Extract…", on_select=self.extract_archive,
+                         enabled=has_files, shortcut=sc("extract_archive")),
+                title="Archive")),
             *self._user_menu_items("file"),
             SEPARATOR,
             MenuItem("Quit", on_select=self.confirm_quit, shortcut=sc("quit")),
@@ -4839,6 +4898,10 @@ class XeFMApp:
             # where Finder and the browsers open and close theirs: File is the
             # longest menu, and three more rows took it past the 23 rows an
             # 80x24 terminal has under the bar, so its pulldown covered the bar.
+            # Switching panes heads the group: it moves between the two
+            # panes as the tab items move within one.
+            MenuItem("Switch Pane", on_select=lambda: self._menu("switch_pane"),
+                     shortcut=sc("switch_pane")),
             MenuItem("New Tab", on_select=lambda: self._menu("new_tab"),
                      shortcut=sc("new_tab")),
             MenuItem("Open in New Tab", on_select=lambda: self._menu("open_in_new_tab"),
@@ -4870,6 +4933,10 @@ class XeFMApp:
             MenuItem("Command Palette…", on_select=self.show_command_palette,
                      shortcut=sc("command_palette")),
             SEPARATOR,
+            # The jobs list beside the longest job that lands in it.
+            MenuItem("Background Jobs…", on_select=self.show_jobs,
+                     enabled=lambda: bool(self.tasks.background_tasks()),
+                     shortcut=sc("jobs")),
             MenuItem("Find Similar Files…", on_select=self.find_similar,
                      shortcut=sc("find_similar")),
             MenuItem("External Programs…", on_select=self.show_programs, shortcut=sc("programs")),
@@ -4951,15 +5018,14 @@ class XeFMApp:
                      shortcut=sc("reread")),
             MenuItem("Show Hidden Files", on_select=lambda: self._menu("toggle_hidden"),
                      checked=lambda: self.flm.show_hidden, shortcut=sc("toggle_hidden")),
-            MenuItem("Reverse Sort", on_select=self._toggle_reverse,
-                     checked=lambda: self.active_pane()["sort_reverse"]),
+            MenuItem("Layout", submenu=self._layout_menu()),
+            MenuItem("Show", submenu=self._extras_menu()),
+            MenuItem("Resolve Attribute…", on_select=lambda: self._menu("resolve_attribute"),
+                     enabled=has_files, shortcut=sc("resolve_attribute")),
             MenuItem("Sort By", submenu=sort_menu),
             SEPARATOR,
-            MenuItem("Theme", submenu=self._theme_menu()),
-            MenuItem("Next Theme", on_select=lambda: self._menu("toggle_color_scheme"),
-                     shortcut=sc("toggle_color_scheme")),
+            MenuItem("Theme", submenu=self._theme_menu(sc)),
             SEPARATOR,
-            MenuItem("Switch Pane", on_select=lambda: self._menu("switch_pane"), shortcut=sc("switch_pane")),
             MenuItem("Quick View", on_select=lambda: self._menu("quick_view"),
                      checked=lambda: self._quick_view is not None,
                      shortcut=sc("quick_view")),
@@ -4969,10 +5035,6 @@ class XeFMApp:
                      checked=lambda: (self.active_pane().get("virtual") or {})
                      .get("kind") == "flat",
                      shortcut=sc("flat_view")),
-            SEPARATOR,
-            MenuItem("Background Jobs…", on_select=self.show_jobs,
-                     enabled=lambda: bool(self.tasks.background_tasks()),
-                     shortcut=sc("jobs")),
             title="View",
         )
         help_menu = Menu(
@@ -5000,7 +5062,8 @@ class XeFMApp:
     def _user_menu_items(self, menu: str) -> list:
         """The config's and the extensions' ``MENU_ITEMS`` for ``menu``
         (#632), as a group of their own behind a separator — nothing when
-        there are none. Each runs its action as a key bound to it would, and
+        there are none, and a Custom submenu when there are more than
+        ``_USER_MENU_INLINE``. Each runs its action as a key bound to it would, and
         shows the key when one is."""
         items = []
         for entry in user_menu_items(menu):
@@ -5008,7 +5071,14 @@ class XeFMApp:
                 entry.label, on_select=lambda name=entry.action: self._menu(name),
                 enabled=self._menu_condition(entry.when),
                 shortcut=self._menu_shortcut(entry.action)))
+        if len(items) > self._USER_MENU_INLINE:
+            # More than a few would push the menu past what a terminal shows
+            # (File is near its 23 rows), so they gather one level down.
+            items = [MenuItem("Custom", submenu=Menu(*items, title="Custom"))]
         return [SEPARATOR, *items] if items else []
+
+    #: How many MENU_ITEMS a menu lists inline before they go under Custom ▸.
+    _USER_MENU_INLINE = 3
 
     def _menu_condition(self, when: str):
         """A ``MENU_ITEMS`` ``when`` as the predicate a MenuItem re-evaluates
@@ -5619,10 +5689,172 @@ class XeFMApp:
         self.panel.dispatch_event(event)
         return True
 
+    def choose_layout(self) -> None:
+        """View > Layout…: how the active pane presents its rows (#756) — a
+        matter of taste and width, chosen per tab and kept across sessions.
+        What the folder adds (Git status, tags) is :meth:`choose_extras`."""
+        pane = self.active_pane()
+        rows = [(layout.name, layout.label) for layout in layouts.all_layouts()]
+
+        def chosen(value) -> None:
+            if value is not None:
+                self._set_layout(pane, value)
+            self.panel.render()
+
+        show_choice_dialog(self.panel, "Layout", rows,
+                           current=layouts.layout_of(pane).name, on_result=chosen)
+        self.panel.render()
+
+    def _set_layout(self, pane: dict, name: str) -> None:
+        pane["layout"] = name
+        self.log_info(f"Layout: {layouts.layout_of(pane).label}")
+        self.panel.render()
+
+    def _layout_menu(self) -> Menu:
+        """View > Layout ▸ — the same choice as :meth:`choose_layout`, rebuilt
+        on open so a config reload's layouts appear in it."""
+        def is_current(name):
+            return lambda: layouts.layout_of(self.active_pane()).name == name
+        return Menu(*[
+            MenuItem(layout.label,
+                     on_select=(lambda n=layout.name: self._set_layout(self.active_pane(), n)),
+                     checked=is_current(layout.name))
+            for layout in layouts.all_layouts()], title="Layout")
+
+    @staticmethod
+    def _saved_extras(saved) -> dict:
+        """A tab's saved extra states, keeping only well-formed ones. A state
+        for an extra the config no longer has is kept: it applies again if the
+        extra comes back."""
+        if not isinstance(saved, dict):
+            return {}
+        return {k: v for k, v in saved.items()
+                if isinstance(k, str) and v in ("on", "off")}
+
+    def _set_extra(self, pane: dict, name: str, state: str) -> None:
+        """Auto / On / Off for one extra in ``pane``'s tab, as sort and filter
+        are the tab's."""
+        extras = dict(pane.get("extras") or {})
+        if state == "auto":
+            extras.pop(name, None)
+        else:
+            extras[name] = state
+        pane["extras"] = extras
+        extra = layouts.get_extra(name)
+        shown = extra in layouts.active_extras(pane)
+        self.log_info(f"{extra.label if extra else name}: {state.capitalize()}"
+                      f"{' (shown here)' if shown else ' (not shown here)'}")
+        self.panel.render()
+
+    def _extras_menu(self) -> Menu:
+        """View > Show ▸ — one submenu per extra with Auto / On / Off, for the
+        active pane's tab."""
+        def item(extra):
+            def is_state(state):
+                return lambda: layouts.extra_state(self.active_pane(), extra.name) == state
+            return MenuItem(extra.label, submenu=Menu(*[
+                MenuItem(state.capitalize(),
+                         on_select=(lambda st=state: self._set_extra(
+                             self.active_pane(), extra.name, st)),
+                         checked=is_state(state))
+                for state in layouts.EXTRA_STATES], title=extra.label))
+        return Menu(*[item(e) for e in layouts.all_extras()], title="Show")
+
+    def choose_extras(self) -> None:
+        """Pick an extra, then Auto / On / Off for it in this tab — the same
+        choice as View > Show ▸, from the keyboard."""
+        pane = self.active_pane()
+        active = layouts.active_extras(pane)
+
+        def label(extra) -> str:
+            state = layouts.extra_state(pane, extra.name).capitalize()
+            return f"{extra.label} — {state}{', shown here' if extra in active else ''}"
+
+        rows = [(e.name, label(e)) for e in layouts.all_extras()]
+
+        def picked(name) -> None:
+            if name is None:
+                self.panel.render()
+                return
+            states = [(st, st.capitalize()) for st in layouts.EXTRA_STATES]
+            show_choice_dialog(
+                self.panel, layouts.get_extra(name).label, states,
+                current=layouts.extra_state(pane, name),
+                on_result=lambda st: (self._set_extra(pane, name, st)
+                                      if st else self.panel.render()))
+            self.panel.render()
+
+        show_choice_dialog(self.panel, "Show", rows, on_result=picked)
+        self.panel.render()
+
+    def resolve_attribute(self) -> None:
+        """Resolve an attribute the active pane shows that is worked out only
+        when asked — a folder's total size, an ``ATTRIBUTES`` entry with
+        ``'compute': 'on_request'`` — for the selection, or the item under the
+        cursor. A dialog names the targets and lists those values by name,
+        even when there is one, so what is about to run is never a guess.
+        Leaving the folder stops it."""
+        pane = self.active_pane()
+        targets = self._selected_or_focused(pane)
+        names = self._resolvable(pane)
+        if not names:
+            self.log_info("Nothing to resolve: this pane shows no attribute "
+                          "that is worked out on request")
+            return
+        if not targets:
+            self.log_info("Nothing to resolve: no item selected or under the cursor")
+            return
+        what = (f"{len(targets)} selected item(s)" if pane["selected_files"]
+                else f"'{name_key.compare_name(targets[0])}'")
+        rows = [(n, attributes.get(n).label) for n in names]
+
+        def chosen(name) -> None:
+            if name is not None:
+                self._resolve(pane, name, targets)
+            self.panel.render()
+
+        show_choice_dialog(self.panel, f"Resolve Attribute — {what}", rows,
+                           on_result=chosen)
+        self.panel.render()
+
+    @staticmethod
+    def _resolvable(pane: dict) -> list:
+        """The on-request attributes ``pane`` shows, in the order it shows them."""
+        names = []
+        layout = layouts.effective(pane)
+        for col in layout.columns:
+            for n in [col.attr, *(m.attr for m in col.markers)]:
+                attr = attributes.get(n)
+                if attr is not None and attr.compute == "on_request" and n not in names:
+                    names.append(n)
+        return names
+
+    def _resolve(self, pane: dict, name: str, targets: list) -> None:
+        """Run one on-request attribute over ``targets`` in the background,
+        logging the start and the end."""
+        attr = attributes.get(name)
+        records = {str(p): a for p, a in pane.get("_listing_entries") or ()}
+        if name == "total_size":
+            # A file's total is its size, already shown: only folders count.
+            targets = [p for p in targets if records.get(str(p), {}).get("is_dir")]
+            if not targets:
+                self.log_info("Total size: no folder among the items")
+                return
+        self.log_info(f"Resolving {attr.label} for {len(targets)} item(s)…")
+
+        def done(count: int, cancelled: bool) -> None:
+            self._call_later(lambda: self.log_info(
+                f"{attr.label}: {'stopped' if cancelled else f'{count} resolved'}"))
+
+        attributes.store_of(pane).request(name, targets, records, on_done=done)
+
     def reread(self) -> None:
         """Read both panes' directories again — Total Commander's F2. File
         monitoring usually makes it unnecessary; it is for a location nothing
-        watches (a network share, a remote) and for a listing in doubt."""
+        watches (a network share, a remote) and for a listing in doubt. Every
+        attribute value is asked for again too (#633)."""
+        attributes.store_of(self.pm.left_pane).clear()
+        attributes.store_of(self.pm.right_pane).clear()
         self._relist(self.pm.left_pane)
         self._relist(self.pm.right_pane)
         self.log_info("Re-read both panes")
@@ -6010,25 +6242,71 @@ class XeFMApp:
             MenuItem(label, on_select=(lambda m=mode: self._set_sort(m)),
                      checked=(lambda m=mode: self.active_pane()["sort_mode"] == m))
             for mode, label, _hotkey in sort_keys.rows()
-        ], title="Sort By")
+        ], SEPARATOR,
+            MenuItem("Reverse Sort", on_select=self._toggle_reverse,
+                     checked=lambda: self.active_pane()["sort_reverse"]),
+            title="Sort By")
 
     def show_sort_menu(self) -> None:
         """Open the sort dialog over the active pane (the 's' key): Up/Down pick
         the key, Left/Right the order, F/E/S/T apply a key directly, with an
         example of the resulting order at the bottom (issue #237)."""
         pane = self.active_pane()
+        overlay = self._sort_overlay(pane)
 
         def on_result(result) -> None:
             if result is not None:
-                pane["sort_mode"], pane["sort_reverse"] = result
+                mode, reverse = result
+                if mode.startswith(self._ATTR_SORT):
+                    pane["sort_overlay"] = {"attr": mode[len(self._ATTR_SORT):],
+                                            "reverse": reverse,
+                                            "path": str(pane["path"])}
+                else:
+                    pane["sort_mode"], pane["sort_reverse"] = mode, reverse
+                    pane["sort_overlay"] = None
                 self._resort(pane)
                 self.log_info(f"Sort: {self.flm.get_sort_description(pane)}")
             self.panel.render()
 
-        show_sort_dialog(self.panel, mode=pane["sort_mode"],
-                         reverse=pane["sort_reverse"],
+        if overlay is not None:
+            mode, reverse = self._ATTR_SORT + overlay[0], overlay[2]
+        else:
+            mode, reverse = pane["sort_mode"], pane["sort_reverse"]
+        show_sort_dialog(self.panel, mode=mode, reverse=reverse,
+                         extra=self._attribute_sort_rows(pane),
                          region=self._active_pane_region(), on_result=on_result)
         self.panel.render()
+
+    #: The sort dialog's mode prefix for an attribute sort (``attr:git.status``).
+    _ATTR_SORT = "attr:"
+
+    def _attribute_sort_rows(self, pane: dict) -> list:
+        """The sort dialog's rows for what the pane shows: one per column of
+        its layout, and per attribute of its active extras, that is not already
+        a sort key — offered once every row has its value (an on-request one
+        at once — rows not computed go last)."""
+        layout = layouts.layout_of(pane)
+        store = attributes.store_of(pane)
+        entries = pane.get("_listing_entries") or ()
+        records = {str(p): a for p, a in entries}
+        files = pane.get("files") or []
+        names = [c.attr for c in layout.columns]
+        for extra in layouts.active_extras(pane):
+            names += [c.column.attr for c in extra.columns]
+            names += [m.marker.attr for m in extra.markers]
+        rows, seen = [], set()
+        for name in names:
+            attr = attributes.get(name)
+            if attr is None or name in seen or name in attributes.SORT_MODE_OF:
+                continue
+            seen.add(name)
+            ready = store.ready(name, files, records)
+            note = ("this folder only" if ready
+                    else "still computing — this folder only")
+            if attr.compute == "on_request":
+                note = "this folder only — rows not calculated go last"
+            rows.append((self._ATTR_SORT + name, attr.label, ready, note))
+        return rows
 
     #: Keyboard nudge for the pane boundary / log height (fraction of the split),
     #: and the page size (lines) for keyboard log scrolling.
@@ -6043,15 +6321,19 @@ class XeFMApp:
         its own base-unit min-size clamp; this keeps the keyboard path safe too)."""
         splitter.fraction = max(0.1, min(0.9, splitter.fraction + delta))
 
-    def _theme_menu(self) -> Menu:
-        """The theme picker, shared by the View menu's 'Theme' submenu. Lists every
-        theme — built-in and user-registered (``config.THEMES``) — with a live
-        ``checked`` predicate marking the active one (mirrors ``_sort_menu``)."""
-        return Menu(*[
-            MenuItem(name, on_select=(lambda i=i: self._select_theme(i)),
-                     checked=(lambda i=i: self._theme_index == i))
-            for i, (name, _theme) in enumerate(self.themes)
-        ], title="Theme")
+    def _theme_menu(self, sc=lambda _name: None) -> Menu:
+        """The View menu's 'Theme' submenu: Next Theme first, then every theme
+        — built-in and user-registered (``config.THEMES``) — with a live
+        ``checked`` predicate marking the active one (mirrors ``_sort_menu``).
+        ``sc`` gives an action's shortcut label."""
+        return Menu(
+            MenuItem("Next Theme", on_select=lambda: self._menu("toggle_color_scheme"),
+                     shortcut=sc("toggle_color_scheme")),
+            SEPARATOR,
+            *[MenuItem(name, on_select=(lambda i=i: self._select_theme(i)),
+                       checked=(lambda i=i: self._theme_index == i))
+              for i, (name, _theme) in enumerate(self.themes)],
+            title="Theme")
 
     def _apply_theme(self, index: int) -> None:
         """Switch the active palette. One assignment recolors every widget: the
@@ -6110,6 +6392,7 @@ class XeFMApp:
         same mode again toggles the sort direction.
         The current reverse setting is kept when switching to a new mode."""
         pane = self.active_pane()
+        pane["sort_overlay"] = None
         if pane["sort_mode"] == mode:
             pane["sort_reverse"] = not pane["sort_reverse"]
         else:
@@ -6119,6 +6402,7 @@ class XeFMApp:
 
     def _set_sort(self, mode: str) -> None:
         pane = self.active_pane()
+        pane["sort_overlay"] = None
         pane["sort_mode"] = mode
         self._resort(pane)
         self.log_info(f"Sort: {self.flm.get_sort_description(pane)}")
@@ -6126,6 +6410,11 @@ class XeFMApp:
 
     def _toggle_reverse(self) -> None:
         pane = self.active_pane()
+        if self._sort_overlay(pane) is not None:
+            pane["sort_overlay"]["reverse"] = not pane["sort_overlay"]["reverse"]
+            self._resort(pane)
+            self.panel.render()
+            return
         pane["sort_reverse"] = not pane["sort_reverse"]
         self._resort(pane)
         self.log_info(f"Sort: {self.flm.get_sort_description(pane)}")
@@ -6578,12 +6867,10 @@ class XeFMApp:
             if tag.name.casefold() not in seen:
                 seen.add(tag.name.casefold())
                 out.append(tag)
-        for view in (self.left_view, self.right_view):
-            cache = getattr(view, "tag_cache", None)
-            for key, tag in list(cache.seen.items()) if cache else []:
-                if key not in seen:
-                    seen.add(key)
-                    out.append(tag)
+        for key, tag in list(tags.SEEN.items()):
+            if key not in seen:
+                seen.add(key)
+                out.append(tag)
         return out
 
     def _remember_tags(self, applied: list) -> None:
@@ -6599,9 +6886,7 @@ class XeFMApp:
                  if not (isinstance(i, list) and i
                          and str(i[0]).casefold() == tag.name.casefold())]
         self.state_manager.set_state("tags.known", known)
-        for view in (self.left_view, self.right_view):
-            if getattr(view, "tag_cache", None):
-                view.tag_cache.seen.pop(tag.name.casefold(), None)
+        tags.SEEN.pop(tag.name.casefold(), None)
         self.log_info(f"Forgot tag {tag.name} (files keep it)")
         return True
 
@@ -6671,9 +6956,9 @@ class XeFMApp:
             for line in res.get("failed", []):
                 self.log_info(f"Tags not changed: {line}")
             self.log_info(message + f" ({res.get('changed', 0)} item(s))")
-            for view in (self.left_view, self.right_view):
-                if getattr(view, "tag_cache", None):
-                    view.tag_cache.forget(targets)
+            for side in ("left", "right"):
+                for tab in self.pm.tabs[side]:
+                    attributes.store_of(tab).forget(targets, "tags")
             self.panel.render()
 
         if store.cheap:
@@ -11357,6 +11642,7 @@ class XeFMApp:
         without a panel to push it onto."""
         from xefm.const import VERSION
         lines = ["# XeFM", f"Version {VERSION}", ""]
+        lines += self._help_markers_section()
         for title, entries in self._HELP_SECTIONS + self._user_help_sections():
             rows = self._help_entries(entries)
             if not rows:
@@ -11379,6 +11665,45 @@ class XeFMApp:
             lines.append("")
         lines.append(self._archive_help_section())
         return "\n".join(lines)
+
+    def _help_markers_section(self) -> list[str]:
+        """The legend (#789): what the marks and extra columns in the active
+        pane mean, first in Help because they are what is on screen. Only the
+        extras active in this tab; nothing at all when there are none.
+
+        Each mark is the extra's own format run on each value it declares, so
+        the legend shows what the pane draws. Help is Markdown, which has no
+        color, so a mark's color is named beside it."""
+        from xefm.user_api import EntryInfo   # imported here: user_api imports us
+        sample = lambda: EntryInfo(Path("."))   # noqa: E731
+        if getattr(self, "pm", None) is None:
+            return []                       # built without panes (tests)
+        out = []
+        for extra in layouts.active_extras(self.active_pane()):
+            rows = layouts.glyphs(extra, sample)
+            columns = [attributes.get(c.column.attr) for c in extra.columns]
+            columns = [a.label for a in columns if a is not None]
+            if not rows and not columns:
+                continue
+            place = ", ".join(
+                f"{m.marker.side} the {'name' if m.on == 'name' else m.on}"
+                for m in extra.markers)
+            out.append(f"**{extra.label}**" + (f" — marks {place}" if place else ""))
+            out.append("")
+            # A list, not a table: kept short, so the key list's links are
+            # still on the first screen, where Tab and Shift-Tab start.
+            for cells, meaning in rows:
+                mark = "".join(c.text for c in cells)
+                colors = {c.color for c in cells if c.color is not None}
+                color = f" {', '.join(sorted(map(str, colors)))}" if colors else ""
+                out.append(f"- `{mark}`{color} — {meaning}")
+            if rows:
+                out.append("")
+            if columns:
+                out += [f"Column: {', '.join(columns)}", ""]
+        if not out:
+            return []
+        return ["## Markers in this pane", ""] + out
 
     def _archive_help_section(self) -> str:
         """The archive formats *this run* supports, as a closing help section.
@@ -11898,10 +12223,21 @@ class XeFMApp:
             self._ask_keymap_preset()
         else:
             self._maybe_show_startup_tip()
+        self._layout_refresh_tick(first=True)
         try:
             self.backend.run_event_loop(self.on_event)
         finally:
             self._restore_streams()
+
+    def _layout_refresh_tick(self, first: bool = False) -> None:
+        """Repaint while a pane draws a column that goes stale on its own — a
+        relative time ("5 min ago") — at the shortest interval one asked for;
+        otherwise just look again later."""
+        due = [v.refresh_interval for v in (self.left_view, self.right_view)
+               if v.refresh_interval]
+        if due and not first:
+            self.panel.render()
+        self.panel.call_later(min(due) if due else 30.0, self._layout_refresh_tick)
 
     def _restore_streams(self) -> None:
         """Put the real stdout/stderr back so anything printed after the event

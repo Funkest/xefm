@@ -109,7 +109,7 @@ to `TaskManager.submit`.
   elided and the marks are kept. The segment's rect is kept as `_jobs_hit`,
   and a click there opens `show_jobs`, the way `_clip_hit` opens the
   clipboard.
-- `show_jobs` (action `jobs`, `Ctrl-G`, View → Background Jobs…) is a
+- `show_jobs` (action `jobs`, `Ctrl-G`, Tools → Background Jobs…) is a
   `ChoiceDialog` of `background_tasks()`. Each row is the title,
   `Task.detail` (set by `FileOperationService` through
   `describe_operation`: "12 items  ~/photos → s3://bucket", "3 items in

@@ -258,23 +258,34 @@ class Carry(_Tmp):
 
 
 class Cache(unittest.TestCase):
-    def test_reads_off_thread_then_answers(self):
-        ready = threading.Event()
-        cache = tags.TagCache(on_ready=ready.set)
-        files = ["x"]
-        with patch.object(tags, "store_for", return_value=tags.XdgTags()), \
-             patch.object(tags, "read", return_value=[Tag("Work")]):
-            self.assertIsNone(cache.get(files, "/a"))
-            self.assertTrue(ready.wait(2))
-            self.assertEqual(cache.get(files, "/a"), [Tag("Work")])
-        self.assertIn("work", cache.seen)
+    """The file list reads tags as the ``tags`` attribute (xefm.attributes)."""
 
-    def test_a_new_listing_starts_afresh_and_costly_stores_are_skipped(self):
-        cache = tags.TagCache()
+    def test_reads_off_thread_then_answers(self):
+        from xefm import attributes
+        from xefm.path import Path
+        ready = threading.Event()
+        attributes.on_ready = ready.set
+        try:
+            store = attributes.AttributeStore()
+            path = Path("/a")
+            files = [path]
+            records = {"/a": {"is_dir": False, "ok": True, "size": 1, "mtime": 1.0}}
+            with patch.object(tags, "store_for", return_value=tags.XdgTags()), \
+                 patch.object(tags, "read", return_value=[Tag("Work")]):
+                store.sync(files, records, "/", {"tags"})
+                self.assertTrue(ready.wait(2))
+                self.assertEqual(store.get(path, records["/a"], "tags"), [Tag("Work")])
+            self.assertIn("work", tags.SEEN)
+        finally:
+            attributes.on_ready = None
+
+    def test_costly_stores_are_skipped(self):
+        from xefm import attributes
+        attr = attributes.get("tags")
         with patch.object(tags, "store_for", return_value=tags.S3Tags()):
-            self.assertEqual(cache.get(["x"], "s3://b/k"), [])
+            self.assertFalse(attr.applies_to("s3://b/k"))
         with patch.object(tags, "store_for", return_value=None):
-            self.assertEqual(cache.get(["y"], "/a"), [])
+            self.assertFalse(attr.applies_to("/a"))
 
 
 class AppIntegration(_Tmp):

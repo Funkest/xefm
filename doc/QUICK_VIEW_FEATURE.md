@@ -46,5 +46,5 @@ In a terminal that can't draw pictures, a picture shows only its details.
 ## See also
 
 - [Text Viewer](TEXT_VIEWER_FEATURE.md) and
-  [Image Viewer](IMAGE_VIEWER_FEATURE.md): the full viewers (**File → View File**)
+  [Image Viewer](IMAGE_VIEWER_FEATURE.md): the full viewers (**File → Open With ▸ Viewer**)
 - [File Details](FILE_DETAILS_FEATURE.md): size on disk and more (**File → Details…**)

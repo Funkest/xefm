@@ -25,6 +25,7 @@ quality there:
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Callable
 
 try:
@@ -39,6 +40,8 @@ from puikit.font import Font
 from puikit.text import elide
 from puikit.widgets.base import Widget
 
+from xefm import attributes
+from xefm import layouts
 from xefm import tags as tags_mod
 from xefm import name_key
 from xefm.dir_scan import is_hidden_path
@@ -48,12 +51,10 @@ from xefm.dir_scan import is_hidden_path
 #: proportional UI font on GUI; on TUI everything is the one grid font anyway.)
 MONO = Font(monospace=True)
 
-#: Base-unit width reserved at the right edge for the size column.
-SIZE_COL = 9
 #: Gap (base units) between adjacent columns (name|size, size|date).
 COL_GAP = 1
-#: Smallest name column we'll allow before dropping the date column on a narrow
-#: pane — the datetime is hidden when the pane gets tight.
+#: Smallest name column we'll allow before dropping a column with a priority
+#: on a narrow pane — the default layout's date goes first.
 MIN_NAME_W = 12
 #: Left/right gutter (base units) reserved on a **grid** (TUI) for the cursor
 #: cue's own two columns — the ``[`` ``]`` brackets where those are the cue, and
@@ -255,10 +256,22 @@ def _dim_ink(color, bg, amount: float):
     return color if amount <= 0.0 else _mix(color, bg, amount)
 
 
-#: The tag marker and how many a row shows before the name runs out of room.
-_TAG_DOT = "●"
-_MAX_TAG_DOTS = 3
+#: Ink for the color names a format may use — the Finder tag colors.
 _TAG_RGB = tags_mod.RGB
+
+
+class _Placed:
+    """One column of a layout as placed for this draw (``FilePane._plan``)."""
+    __slots__ = ("col", "kind", "w", "resolved", "attr", "markers", "x")
+
+    def __init__(self, col, kind, w, resolved, attr, markers):
+        self.col = col
+        self.kind = kind          # "name" | "ext" | "value"
+        self.w = w
+        self.resolved = resolved
+        self.attr = attr
+        self.markers = markers    # [(Marker, Attribute, Resolved)]
+        self.x = 0.0
 
 
 class FilePane(Widget):
@@ -354,9 +367,13 @@ class FilePane(Widget):
         #: (refreshed/sorted/filtered lists are fresh objects), so we measure the
         #: whole pane once per listing rather than every frame.
         self._ext_cache: tuple[int, float] = (0, 0.0)
-        #: The app's :class:`xefm.tags.TagCache` for this pane, or None for no
-        #: tag markers. Rows show their tags as colored dots after the name.
-        self.tag_cache = None
+        #: ``(id(listing entries), {str(path): record})`` — see ``_records``.
+        self._records_cache: tuple = (None, {})
+        #: ``(key, measurements)`` — see ``_measure``.
+        self._measure_cache: tuple = (None, None)
+        #: The shortest repaint interval a drawn column asked for (a relative
+        #: time goes stale), or None; the app repaints on it.
+        self.refresh_interval: float | None = None
 
     # --- helpers -------------------------------------------------------------
 
@@ -475,20 +492,6 @@ class FilePane(Widget):
         return (spec.get("color") or theme.accent,
                 float(spec.get("arm", PANE_FRAME_ARM)),
                 float(spec.get("thickness", PANE_FRAME_THICKNESS)))
-
-    def _date_width(self) -> int:
-        """Character width of the date column, from the first dated entry.
-
-        ``xefm.file_list_manager`` formats every entry in a pane with the same
-        ``config.DATE_FORMAT`` (short ``YY-MM-DD HH:MM`` = 14, full
-        ``YYYY-MM-DD HH:MM:SS`` = 19), so one sample gives the column width.
-        Returns 0 when nothing carries a date (so the column is dropped).
-        """
-        for info in self.pane.get("file_info", {}).values():
-            date_str = info.get("date_str")
-            if date_str:
-                return len(date_str)
-        return 0
 
     def _display_name(self, entry) -> str:
         """The text shown in the name column. Normally the entry's basename; on a
@@ -675,27 +678,18 @@ class FilePane(Widget):
         def measure_mono(s: str) -> float:
             return ctx.measure_text(s, Style(font=MONO))
 
-        # Columns, left to right: gutter | basename | ext | size | date. The
-        # extension column sits between the name and size; it is
-        # dropped when the pane has no splittable extensions.
-        ext_w = self._ext_width(measure)
-        ext_block = (COL_GAP + ext_w) if ext_w > 0 else 0.0
-
-        # Date column (right of size), shown only while the name still has room to
-        # breathe.
-        date_w = self._date_width()
-        name_if_dated = content_right - content_left - SIZE_COL - date_w - COL_GAP * 2 - ext_block
-        show_date = date_w > 0 and name_if_dated >= MIN_NAME_W
-        tail = SIZE_COL + COL_GAP + (date_w + COL_GAP if show_date else 0)
-
-        # Fractional name width / ext origin so the extension column lands at the
-        # exact pixel after the (proportional) name, not snapped to the char grid.
-        # (Whole-unit backends still snap on draw, so the TUI stays grid-aligned.)
-        name_w = max(1.0, content_right - content_left - ext_block - tail)
-        ext_x = content_left + name_w + COL_GAP
-        # Right edges of the size / date columns.
-        date_right = content_right
-        size_right = (content_right - date_w - COL_GAP) if show_date else content_right
+        # The columns come from the pane's layout (xefm.layouts). The store is
+        # brought up to this listing first, so an automatic attribute the
+        # layout draws starts computing for every row the moment it is shown.
+        layout = layouts.effective(self.pane)
+        records = self._records()
+        store = attributes.store_of(self.pane)
+        store.sync(files, records, self.pane.get("path"), layout.attributes())
+        measured = self._measure(layout, files, records, store, measure, measure_mono)
+        plan = self._plan(layout, content_left, content_right, measure, measured)
+        self.refresh_interval = min(
+            (r.refresh for p in plan for r in [p.resolved, *(m[2] for m in p.markers)]
+             if r is not None and r.refresh), default=None)
         selected = self.pane["selected_files"]
 
         first = int(self.offset)
@@ -709,10 +703,9 @@ class FilePane(Widget):
             if i >= 0:
                 entry = files[i]
                 self._draw_row(ctx, my + ry, entry, i == cursor, str(entry) in selected,
-                               i in self.search_matches, grid, ruled,
-                               content_left, name_w, ext_x, ext_w, size_right, show_date,
-                               date_right, content_right, band_left, band_right,
-                               measure, measure_mono)
+                               i in self.search_matches, grid, ruled, plan,
+                               records, store, content_left, content_right,
+                               band_left, band_right, measure, measure_mono)
             row += 1
 
         self._bar = None
@@ -746,37 +739,226 @@ class FilePane(Widget):
             ctx.draw_corner_brackets(ctx.size_units[0], ctx.size_units[1],
                                      Style(fg=color), arm=arm, thickness=thickness)
 
+    def _records(self) -> dict:
+        """``{str(path): record}`` — the listing's own attribute records, what
+        a synchronous attribute and a format read. Rebuilt once per listing."""
+        entries = self.pane.get("_listing_entries")
+        if entries is None:
+            return {}
+        if self._records_cache[0] != id(entries):
+            self._records_cache = (id(entries), {str(p): a for p, a in entries})
+        return self._records_cache[1]
+
+    def _measure(self, layout, files, records, store, measure, measure_mono) -> dict:
+        """The widest value each extra's column has in the current listing —
+        what keeps a row tight when extras are sparse: an extra's column is
+        only as wide as what it shows here, and absent when it shows nothing
+        (#756). Recomputed only when the listing, its values
+        (``store.version``) or the layout change. Markers reserve nothing, so
+        they are not measured."""
+        key = (id(files), store.version, layout, id(records), measure(" "))
+        if self._measure_cache[0] == key:
+            return self._measure_cache[1]
+        values: dict = {}
+        cols = []
+        for ci, col in enumerate(layout.columns):
+            attr = attributes.get(col.attr)
+            if attr is not None and col.extra is not None:
+                cols.append((ci, col, attr, layouts.resolve_format(
+                    col.format, attr, self.config, width=col.width, align=col.align)))
+        if cols:
+            for path in files:
+                record = records.get(str(path)) or {"is_dir": False, "ok": True}
+                value_of, row_for, entry_factory = self._row_access(path, record, store)
+                for ci, col, attr, resolved in cols:
+                    cells = layouts.render(resolved, value_of(col.attr),
+                                           row_for(attr), entry_factory)
+                    text_measure = measure_mono if resolved.mono else measure
+                    w = sum(text_measure(c.text) for c in cells)
+                    if w > 0:
+                        values[ci] = max(values.get(ci, 0.0), w)
+        result = {"values": values}
+        self._measure_cache = (key, result)
+        return result
+
+    def _resolved_markers(self, col) -> list:
+        out = []
+        for m in col.markers:
+            m_attr = attributes.get(m.attr)
+            if m_attr is not None:
+                out.append((m, m_attr, layouts.resolve_format(m.format, m_attr, self.config)))
+        return out
+
+    def _row_access(self, entry, record, store):
+        """The three things a row's formats need: a value by attribute name, a
+        built-in format's view of the row, and the row as an ``EntryInfo`` for
+        a format of the user's own (built only if one asks)."""
+        is_dir = bool(record.get("is_dir"))
+
+        def value_of(attr_name):
+            return store.get(entry, record, attr_name)
+
+        def row_for(attr):
+            return layouts.Row(is_dir=is_dir, ok=bool(record.get("ok", True)), attr=attr)
+
+        def entry_factory():
+            from xefm.user_api import EntryInfo   # user_api imports the pane's modules
+            return EntryInfo._from_attrs(entry, record)
+
+        return value_of, row_for, entry_factory
+
+    def _plan(self, layout, content_left, content_right, measure, measured) -> list:
+        """Place ``layout``'s columns across ``[content_left, content_right)``.
+
+        Every column but the name has a fixed width — its format's, the one
+        the layout gave it, or for an extra's column its widest value in this
+        listing (none: the column is left out). Markers take no room of their
+        own: on each row they sit beside the text they mark, and that text
+        gives way. The name takes what is left. While that is under
+        ``MIN_NAME_W``, the column with the lowest priority goes (the rightmost
+        of a tie); a column with no priority stays. That is the rule the date
+        column has always followed, stated for every column."""
+        values = measured["values"]
+        placed = []
+        for ci, col in enumerate(layout.columns):
+            attr = attributes.get(col.attr)
+            if attr is None:
+                continue
+            markers = self._resolved_markers(col)
+            if col.attr == "name":
+                placed.append(_Placed(col, "name", 0.0, None, attr, markers))
+                continue
+            if col.attr == "ext":
+                w = self._ext_width(measure)
+                if w > 0:
+                    placed.append(_Placed(col, "ext", w, None, attr, markers))
+                continue
+            resolved = layouts.resolve_format(col.format, attr, self.config,
+                                              width=col.width, align=col.align,
+                                              refresh=col.refresh)
+            if col.extra is not None:
+                if ci not in values:
+                    continue        # nothing to show in this listing
+                if col.width is None:
+                    resolved = replace(resolved, width=values[ci])
+            placed.append(_Placed(col, "value", resolved.width, resolved, attr, markers))
+
+        avail = content_right - content_left
+
+        def name_room() -> float:
+            fixed = sum(p.w for p in placed if p.kind != "name")
+            return avail - fixed - COL_GAP * (len(placed) - 1)
+
+        while name_room() < MIN_NAME_W:
+            droppable = [p for p in placed if p.col.priority is not None]
+            if not droppable:
+                break
+            placed.remove(min(droppable, key=lambda p: (p.col.priority, -placed.index(p))))
+        # Fractional name width so the next column lands at the exact pixel after
+        # the (proportional) name, not snapped to the char grid. (Whole-unit
+        # backends still snap on draw, so the TUI stays grid-aligned.)
+        name_w = max(1.0, name_room())
+        x = content_left
+        for p in placed:
+            if p.kind == "name":
+                p.w = name_w
+            p.x = x
+            x += p.w + COL_GAP
+        return placed
+
+    def _cell_fg(self, ctx, cell, base, dim, eff_bg, default_fg):
+        """A cell's ink: its color role or name, washed and floored the way the
+        tag dots always were, or the column's own ink when it names none."""
+        color = cell.color
+        if color is None:
+            return default_fg
+        if isinstance(color, (tuple, list)):
+            rgb = tuple(color)
+        else:
+            theme = ctx.theme
+            rgb = {"muted": theme.muted_text, "text": theme.text,
+                   "accent": theme.accent, "accent2": theme.accent2}.get(color) \
+                or _TAG_RGB.get(color)
+        if rgb is None:
+            return default_fg
+        return ctx.ink(_dim_ink(rgb, base, dim), on=eff_bg, target=LC_LARGE)
+
+    def _slot_groups(self, markers, side, value_of, row_for, entry_factory,
+                     measure) -> dict:
+        """This row's markers on ``side``, by slot: ``{slot: (cells, width)}``.
+        A slot is one extra (or one marker a layout placed itself); several
+        markers of one extra share it, a space apart. A marker with nothing to
+        say adds nothing, and a slot with nothing is absent.
+
+        ``limit`` caps how many cells of a format's result are drawn — a
+        count, not a width, so it means the same in a proportional font (the
+        tag dots: three)."""
+        space = measure(" ")
+        groups: dict = {}
+        for marker, attr, resolved in markers:
+            if marker.side != side:
+                continue
+            cells = layouts.render(resolved, value_of(marker.attr),
+                                   row_for(attr), entry_factory)
+            if marker.limit:
+                cells = cells[:marker.limit]
+            if not cells:
+                continue
+            width = sum(measure(c.text) for c in cells)
+            key = marker.slot or marker.attr
+            if key in groups:
+                prev, prev_w = groups[key]
+                groups[key] = (prev + [layouts.Cell(" ")] + cells, prev_w + space + width)
+            else:
+                groups[key] = (cells, width)
+        return groups
+
+    def _draw_cells(self, ctx, x, y, cells, style, cell_fg, measure) -> float:
+        for cell in cells:
+            attr = style.attr
+            if cell.bold:
+                attr |= TextAttribute.BOLD
+            if cell.italic:
+                attr |= TextAttribute.ITALIC
+            ctx.draw_text(x, y, cell.text,
+                          Style(fg=cell_fg(cell), bg=style.bg, attr=attr,
+                                underline_color=style.underline_color, font=style.font),
+                          ink=False)
+            x += measure(cell.text)
+        return x
+
     def _draw_row(self, ctx, y, entry, is_cursor, selected, is_match, grid, ruled,
-                  content_left, name_w, ext_x, ext_w, size_right, show_date,
-                  date_right, content_right, band_left, band_right,
-                  measure, measure_mono) -> None:
+                  plan, records, store, content_left, content_right,
+                  band_left, band_right, measure, measure_mono) -> None:
         theme = ctx.theme
         info = self._info(entry)
         is_dir = info["is_dir"]
         virtual = self.pane.get("virtual")
-        if virtual:
-            # Whole root-relative path in the name column, no extension split;
-            # elide in the middle so both the leading dirs and the trailing
-            # filename stay visible when the path is too long for the column.
+        has_ext = any(p.kind == "ext" for p in plan)
+        if virtual or not has_ext:
+            # A search-results pane shows the whole root-relative path in the
+            # name column, no extension split; elide in the middle so both the
+            # leading dirs and the trailing filename stay visible when the path
+            # is too long for the column. A layout with no extension column
+            # keeps the extension in the name.
             basename, ext = self._display_name(entry), ""
-            name_elide = "middle"
+            name_elide = "middle" if virtual else "end"
         else:
             basename, ext = self._split_name(self._display_name(entry), is_dir)
             name_elide = "end"
         name = basename
-        size = info["size_str"]
-        date = info["date_str"] if show_date else ""
-        # Tag markers: one dot per tag (at most _MAX_TAG_DOTS) after the name,
-        # in the tag's Finder color, or muted for a tag without one. The name
-        # gives up the room they need rather than pushing them out of view.
-        file_tags = (self.tag_cache.get(self.pane.get("files"), entry)
-                     if self.tag_cache is not None else None) or []
-        dots = file_tags[:_MAX_TAG_DOTS]
-        dot_w = measure(_TAG_DOT) if dots else 0.0
-        dots_w = (len(dots) * dot_w + measure(" ")) if dots else 0.0
-        name_text = elide(name, max(0.0, name_w - dots_w), where=name_elide,
-                          measure=measure)
-        ext_text = elide(ext, ext_w, where="end", measure=measure) if ext_w > 0 else ""
+        key = str(entry)
+        record = records.get(key)
+        # A pane with no listing records behind it (one built by hand, or a
+        # row the listing never saw) still has the strings the listing
+        # formatted; the built-in columns draw those.
+        fallback = {}
+        if record is None:
+            record = {"is_dir": is_dir, "ok": True}
+            fallback = {"size": info.get("size_str", ""),
+                        "total_size": info.get("size_str", ""),
+                        "mtime": info.get("date_str", "")}
+        value_of, row_for, entry_factory = self._row_access(entry, record, store)
 
         # Row background carries "selected": the pane background tinted toward the
         # accent (never the accent itself), firmer on the active pane, painted
@@ -904,44 +1086,98 @@ class FilePane(Widget):
         # A cut name is faded the same way, and needs the same opt-out: with
         # auto-ink on, only the cursor row kept its fade (#577 hand check).
         name_ink = not hidden and not faded_cut
-        ctx.draw_text(content_left, y, name_text,
-                      Style(fg=name_fg, bg=text_bg, attr=name_attr, underline_color=under),
-                      ink=name_ink)
-        if dots:
-            x = content_left + measure(name_text) + measure(" ")
-            for tag in dots:
-                rgb = _TAG_RGB.get(tag.color_name)
-                fg = (ctx.ink(_dim_ink(rgb, base, dim), on=eff_bg, target=LC_LARGE)
-                      if rgb else col_fg)
-                ctx.draw_text(x, y, _TAG_DOT,
-                              Style(fg=fg, bg=text_bg, attr=row_attr, underline_color=under),
-                              ink=False)
-                x += dot_w
-        if ext_text:
-            ctx.draw_text(ext_x, y, ext_text,
-                          Style(fg=name_fg, bg=text_bg, attr=name_attr, underline_color=under),
-                          ink=name_ink)
-        # The columns opt out for the same reason the hidden name does, and they
-        # have wanted to for longer: they are inked at LC_LARGE just above, to sit
-        # a tier under the filenames, and auto-ink was lifting them back to body
-        # weight — Gruvbox's muted (146, 131, 116) reached the row as
-        # (214, 208, 201), all but the name's own color. The quiet column tier was
-        # quiet in intent only, and on a GUI backend it was quiet on the cursor
-        # row alone, that being where auto-ink steps aside.
-        if size:
-            ctx.draw_text(size_right - measure_mono(size), y, size,
-                          Style(fg=col_fg, bg=text_bg, attr=row_attr, underline_color=under, font=MONO),
-                          ink=False)
-        if date:
-            ctx.draw_text(date_right - measure_mono(date), y, date,
-                          Style(fg=col_fg, bg=text_bg, attr=row_attr, underline_color=under, font=MONO),
-                          ink=False)
+        space = measure(" ")
+
+        def marker_fg(cell):
+            return self._cell_fg(ctx, cell, base, dim, eff_bg, col_fg)
+
+        marker_style = Style(bg=text_bg, attr=row_attr, underline_color=under)
+        for p in plan:
+            if p.kind == "name":
+                # Markers sit against the name on each row, before or after
+                # it, and the name gives up the room they take on that row —
+                # none when the row has none. Nothing is reserved, so a name
+                # with a mark in front starts later than one without.
+                before = self._slot_groups(p.markers, "before", value_of, row_for,
+                                           entry_factory, measure)
+                after = self._slot_groups(p.markers, "after", value_of, row_for,
+                                          entry_factory, measure)
+                taken = sum(w + space for _c, w in [*before.values(), *after.values()])
+                name_text = elide(name, max(0.0, p.w - taken), where=name_elide,
+                                  measure=measure)
+                x = p.x
+                for cells, _w in before.values():
+                    x = self._draw_cells(ctx, x, y, cells, marker_style, marker_fg,
+                                         measure) + space
+                ctx.draw_text(x, y, name_text,
+                              Style(fg=name_fg, bg=text_bg, attr=name_attr,
+                                    underline_color=under),
+                              ink=name_ink)
+                x += measure(name_text)
+                for cells, _w in after.values():
+                    x = self._draw_cells(ctx, x + space, y, cells, marker_style,
+                                         marker_fg, measure)
+                continue
+            if p.kind == "ext":
+                ext_text = elide(ext, p.w, where="end", measure=measure) if ext else ""
+                if ext_text:
+                    ctx.draw_text(p.x, y, ext_text,
+                                  Style(fg=name_fg, bg=text_bg, attr=name_attr,
+                                        underline_color=under),
+                                  ink=name_ink)
+                continue
+            self._draw_value(ctx, y, p, value_of, row_for, entry_factory,
+                             marker_style, marker_fg, measure, measure_mono,
+                             fallback.get(p.col.attr))
 
         # Grid cursor cue drawn last, in the reserved gutter columns clear of the
         # glyphs: the brackets, or — where the row is ruled — the two cells that
         # carry the rule past the content and out to the row's ends.
         if is_cursor and grid:
             self._draw_cursor(ctx, y, band_left, band_right, grid, ruled)
+
+    def _draw_value(self, ctx, y, p, value_of, row_for, entry_factory, style,
+                    marker_fg, measure, measure_mono, fallback=None) -> None:
+        """One value column of one row: its cells, with this row's markers
+        either side of them, aligned as one run inside the column. The value
+        gives up the room the markers take, as the name does.
+
+        The columns are inked at ``LC_LARGE``, a tier under the filenames, and
+        opt out of auto-ink for the same reason the hidden name does: auto-ink
+        was lifting them back to body weight — Gruvbox's muted (146, 131, 116)
+        reached the row as (214, 208, 201), all but the name's own color — and
+        on a GUI backend only the cursor row, where auto-ink steps aside, kept
+        the quiet tier."""
+        resolved = p.resolved
+        text_measure = measure_mono if resolved.mono else measure
+        font = MONO if resolved.mono else None
+        if fallback is not None:
+            cells = [layouts.Cell(fallback)] if fallback else []
+        else:
+            cells = layouts.render(resolved, value_of(p.col.attr), row_for(p.attr),
+                                   entry_factory)
+        space = measure(" ")
+        before = list(self._slot_groups(p.markers, "before", value_of, row_for,
+                                        entry_factory, measure).values())
+        after = list(self._slot_groups(p.markers, "after", value_of, row_for,
+                                       entry_factory, measure).values())
+        taken = sum(w + space for _c, w in before + after)
+        room = max(0.0, p.w - taken)
+        width = sum(text_measure(c.text) for c in cells)
+        if width > room and cells:
+            cells = [layouts.Cell(elide("".join(c.text for c in cells), room,
+                                        where="end", measure=text_measure),
+                                  cells[0].color, cells[0].bold, cells[0].italic)]
+            width = text_measure(cells[0].text)
+        run = taken + width
+        x = p.x + (p.w - run if resolved.align == "right" else 0.0)
+        for cells_m, _w in before:
+            x = self._draw_cells(ctx, x, y, cells_m, style, marker_fg, measure) + space
+        value_style = Style(bg=style.bg, attr=style.attr,
+                            underline_color=style.underline_color, font=font)
+        x = self._draw_cells(ctx, x, y, cells, value_style, marker_fg, text_measure)
+        for cells_m, _w in after:
+            x = self._draw_cells(ctx, x + space, y, cells_m, style, marker_fg, measure)
 
     def _draw_cursor(self, ctx, y, band_left, band_right, grid, ruled=False) -> None:
         """Draw the cursor-position cue for the current row — the theme's ``cursor``

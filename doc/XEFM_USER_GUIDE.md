@@ -560,7 +560,7 @@ s3://my-bucket/path/to/files/
 
 # View S3 text file
 # 1. Navigate to s3://bucket/file.txt
-# 2. Run view_file (File → View File); editing needs a local copy
+# 2. Run view_file (File → Open With ▸ Viewer); editing needs a local copy
 ```
 
 ---
@@ -667,7 +667,7 @@ KEY_BINDINGS = {
 ### Themes
 XeFM ships with several built-in themes (Dark+, Light+, Monokai, Dracula, Nord,
 Solarized, Gruvbox Dark, Solarized Light) and remembers the last one you used.
-Cycle themes at runtime with **View → Next Theme**, or pick one from **View → Theme**.
+Cycle themes at runtime with **View → Theme ▸ Next Theme**, or pick one from **View → Theme**.
 Define your own with the `THEMES` dict in config.
 
 **See detailed documentation**: [Color Schemes Feature](COLOR_SCHEMES_FEATURE.md)
@@ -804,6 +804,7 @@ For detailed information about specific features, see these dedicated guides:
 - [Rename in the Editor](RENAME_IN_EDITOR_FEATURE.md) - Rename many files by editing their names in your text editor
 - [Select by Pattern](SELECT_BY_PATTERN_FEATURE.md) - Select or unselect every file matching a pattern
 - [File Tags](FILE_TAGS_FEATURE.md) - Read and write the tags your system keeps, and search by tag
+- [File List Layouts](FILE_LIST_LAYOUTS_FEATURE.md) - Choose and define which columns a row shows, folder sizes, and your own values such as a Git status
 - [Archive Feature](ARCHIVE_FEATURE.md) - Create, extract, and browse archives (incl. password-protected)
 - [File Details Feature](FILE_DETAILS_FEATURE.md) - Viewing detailed file information
 - [Searching the OS Index](OS_INDEX_SEARCH_FEATURE.md) - Spotlight and Windows Search, results as a list
@@ -935,7 +936,7 @@ See the [Configuration](#customization) section and [Key Bindings Feature](KEY_B
 #### Development Workflow
 1. Set up favorites for project directories
 2. Use external programs for git operations
-3. Edit files with `edit_file` (**File → Edit File**)
+3. Edit files with `edit_file` (**File → Open With ▸ Text Editor**)
 4. Use content search to find code
 
 #### S3 Data Management

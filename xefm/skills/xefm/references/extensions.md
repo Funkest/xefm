@@ -122,13 +122,23 @@ Rules the check enforces — each violation is an `error:` naming the field:
   assignment or import). The check reads the file; it does not import it.
 - Contribution kinds: `actions`, `event_hooks`, `sort_keys`, `filters`,
   `image_decoders`, `path_schemes`, `lexers`, `themes`, `menus`,
-  `key_suggestions`.
+  `attributes`, `layouts`, `layout_extras`, `key_suggestions`.
+- An `attributes` entry is a table like its `ATTRIBUTES` entry, with
+  `read` a reference (`"pkg.git:status"`). `layouts` and `layout_extras` entries
+  are plain data like their `LAYOUTS` / `LAYOUT_EXTRAS` entries; a column's or
+  marker's `format`, and an extra's `when`, are a built-in name or a
+  reference. An extra brings its own default (`when`, placement): the user
+  switches it Auto / On / Off per tab, and `config.py` overrides it key by
+  key under the same name. Prefer markers on the name — `side = "before"`
+  for a state read at a glance — with glyphs that cannot be mistaken for
+  the tag dots (`●`).
 - A `menus` entry is keyed by one of the package's own actions: `menus` is a
   list of `"file"` (the File menu) and `"context"` (a row's context menu),
   `label` the text shown, and the optional `when` greys it out unless it
   applies — `"entry"` (an entry under the cursor), `"selection"` (something
   selected) or `"always"` (the default). XeFM places the item, in a group of
-  extension items near the foot of the menu; there is no position to give.
+  extension items near the foot of the menu (under **Custom ▸** once there
+  are more than three); there is no position to give.
 - Action names must not be a built-in action's name. Prefix them with a
   short name for your extension — any lowercase word, usually the id or its
   first part (`hello.greet` for `hello-xefm`); an unprefixed name is a
@@ -143,7 +153,9 @@ Rules the check enforces — each violation is an `error:` naming the field:
 
 What each table entry *does* is the same as the `config.py` table it feeds —
 `ACTIONS`, `EVENT_HOOKS`, `SORT_KEYS`, `FILTERS`, `IMAGE_DECODERS`,
-`PATH_SCHEMES`, `LEXERS`, `THEMES`, `MENU_ITEMS`. Each is documented, with the shape of
+`PATH_SCHEMES`, `LEXERS`, `THEMES`, `MENU_ITEMS`, `ATTRIBUTES`, `LAYOUTS`,
+`LAYOUT_EXTRAS`.
+Each is documented, with the shape of
 its values, in the comment above it in `references/config-template.md`; for a
 `sort_keys`, `filters`, `image_decoders` or `path_schemes` entry the
 referenced object is exactly the value that table would hold.
@@ -167,7 +179,7 @@ modules, and from each only the names in its `__all__`:
 - `xefm.user_api.__all__` — `API_VERSION`, `PREVIEW_APIS`,
   `DEPRECATED_APIS`, `ActionContext`, `PaneApi`, `EntryInfo`, `HookEvent`, `extension`,
   `TaskJob`, `TaskOutcome`, `ItemResult`, `ActionInfo`, `md_code_block`,
-  `md_escape`, `xefm_tool`, `xefm_python`, `is_desktop_mode`
+  `md_escape`, `Cell`, `xefm_tool`, `xefm_python`, `is_desktop_mode`
 - `xefm.path_base.__all__` — `ReadOnlyPathImpl`, `UriPathImpl`,
   `UriStatResult`
 

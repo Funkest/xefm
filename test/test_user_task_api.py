@@ -449,6 +449,22 @@ def test_the_menus_carry_the_items_and_run_their_actions(app, clean_registry):
     assert len(calls) == 1
 
 
+def test_more_than_three_menu_items_go_under_custom(app, clean_registry):
+    """A few stay inline; more gather under Custom ▸, so File still fits the 23
+    rows a terminal leaves (it is near that already)."""
+    names = [f"mine.a{i}" for i in range(4)]
+    app.config.ACTIONS = {n: (lambda ctx: None) for n in names}
+    app.config.MENU_ITEMS = {n: {"menus": ["file"], "label": n} for n in names[:3]}
+    app._load_user_entries(app.config)
+    assert "mine.a0" in _labels(app._build_menu().items[0].submenu)
+    app.config.MENU_ITEMS = {n: {"menus": ["file"], "label": n} for n in names}
+    app._load_user_entries(app.config)
+    file_menu = app._build_menu().items[0].submenu
+    assert "mine.a0" not in _labels(file_menu)
+    (custom,) = [i for i in file_menu.items if getattr(i, "label", None) == "Custom"]
+    assert _labels(custom.submenu) == names
+
+
 # --------------------------------------------------------------------------- #
 # Preview marks
 # --------------------------------------------------------------------------- #

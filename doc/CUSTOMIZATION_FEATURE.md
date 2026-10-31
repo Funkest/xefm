@@ -16,7 +16,8 @@ English \| [日本語](CUSTOMIZATION_FEATURE.ja.md)
 > `ctx.message`, `ctx.action_names`; and `xefm_tool`, `xefm_python` and
 > `is_desktop_mode` for `PROGRAMS`.
 >
-> Preview: `EVENT_HOOKS`, `MENU_ITEMS`, `IMAGE_DECODERS`, `LEXERS`, the
+> Preview: `EVENT_HOOKS`, `MENU_ITEMS`, `IMAGE_DECODERS`, `LEXERS`,
+> `ATTRIBUTES`, `LAYOUTS`, `DEFAULT_LAYOUT`, `LAYOUT_EXTRAS`, `entry.attr`, `Cell`, the
 > prompts (`ctx.input` / `choose` / `confirm`), `ctx.run_task`,
 > `ctx.show_markdown`, `ctx.copy_text`, `ctx.actions` and `pane.open_list`. A config that
 > uses a Preview table gets one line in the log pane saying so, and the first
@@ -423,7 +424,9 @@ class Config:
 `when` greys the item out unless it applies: `'entry'` needs an entry under the
 cursor, `'selection'` at least one selected entry; the default is `'always'`.
 Your items gather in a group of their own near the foot of each menu, in the
-order written, and show the action's key when it has one. A built-in action can
+order written, and show the action's key when it has one. Up to three are
+listed there; more go under a **Custom ▸** submenu, so the menu still fits a
+terminal. A built-in action can
 be named too. An entry with a mistake is skipped with a line in the log pane.
 
 ### Running an external program from a key
@@ -791,6 +794,20 @@ Like a sort key, `match` may run on a background thread, so keep it to
 arithmetic, strings and quick filesystem questions.
 
 ---
+
+## What the file list shows: `ATTRIBUTES`, `LAYOUTS` and `LAYOUT_EXTRAS` (Preview)
+
+`ATTRIBUTES` adds values XeFM can know about each entry — a Git status, a line
+count — computed by your functions in the background. `LAYOUTS` decides how
+rows are presented: which of the usual columns, in what order, written how.
+`LAYOUT_EXTRAS` adds what a folder holds on top of that — marks beside a column's
+text, or columns of their own — each showing where it applies and switched per
+tab. They have a page of their own:
+[File List Layouts](FILE_LIST_LAYOUTS_FEATURE.md).
+
+Any of your functions can read a value XeFM already has with
+`entry.attr('git')`. It never computes one and never waits — it is `None`
+until the value is there — so it is as cheap in an action as in a sort key.
 
 ## Your own picture formats: `IMAGE_DECODERS` (Preview)
 
